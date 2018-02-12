@@ -1,4 +1,4 @@
-birdclass
+`openbird`
 ---
 
 1. `legacy/` - contains Lasseck's 2013 code
