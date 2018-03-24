@@ -14,4 +14,4 @@ def sampling(dir, config):
     Raises:
         NotImplementedError: Not written yet.
     '''
-    raise NotImplementedError("Error: sampling functionality isn't available")
+    raise NotImplementedError("Sampling functionality isn't available")

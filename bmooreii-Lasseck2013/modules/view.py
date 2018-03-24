@@ -3,7 +3,7 @@ import matplotlib.patches as patches
 import numpy as np
 import pickle
 import pymongo
-from modules.preprocess import preprocess_file
+from modules.spect_gen import spect_gen
 from modules.image_utils import apply_gaussian_filter
 from modules.db_utils import read_spectrogram
 

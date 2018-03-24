@@ -43,14 +43,13 @@ def generate_config(section):
 
 
 from docopt import docopt
-from configparser import ConfigParser
 from os.path import isfile
-from os.path import split as path_split
-from glob import glob
+from configparser import ConfigParser
 from modules.sampling import sampling
 from modules.spect_gen import spect_gen
 from modules.view import view
 from modules.model_fit import model_fit
+from modules.prediction import prediction
 
 # From the docstring, generate the arguments dictionary
 arguments = docopt(__doc__, version='openbird.py version 0.0.1')
@@ -75,4 +74,5 @@ elif arguments['model_fit']:
     model_fit(arguments['<dir>'], defaults)
 
 elif arguments['prediction']:
+    # Given a directory, make a prediction based on a model
     prediction(arguments['<dir>'], defaults)

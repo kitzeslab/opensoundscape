@@ -13,4 +13,4 @@ def prediction(dir, config):
     Raises:
         NotImplementedError: Not written yet.
     '''
-    raise NotImplementedError("Error: prediction functionality isn't available")
+    raise NotImplementedError("Prediction functionality isn't available")
