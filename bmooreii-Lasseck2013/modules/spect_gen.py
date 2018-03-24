@@ -190,6 +190,7 @@ def spect_gen(file, config):
 
     # Finally store the data
     if config.getboolean('db_readwrite'):
-        write_spectrogram(file, bboxes_df, spectrogram, spectrogram_max, config)
+        write_spectrogram(file, bboxes_df, spectrogram, spectrogram_max,
+                config)
     else:
         return bboxes_df, spectrogram, float(spectrogram_max)

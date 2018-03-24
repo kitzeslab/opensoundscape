@@ -4,18 +4,20 @@ Usage:
     openbird.py [-hv]
     openbird.py sampling <dir> [-i <ini>]
     openbird.py spect_gen <file> [-i <ini>]
-    openbird.py view <file> [-i <ini>]
+    openbird.py view <file> [<image>] [-i <ini>] [-s]
     openbird.py model_fit <dir> [-i <ini>]
     openbird.py prediction <model> <dir> [-i <ini>]
 
 Positional Arguments:
-    <file>             e.g. 'train/001.wav'
-    <dir>              e.g. 'nips4b/'
+    <file>             A wav file, e.g. 'train/001.wav'
+    <dir>              A directory, e.g. 'nips4b/'
+    <image>            An image file to write, e.g. 'image.png'
 
 Options:
     -h --help           Print this screen and exit
     -v --version        Print the version of crc-squeue.py
     -i --ini <ini>      Specify a different ini file [default: openbird.ini]
+    -s --segments       View the segments only [default: False]
 '''
 
 
@@ -57,6 +59,10 @@ arguments = docopt(__doc__, version='openbird.py version 0.0.1')
 # Get the default config variables
 defaults = generate_config('default')
 
+# Initialize empty string for arguments['<image>'] (not supported by docopt)
+if not arguments['<image>']:
+    arguments['<image>'] = ''
+
 if arguments['sampling']:
     # Preprocess the file with the defaults
     sampling(arguments['<file>'], defaults)
@@ -67,7 +73,8 @@ elif arguments['spect_gen']:
 
 elif arguments['view']:
     # Preprocess the file with the defaults
-    view(arguments['<file>'], defaults)
+    # -> optionally write image to a file
+    view(arguments['<file>'], arguments['<image>'], arguments['--segments'], defaults)
 
 elif arguments['model_fit']:
     # Using defined algorithm, create model
