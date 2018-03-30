@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from scipy.ndimage import median_filter
 from scipy.sparse import csr_matrix
+from datetime import datetime
 
 
 def write_spectrogram(label, df, spec, normal, config):
@@ -37,15 +38,20 @@ def write_spectrogram(label, df, spec, normal, config):
         # 3. Pickle and store
         if config.getboolean('db_sparse'):
             spec[spec <
-                    (config.getint('db_sparse_thresh_percent') / 100.)] = 0
+                    (config.getfloat('db_sparse_thresh_percent') / 100.)] = 0
             spec_bytes = pickle.dumps(csr_matrix(spec))
         else:
             spec_bytes = pickle.dumps(spec)
 
         # Update existing, or insert
-        coll.update_one({'label': label}, {'$set': {'label': label, 'df': df_bytes,
-            'spectrogram': spec_bytes, 'normalization_factor': float(normal)}},
-            upsert=False)
+        coll.update_one({'label': label}, {'$set': {'df': df_bytes,
+            'spectrogram': spec_bytes, 'normalization_factor': float(normal),
+            'sparse': config.getboolean('db_sparse'),
+            'sparse_thresh_percent': config.getfloat('db_sparse_thresh_percent'),
+            'spect_gen_preprocess_method': config['spect_gen_preprocess_method'],
+            'preprocess_date': datetime.now()}},
+            upsert=True)
+
 
 def read_spectrogram(label, config):
     '''Read spectrogram from MongoDB

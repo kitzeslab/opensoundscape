@@ -4,7 +4,6 @@ from scipy import signal, ndimage
 from scipy.io import wavfile
 from scikits.samplerate import resample
 from skimage.morphology import remove_small_objects
-from os.path import isfile
 from modules.db_utils import write_spectrogram
 
 def generate_segments_from_binary_spectrogram(binary_spec, buffer):
@@ -132,11 +131,8 @@ def spect_gen(file, config):
           spectrogram (numpy 2D matrix), and the normalization factor
 
     Raises:
-        FileNotFoundError: If the wavfile doesn't exist, it can't be processed
+        Nothing
     '''
-    # If doesn't exist, raise an error
-    if not isfile(file):
-        raise FileNotFoundError("ERROR: I can not find {}!".format(file))
 
     # Resample
     sample_rate, samples = wavfile.read(file)

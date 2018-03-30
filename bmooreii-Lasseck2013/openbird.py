@@ -46,6 +46,7 @@ def generate_config(section):
 
 from docopt import docopt
 from os.path import isfile
+from os.path import abspath
 from configparser import ConfigParser
 from modules.sampling import sampling
 from modules.spect_gen import spect_gen
@@ -58,6 +59,16 @@ arguments = docopt(__doc__, version='openbird.py version 0.0.1')
 
 # Get the default config variables
 defaults = generate_config('default')
+
+# If given <file>,
+# -> Does it actually exist?
+# -> Use absolute path for now
+if arguments['<file>']:
+    # If doesn't exist, raise an error
+    if not isfile(arguments['<file>']):
+        raise FileNotFoundError("ERROR: I can not find {}!".format(arguments['<file>']))
+    else:
+        arguments['<file>'] = abspath(arguments['<file>'])
 
 # Initialize empty string for arguments['<image>'] (not supported by docopt)
 if not arguments['<image>']:
