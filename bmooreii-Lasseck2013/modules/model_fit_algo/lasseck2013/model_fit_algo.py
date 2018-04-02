@@ -1,7 +1,5 @@
-from sys.path import append
-
-def model_fit(dir, config):
-    '''Fit a model
+def model_fit_algo(dir, config):
+    '''Fit the lasseck2013 model
 
     Given a directory and method (from config), fit a model against the
     training data.
@@ -14,10 +12,6 @@ def model_fit(dir, config):
         Nothing. Writes a model to the MongoDB.
 
     Raises:
-        Nothing
+        NotImplementedError: Not written yet.
     '''
-
-    append("modules/model_fit_algo/{}".format(config['model_fit_algo']))
-    from model_fit_algo import model_fit_algo
-
-    model_fit_algo(dir, config)
+    raise NotImplementedError("lasseck2013 is not implemented")

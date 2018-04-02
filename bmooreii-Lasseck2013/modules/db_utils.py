@@ -44,13 +44,14 @@ def write_spectrogram(label, df, spec, normal, config):
             spec_bytes = pickle.dumps(spec)
 
         # Update existing, or insert
-        coll.update_one({'label': label}, {'$set': {'df': df_bytes,
-            'spectrogram': spec_bytes, 'normalization_factor': float(normal),
-            'sparse': config.getboolean('db_sparse'),
-            'sparse_thresh_percent': config.getfloat('db_sparse_thresh_percent'),
-            'spect_gen_preprocess_method': config['spect_gen_preprocess_method'],
-            'preprocess_date': datetime.now()}},
-            upsert=True)
+        coll.update_one({'data_dir': config['data_dir'], 'label': label},
+                {'$set': {'df': df_bytes, 'spectrogram': spec_bytes,
+                    'normalization_factor': float(normal), 'sparse':
+                    config.getboolean('db_sparse'), 'sparse_thresh_percent':
+                    config.getfloat('db_sparse_thresh_percent'),
+                    'spect_gen_preprocess_method':
+                    config['spect_gen_preprocess_method'], 'preprocess_date':
+                    datetime.now()}}, upsert=True)
 
 
 def read_spectrogram(label, config):
@@ -74,7 +75,7 @@ def read_spectrogram(label, config):
         coll = db[config['db_collection_name']]
 
         # Extract DF and Spectrogram
-        item = coll.find_one({'label': label})
+        item = coll.find_one({'data_dir': config['data_dir'], 'label': label})
         df_bytes = item['df']
         spec_bytes = item['spectrogram']
         normal = item['normalization_factor']

@@ -135,7 +135,7 @@ def spect_gen(file, config):
     '''
 
     # Resample
-    sample_rate, samples = wavfile.read(file)
+    sample_rate, samples = wavfile.read("{}/{}".format(config['data_dir'], file))
     sample_rate, samples = resample_audio(samples, sample_rate,
             config.getfloat('resample_rate'))
 

@@ -16,18 +16,21 @@ Positional Arguments:
 Options:
     -h --help           Print this screen and exit
     -v --version        Print the version of crc-squeue.py
-    -i --ini <ini>      Specify a different ini file [default: openbird.ini]
+    -i --ini <ini>      Specify an override file [default: openbird.ini]
     -s --segments       View the segments only [default: False]
 '''
 
 
-def generate_config(section):
+def generate_config(f_default, f_override, section):
     '''Get the configuration section
 
-    Simply return a ConfigParser containing the INI section.
-    Access elements via `config.get{float,boolean,int}('key')`.
+    Simply return a ConfigParser containing the INI section of interest. We
+    have a default config in config as well as an override file.  Access
+    elements via `config.get{float,boolean,int}('key')`.
 
     Args:
+        f_default: The default config `config/openbird.ini`
+        f_override: The override config `openbird.ini`
         section: The parent section of the INI file
 
     Returns:
@@ -36,12 +39,15 @@ def generate_config(section):
     Raises:
         FileNotFoundError if INI file doesn't exist
     '''
-    if isfile(arguments['--ini']):
-        config = ConfigParser()
-        config.read(arguments['--ini'])
-        return config[section]
-    else:
-        raise FileNotFoundError("File: {} doesn't exist!".format(arguments['--ini']))
+    if not isfile(f_default):
+        raise FileNotFoundError("{} doesn't exist!".format(f_default))
+    if not isfile(f_override):
+        raise FileNotFoundError("{} doesn't exist!".format(f_override))
+
+    config = ConfigParser()
+    config.read(f_default)
+    config.read(f_override)
+    return config[section]
 
 
 from docopt import docopt
@@ -58,17 +64,16 @@ from modules.prediction import prediction
 arguments = docopt(__doc__, version='openbird.py version 0.0.1')
 
 # Get the default config variables
-defaults = generate_config('default')
+defaults = generate_config('config/openbird.ini', arguments['--ini'], 'default')
 
 # If given <file>,
 # -> Does it actually exist?
 # -> Use absolute path for now
 if arguments['<file>']:
     # If doesn't exist, raise an error
-    if not isfile(arguments['<file>']):
-        raise FileNotFoundError("ERROR: I can not find {}!".format(arguments['<file>']))
-    else:
-        arguments['<file>'] = abspath(arguments['<file>'])
+    if not isfile('{}/{}'.format(defaults['data_dir'],  arguments['<file>'])):
+        raise FileNotFoundError("ERROR: I can not find {}/{}!".format(defaults['data_dir'],
+            arguments['<file>']))
 
 # Initialize empty string for arguments['<image>'] (not supported by docopt)
 if not arguments['<image>']:
