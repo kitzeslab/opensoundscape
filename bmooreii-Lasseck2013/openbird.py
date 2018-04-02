@@ -2,15 +2,13 @@
 ''' openbird.py -- OpenBird
 Usage:
     openbird.py [-hv]
-    openbird.py sampling <dir> [-i <ini>]
-    openbird.py spect_gen <file> [-i <ini>]
-    openbird.py view <file> [<image>] [-i <ini>] [-s]
-    openbird.py model_fit <dir> [-i <ini>]
-    openbird.py prediction <model> <dir> [-i <ini>]
+    openbird.py sampling [-i <ini>]
+    openbird.py spect_gen [-i <ini>]
+    openbird.py view <label> [<image>] [-i <ini>] [-s]
+    openbird.py model_fit [-i <ini>]
+    openbird.py predict <model> [-i <ini>]
 
 Positional Arguments:
-    <file>             A wav file, e.g. 'train/001.wav'
-    <dir>              A directory, e.g. 'nips4b/'
     <image>            An image file to write, e.g. 'image.png'
 
 Options:
@@ -58,7 +56,7 @@ from modules.sampling import sampling
 from modules.spect_gen import spect_gen
 from modules.view import view
 from modules.model_fit import model_fit
-from modules.prediction import prediction
+from modules.predict import predict
 
 # From the docstring, generate the arguments dictionary
 arguments = docopt(__doc__, version='openbird.py version 0.0.1')
@@ -66,36 +64,30 @@ arguments = docopt(__doc__, version='openbird.py version 0.0.1')
 # Get the default config variables
 defaults = generate_config('config/openbird.ini', arguments['--ini'], 'default')
 
-# If given <file>,
-# -> Does it actually exist?
-# -> Use absolute path for now
-if arguments['<file>']:
-    # If doesn't exist, raise an error
-    if not isfile('{}/{}'.format(defaults['data_dir'],  arguments['<file>'])):
-        raise FileNotFoundError("ERROR: I can not find {}/{}!".format(defaults['data_dir'],
-            arguments['<file>']))
-
 # Initialize empty string for arguments['<image>'] (not supported by docopt)
 if not arguments['<image>']:
     arguments['<image>'] = ''
 
 if arguments['sampling']:
     # Preprocess the file with the defaults
-    sampling(arguments['<file>'], defaults)
+    #sampling(arguments['<file>'], defaults)
+    print("sampling")
 
 elif arguments['spect_gen']:
-    # Preprocess the file with the defaults
-    spect_gen(arguments['<file>'], defaults)
+    # Pass the configuration to spect_gen
+    spect_gen(defaults)
 
 elif arguments['view']:
     # Preprocess the file with the defaults
     # -> optionally write image to a file
-    view(arguments['<file>'], arguments['<image>'], arguments['--segments'], defaults)
+    view(arguments['<label>'], arguments['<image>'], arguments['--segments'], defaults)
 
 elif arguments['model_fit']:
     # Using defined algorithm, create model
-    model_fit(arguments['<dir>'], defaults)
+    #model_fit(arguments['<dir>'], defaults)
+    print("model_fit")
 
-elif arguments['prediction']:
+elif arguments['predict']:
     # Given a directory, make a prediction based on a model
-    prediction(arguments['<dir>'], defaults)
+    #predict(arguments['<dir>'], defaults)
+    print("predict")

@@ -1,4 +1,4 @@
-from sys.path import append
+import sys
 
 def model_fit(dir, config):
     '''Fit a model
@@ -17,7 +17,7 @@ def model_fit(dir, config):
         Nothing
     '''
 
-    append("modules/model_fit_algo/{}".format(config['model_fit_algo']))
+    sys.path.append("modules/model_fit_algo/{}".format(config['model_fit_algo']))
     from model_fit_algo import model_fit_algo
 
     model_fit_algo(dir, config)

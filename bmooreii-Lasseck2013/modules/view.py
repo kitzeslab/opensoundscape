@@ -113,15 +113,14 @@ def gen_segs(spec, df, image):
     show_or_write(image)
 
 
-def view(file, image, seg_only, config):
+def view(label, image, seg_only, config):
     '''View a spectrogram
     
     This is a super function which provides all of the functionality to
     view a spectrogram, either from the database itself or recreated
 
     Args:
-        file: A wav file for template matching
-        config: The parsed ini file for this particular run
+        label: The label for the file
         image: If not '', write image to a file named this
         seg_only: View segments only
         config: The parsed ini file for this particular run
@@ -134,10 +133,7 @@ def view(file, image, seg_only, config):
     '''
 
     # Get the data, from the database or recreate
-    if config.getboolean('db_readwrite'):
-        df, spectrogram, normalization_factor = read_spectrogram(file, config)
-    else:
-        df, spectrogram, normalization_factor = preprocess_file(file, config)
+    df, spectrogram, normalization_factor = read_spectrogram(label, config)
 
     # Apply Gaussian Filter
     spectrogram = apply_gaussian_filter(spectrogram,

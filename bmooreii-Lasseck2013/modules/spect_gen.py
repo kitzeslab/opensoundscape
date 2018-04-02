@@ -1,5 +1,9 @@
 import pandas as pd
 import numpy as np
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import cpu_count
+import progressbar
+from itertools import repeat
 from scipy import signal, ndimage
 from scipy.io import wavfile
 from scikits.samplerate import resample
@@ -113,29 +117,26 @@ def frequency_based_spectrogram_filter(spec, freq, low_freq_thr, high_freq_thr):
     return spec[indices, :], freq[indices]
 
 
-def spect_gen(file, config):
-    '''Preprocess a wav file
+def preprocess(label, config):
+    '''Preprocess all images
     
     This is a super function which provides all of the functionality to
-    preprocess a wav file for our template matching procedure. Later,
-    this function will call an external algorithm to do image processing.
+    preprocess many wav file for model fitting. Later, this function will call
+    an external algorithm to do image processing.
 
     Args:
-        file: A wav file for template matching
+        label: The label e.g. train/001.wav
         config: The parsed ini file for this particular run
 
     Returns:
-        - If `db_readwrite = False`, write data to MongoDB w/ `db_name` &
-          `db_collection_name`
-        - Else returns a tuple containing: bounding boxes as a DataFrame,
-          spectrogram (numpy 2D matrix), and the normalization factor
+        Nothing, write data to MongoDB w/ `db_name` & `db_collection_name`
 
     Raises:
         Nothing
     '''
 
     # Resample
-    sample_rate, samples = wavfile.read("{}/{}".format(config['data_dir'], file))
+    sample_rate, samples = wavfile.read("{}/{}".format(config['data_dir'], label))
     sample_rate, samples = resample_audio(samples, sample_rate,
             config.getfloat('resample_rate'))
 
@@ -185,8 +186,50 @@ def spect_gen(file, config):
             config.getint('segment_pixel_buffer'))
 
     # Finally store the data
-    if config.getboolean('db_readwrite'):
-        write_spectrogram(file, bboxes_df, spectrogram, spectrogram_max,
-                config)
+    write_spectrogram(label, bboxes_df, spectrogram, spectrogram_max, config)
+
+
+def spect_gen(config):
+    '''Preprocess all images
+    
+    This is a super function which provides all of the functionality to
+    preprocess many wav file for model fitting. Later, this function will call
+    an external algorithm to do image processing.
+
+    Args:
+        config: The parsed ini file for this particular run
+
+    Returns:
+        Nothing, write data to MongoDB w/ `db_name` & `db_collection_name`
+
+    Raises:
+        Nothing
+    '''
+
+    # Generate a Series of file names
+    preprocess_files = pd.Series()
+    if config['train_file']:
+        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['data_dir'],
+            config['train_file']))['Filename'], ignore_index=True)
+    if config['test_file']:
+        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['data_dir'],
+            config['test_file']))['Filename'], ignore_index=True)
+    if config['validate_file']:
+        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['data_dir'],
+            config['validate_file']))['Filename'], ignore_index=True)
+    if config['predict_file']:
+        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['data_dir'],
+            config['predict_file']))['Filename'], ignore_index=True)
+
+    # Get the processor counts
+    if config['num_processors'] == '':
+        nprocs = cpu_count()
     else:
-        return bboxes_df, spectrogram, float(spectrogram_max)
+        nprocs = config.getint('num_processors')
+
+    # Create a ProcessPoolExecutor, run all of the files with a progressbar
+    with ProcessPoolExecutor(nprocs) as executor:
+        with progressbar.ProgressBar(max_value=preprocess_files.shape[0]) as bar:
+            for idx, result in zip(np.arange(preprocess_files.shape[0]),
+                    executor.map(preprocess, preprocess_files.values, repeat(config))):
+                bar.update(idx)

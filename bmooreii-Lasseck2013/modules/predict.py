@@ -1,4 +1,4 @@
-def prediction(dir, config):
+def predict(dir, config):
     '''Make a prediction based on a model
 
     Given a directory of data, make a prediction using a model
@@ -13,4 +13,4 @@ def prediction(dir, config):
     Raises:
         NotImplementedError: Not written yet.
     '''
-    raise NotImplementedError("Prediction functionality isn't available")
+    raise NotImplementedError("Predict functionality isn't available")
