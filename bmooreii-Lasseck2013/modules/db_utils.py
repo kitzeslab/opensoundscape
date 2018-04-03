@@ -1,8 +1,6 @@
 import pymongo
 import pickle
 import pandas as pd
-import numpy as np
-from scipy.ndimage import median_filter
 from scipy.sparse import csr_matrix
 from datetime import datetime
 
@@ -25,28 +23,27 @@ def write_spectrogram(label, df, spec, normal, config):
         Nothing.
     '''
 
+    # Pickle Up the DF
+    df_bytes = pickle.dumps(df)
+
+    # Steps:
+    # 1. Set the lowest 5% values to zero
+    # 2. Store as compressed sparse row matrix
+    # 3. Pickle and store
+    if config.getboolean('db_sparse'):
+        spec[spec <
+                (config.getfloat('db_sparse_thresh_percent') / 100.)] = 0
+        spec_bytes = pickle.dumps(csr_matrix(spec))
+    else:
+        spec_bytes = pickle.dumps(spec)
+
+    # Update or insert item into collection
     with pymongo.MongoClient(config['db_uri']) as client:
         db = client[config['db_name']]
         coll = db[config['db_collection_name']]
-
-        # Pickle Up the DF
-        df_bytes = pickle.dumps(df)
-
-        # Steps:
-        # 1. Set the lowest 5% values to zero
-        # 2. Store as compressed sparse row matrix
-        # 3. Pickle and store
-        if config.getboolean('db_sparse'):
-            spec[spec <
-                    (config.getfloat('db_sparse_thresh_percent') / 100.)] = 0
-            spec_bytes = pickle.dumps(csr_matrix(spec))
-        else:
-            spec_bytes = pickle.dumps(spec)
-
-        # Update existing, or insert
         coll.update_one({'data_dir': config['data_dir'], 'label': label},
                 {'$set': {'df': df_bytes, 'spectrogram': spec_bytes,
-                    'normalization_factor': float(normal), 'sparse':
+                    'normalization_factor': normal, 'sparse':
                     config.getboolean('db_sparse'), 'sparse_thresh_percent':
                     config.getfloat('db_sparse_thresh_percent'),
                     'spect_gen_preprocess_method':
@@ -87,3 +84,28 @@ def read_spectrogram(label, config):
             spec = spec.todense()
 
     return df, spec, normal
+
+
+def write_file_stats(label, file_stats, config):
+    '''Write file statistics to MongoDB
+
+    Open connection to MongoDB and write the pickled file statistics
+
+    Args:
+        label: The label for the MongoDB entry
+        file_stats: The file stats as a numpy array
+        config: The openbird configuration
+
+    Returns:
+        Nothing.
+    '''
+
+    # Pickle Up the DF
+    file_stats_bytes = pickle.dumps(file_stats)
+
+    # Update or insert item into collection
+    with pymongo.MongoClient(config['db_uri']) as client:
+        db = client[config['db_name']]
+        coll = db[config['db_collection_name']]
+        coll.update_one({'data_dir': config['data_dir'], 'label': label},
+                {'$set': {'file_stats': file_stats_bytes}})

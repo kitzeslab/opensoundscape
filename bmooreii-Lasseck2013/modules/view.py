@@ -102,12 +102,17 @@ def gen_segs(spec, df, image):
     # Extract the segments
     segments = extract_segments(spec, df)
 
-    # Plot the segments, need to flip y axis
-    fig, ax = plt.subplots(len(df.index), 1, figsize=(10, 50))
+    # Determine the shape constaints
+    max_rows = 5
+    columns = (df.index.shape[0] // max_rows) + (df.index.shape[0] % max_rows)
+
+    # Create the figure,
+    # -> for each segment, add subplot
+    fig = plt.figure()
     for idx in df.index:
-        img = ax[idx].imshow(segments[idx], cmap=plt.get_cmap("gray_r"))
-        ax[idx].set_ylim(ax[idx].get_ylim()[::-1])
-        #plt.colorbar(img, ax=ax[idx])
+        ax = fig.add_subplot(max_rows, columns, idx + 1)
+        ax.imshow(segments[idx], cmap=plt.get_cmap("gray_r"))
+        ax.set_ylim(ax.get_ylim()[::-1])
 
     # Show or write
     show_or_write(image)

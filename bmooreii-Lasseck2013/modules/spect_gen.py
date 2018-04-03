@@ -129,8 +129,11 @@ def preprocess(label, config):
         config: The parsed ini file for this particular run
 
     Returns:
-        Nothing, write data to MongoDB w/ `db_name` & `db_collection_name`
-
+        if read write to DB defined (`db_rw` in INI)
+            Write data to MongoDB w/ `db_name` & `db_collection_name`
+        else:
+            Return the bounding box dataframe, spectrogram, and normalization
+            factor
     Raises:
         Nothing
     '''
@@ -152,7 +155,7 @@ def preprocess(label, config):
             config.getint('high_freq_thresh'))
 
     # Normalization, need spectrogram_max later
-    spectrogram_max = spectrogram.max()
+    spectrogram_max = float(spectrogram.max())
     spectrogram /= spectrogram_max
 
     # Scaled Median Column/Row Filters
@@ -185,8 +188,11 @@ def preprocess(label, config):
     bboxes_df = generate_segments_from_binary_spectrogram(binary_spectrogram,
             config.getint('segment_pixel_buffer'))
 
-    # Finally store the data
-    write_spectrogram(label, bboxes_df, spectrogram, spectrogram_max, config)
+    # Write to DB, if defined:
+    if config.getboolean('db_rw'):
+        write_spectrogram(label, bboxes_df, spectrogram, spectrogram_max, config)
+    else:
+        return bboxes_df, spectrogram, spectrogram_max
 
 
 def spect_gen(config):
@@ -205,6 +211,10 @@ def spect_gen(config):
     Raises:
         Nothing
     '''
+
+    # If not writing to DB, no reason to do any preprocessing now
+    if not config.getboolean('db_rw'):
+        return
 
     # Generate a Series of file names
     preprocess_files = pd.Series()
@@ -227,9 +237,12 @@ def spect_gen(config):
     else:
         nprocs = config.getint('num_processors')
 
-    # Create a ProcessPoolExecutor, run all of the files with a progressbar
+    # Create a ProcessPoolExecutor, run:
+    # -> Wrap everything in a ProgressBar
+    # -> Async process everything
     with ProcessPoolExecutor(nprocs) as executor:
         with progressbar.ProgressBar(max_value=preprocess_files.shape[0]) as bar:
-            for idx, result in zip(np.arange(preprocess_files.shape[0]),
-                    executor.map(preprocess, preprocess_files.values, repeat(config))):
+            for idx, ret in zip(np.arange(preprocess_files.shape[0]),
+                    executor.map(preprocess, preprocess_files.values,
+                        repeat(config))):
                 bar.update(idx)

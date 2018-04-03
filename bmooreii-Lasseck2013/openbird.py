@@ -84,8 +84,7 @@ elif arguments['view']:
 
 elif arguments['model_fit']:
     # Using defined algorithm, create model
-    #model_fit(arguments['<dir>'], defaults)
-    print("model_fit")
+    model_fit(defaults)
 
 elif arguments['predict']:
     # Given a directory, make a prediction based on a model
