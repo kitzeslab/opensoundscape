@@ -3,6 +3,7 @@ import numpy as np
 from modules.db_utils import read_spectrogram, write_file_stats
 from modules.spect_gen import preprocess
 from scipy import stats
+from cv2 import matchTemplate
 
 
 def file_stats(label, config):
@@ -21,7 +22,7 @@ def file_stats(label, config):
     Raises:
         Nothing.
     '''
-    
+
     # Generate the df, spectrogram, and normalization factor
     # -> Read from MongoDB or preprocess
     if config.getboolean('db_rw'):
@@ -81,12 +82,15 @@ def file_file_stats(df_one, spec_one, normal_one, idx_one, labels_df, config):
         config: The parsed ini configuration
 
     Returns:
-        Something or possibly writes to MongoDB
+        match_stats_dict: A dictionary, where all keys are indices of df_two
+            and values are the template match parameters (max correlation,
+            max correlation x value, max correlation y value)
 
     Raises:
         Nothing.
     '''
-    
+
+    match_stats_dict = {}
     for idx_two, label_two in labels_df['Filename'].drop(idx_one).iteritems():
         # Generate the df, spectrogram, and normalization factor
         # -> Read from MongoDB or preprocess
@@ -96,9 +100,26 @@ def file_file_stats(df_one, spec_one, normal_one, idx_one, labels_df, config):
             df_two, spec_two, normal_two = preprocess(label_two, config)
 
         # Slide segments over all other spectrograms
-        # -> Moving to Jupyter Lab for now
+        template_match = [None] * len(df_one.index)
+        frequency_buffer = config.getint('template_match_frequency_buffer')
+        for idx, item in df_one.iterrows():
+            y_min_target = item['y_min'] - frequency_buffer
+                if item['y_min'] > frequency_buffer else 0
+            y_max_target = item['y_max'] + frequency_buffer
+                if item['y_max'] < spec_one.shape[0] - frequency_buffer
+                else spec_one.shape[0]
 
-    return None
+            # Match the template against the stripe of spec_two with the 5th
+            # -> algorithm of matchTemplate, then grab the max correllation
+            # -> max location x value, and max location y value
+            output_stats = matchTemplate(spec_two[y_min_target: y_max_target, :],
+                item['segments'], 5)
+            template_match[idx] = [output_stats[1], output_stats[3][0],
+                output_stats[3][1] + y_min_target]
+
+        # Add the statistics
+        match_stats_dict[idx_two] = template_match
+    return match_stats_dict
 
 
 def model_fit_algo(config):
@@ -124,5 +145,9 @@ def model_fit_algo(config):
     # statistics
     for idx_one, label_one in labels_df['Filename'].iteritems():
         df_one, spec_one, normal_one, row_f = file_stats(label_one, config)
-        row_ff = file_file_stats(df_one, spec_one, normal_one, idx_one,
-                labels_df, config)
+        match_stats_dict = file_file_stats(df_one, spec_one, normal_one,
+            idx_one, labels_df, config)
+        write_file_stats(label, row_f, match_stats_dict, config)
+
+    # Now the file stats are available
+    # -> Now what...

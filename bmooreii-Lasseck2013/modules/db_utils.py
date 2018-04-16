@@ -76,7 +76,7 @@ def read_spectrogram(label, config):
         df_bytes = item['df']
         spec_bytes = item['spectrogram']
         normal = item['normalization_factor']
-        
+
         # Recreate Data
         df = pd.DataFrame(pickle.loads(df_bytes))
         spec = pickle.loads(spec_bytes)
@@ -86,7 +86,7 @@ def read_spectrogram(label, config):
     return df, spec, normal
 
 
-def write_file_stats(label, file_stats, config):
+def write_file_stats(label, file_stats, file_file_stats, config):
     '''Write file statistics to MongoDB
 
     Open connection to MongoDB and write the pickled file statistics
@@ -94,18 +94,21 @@ def write_file_stats(label, file_stats, config):
     Args:
         label: The label for the MongoDB entry
         file_stats: The file stats as a numpy array
+        file_file_stats: A dictionary containing file_file_stats
         config: The openbird configuration
 
     Returns:
         Nothing.
     '''
 
-    # Pickle Up the DF
+    # Pickle it up
     file_stats_bytes = pickle.dumps(file_stats)
+    file_file_stats_bytes = pickle.dumps(file_file_stats)
 
     # Update or insert item into collection
     with pymongo.MongoClient(config['db_uri']) as client:
         db = client[config['db_name']]
         coll = db[config['db_collection_name']]
         coll.update_one({'data_dir': config['data_dir'], 'label': label},
-                {'$set': {'file_stats': file_stats_bytes}})
+            {'$set': {'file_stats': file_stats_bytes,
+            'file_file_stats': file_file_stats_bytes}})
