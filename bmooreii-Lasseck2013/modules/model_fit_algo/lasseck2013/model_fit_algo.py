@@ -1,9 +1,14 @@
 import pandas as pd
 import numpy as np
 from modules.db_utils import read_spectrogram, write_file_stats
-from modules.spect_gen import preprocess
+from modules.spect_gen import spect_gen
+from modules.view import extract_segments
 from scipy import stats
-from cv2 import matchTemplate
+from cv2 import matchTemplate, minMaxLoc
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from multiprocessing import cpu_count, Pool
+import progressbar
+from itertools import repeat
 
 
 def file_stats(label, config):
@@ -28,7 +33,7 @@ def file_stats(label, config):
     if config.getboolean('db_rw'):
         df, spec, normal = read_spectrogram(label, config)
     else:
-        df, spec, normal = preprocess(label, config)
+        df, spec, normal = spect_gen(label, config)
 
     # Generate the Raw Spectrogram
     raw_spec = spec * normal
@@ -90,36 +95,77 @@ def file_file_stats(df_one, spec_one, normal_one, idx_one, labels_df, config):
         Nothing.
     '''
 
-    match_stats_dict = {}
-    for idx_two, label_two in labels_df['Filename'].drop(idx_one).iteritems():
+    # Extract the segments for matching
+    df_one['segments'] = extract_segments(spec_one, df_one)
+
+    # Indices
+    indices = labels_df.index[labels_df.index != idx_one]
+
+    # match_stats dimensions are 3 items by number of segments * number of
+    # -> files excluding the current image
+    match_stats = np.zeros([len(indices), df_one.shape[0], 3])
+    for monotonic_idx_two, idx_two in enumerate(indices):
         # Generate the df, spectrogram, and normalization factor
         # -> Read from MongoDB or preprocess
         if config.getboolean('db_rw'):
-            df_two, spec_two, normal_two = read_spectrogram(label_two, config)
+            df_two, spec_two, normal_two = read_spectrogram(idx_two, config)
         else:
-            df_two, spec_two, normal_two = preprocess(label_two, config)
+            df_two, spec_two, normal_two = spect_gen(idx_two, config)
 
         # Slide segments over all other spectrograms
-        template_match = [None] * len(df_one.index)
         frequency_buffer = config.getint('template_match_frequency_buffer')
         for idx, item in df_one.iterrows():
-            y_min_target = item['y_min'] - frequency_buffer
-                if item['y_min'] > frequency_buffer else 0
-            y_max_target = item['y_max'] + frequency_buffer
-                if item['y_max'] < spec_one.shape[0] - frequency_buffer
-                else spec_one.shape[0]
+            # Determine minimum y target
+            y_min_target = 0
+            if item['y_min'] > frequency_buffer:
+                y_min_target = item['y_min'] - frequency_buffer
 
-            # Match the template against the stripe of spec_two with the 5th
+            # Determine maximum y target
+            y_max_target = spec_one.shape[0]
+            if item['y_max'] < spec_one.shape[0] - frequency_buffer:
+                y_max_target = item['y_max'] + frequency_buffer
+
+            # If the template is too large, output_stats should be all zeroes
+            # Else:
+            # -> Match the template against the stripe of spec_two with the 5th
             # -> algorithm of matchTemplate, then grab the max correllation
             # -> max location x value, and max location y value
-            output_stats = matchTemplate(spec_two[y_min_target: y_max_target, :],
-                item['segments'], 5)
-            template_match[idx] = [output_stats[1], output_stats[3][0],
-                output_stats[3][1] + y_min_target]
+            if y_max_target - y_min_target > spec_two.shape[0] or \
+                item['x_max'] - item['x_min'] > spec_two.shape[1]:
+                match_stats[monotonic_idx_two][idx] = [0, 0, 0]
+            else:
+                output_stats = matchTemplate(
+                    spec_two[y_min_target: y_max_target, :], item['segments'], 5)
+                min_val, max_val, min_loc, max_loc = minMaxLoc(output_stats)
+                match_stats[monotonic_idx_two][idx][0] = max_val
+                match_stats[monotonic_idx_two][idx][1] = max_loc[0]
+                match_stats[monotonic_idx_two][idx][2] = max_loc[1] + y_min_target
+    return match_stats
 
-        # Add the statistics
-        match_stats_dict[idx_two] = template_match
-    return match_stats_dict
+
+def run_stats(idx_one, labels_df, config):
+    '''Wrapper for parallel stats execution
+
+    Run within a parallel executor to generate file and file-file Statistics
+    for a given label.
+
+    Args:
+        idx_one: The label for the file
+        labels_df: Passed through to `file_file_stats` function
+        config: The parsed ini file for this run
+
+    Returns:
+        Nothing, writes to MongoDB
+
+    Raises:
+        Nothing.
+    '''
+    monotonic_idx_one = labels_df.index.get_loc(idx_one)
+    birds_identified = labels_df.iloc[monotonic_idx_one][labels_df.iloc[monotonic_idx_one] == 1.0]
+    if len(birds_identified) > 0:
+        df_one, spec_one, normal_one, row_f = file_stats(idx_one, config)
+        match_stats_dict = file_file_stats(df_one, spec_one, normal_one, idx_one, labels_df, config)
+        write_file_stats(idx_one, row_f, match_stats_dict, config)
 
 
 def model_fit_algo(config):
@@ -139,15 +185,29 @@ def model_fit_algo(config):
 
     # First, we need labels and files
     labels_df = pd.read_csv("{}/{}".format(config['data_dir'],
-        config['train_file']))
+        config['train_file']), index_col=0)
+
+    # Get the processor counts
+    if config['num_processors'] == '':
+        nprocs = cpu_count()
+    else:
+        nprocs = config.getint('num_processors')
 
     # For each file, we need to create a new DF with first and second order
     # statistics
-    for idx_one, label_one in labels_df['Filename'].iteritems():
-        df_one, spec_one, normal_one, row_f = file_stats(label_one, config)
-        match_stats_dict = file_file_stats(df_one, spec_one, normal_one,
-            idx_one, labels_df, config)
-        write_file_stats(label, row_f, match_stats_dict, config)
+    with progressbar.ProgressBar(max_value=labels_df.shape[0]) as bar:
+        with ProcessPoolExecutor(nprocs) as executor:
+            for idx, ret in zip(np.arange(labels_df.shape[0]),
+                    executor.map(run_stats, labels_df.index,
+                        repeat(labels_df), repeat(config))):
+                bar.update(idx)
+
+    # Serial code for debugging
+    # with progressbar.ProgressBar(max_value=labels_df.shape[0]) as bar:
+    #     for idx, item in enumerate(labels_df.index):
+    #         run_stats(item, labels_df, config)
+    #         bar.update(idx)
 
     # Now the file stats are available
-    # -> Now what...
+    # -> Moving to Jupyter Notebook
+    return None
