@@ -73,16 +73,57 @@ def read_spectrogram(label, config):
 
         # Extract DF and Spectrogram
         item = coll.find_one({'data_dir': config['data_dir'], 'label': label})
-        df_bytes = item['df']
-        spec_bytes = item['spectrogram']
-        normal = item['normalization_factor']
+        df, spec, normal = cursor_item_to_data(item, config)
 
-        # Recreate Data
-        df = pd.DataFrame(pickle.loads(df_bytes))
-        spec = pickle.loads(spec_bytes)
-        if config.getboolean('db_sparse'):
-            spec = spec.todense()
+    return df, spec, normal
 
+
+def return_spectrogram_cursor(indices, config):
+    '''Generate a cursor of all other spectrograms
+
+    Open connection to MongoDB, generate a cursor with the list of indices,
+    return it
+
+    Args:
+        indices: A list of the labels to return
+        config: The openbird configuration, need the uri and names
+
+    Returns:
+        MongoDB Cursor
+    '''
+
+    with pymongo.MongoClient(config['db_uri']) as client:
+        db = client[config['db_name']]
+        coll = db[config['db_collection_name']]
+
+        items = coll.find({'data_dir': config['data_dir'], 'label': {'$in': indices}})
+        return items
+
+
+def cursor_item_to_data(item, config):
+    '''Given an item, return necessary spectrogram data
+
+    Utility function to convert an item in the database to bounding
+    box dataframe, spectogram, and normalization factor.
+
+    Args:
+        item: A database item
+        config: The openbird configuration
+
+    Returns:
+        df: The bounding box dataframe,
+        spec: The dense spectrogram
+        normal: The normalization factor
+    '''
+    df_bytes = item['df']
+    spec_bytes = item['spectrogram']
+    normal = item['normalization_factor']
+
+    # Recreate Data
+    df = pd.DataFrame(pickle.loads(df_bytes))
+    spec = pickle.loads(spec_bytes)
+    if config.getboolean('db_sparse'):
+        spec = spec.todense()
     return df, spec, normal
 
 

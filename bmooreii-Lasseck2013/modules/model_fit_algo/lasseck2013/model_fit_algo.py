@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from modules.db_utils import read_spectrogram, write_file_stats
+from modules.db_utils import read_spectrogram, write_file_stats, return_spectrogram_cursor, cursor_item_to_data
 from modules.spect_gen import spect_gen
 from modules.view import extract_segments
 from scipy import stats
@@ -101,14 +101,23 @@ def file_file_stats(df_one, spec_one, normal_one, idx_one, labels_df, config):
     # Indices
     indices = labels_df.index[labels_df.index != idx_one]
 
+    # Get the MongoDB Cursor, indices is a Pandas Index object -> list
+    if config.getboolean('db_rw'):
+        items = return_spectrogram_cursor(indices.values.tolist(), config)
+    else:
+        items = {'label': x for x in indices}
+
     # match_stats dimensions are 3 items by number of segments * number of
     # -> files excluding the current image
-    match_stats = np.zeros([len(indices), df_one.shape[0], 3])
-    for monotonic_idx_two, idx_two in enumerate(indices):
-        # Generate the df, spectrogram, and normalization factor
-        # -> Read from MongoDB or preprocess
+    match_stats = np.zeros([labels_df.shape[0], df_one.shape[0], 3])
+
+    # Iterate through the cursor
+    for item in items:
+        idx_two = item['label']
+        monotonic_idx_two = labels_df.index.get_loc(idx_two)
+
         if config.getboolean('db_rw'):
-            df_two, spec_two, normal_two = read_spectrogram(idx_two, config)
+            df_two, spec_two, normal_two = cursor_item_to_data(item, config)
         else:
             df_two, spec_two, normal_two = spect_gen(idx_two, config)
 
@@ -210,4 +219,3 @@ def model_fit_algo(config):
 
     # Now the file stats are available
     # -> Moving to Jupyter Notebook
-    return None
