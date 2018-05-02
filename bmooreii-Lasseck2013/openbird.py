@@ -6,10 +6,12 @@ Usage:
     openbird.py spect_gen [-i <ini>]
     openbird.py view <label> [<image>] [-i <ini>] [-s]
     openbird.py model_fit [-i <ini>]
-    openbird.py predict <model> [-i <ini>]
+    openbird.py predict [-i <ini>]
 
 Positional Arguments:
-    <image>            An image file to write, e.g. 'image.png'
+    <label>             The label you would like to view, must be in the configs
+                            defined as `data_dir`
+    <image>             An image file to write, e.g. 'image.png'
 
 Options:
     -h --help           Print this screen and exit
