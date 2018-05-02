@@ -32,7 +32,7 @@ def generate_config(f_default, f_override, section):
         section: The parent section of the INI file
 
     Returns:
-        A ConfigParser instance 
+        A ConfigParser instance
 
     Raises:
         FileNotFoundError if INI file doesn't exist
@@ -87,6 +87,5 @@ elif arguments['model_fit']:
     model_fit(defaults)
 
 elif arguments['predict']:
-    # Given a directory, make a prediction based on a model
-    #predict(arguments['<dir>'], defaults)
-    print("predict")
+    # Make a prediction based on a model
+    predict(defaults)
