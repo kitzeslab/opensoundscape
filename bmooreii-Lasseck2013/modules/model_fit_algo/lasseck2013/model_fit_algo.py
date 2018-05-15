@@ -84,6 +84,7 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
     Given a df, spec, and normal for label_one, generate the file-file statistics.
 
     Args:
+        monotonic_idx_one: The monotonic index for df_one
         df_one: The bounding box dataframe for label_one
         spec_one: The spectrum for label_one
         normal_one: The normalization factor for label_one
@@ -91,8 +92,8 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
         config: The parsed ini configuration
 
     Returns:
-        match_stats: A list which contains template matching statistics of all
-            segments in labels_df slid over spec_one
+        match_stats_dict: A dictionary which contains template matching statistics
+         of all segments in labels_df slid over spec_one. Keys are the labels
 
     Raises:
         Nothing.
@@ -102,16 +103,16 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
     if config.getboolean('db_rw'):
         items = return_spectrogram_cursor(labels_df.index.values.tolist(), config)
     else:
-        items = {'label': x for x in indices}
+        items = {'label': x for x in labels_df.index.values.tolist()}
 
-    # Update:
-    # -> The inner dimension isn't constant, need a list here
-    match_stats = [None] * labels_df.shape[0]
+    match_stats_dict = {}
 
     # Iterate through the cursor
     for item in items:
+        # Need to get the index for match_stats
         idx_two = item['label']
-        monotonic_idx_two = labels_df.index.get_loc(idx_two)
+        # monotonic_idx_two, = np.where(get_segments_from == idx_two)
+        # monotonic_idx_two = monotonic_idx_two[0]
 
         if config.getboolean('db_rw'):
             df_two, spec_two, normal_two = cursor_item_to_data(item, config)
@@ -122,7 +123,7 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
         df_two['segments'] = extract_segments(spec_two, df_two)
 
         # Generate the np.array to append
-        to_append = np.zeros((df_two.shape[0], 3))
+        match_stats_dict[idx_two] = np.zeros((df_two.shape[0], 3))
 
         # Slide segments over all other spectrograms
         frequency_buffer = config.getint('template_match_frequency_buffer')
@@ -146,13 +147,10 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
                 output_stats = matchTemplate(
                     spec_one[y_min_target: y_max_target, :], item['segments'], 5)
                 min_val, max_val, min_loc, max_loc = minMaxLoc(output_stats)
-                to_append[idx][0] = max_val
-                to_append[idx][1] = max_loc[0]
-                to_append[idx][2] = max_loc[1] + y_min_target
-
-        # Append the statistics, copy might not be necessary
-        match_stats[monotonic_idx_two] = copy(to_append)
-    return match_stats
+                match_stats_dict[idx_two][idx][0] = max_val
+                match_stats_dict[idx_two][idx][1] = max_loc[0]
+                match_stats_dict[idx_two][idx][2] = max_loc[1] + y_min_target
+    return match_stats_dict
 
 
 def run_stats(idx_one, labels_df, config):
@@ -172,8 +170,7 @@ def run_stats(idx_one, labels_df, config):
     Raises:
         Nothing.
     '''
-    #monotonic_idx_one = labels_df.index.get_loc(idx_one)
-    #birds_identified = labels_df.iloc[monotonic_idx_one][labels_df.iloc[monotonic_idx_one] == 1.0]
+    monotonic_idx_one = labels_df.index.get_loc(idx_one)
     df_one, spec_one, normal_one, row_f = file_stats(idx_one, config)
     match_stats = file_file_stats(df_one, spec_one, normal_one, labels_df, config)
     write_file_stats(idx_one, row_f, match_stats, config)
@@ -211,6 +208,7 @@ def model_fit_algo(config):
                 bar.update(idx)
 
     # Serial code for debugging
+    # print("Running serial code...")
     # for idx, item in enumerate(labels_df.index):
     #     run_stats(item, labels_df, config)
 

@@ -135,7 +135,7 @@ def write_file_stats(label, file_stats, file_file_stats, config):
     Args:
         label: The label for the MongoDB entry
         file_stats: The file stats as a numpy array
-        file_file_stats: A dictionary containing file_file_stats
+        file_file_stats: An array containing file file statistics for training files
         config: The openbird configuration
 
     Returns:
@@ -153,4 +153,3 @@ def write_file_stats(label, file_stats, file_file_stats, config):
         coll.update_one({'data_dir': config['data_dir'], 'label': label},
             {'$set': {'file_stats': file_stats_bytes,
             'file_file_stats': file_file_stats_bytes}})
-    return None

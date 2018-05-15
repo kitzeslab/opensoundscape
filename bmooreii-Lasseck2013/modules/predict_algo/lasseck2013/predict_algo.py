@@ -30,13 +30,16 @@ def run_stats(predict_idx, train_labels_df, config):
 
     # Expose the statistics functions necessary for making the prediction
     # -> Can't do this at top of file because it is dependent on the config
-    sys.path.append("modules/model_fit_algo/{}".format(config['predict_algo']))
-    from model_fit_algo import file_stats
-    from model_fit_algo import file_file_stats
+    try:
+        file_stats.__name__
+        file_file_stats.__name__
+    except UnboundLocalError:
+        sys.path.append("modules/model_fit_algo/{}".format(config['predict_algo']))
+        from model_fit_algo import file_stats, file_file_stats
 
     df_predict, spec_predict, normal_predict, row_predict = file_stats(predict_idx, config)
-    match_stats = file_file_stats(df_predict, spec_predict, normal_predict, train_labels_df, config)
-    write_file_stats(predict_idx, row_predict, match_stats, config)
+    match_stats_dict = file_file_stats(df_predict, spec_predict, normal_predict, train_labels_df, config)
+    write_file_stats(predict_idx, row_predict, match_stats_dict, config)
 
 
 def predict_algo(config):
@@ -73,5 +76,4 @@ def predict_algo(config):
 
     # Serial code for debugging
     # for idx, item in enumerate(predict_labels_df.index):
-    #     print(idx, item)
     #     run_stats(item, train_labels_df, config)
