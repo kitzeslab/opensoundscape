@@ -39,6 +39,10 @@ def generate_config(f_default, f_override, section):
     Raises:
         FileNotFoundError if INI file doesn't exist
     '''
+    openbird_dir = dirname(abspath(__file__))
+    f_default = join(openbird_dir, f_default)
+    f_override = join(openbird_dir, f_override)
+
     if not isfile(f_default):
         raise FileNotFoundError("{} doesn't exist!".format(f_default))
     if not isfile(f_override):
@@ -53,6 +57,8 @@ def generate_config(f_default, f_override, section):
 from docopt import docopt
 from os.path import isfile
 from os.path import abspath
+from os.path import dirname
+from os.path import join
 from configparser import ConfigParser
 from modules.sampling import sampling
 from modules.spect_gen import spect_gen
