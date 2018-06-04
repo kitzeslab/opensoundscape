@@ -46,12 +46,13 @@ def extract_segments(spec, df):
     return segments
 
 
-def gen_spec_with_segs(spec, df, image):
+def gen_spec_with_segs(label, spec, df, image):
     '''Plot spectrogram w/ bounding boxes
 
     Plots the spectrogram with bounding boxes labeling segments
 
     Args:
+        label: The spectrogram title
         spec: The spectrogram
         df: The bounding box DataFrame
         image: If '' show plot, else write plot
@@ -64,13 +65,15 @@ def gen_spec_with_segs(spec, df, image):
     segments = extract_segments(spec, df)
 
     # Generate Color Map
-    cmap = plt.cm.get_cmap('jet', df.shape[0])
-    rgb_vals = cmap(np.arange(df.shape[0]))[:, :-1]
+    if df.shape[0] != 0:
+        cmap = plt.cm.get_cmap('jet', df.shape[0])
+        rgb_vals = cmap(np.arange(df.shape[0]))[:, :-1]
 
     # Plot, flip the y-axis
     fig, ax = plt.subplots(1, figsize=(15, 5))
     ax.imshow(spec, cmap=plt.get_cmap('gray_r'))
     ax.set_ylim(ax.get_ylim()[::-1])
+    ax.set_title(label)
 
     for idx, row in df.iterrows():
         rect = patches.Rectangle((row['x_min'], row['y_min']),
@@ -112,6 +115,7 @@ def gen_segs(spec, df, image):
     for idx in df.index:
         ax = fig.add_subplot(max_rows, columns, idx + 1)
         ax.imshow(segments[idx], cmap=plt.get_cmap("gray_r"))
+        ax.set_title(idx)
         ax.set_ylim(ax.get_ylim()[::-1])
 
     # Show or write
@@ -120,7 +124,7 @@ def gen_segs(spec, df, image):
 
 def view(label, image, seg_only, config):
     '''View a spectrogram
-    
+
     This is a super function which provides all of the functionality to
     view a spectrogram, either from the database itself or recreated
 
@@ -149,4 +153,4 @@ def view(label, image, seg_only, config):
     if seg_only:
         gen_segs(spectrogram, df, image)
     else:
-        gen_spec_with_segs(spectrogram, df, image)
+        gen_spec_with_segs(label, spectrogram, df, image)
