@@ -127,6 +127,25 @@ def cursor_item_to_data(item, config):
     return df, spec, normal
 
 
+def cursor_item_to_stats(item):
+    '''Given an item, return file and file_file statistics
+
+    Utility function to convert an item in the database to file and file_file
+    statistics
+
+    Args:
+        item: A database item
+
+    Returns:
+        file_stats: single file statistics
+        file_file_stats: file-file statistics
+    '''
+    file_stats_bytes = item['file_stats']
+    file_file_stats_bytes = item['file_file_stats']
+
+    return pickle.loads(file_stats_bytes), pickle.loads(file_file_stats_bytes)
+
+
 def write_file_stats(label, file_stats, file_file_stats, config):
     '''Write file statistics to MongoDB
 
