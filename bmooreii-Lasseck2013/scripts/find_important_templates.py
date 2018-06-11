@@ -12,16 +12,17 @@ Prerequisites:
 
 Usage:
     find_important_templates.py [-hv]
-    find_important_templates.py <label> [-i <ini>]
+    find_important_templates.py <label> [-i <ini>] [-s <template_pool.csv>]
 
 Positional Arguments:
     <label>             The label you would like to interrogate,
                             must be in the CSV defined as `train_file`
 
 Options:
-    -h --help           Print this screen and exit
-    -v --version        Print the version of crc-squeue.py
-    -i --ini <ini>      Specify an override file [default: openbird.ini]
+    -h --help                       Print this screen and exit
+    -v --version                    Print the version of crc-squeue.py
+    -i --ini <ini>                  Specify an override file [default: openbird.ini]
+    -s --save <template_pool.csv>   Generate a <template_pool.csv> for openbird.py
 '''
 
 
@@ -40,6 +41,36 @@ def build_identification_list(found_df):
 
     # 4. Flatten and tuple up
     return [(idx, item) for sl in to_filenames for idx, item in enumerate(sl)]
+
+
+def sampled_X_y(species_found, species_not_found):
+    # Downsample not_found DF to smaller size
+    found_length = 2 * species_found.shape[0]
+    dummies = species_not_found.sample(n=found_length, random_state=42)
+
+    # Merge the DataFrames
+    sampled_df = pd.concat((species_found, dummies))
+
+    # Get the cursor of items
+    items = return_spectrogram_cursor(list(sampled_df.index.values), configs)
+
+    # Generate the file_file_stats
+    all_file_file_statistics = [None] * sampled_df.shape[0]
+    for idx, item in enumerate(items):
+        _, file_file_stats = cursor_item_to_stats(item)
+        all_file_file_statistics[idx] = [file_file_stats[found] for found in species_found.index.values]
+
+    # Stack internal stats
+    # -> convert to NP array
+    # -> extract only template matching stat specifically [:, :, 0]
+    npify = [None] * sampled_df.shape[0]
+    for o_idx, outer in enumerate(all_file_file_statistics):
+        stack = np.vstack([all_file_file_statistics[o_idx][x] for x in range(len(all_file_file_statistics[o_idx]))])
+        npify[o_idx] = copy(stack)
+    all_file_file_statistics = np.array(npify)[:, :, 0]
+
+    # Generate X and y
+    return pd.DataFrame(all_file_file_statistics), pd.Series(sampled_df.values)
 
 
 def identify_templates(X, y, identifiers):
@@ -76,6 +107,17 @@ def identify_templates(X, y, identifiers):
     return good_templates
 
 
+def gen_results_df(idx, species_found, species_not_found, identifiers_list):
+    X, y = sampled_X_y(species_found, species_not_found)
+    results_df = pd.DataFrame(columns=["weight", "template"])
+    output = identify_templates(X, y, identifiers_list)
+    for outer in output:
+        for inner in outer:
+            weight, template = inner
+            results_df = results_df.append({"weight": weight, "template": template}, ignore_index=True)
+    return results_df
+
+
 from docopt import docopt
 import pandas as pd
 import numpy as np
@@ -85,6 +127,10 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 import pickle
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import cpu_count
+import progressbar
+from itertools import repeat
 
 # Need some functions from our module
 import sys
@@ -111,64 +157,32 @@ species = arguments["<label>"]
 species_found = labels_df[species][labels_df[species] == 1]
 species_not_found = labels_df[species][labels_df[species] == 0]
 
-# Downsample not_found DF to smaller size
-found_length = 2 * species_found.shape[0]
-species_not_found = species_not_found.sample(n=found_length, random_state=42)
-
-# Merge the DataFrames
-sampled_df = pd.concat((species_found, species_not_found))
-
-# Get the cursor of items
-items = return_spectrogram_cursor(list(sampled_df.index.values), configs)
-
-# Generate the file_file_stats
-all_file_file_statistics = [None] * sampled_df.shape[0]
-for idx, item in enumerate(items):
-    _, file_file_stats = cursor_item_to_stats(item)
-    all_file_file_statistics[idx] = [file_file_stats[found] for found in species_found.index.values]
-
-# Stack internal stats
-# -> convert to NP array
-# -> extract only template matching stat specifically [:, :, 0]
-npify = [None] * sampled_df.shape[0]
-for o_idx, outer in enumerate(all_file_file_statistics):
-    stack = np.vstack([all_file_file_statistics[o_idx][x] for x in range(len(all_file_file_statistics[o_idx]))])
-    npify[o_idx] = copy(stack)
-all_file_file_statistics = np.array(npify)[:, :, 0]
-
-# Generate X and y
-X = pd.DataFrame(all_file_file_statistics)
-y = pd.Series(sampled_df.values)
-
 # Generate list of tuples with identifying features for templates
 identifiers_list = build_identification_list(species_found)
 
 # Now, run a loop to identify useful templates
-results_df = pd.DataFrame(columns=["weight", "template"])
-for i in range(1):
-    output = identify_templates(X, y, identifiers_list)
-    for outer in output:
-        for inner in outer:
-            weight, template = inner
-            results_df = results_df.append({"weight": weight, "template": template}, ignore_index=True)
+its = 100
+nprocs = cpu_count() - 1
+nprocs = min(nprocs, its)
+with ProcessPoolExecutor(nprocs) as executor:
+    results = executor.map(gen_results_df, range(its), repeat(species_found),
+        repeat(species_not_found), repeat(identifiers_list))
 
-# Keep any weights above 0.25
+# Concatenate all results
+results_df = pd.concat(results)
+
+# Keep any weights above 0.35
 results_df = results_df[results_df["weight"] >= 0.35]
 
 # Sort by the weights
 results_df.sort_values(by=["weight", "template"], ascending=False, inplace=True)
-to_set = set(results_df.template.unique())
+templates = list(set(results_df.template.unique()))
 
-print("Files which generate important templates:")
-print("----------------")
-print(sorted(set([n for t, n in to_set])))
-print()
+df = pd.DataFrame(templates, columns=["templates", "filenames"])
+gb_filenames = df.groupby("filenames")
+by_filename = [None] * len(gb_filenames.groups.keys())
+for idx, (key, item) in enumerate(gb_filenames):
+    by_filename[idx] = (key, sorted(gb_filenames.get_group(key)["templates"].values))
 
-print("Important templates from files")
-print("----------------")
-print(to_set)
-print()
-
-print("Weights >= 0.35 in models with >= 0.85 ROC on test set:")
-print("----------------")
-print(results_df)
+df = pd.DataFrame(by_filename, columns=["Filename", "templates"])
+df.to_csv("template_pool.csv", index=False)
