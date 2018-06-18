@@ -73,7 +73,7 @@ def yes_no(question, default='no'):
     yes = set(['yes', 'y', 'ye'])
     no = set(['no', 'n'])
 
-    if default = 'no':
+    if default == 'no':
         yn_def_str = '[yN]'
         yn_def_ret = False
     else:
@@ -81,12 +81,12 @@ def yes_no(question, default='no'):
         yn_def_ret = True
 
     while True:
-        choice = input("{} {}: ".format(question, yn_default_str)).lower()
+        choice = input("{} {}: ".format(question, yn_def_str)).lower()
         if choice in yes:
            return True
         elif choice in no:
            return False
-       elif choice == '':
+        elif choice == '':
            return yn_def_ret
-       else:
+        else:
            print("Please respond with 'yes' or 'no'")

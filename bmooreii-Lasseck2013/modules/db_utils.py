@@ -18,19 +18,21 @@ def write_ini_section(config, section):
     warn the user it is happening.
     '''
 
-    ini_dict = config[section].items()
+    ini_dict = dict(config[section].items())
 
     with pymongo.MongoClient(config['general']['db_uri']) as client:
         db = client[config['general']['db_name']]
         coll = db['ini']
 
         item = coll.find_one({'section': section})
-        if item.count() == 0:
+        if item == None:
             ini_dict['section'] = section
             coll.insert(ini_dict)
         # section exists, has the config changed?
         else:
+            # Pop off the items which are added by db_utils and MongoDB
             item.pop('section')
+            item.pop('_id')
             if ini_dict != item:
                 print("WARNING: Detected a change to your configuration!")
                 answer = yes_no("Do you want to override the current config?")
@@ -122,7 +124,7 @@ def return_spectrogram_cursor(indices, config):
         db = client[config['general']['db_name']]
         coll = db['spectrograms']
 
-        items = coll.find('label': {'$in': indices})
+        items = coll.find({'label': {'$in': indices}})
         return items
 
 
