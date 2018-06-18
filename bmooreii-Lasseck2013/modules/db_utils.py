@@ -3,6 +3,42 @@ import pickle
 import pandas as pd
 from scipy.sparse import csr_matrix
 from datetime import datetime
+from modules.utils import yes_no
+
+
+class OpenbirdAttemptOverrideINISection(Exception):
+    pass
+
+
+def write_ini_section(config, section):
+    '''Write the ini to database
+
+    Open connection to MongoDB and write the INI file section to the database.
+    We'll use this like a lock file. If you try to change the config, we will
+    warn the user it is happening.
+    '''
+
+    ini_dict = config[section].items()
+
+    with pymongo.MongoClient(config['general']['db_uri']) as client:
+        db = client[config['general']['db_name']]
+        coll = db['ini']
+
+        item = coll.find_one({'section': section})
+        if item.count() == 0:
+            ini_dict['section'] = section
+            coll.insert(ini_dict)
+        # section exists, has the config changed?
+        else:
+            item.pop('section')
+            if ini_dict != item:
+                print("WARNING: Detected a change to your configuration!")
+                answer = yes_no("Do you want to override the current config?")
+                if not answer:
+                    raise OpenbirdAttemptOverrideINISection("Check for INI file!")
+                else:
+                    coll.update_one({'section': section}, {'$set': ini_dict},
+                        upsert=True)
 
 
 def write_spectrogram(label, df, spec, normal, config):
@@ -23,13 +59,8 @@ def write_spectrogram(label, df, spec, normal, config):
         Nothing.
     '''
 
-    # Pickle Up the DF
     df_bytes = pickle.dumps(df)
 
-    # Steps:
-    # 1. Set the lowest 5% values to zero
-    # 2. Store as compressed sparse row matrix
-    # 3. Pickle and store
     if config['general'].getboolean('db_sparse'):
         spec[spec <
                 (config['general'].getfloat('db_sparse_thresh_percent') / 100.)] = 0
@@ -37,18 +68,13 @@ def write_spectrogram(label, df, spec, normal, config):
     else:
         spec_bytes = pickle.dumps(spec)
 
-    # Update or insert item into collection
     with pymongo.MongoClient(config['general']['db_uri']) as client:
         db = client[config['general']['db_name']]
-        coll = db[config['general']['db_collection_name']]
-        coll.update_one({'data_dir': config['general']['data_dir'], 'label': label},
-                {'$set': {'df': df_bytes, 'spectrogram': spec_bytes,
-                    'normalization_factor': normal, 'sparse':
-                    config['general'].getboolean('db_sparse'), 'sparse_thresh_percent':
-                    config['general'].getfloat('db_sparse_thresh_percent'),
-                    'spect_gen_preprocess_method':
-                    config['spect_gen']['algo'], 'preprocess_date':
-                    datetime.now()}}, upsert=True)
+        coll = db['spectrograms']
+        coll.update_one({'label': label},
+            {'$set': {'df': df_bytes, 'spectrogram': spec_bytes,
+                'normalization_factor': normal, 'preprocess_date': datetime.now()}},
+            upsert=True)
 
 
 def read_spectrogram(label, config):
@@ -69,10 +95,10 @@ def read_spectrogram(label, config):
 
     with pymongo.MongoClient(config['general']['db_uri']) as client:
         db = client[config['general']['db_name']]
-        coll = db[config['general']['db_collection_name']]
+        coll = db['spectrograms']
 
         # Extract DF and Spectrogram
-        item = coll.find_one({'data_dir': config['general']['data_dir'], 'label': label})
+        item = coll.find_one({'label': label})
         df, spec, normal = cursor_item_to_data(item, config)
 
     return df, spec, normal
@@ -94,9 +120,9 @@ def return_spectrogram_cursor(indices, config):
 
     with pymongo.MongoClient(config['general']['db_uri']) as client:
         db = client[config['general']['db_name']]
-        coll = db[config['general']['db_collection_name']]
+        coll = db['spectrograms']
 
-        items = coll.find({'data_dir': config['general']['data_dir'], 'label': {'$in': indices}})
+        items = coll.find('label': {'$in': indices})
         return items
 
 
@@ -168,7 +194,8 @@ def write_file_stats(label, file_stats, file_file_stats, config):
     # Update or insert item into collection
     with pymongo.MongoClient(config['general']['db_uri']) as client:
         db = client[config['general']['db_name']]
-        coll = db[config['general']['db_collection_name']]
-        coll.update_one({'data_dir': config['general']['data_dir'], 'label': label},
+        coll = db['stats']
+        coll.update_one({'label': label},
             {'$set': {'file_stats': file_stats_bytes,
-            'file_file_stats': file_file_stats_bytes}})
+                'file_file_stats': file_file_stats_bytes}},
+            upsert=True)

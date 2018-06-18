@@ -130,7 +130,7 @@ def preprocess(label, config):
 
     Returns:
         if read write to DB defined (`db_rw` in INI)
-            Write data to MongoDB w/ `db_name` & `db_collection_name`
+            Write data to MongoDB w/ `db_name`
         else:
             Return the bounding box dataframe, spectrogram, and normalization
             factor
@@ -206,7 +206,7 @@ def spect_gen_algo(config):
         config: The parsed ini file for this particular run
 
     Returns:
-        Nothing, write data to MongoDB w/ `db_name` & `db_collection_name`
+        Nothing, write data to MongoDB w/ `db_name`
 
     Raises:
         Nothing
