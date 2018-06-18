@@ -29,7 +29,7 @@ Options:
 def build_identification_list(found_df):
     # 1. Generate a dictionary
     num_of_segments_d = {}
-    items = return_spectrogram_cursor(list(found_df.index), configs)
+    items = return_spectrogram_cursor(list(found_df.index), config)
     for item in items:
         num_of_segments_d[item['label']] = pd.DataFrame(pickle.loads(item['df'])).shape[0]
 
@@ -52,7 +52,7 @@ def sampled_X_y(species_found, species_not_found):
     sampled_df = pd.concat((species_found, dummies))
 
     # Get the cursor of items
-    items = return_spectrogram_cursor(list(sampled_df.index.values), configs)
+    items = return_spectrogram_cursor(list(sampled_df.index.values), config)
 
     # Generate the file_file_stats
     all_file_file_statistics = [None] * sampled_df.shape[0]
@@ -128,7 +128,6 @@ from sklearn.metrics import roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 import pickle
 from concurrent.futures import ProcessPoolExecutor
-from multiprocessing import cpu_count
 import progressbar
 from itertools import repeat
 
@@ -136,7 +135,7 @@ from itertools import repeat
 import sys
 sys.path.append("../modules")
 
-from utils import generate_config
+from utils import generate_config, return_cpu_count
 from db_utils import cursor_item_to_stats
 from db_utils import return_spectrogram_cursor
 
@@ -144,10 +143,10 @@ from db_utils import return_spectrogram_cursor
 arguments = docopt(__doc__, version='find_important_templates.py version 0.0.1')
 
 # Generate the config instance
-configs = generate_config('../config/openbird.ini', arguments['--ini'], 'default')
+config = generate_config('../config/openbird.ini', arguments['--ini'])
 
 # Generate list of files which identify <label>
-labels_df = pd.read_csv("{}/{}".format(configs['data_dir'], configs['train_file']), index_col="Filename")
+labels_df = pd.read_csv("{}/{}".format(config['general']['data_dir'], config['general']['train_file']), index_col="Filename")
 labels_df = labels_df.fillna(0).astype(int)
 
 # Downsample to particular species
@@ -161,9 +160,9 @@ species_not_found = labels_df[species][labels_df[species] == 0]
 identifiers_list = build_identification_list(species_found)
 
 # Now, run a loop to identify useful templates
+# -> Don't use
 its = 100
-nprocs = cpu_count() - 1
-nprocs = min(nprocs, its)
+nprocs = return_cpu_count(config)
 with ProcessPoolExecutor(nprocs) as executor:
     results = executor.map(gen_results_df, range(its), repeat(species_found),
         repeat(species_not_found), repeat(identifiers_list))

@@ -139,20 +139,20 @@ def preprocess(label, config):
     '''
 
     # Resample
-    sample_rate, samples = wavfile.read("{}/{}".format(config['data_dir'], label))
+    sample_rate, samples = wavfile.read("{}/{}".format(config['general']['data_dir'], label))
     sample_rate, samples = resample_audio(samples, sample_rate,
-            config.getfloat('resample_rate'))
+            config['spect_gen'].getfloat('resample_rate'))
 
     # Generate Spectrogram
-    nperseg = config.getint('spectrogram_segment_length')
-    noverlap = int(nperseg * config.getfloat('spectrogram_overlap') / 100.)
+    nperseg = config['spect_gen'].getint('spectrogram_segment_length')
+    noverlap = int(nperseg * config['spect_gen'].getfloat('spectrogram_overlap') / 100.)
     frequencies, times, spectrogram = signal.spectrogram(samples, sample_rate,
             window='hann', nperseg=nperseg, noverlap=noverlap, nfft=nperseg)
 
     # Frequency Selection
     spectrogram, frequencies = frequency_based_spectrogram_filter(spectrogram,
-            frequencies, config.getint('low_freq_thresh'),
-            config.getint('high_freq_thresh'))
+            frequencies, config['spect_gen'].getint('low_freq_thresh'),
+            config['spect_gen'].getint('high_freq_thresh'))
 
     # Normalization, need spectrogram_max later
     spectrogram_max = float(spectrogram.max())
@@ -160,36 +160,36 @@ def preprocess(label, config):
 
     # Scaled Median Column/Row Filters
     binary_spectrogram = scaled_median_filter(spectrogram,
-            config.getfloat('median_filter_factor'))
+            config['spect_gen'].getfloat('median_filter_factor'))
 
     # Binary Closing
     binary_spectrogram = ndimage.morphology.binary_closing(binary_spectrogram,
             structure=np.ones((
-                config.getint('binary_closing_kernel_height'),
-                config.getint('binary_closing_kernel_width'))))
+                config['spect_gen'].getint('binary_closing_kernel_height'),
+                config['spect_gen'].getint('binary_closing_kernel_width'))))
 
     # Binary Dilation
     binary_spectrogram = ndimage.morphology.binary_dilation(binary_spectrogram,
             structure=np.ones((
-                config.getint('binary_dilation_kernel_height'),
-                config.getint('binary_dilation_kernel_width'))))
+                config['spect_gen'].getint('binary_dilation_kernel_height'),
+                config['spect_gen'].getint('binary_dilation_kernel_width'))))
 
     # Binary Median Filter
     binary_spectrogram = ndimage.median_filter(binary_spectrogram,
             size=(
-                config.getint('median_filter_kernel_height'),
-                config.getint('median_filter_kernel_width')))
+                config['spect_gen'].getint('median_filter_kernel_height'),
+                config['spect_gen'].getint('median_filter_kernel_width')))
 
     # Remove Small Objects
     binary_spectrogram = remove_small_objects(binary_spectrogram,
-            config.getint('small_objects_kernel_size'))
+            config['spect_gen'].getint('small_objects_kernel_size'))
 
     # Get the bounding box dataframe from the labeled segments
     bboxes_df = generate_segments_from_binary_spectrogram(binary_spectrogram,
-            config.getint('segment_pixel_buffer'))
+            config['spect_gen'].getint('segment_pixel_buffer'))
 
     # Write to DB, if defined:
-    if config.getboolean('db_rw'):
+    if config['general'].getboolean('db_rw'):
         write_spectrogram(label, bboxes_df, spectrogram, spectrogram_max, config)
     else:
         return bboxes_df, spectrogram, spectrogram_max
@@ -213,29 +213,29 @@ def spect_gen_algo(config):
     '''
 
     # If not writing to DB, no reason to do any preprocessing now
-    if not config.getboolean('db_rw'):
+    if not config['general'].getboolean('db_rw'):
         return
 
     # Generate a Series of file names
     preprocess_files = pd.Series()
-    if config['train_file']:
-        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['data_dir'],
-            config['train_file']))['Filename'], ignore_index=True)
-    if config['test_file']:
-        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['data_dir'],
-            config['test_file']))['Filename'], ignore_index=True)
-    if config['validate_file']:
-        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['data_dir'],
-            config['validate_file']))['Filename'], ignore_index=True)
-    if config['predict_file']:
-        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['data_dir'],
-            config['predict_file']))['Filename'], ignore_index=True)
+    if config['general']['train_file']:
+        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['general']['data_dir'],
+            config['general']['train_file']))['Filename'], ignore_index=True)
+    if config['general']['test_file']:
+        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['general']['data_dir'],
+            config['general']['test_file']))['Filename'], ignore_index=True)
+    if config['general']['validate_file']:
+        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['general']['data_dir'],
+            config['general']['validate_file']))['Filename'], ignore_index=True)
+    if config['general']['predict_file']:
+        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['general']['data_dir'],
+            config['general']['predict_file']))['Filename'], ignore_index=True)
 
     # Get the processor counts
-    if config['num_processors'] == '':
+    if config['general']['num_processors'] == '':
         nprocs = cpu_count()
     else:
-        nprocs = config.getint('num_processors')
+        nprocs = config['general'].getint('num_processors')
 
     # Create a ProcessPoolExecutor, run:
     # -> Wrap everything in a ProgressBar

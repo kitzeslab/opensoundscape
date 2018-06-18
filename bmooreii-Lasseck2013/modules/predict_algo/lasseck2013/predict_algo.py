@@ -34,7 +34,7 @@ def run_stats(predict_idx, train_labels_df, config):
         file_stats.__name__
         file_file_stats.__name__
     except UnboundLocalError:
-        sys.path.append("modules/model_fit_algo/{}".format(config['predict_algo']))
+        sys.path.append("modules/model_fit_algo/{}".format(config['predict']['algo']))
         from model_fit_algo import file_stats, file_file_stats
 
     df_predict, spec_predict, normal_predict, row_predict = file_stats(predict_idx, config)
@@ -58,10 +58,10 @@ def predict_algo(config):
         NotImplementedError: Not written yet.
     '''
     # First, we need labels and files
-    predict_labels_df = pd.read_csv("{}/{}".format(config['data_dir'],
-        config['predict_file']), index_col=0)
-    train_labels_df = pd.read_csv("{}/{}".format(config['data_dir'],
-        config['train_file']), index_col=0)
+    predict_labels_df = pd.read_csv("{}/{}".format(config['general']['data_dir'],
+        config['general']['predict_file']), index_col=0)
+    train_labels_df = pd.read_csv("{}/{}".format(config['general']['data_dir'],
+        config['general']['train_file']), index_col=0)
 
     # Get the number of processors
     nprocs = return_cpu_count(config)

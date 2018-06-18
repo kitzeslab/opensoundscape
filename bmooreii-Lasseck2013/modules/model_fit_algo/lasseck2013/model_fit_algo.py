@@ -31,7 +31,7 @@ def file_stats(label, config):
 
     # Generate the df, spectrogram, and normalization factor
     # -> Read from MongoDB or preprocess
-    if config.getboolean('db_rw'):
+    if config['general'].getboolean('db_rw'):
         df, spec, normal = read_spectrogram(label, config)
     else:
         df, spec, normal = spect_gen(label, config)
@@ -43,7 +43,7 @@ def file_stats(label, config):
     raw_spec_stats = stats.describe(raw_spec, axis=None)
 
     # Frequency Band Stats
-    freq_bands = np.array_split(raw_spec, config.getint('num_frequency_bands'))
+    freq_bands = np.array_split(raw_spec, config['model_fit'].getint('num_frequency_bands'))
     freq_bands_stats = [None] * len(freq_bands)
     for idx, band in enumerate(freq_bands):
         freq_bands_stats[idx] = stats.describe(band, axis=None)
@@ -100,7 +100,7 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
     '''
 
     # Get the MongoDB Cursor, indices is a Pandas Index object -> list
-    if config.getboolean('db_rw'):
+    if config['general'].getboolean('db_rw'):
         items = return_spectrogram_cursor(labels_df.index.values.tolist(), config)
     else:
         items = {'label': x for x in labels_df.index.values.tolist()}
@@ -114,7 +114,7 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
         # monotonic_idx_two, = np.where(get_segments_from == idx_two)
         # monotonic_idx_two = monotonic_idx_two[0]
 
-        if config.getboolean('db_rw'):
+        if config['general'].getboolean('db_rw'):
             df_two, spec_two, normal_two = cursor_item_to_data(item, config)
         else:
             df_two, spec_two, normal_two = spect_gen(idx_two, config)
@@ -126,7 +126,7 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
         match_stats_dict[idx_two] = np.zeros((df_two.shape[0], 3))
 
         # Slide segments over all other spectrograms
-        frequency_buffer = config.getint('template_match_frequency_buffer')
+        frequency_buffer = config['model_fit'].getint('template_match_frequency_buffer')
         for idx, item in df_two.iterrows():
             # Determine minimum y target
             y_min_target = 0
@@ -192,8 +192,8 @@ def model_fit_algo(config):
     '''
 
     # First, we need labels and files
-    labels_df = pd.read_csv("{}/{}".format(config['data_dir'],
-        config['train_file']), index_col=0)
+    labels_df = pd.read_csv("{}/{}".format(config['model_fit']['data_dir'],
+        config['model_fit']['train_file']), index_col=0)
 
     # Get the processor counts
     nprocs = return_cpu_count(config)
