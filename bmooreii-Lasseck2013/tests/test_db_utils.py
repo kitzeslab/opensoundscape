@@ -81,6 +81,12 @@ def test_write_ini_section_override_answer_no(monkeypatch, coll_write_ini_sectio
         write_ini_section(ini_test_change, 'general')
 
 
+def test_write_ini_section_override_answer_default(monkeypatch, coll_write_ini_section, ini_test_change):
+    monkeypatch.setattr('builtins.input', lambda prompt: '')
+    with pytest.raises(OpenbirdAttemptOverrideINISection):
+        write_ini_section(ini_test_change, 'general')
+
+
 def test_write_ini_section_override_answer_yes(monkeypatch, coll_write_ini_section, ini_test_change):
     monkeypatch.setattr('builtins.input', lambda prompt: 'yes')
     write_ini_section(ini_test_change, 'general')
