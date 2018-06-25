@@ -197,8 +197,8 @@ def model_fit_algo(config):
     '''
 
     # First, we need labels and files
-    labels_df = pd.read_csv("{}/{}".format(config['model_fit']['data_dir'],
-        config['model_fit']['train_file']), index_col=0)
+    labels_df = pd.read_csv("{}/{}".format(config['general']['data_dir'],
+        config['general']['train_file']), index_col=0)
 
     # Get the processor counts
     nprocs = return_cpu_count(config)

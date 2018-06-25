@@ -7,3 +7,4 @@ git+https://github.com/gregorias/samplerate@master
 scikit-image==0.13.1
 pymongo==3.4.0
 progressbar2==3.36.0
+pytest==3.6.1

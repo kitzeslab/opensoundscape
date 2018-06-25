@@ -52,3 +52,41 @@ def generate_config(f_default, f_override):
     config.read(f_default)
     config.read(f_override)
     return config
+
+
+def yes_no(question, default='no'):
+    ''' Ask a yes/no question
+
+    Ask a yes/no question with a default.
+
+    Args:
+        question: The y/n question
+        default: What should the default be if blank
+
+    Returns:
+        True (yes) or False (no)
+
+    Raises:
+        Nothing
+    '''
+
+    yes = set(['yes', 'y', 'ye'])
+    no = set(['no', 'n'])
+
+    if default == 'no':
+        yn_def_str = '[yN]'
+        yn_def_ret = False
+    else:
+        yn_def_str = '[Yn]'
+        yn_def_ret = True
+
+    while True:
+        choice = input("{} {}: ".format(question, yn_def_str)).lower()
+        if choice in yes:
+           return True
+        elif choice in no:
+           return False
+        elif choice == '':
+           return yn_def_ret
+        else:
+           print("Please respond with 'yes' or 'no'")

@@ -1,4 +1,5 @@
 import sys
+from modules.db_utils import write_ini_section
 
 def predict(config):
     '''Make a prediction
@@ -21,5 +22,8 @@ def predict(config):
 
     sys.path.append("modules/predict_algo/{}".format(config['predict']['algo']))
     from predict_algo import predict_algo
+
+    if config['general'].getboolean('db_rw'):
+        write_ini_section(config, 'predict')
 
     predict_algo(config)
