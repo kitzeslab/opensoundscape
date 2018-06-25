@@ -7,6 +7,8 @@ from modules.utils import yes_no
 
 
 class OpenbirdAttemptOverrideINISection(Exception):
+    '''Override INI Section Exception
+    '''
     pass
 
 
@@ -14,30 +16,51 @@ def write_ini_section(config, section):
     '''Write the ini to database
 
     Open connection to MongoDB and write the INI file section to the database.
-    We'll use this like a lock file. If you try to change the config, we will
-    warn the user it is happening.
+    The db section will operate like a lock file. Each section is reliant on the
+    'general' section so we check that for all other sections. If you try to
+    change the config, we will warn the user it is happening.
+
+    Args:
+        config: The openbird configuration
+        section: Which database section to work on
+
+    Returns:
+        Nothing.
+
+    Raises:
+        OpenbirdAttemptOverrideINISection: When INI section exists and user
+            doesn't override
     '''
 
     ini_dict = dict(config[section].items())
+    gen_dict = dict(config['general'].items())
 
     with pymongo.MongoClient(config['general']['db_uri']) as client:
         db = client[config['general']['db_name']]
         coll = db['ini']
 
+        if section != 'general':
+            item = coll.find_one({'section': 'general'})
+            if item == None:
+                raise OpenbirdAttemptOverrideINISection("Please run `openbird.py init`")
+            else:
+                item.pop('section')
+                item.pop('_id')
+                if gen_dict != item:
+                    raise OpenbirdAttemptOverrideINISection("Please run `openbird.py init`")
+
         item = coll.find_one({'section': section})
         if item == None:
             ini_dict['section'] = section
             coll.insert(ini_dict)
-        # section exists, has the config changed?
         else:
-            # Pop off the items which are added by db_utils and MongoDB
             item.pop('section')
             item.pop('_id')
             if ini_dict != item:
                 print("WARNING: Detected a change to your configuration!")
                 answer = yes_no("Do you want to override the current config?")
                 if not answer:
-                    raise OpenbirdAttemptOverrideINISection("Check for INI file!")
+                    raise OpenbirdAttemptOverrideINISection("Check your INI file!")
                 else:
                     coll.update_one({'section': section}, {'$set': ini_dict},
                         upsert=True)

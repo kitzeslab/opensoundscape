@@ -2,6 +2,7 @@
 ''' openbird.py -- OpenBird
 Usage:
     openbird.py [-hv]
+    openbird.py init [-i <ini>]
     openbird.py sampling [-i <ini>]
     openbird.py spect_gen [-i <ini>]
     openbird.py template_pool_gen [-i <ini>]
@@ -29,6 +30,7 @@ from modules.view import view
 from modules.model_fit import model_fit
 from modules.predict import predict
 from modules.utils import generate_config
+from modules.init import init
 from modules.template_pool_gen import template_pool_gen
 
 # From the docstring, generate the arguments dictionary
@@ -64,3 +66,7 @@ elif arguments['predict']:
 elif arguments['template_pool_gen']:
     # Build template pool based on config
     template_pool_gen(config)
+
+elif arguments['init']:
+    # Initialize INI section
+    init(config)
