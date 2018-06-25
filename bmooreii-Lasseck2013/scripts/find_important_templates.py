@@ -46,7 +46,7 @@ def build_identification_list(found_df):
 def sampled_X_y(species_found, species_not_found):
     # Downsample not_found DF to smaller size
     found_length = 2 * species_found.shape[0]
-    dummies = species_not_found.sample(n=found_length, random_state=42)
+    dummies = species_not_found.sample(n=found_length)
 
     # Merge the DataFrames
     sampled_df = pd.concat((species_found, dummies))
@@ -76,7 +76,7 @@ def sampled_X_y(species_found, species_not_found):
 def identify_templates(X, y, identifiers):
     # Train/test split w/ stratification
     # -> No random state!
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, stratify=y, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, stratify=y)
 
     # Scale features
     scaler = MinMaxScaler()
