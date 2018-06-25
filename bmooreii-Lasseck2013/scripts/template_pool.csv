@@ -1,10 +1,10 @@
 Filename,templates
-train/nips4b_birds_trainfile125.wav,"[0, 1, 2, 4]"
-train/nips4b_birds_trainfile188.wav,"[1, 3, 5, 6, 7, 8, 9, 10, 13, 14, 16, 17, 22, 24, 25, 26, 27, 28, 31, 33, 37, 38, 40]"
-train/nips4b_birds_trainfile270.wav,"[0, 1, 3, 5, 6, 9, 13, 17, 22, 23, 24, 25, 26]"
-train/nips4b_birds_trainfile364.wav,"[1, 4]"
-train/nips4b_birds_trainfile411.wav,"[0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12]"
-train/nips4b_birds_trainfile467.wav,"[2, 5, 7, 10]"
-train/nips4b_birds_trainfile541.wav,[0]
-train/nips4b_birds_trainfile600.wav,"[2, 5, 8]"
-train/nips4b_birds_trainfile615.wav,"[0, 2, 5, 7, 9]"
+train/nips4b_birds_trainfile125.wav,"[0, 1, 2, 3, 4]"
+train/nips4b_birds_trainfile188.wav,"[1, 2, 4, 5, 6, 7, 9, 13, 15, 17, 18, 22, 27, 28, 31, 37]"
+train/nips4b_birds_trainfile270.wav,"[0, 1, 5, 6, 7, 8, 9, 13, 20, 22, 23, 24, 25]"
+train/nips4b_birds_trainfile364.wav,[1]
+train/nips4b_birds_trainfile411.wav,"[0, 1, 2, 4, 6, 8, 9, 10, 11, 12]"
+train/nips4b_birds_trainfile467.wav,"[4, 5, 6, 9, 10]"
+train/nips4b_birds_trainfile592.wav,[5]
+train/nips4b_birds_trainfile600.wav,"[1, 8]"
+train/nips4b_birds_trainfile615.wav,"[0, 1, 2, 10]"

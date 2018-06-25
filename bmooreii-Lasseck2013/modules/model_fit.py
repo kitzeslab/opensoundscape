@@ -19,7 +19,7 @@ def model_fit(config):
         Nothing
     '''
 
-    sys.path.append("modules/model_fit_algo/{}".format(config['model_fit_algo']))
+    sys.path.append("modules/model_fit_algo/{}".format(config['model_fit']['algo']))
     from model_fit_algo import model_fit_algo
 
     model_fit_algo(config)

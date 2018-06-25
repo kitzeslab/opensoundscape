@@ -30,24 +30,24 @@ def write_spectrogram(label, df, spec, normal, config):
     # 1. Set the lowest 5% values to zero
     # 2. Store as compressed sparse row matrix
     # 3. Pickle and store
-    if config.getboolean('db_sparse'):
+    if config['general'].getboolean('db_sparse'):
         spec[spec <
-                (config.getfloat('db_sparse_thresh_percent') / 100.)] = 0
+                (config['general'].getfloat('db_sparse_thresh_percent') / 100.)] = 0
         spec_bytes = pickle.dumps(csr_matrix(spec))
     else:
         spec_bytes = pickle.dumps(spec)
 
     # Update or insert item into collection
-    with pymongo.MongoClient(config['db_uri']) as client:
-        db = client[config['db_name']]
-        coll = db[config['db_collection_name']]
-        coll.update_one({'data_dir': config['data_dir'], 'label': label},
+    with pymongo.MongoClient(config['general']['db_uri']) as client:
+        db = client[config['general']['db_name']]
+        coll = db[config['general']['db_collection_name']]
+        coll.update_one({'data_dir': config['general']['data_dir'], 'label': label},
                 {'$set': {'df': df_bytes, 'spectrogram': spec_bytes,
                     'normalization_factor': normal, 'sparse':
-                    config.getboolean('db_sparse'), 'sparse_thresh_percent':
-                    config.getfloat('db_sparse_thresh_percent'),
+                    config['general'].getboolean('db_sparse'), 'sparse_thresh_percent':
+                    config['general'].getfloat('db_sparse_thresh_percent'),
                     'spect_gen_preprocess_method':
-                    config['spect_gen_preprocess_method'], 'preprocess_date':
+                    config['spect_gen']['algo'], 'preprocess_date':
                     datetime.now()}}, upsert=True)
 
 
@@ -67,12 +67,12 @@ def read_spectrogram(label, config):
         normalization factor
     '''
 
-    with pymongo.MongoClient(config['db_uri']) as client:
-        db = client[config['db_name']]
-        coll = db[config['db_collection_name']]
+    with pymongo.MongoClient(config['general']['db_uri']) as client:
+        db = client[config['general']['db_name']]
+        coll = db[config['general']['db_collection_name']]
 
         # Extract DF and Spectrogram
-        item = coll.find_one({'data_dir': config['data_dir'], 'label': label})
+        item = coll.find_one({'data_dir': config['general']['data_dir'], 'label': label})
         df, spec, normal = cursor_item_to_data(item, config)
 
     return df, spec, normal
@@ -92,11 +92,11 @@ def return_spectrogram_cursor(indices, config):
         MongoDB Cursor
     '''
 
-    with pymongo.MongoClient(config['db_uri']) as client:
-        db = client[config['db_name']]
-        coll = db[config['db_collection_name']]
+    with pymongo.MongoClient(config['general']['db_uri']) as client:
+        db = client[config['general']['db_name']]
+        coll = db[config['general']['db_collection_name']]
 
-        items = coll.find({'data_dir': config['data_dir'], 'label': {'$in': indices}})
+        items = coll.find({'data_dir': config['general']['data_dir'], 'label': {'$in': indices}})
         return items
 
 
@@ -122,7 +122,7 @@ def cursor_item_to_data(item, config):
     # Recreate Data
     df = pd.DataFrame(pickle.loads(df_bytes))
     spec = pickle.loads(spec_bytes)
-    if config.getboolean('db_sparse'):
+    if config['general'].getboolean('db_sparse'):
         spec = spec.todense()
     return df, spec, normal
 
@@ -166,9 +166,9 @@ def write_file_stats(label, file_stats, file_file_stats, config):
     file_file_stats_bytes = pickle.dumps(file_file_stats)
 
     # Update or insert item into collection
-    with pymongo.MongoClient(config['db_uri']) as client:
-        db = client[config['db_name']]
-        coll = db[config['db_collection_name']]
-        coll.update_one({'data_dir': config['data_dir'], 'label': label},
+    with pymongo.MongoClient(config['general']['db_uri']) as client:
+        db = client[config['general']['db_name']]
+        coll = db[config['general']['db_collection_name']]
+        coll.update_one({'data_dir': config['general']['data_dir'], 'label': label},
             {'$set': {'file_stats': file_stats_bytes,
             'file_file_stats': file_file_stats_bytes}})

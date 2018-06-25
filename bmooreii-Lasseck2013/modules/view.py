@@ -146,7 +146,7 @@ def view(label, image, seg_only, config):
 
     # Apply Gaussian Filter
     spectrogram = apply_gaussian_filter(spectrogram,
-            config.getfloat('gaussian_filter_sigma'))
+            config['model_fit'].getfloat('gaussian_filter_sigma'))
 
     # Either vizualize spectrogram w/ bounding boxes
     # -> or, segments

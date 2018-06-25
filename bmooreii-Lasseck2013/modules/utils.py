@@ -8,7 +8,7 @@ def return_cpu_count(config):
     '''Return the number of CPUs requested
 
     If num_processors defined in the config, return that number. else return
-    the number of CPUs on the machine.
+    the number of CPUs on the machine minus 1 (leave some space for system).
 
     Args:
         config: The parsed ini file for this run
@@ -16,24 +16,23 @@ def return_cpu_count(config):
     Returns:
         nprocs: Integer number of cores
     '''
-    if config['num_processors'] == '':
-        nprocs = cpu_count()
+    if config['general']['num_processors'] == '':
+        nprocs = cpu_count() - 1
     else:
-        nprocs = config.getint('num_processors')
+        nprocs = config['general'].getint('num_processors')
     return nprocs
 
 
-def generate_config(f_default, f_override, section):
-    '''Get the configuration section
+def generate_config(f_default, f_override):
+    '''Generate the configuration
 
-    Simply return a ConfigParser containing the INI section of interest. We
-    have a default config in config as well as an override file.  Access
-    elements via `config.get{float,boolean,int}('key')`.
+    Simply return a ConfigParser for openbird. We have a default config in
+    `config/` as well as a potential override file. Access elements via
+    `config[<section>].get{float,boolean,int}('key')`.
 
     Args:
         f_default: The default config `config/openbird.ini`
         f_override: The override config `openbird.ini`
-        section: The parent section of the INI file
 
     Returns:
         A ConfigParser instance
@@ -52,4 +51,4 @@ def generate_config(f_default, f_override, section):
     config = ConfigParser()
     config.read(f_default)
     config.read(f_override)
-    return config[section]
+    return config

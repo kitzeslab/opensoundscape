@@ -15,7 +15,7 @@ def spect_gen(config):
         Nothing
     '''
 
-    sys.path.append("modules/spect_gen_algo/{}".format(config['spect_gen_preprocess_method']))
+    sys.path.append("modules/spect_gen_algo/{}".format(config['spect_gen']['algo']))
     from spect_gen_algo import spect_gen_algo
 
     spect_gen_algo(config)

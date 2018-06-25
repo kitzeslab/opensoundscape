@@ -19,7 +19,7 @@ def predict(config):
         -
     '''
 
-    sys.path.append("modules/predict_algo/{}".format(config['predict_algo']))
+    sys.path.append("modules/predict_algo/{}".format(config['predict']['algo']))
     from predict_algo import predict_algo
 
     predict_algo(config)
