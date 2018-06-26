@@ -13,4 +13,4 @@ def apply_gaussian_filter(spec, sigma):
     Returns:
         The Gaussian filtered spectrogram
     '''
-    return gaussian_filter(spec, sigma=sigma)
+    return gaussian_filter(spec, sigma=float(sigma))

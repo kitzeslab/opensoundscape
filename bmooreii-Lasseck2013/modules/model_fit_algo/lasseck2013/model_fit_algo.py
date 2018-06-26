@@ -4,7 +4,7 @@ from modules.db_utils import read_spectrogram, write_file_stats, return_spectrog
 from modules.spect_gen import spect_gen
 from modules.view import extract_segments
 from modules.utils import return_cpu_count
-from modules.image_utils import gaussian_filter
+from modules.image_utils import apply_gaussian_filter
 from scipy import stats
 from cv2 import matchTemplate, minMaxLoc
 from concurrent.futures import ProcessPoolExecutor
@@ -120,7 +120,7 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
         else:
             df_two, spec_two, normal_two = spect_gen(idx_two, config)
 
-        spec_two = gaussian_filter(spec_two, config['gaussian_filter_sigma'])
+        spec_two = apply_gaussian_filter(spec_two, config['model_fit']['gaussian_filter_sigma'])
 
         # Extract segments
         df_two['segments'] = extract_segments(spec_two, df_two)
@@ -176,7 +176,7 @@ def run_stats(idx_one, labels_df, config):
     monotonic_idx_one = labels_df.index.get_loc(idx_one)
     df_one, spec_one, normal_one, row_f = file_stats(idx_one, config)
     # Blur spec_one before feeding to file_file_stats
-    spec_one = gaussian_filter(spec_one, config['gaussian_filter_sigma'])
+    spec_one = apply_gaussian_filter(spec_one, config['model_fit']['gaussian_filter_sigma'])
     match_stats = file_file_stats(df_one, spec_one, normal_one, labels_df, config)
     write_file_stats(idx_one, row_f, match_stats, config)
 
