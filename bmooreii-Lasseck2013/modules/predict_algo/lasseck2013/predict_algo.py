@@ -39,7 +39,7 @@ def run_stats(predict_idx, train_labels_df, config):
         from model_fit_algo import file_stats, file_file_stats
 
     df_predict, spec_predict, normal_predict, row_predict = file_stats(predict_idx, config)
-    spec_predict = gaussian_filter(spec_predict, config['gaussian_filter_sigma'])
+    spec_predict = gaussian_filter(spec_predict, config['model_fit']['gaussian_filter_sigma'])
     match_stats_dict = file_file_stats(df_predict, spec_predict, normal_predict, train_labels_df, config)
     write_file_stats(predict_idx, row_predict, match_stats_dict, config)
 
