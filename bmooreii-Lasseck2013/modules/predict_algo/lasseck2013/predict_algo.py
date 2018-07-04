@@ -4,7 +4,7 @@ from modules.db_utils import read_spectrogram, write_file_stats, return_spectrog
 from modules.spect_gen import spect_gen
 from modules.view import extract_segments
 from modules.utils import return_cpu_count
-from modules.image_utils import gaussian_filter
+from modules.image_utils import apply_gaussian_filter
 from scipy import stats
 from cv2 import matchTemplate, minMaxLoc
 from concurrent.futures import ProcessPoolExecutor
@@ -39,7 +39,7 @@ def run_stats(predict_idx, train_labels_df, config):
         from model_fit_algo import file_stats, file_file_stats
 
     df_predict, spec_predict, normal_predict, row_predict = file_stats(predict_idx, config)
-    spec_predict = gaussian_filter(spec_predict, config['model_fit']['gaussian_filter_sigma'])
+    spec_predict = apply_gaussian_filter(spec_predict, config['model_fit']['gaussian_filter_sigma'])
     match_stats_dict = file_file_stats(df_predict, spec_predict, normal_predict, train_labels_df, config)
     write_file_stats(predict_idx, row_predict, match_stats_dict, config)
 
