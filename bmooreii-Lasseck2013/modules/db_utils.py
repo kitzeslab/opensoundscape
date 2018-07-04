@@ -219,7 +219,7 @@ def write_file_stats(label, file_stats, file_file_stats, config):
     # Update or insert item into collection
     with pymongo.MongoClient(config['general']['db_uri']) as client:
         db = client[config['general']['db_name']]
-        coll = db['stats']
+        coll = db['statistics']
         coll.update_one({'label': label},
             {'$set': {'file_stats': file_stats_bytes,
                 'file_file_stats': file_file_stats_bytes}},
