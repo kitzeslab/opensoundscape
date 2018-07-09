@@ -40,8 +40,8 @@ def extract_segments(spec, df):
         A list containing the segments
     '''
     segments = [None] * len(df.index)
-    for idx in df.index:
-        segments[idx] = spec[df.loc[idx]['y_min']: df.loc[idx]['y_max'],
+    for seg_idx, idx in enumerate(df.index):
+        segments[seg_idx] = spec[df.loc[idx]['y_min']: df.loc[idx]['y_max'],
             df.loc[idx]['x_min']: df.loc[idx]['x_max']]
     return segments
 

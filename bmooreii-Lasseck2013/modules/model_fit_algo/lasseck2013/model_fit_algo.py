@@ -11,6 +11,7 @@ from concurrent.futures import ProcessPoolExecutor
 import progressbar
 from itertools import repeat
 from copy import copy
+import json
 
 
 def file_stats(label, config):
@@ -82,7 +83,8 @@ def file_stats(label, config):
 def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
     '''Generate the second order statistics
 
-    Given a df, spec, and normal for label_one, generate the file-file statistics.
+    Given a df, spec, and normal for label_one, generate the file-file statistics
+    for all files (or downselect w/ template_pool.csv file)
 
     Args:
         monotonic_idx_one: The monotonic index for df_one
@@ -101,8 +103,21 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
     '''
 
     # Get the MongoDB Cursor, indices is a Pandas Index object -> list
+    # -> If template_pool defined:
+    # -> 1. Generate a pools dataframe and convert string to [int]
+    # -> 2. Read items from template_pool_db if necessary
     if config['general'].getboolean('db_rw'):
-        items = return_spectrogram_cursor(labels_df.index.values.tolist(), config)
+        if config['model_fit']['template_pool']:
+            pools_df = pd.read_csv(config['model_fit']['template_pool'], index_col=0)
+            pools_df.templates = pools_df.templates.apply(lambda x: json.loads(x))
+
+            if config['model_fit']['template_pool_db']:
+                items = return_spectrogram_cursor(pools_df.index.values.tolist(),
+                    config, config['model_fit']['template_pool_db'])
+            else:
+                items = return_spectrogram_cursor(pools_df.index.values.tolist(), config)
+        else:
+            items = return_spectrogram_cursor(labels_df.index.values.tolist(), config)
     else:
         items = {'label': x for x in labels_df.index.values.tolist()}
 
@@ -123,6 +138,9 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
         spec_two = apply_gaussian_filter(spec_two, config['model_fit']['gaussian_filter_sigma'])
 
         # Extract segments
+        # -> If using template_pool, downselect the dataframe before extracting segments
+        if config['model_fit']['template_pool']:
+            df_two = df_two.iloc[pools_df.loc[idx_two].values[0]]
         df_two['segments'] = extract_segments(spec_two, df_two)
 
         # Generate the np.array to append
@@ -130,7 +148,7 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
 
         # Slide segments over all other spectrograms
         frequency_buffer = config['model_fit'].getint('template_match_frequency_buffer')
-        for idx, item in df_two.iterrows():
+        for idx, (_, item) in enumerate(df_two.iterrows()):
             # Determine minimum y target
             y_min_target = 0
             if item['y_min'] > frequency_buffer:

@@ -129,7 +129,7 @@ def read_spectrogram(label, config):
     return df, spec, normal
 
 
-def return_spectrogram_cursor(indices, config):
+def return_spectrogram_cursor(indices, config, db_name=''):
     '''Generate a cursor of all other spectrograms
 
     Open connection to MongoDB, generate a cursor with the list of indices,
@@ -144,7 +144,10 @@ def return_spectrogram_cursor(indices, config):
     '''
 
     with pymongo.MongoClient(config['general']['db_uri']) as client:
-        db = client[config['general']['db_name']]
+        if db_name:
+            db = client[db_name]
+        else:
+            db = client[config['general']['db_name']]
         coll = db['spectrograms']
 
         items = coll.find({'label': {'$in': indices}})

@@ -31,12 +31,12 @@ def run_stats(predict_idx, train_labels_df, config):
 
     # Expose the statistics functions necessary for making the prediction
     # -> Can't do this at top of file because it is dependent on the config
-    try:
-        file_stats.__name__
-        file_file_stats.__name__
-    except UnboundLocalError:
-        sys.path.append("modules/model_fit_algo/{}".format(config['predict']['algo']))
-        from model_fit_algo import file_stats, file_file_stats
+    # try:
+    #     file_stats.__name__
+    #     file_file_stats.__name__
+    # except UnboundLocalError:
+    sys.path.append("modules/model_fit_algo/{}".format(config['predict']['algo']))
+    from model_fit_algo import file_stats, file_file_stats
 
     df_predict, spec_predict, normal_predict, row_predict = file_stats(predict_idx, config)
     spec_predict = apply_gaussian_filter(spec_predict, config['model_fit']['gaussian_filter_sigma'])

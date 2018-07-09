@@ -5,7 +5,6 @@ Usage:
     openbird.py init [-i <ini>]
     openbird.py sampling [-i <ini>]
     openbird.py spect_gen [-i <ini>]
-    openbird.py template_pool_gen [-i <ini>]
     openbird.py view <label> [<image>] [-i <ini>] [-s]
     openbird.py model_fit [-i <ini>]
     openbird.py predict [-i <ini>]
@@ -31,7 +30,6 @@ from modules.model_fit import model_fit
 from modules.predict import predict
 from modules.utils import generate_config
 from modules.init import init
-from modules.template_pool_gen import template_pool_gen
 
 # From the docstring, generate the arguments dictionary
 arguments = docopt(__doc__, version='openbird.py version 0.0.1')
@@ -62,10 +60,6 @@ elif arguments['model_fit']:
 elif arguments['predict']:
     # Make a prediction based on a model
     predict(config)
-
-elif arguments['template_pool_gen']:
-    # Build template pool based on config
-    template_pool_gen(config)
 
 elif arguments['init']:
     # Initialize INI section
