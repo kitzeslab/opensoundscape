@@ -29,7 +29,7 @@ Options:
 def build_identification_list(found_df):
     # 1. Generate a dictionary
     num_of_segments_d = {}
-    items = return_spectrogram_cursor(list(found_df.index), config)
+    items = return_cursor(list(found_df.index), 'spectrograms', config)
     for item in items:
         num_of_segments_d[item['label']] = pd.DataFrame(pickle.loads(item['df'])).shape[0]
 
@@ -52,7 +52,7 @@ def sampled_X_y(species_found, species_not_found):
     sampled_df = pd.concat((species_found, dummies))
 
     # Get the cursor of items
-    items = return_spectrogram_cursor(list(sampled_df.index.values), config)
+    items = return_cursor(list(sampled_df.index.values), 'spectrograms', config)
 
     # Generate the file_file_stats
     all_file_file_statistics = [None] * sampled_df.shape[0]
@@ -137,7 +137,7 @@ sys.path.append("../modules")
 
 from utils import generate_config, return_cpu_count
 from db_utils import cursor_item_to_stats
-from db_utils import return_spectrogram_cursor
+from db_utils import return_cursor
 
 # From the docstring, generate the arguments dictionary
 arguments = docopt(__doc__, version='find_important_templates.py version 0.0.1')

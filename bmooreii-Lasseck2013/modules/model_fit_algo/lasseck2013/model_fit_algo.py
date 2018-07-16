@@ -1,6 +1,11 @@
 import pandas as pd
 import numpy as np
-from modules.db_utils import read_spectrogram, write_file_stats, return_spectrogram_cursor, cursor_item_to_data
+from modules.db_utils import cursor_item_to_data
+from modules.db_utils import cursor_item_to_stats
+from modules.db_utils import read_spectrogram
+from modules.db_utils import return_cursor
+from modules.db_utils import write_file_stats
+from modules.db_utils import write_model
 from modules.spect_gen import spect_gen
 from modules.view import extract_segments
 from modules.utils import return_cpu_count
@@ -12,6 +17,12 @@ import progressbar
 from itertools import repeat
 from copy import copy
 import json
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import confusion_matrix
 
 
 def file_stats(label, config):
@@ -112,12 +123,14 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
             pools_df.templates = pools_df.templates.apply(lambda x: json.loads(x))
 
             if config['model_fit']['template_pool_db']:
-                items = return_spectrogram_cursor(pools_df.index.values.tolist(),
-                    config, config['model_fit']['template_pool_db'])
+                items = return_cursor(pools_df.index.values.tolist(),
+                    'spectrograms', config, config['model_fit']['template_pool_db'])
             else:
-                items = return_spectrogram_cursor(pools_df.index.values.tolist(), config)
+                items = return_cursor(pools_df.index.values.tolist(),
+                    'spectrograms', config)
         else:
-            items = return_spectrogram_cursor(labels_df.index.values.tolist(), config)
+            items = return_cursor(labels_df.index.values.tolist(),
+                'spectrograms', config)
     else:
         items = {'label': x for x in labels_df.index.values.tolist()}
 
@@ -199,6 +212,92 @@ def run_stats(idx_one, labels_df, config):
     write_file_stats(idx_one, row_f, match_stats, config)
 
 
+def build_X_y(labels_df, config):
+    '''Build X and y from labels_df
+
+    Build X and y to fit a DecisionTree Classifier
+
+    Args:
+        labels_df: labels dataframe for this particular bird
+
+    Returns:
+        X: dataframe containing data to fit on
+        y: series containing the labels
+
+    Raises:
+        Nothing.
+    '''
+
+    get_file_file_stats_for = [x for x in labels_df.index if labels_df[x] == 1]
+
+    items = return_cursor(labels_df.index.values.tolist(), 'statistics', config)
+
+    file_stats = [None] * labels_df.shape[0]
+    file_file_stats = [None] * labels_df.shape[0]
+    for item in items:
+        mono_idx = labels_df.index.get_loc(item['label'])
+        file_stats[mono_idx], file_file_stats[mono_idx] = cursor_item_to_stats(item)
+        file_file_stats[mono_idx] = [file_file_stats[mono_idx][x] for x in get_file_file_stats_for]
+
+    # Shape: (num_files, 80), 80 is number of file statistics
+    file_stats = np.array(file_stats)
+
+    # Reshape file_file_stats into 3D numpy array
+    # -> (num_files, num_templates, 3), 3 is the number of file-file statistics
+    _tmp = [None] * labels_df.shape[0]
+    for o_idx, outer in enumerate(file_file_stats):
+        _tmp[o_idx] = np.vstack([file_file_stats[o_idx][x] for x in
+            range(len(file_file_stats[o_idx]))])
+    file_file_stats = np.array(_tmp)
+
+    return pd.DataFrame(np.hstack(
+        (file_stats, file_file_stats.reshape(file_file_stats.shape[0], -1)))), pd.Series(labels_df.values)
+
+
+def fit_model(X, y, config):
+    '''Fit model on X, y
+
+    Given X, y perform train/test split, scaling, and model fitting
+
+    Args:
+        X: dataframe containing model data
+        y: labels series
+
+    Returns:
+        model: The sklearn model
+
+    Raises:
+        Nothing.
+    '''
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33,
+        stratify=y)
+
+    scaler = MinMaxScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    classifier = RandomForestClassifier()
+
+    params = {
+        "n_estimators": [config['model_fit'].getint('n_estimators')],
+        "max_features": [config['model_fit'].getint('max_features')],
+        "min_samples_split": [config['model_fit'].getint('min_samples_split')]
+    }
+
+    grid_search = GridSearchCV(classifier, params, cv=y_train.sum(), n_jobs=1)
+    grid_search.fit(X_train, y_train)
+
+    y_train_pred = grid_search.best_estimator_.predict(X_train)
+    y_test_pred = grid_search.best_estimator_.predict(X_test)
+    print("ROC AUC Train: {}".format(roc_auc_score(y_train, y_train_pred)))
+    print("ROC AUC Test: {}".format(roc_auc_score(y_test, y_test_pred)))
+    print("Confusion Matrix Train:")
+    print(confusion_matrix(y_train, y_train_pred))
+    print("Confusion Matrix Test:")
+    print(confusion_matrix(y_test, y_test_pred))
+    return grid_search.best_estimator_
+
+
 def model_fit_algo(config):
     '''Fit the lasseck2013 model
 
@@ -234,6 +333,11 @@ def model_fit_algo(config):
     # print("Running serial code...")
     # for idx, item in enumerate(labels_df.index):
     #     run_stats(item, labels_df, config)
-
-    # Now the file stats are available
-    # -> Moving to Jupyter Notebook
+    #
+    # Now that file stats are available, build the models in parallel
+    for bird in labels_df.columns:
+        X, y = build_X_y(labels_df[bird], config)
+        print("Bird: {}".format(bird))
+        print("---")
+        model = fit_model(X, y, config)
+        # write_model(bird, model, roc_auc_train, roc_auc_test, config)
