@@ -23,6 +23,9 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import recall_score
+from sklearn.metrics import precision_score
+from sklearn.metrics import f1_score
 
 
 def file_stats(label, config):
@@ -228,7 +231,12 @@ def build_X_y(labels_df, config):
         Nothing.
     '''
 
-    get_file_file_stats_for = [x for x in labels_df.index if labels_df[x] == 1]
+    if config['model_fit']['template_pool']:
+        pools_df = pd.read_csv(config['model_fit']['template_pool'], index_col=0)
+        pools_df.templates = pools_df.templates.apply(lambda x: json.loads(x))
+        get_file_file_stats_for = [x for x in pools_df.index]
+    else:
+        get_file_file_stats_for = [x for x in labels_df.index if labels_df[x] == 1]
 
     items = return_cursor(labels_df.index.values.tolist(), 'statistics', config)
 
@@ -245,7 +253,7 @@ def build_X_y(labels_df, config):
     # Reshape file_file_stats into 3D numpy array
     # -> (num_files, num_templates, 3), 3 is the number of file-file statistics
     _tmp = [None] * labels_df.shape[0]
-    for o_idx, outer in enumerate(file_file_stats):
+    for o_idx, _ in enumerate(file_file_stats):
         _tmp[o_idx] = np.vstack([file_file_stats[o_idx][x] for x in
             range(len(file_file_stats[o_idx]))])
     file_file_stats = np.array(_tmp)
@@ -291,6 +299,12 @@ def fit_model(X, y, config):
     y_test_pred = grid_search.best_estimator_.predict(X_test)
     print("ROC AUC Train: {}".format(roc_auc_score(y_train, y_train_pred)))
     print("ROC AUC Test: {}".format(roc_auc_score(y_test, y_test_pred)))
+    print("Precision Train: {}".format(precision_score(y_train, y_train_pred)))
+    print("Precision Test: {}".format(precision_score(y_test, y_test_pred)))
+    print("Recall Train: {}".format(recall_score(y_train, y_train_pred)))
+    print("Recall Test: {}".format(recall_score(y_test, y_test_pred)))
+    print("F1 Score Train: {}".format(f1_score(y_train, y_train_pred)))
+    print("F1 Score Test: {}".format(f1_score(y_test, y_test_pred)))
     print("Confusion Matrix Train:")
     print(confusion_matrix(y_train, y_train_pred))
     print("Confusion Matrix Test:")
