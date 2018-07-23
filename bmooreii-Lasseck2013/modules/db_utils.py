@@ -231,7 +231,7 @@ def write_file_stats(label, file_stats, file_file_stats, config):
             upsert=True)
 
 
-def write_model(label, model, roc_auc_train, roc_auc_test, config):
+def write_model(label, model, scaler, config):
     '''Write model to MongoDB
 
     Open connection to MongoDB and write the model
@@ -239,17 +239,38 @@ def write_model(label, model, roc_auc_train, roc_auc_test, config):
     Args:
         label: The label for the MongoDB entry
         model: The sklearn model
-        roc_auc_train: The ROC AUC score for training data
-        roc_auc_test: The ROC AUC score for testing data
         config: The openbird configuration
 
     Returns:
         Nothing.
     '''
 
+    model_bytes = pickle.dumps(model)
+    scaler_bytes = pickle.dumps(scaler)
+
     with pymongo.MongoClient(config['general']['db_uri']) as client:
         db = client[config['general']['db_name']]
         coll = db['models']
-        coll.update_one({'label': label},
-            {'$set': {'model': model, 'roc_auc_train': roc_auc_train,
-                'roc_auc_test': roc_auc_test}}, upsert=True)
+        coll.update_one({'label': label}, {'$set': {'model': model_bytes,
+            'scaler': scaler_bytes}}, upsert=True)
+
+
+def recall_model(label, config):
+    '''Recall model from MongoDB
+
+    Open connection to MongoDB and recall the model
+
+    Args:
+        label: The label for the MongoDB entry
+        config: The openbird configuration
+
+    Returns:
+        Nothing.
+    '''
+
+
+    with pymongo.MongoClient(config['general']['db_uri']) as client:
+        db = client[config['general']['db_name']]
+        coll = db['models']
+        item = coll.find_one({'label': label})
+        return pickle.loads(item['model']), pickle.loads(item['scaler'])

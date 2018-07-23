@@ -248,7 +248,8 @@ def build_X_y(labels_df, config):
         file_file_stats[mono_idx] = [file_file_stats[mono_idx][x] for x in get_file_file_stats_for]
 
     # Shape: (num_files, 80), 80 is number of file statistics
-    file_stats = np.array(file_stats)
+    # -> sometimes garbage data in file_stats
+    file_stats = np.nan_to_num(np.array(file_stats))
 
     # Reshape file_file_stats into 3D numpy array
     # -> (num_files, num_templates, 3), 3 is the number of file-file statistics
@@ -309,7 +310,7 @@ def fit_model(X, y, config):
     print(confusion_matrix(y_train, y_train_pred))
     print("Confusion Matrix Test:")
     print(confusion_matrix(y_test, y_test_pred))
-    return grid_search.best_estimator_
+    return grid_search.best_estimator_, scaler
 
 
 def model_fit_algo(config):
@@ -351,7 +352,7 @@ def model_fit_algo(config):
     # Now that file stats are available, build the models in parallel
     for bird in labels_df.columns:
         X, y = build_X_y(labels_df[bird], config)
-        print("Bird: {}".format(bird))
-        print("---")
-        model = fit_model(X, y, config)
-        # write_model(bird, model, roc_auc_train, roc_auc_test, config)
+        # print("Bird: {}".format(bird))
+        # print("---")
+        model, scaler = fit_model(X, y, config)
+        write_model(bird, model, scaler, config)
