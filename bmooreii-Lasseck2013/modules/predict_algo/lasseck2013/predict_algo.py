@@ -135,8 +135,13 @@ def predict_algo(config):
     # for idx, item in enumerate(predict_labels_df.index):
     #     run_stats(item, train_labels_df, config)
 
-    for bird in train_labels_df.columns:
+    print("For each class,")
+    print("-> format `[no, yes]`, where `no` means probability it is not identified")
+    print("-> and no is probability it is identified")
+    for bird in train_label
+        print("Class: {}".format(bird))
+        print("---")
         model, scaler = recall_model(bird, config)
         X = build_X(predict_labels_df, train_labels_df[bird], config)
         X = scaler.transform(X)
-        print(model.predict(X))
+        print(model.predict_proba(X))
