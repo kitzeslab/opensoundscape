@@ -138,7 +138,7 @@ def predict_algo(config):
     print("For each class,")
     print("-> format `[no, yes]`, where `no` means probability it is not identified")
     print("-> and no is probability it is identified")
-    for bird in train_label
+    for bird in train_labels_df:
         print("Class: {}".format(bird))
         print("---")
         model, scaler = recall_model(bird, config)
