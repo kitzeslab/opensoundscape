@@ -146,7 +146,8 @@ arguments = docopt(__doc__, version='find_important_templates.py version 0.0.1')
 config = generate_config('../config/openbird.ini', arguments['--ini'])
 
 # Generate list of files which identify <label>
-labels_df = pd.read_csv("{}/{}".format(config['general']['data_dir'], config['general']['train_file']), index_col="Filename")
+labels_df = pd.read_csv(f"{config['general']['data_dir']}/{config['general']['train_file']}",
+    index_col="Filename")
 labels_df = labels_df.fillna(0).astype(int)
 
 # Downsample to particular species

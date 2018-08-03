@@ -16,7 +16,7 @@ def spect_gen(config):
         Nothing
     '''
 
-    sys.path.append("modules/spect_gen_algo/{}".format(config['spect_gen']['algo']))
+    sys.path.append(f"modules/spect_gen_algo/{config['spect_gen']['algo']}")
     from spect_gen_algo import spect_gen_algo
 
     if config['general'].getboolean('db_rw'):

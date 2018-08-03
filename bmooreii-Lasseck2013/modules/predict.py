@@ -20,7 +20,7 @@ def predict(config):
         -
     '''
 
-    sys.path.append("modules/predict_algo/{}".format(config['predict']['algo']))
+    sys.path.append(f"modules/predict_algo/{config['predict']['algo']}")
     from predict_algo import predict_algo
 
     if config['general'].getboolean('db_rw'):

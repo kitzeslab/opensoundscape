@@ -44,9 +44,9 @@ def generate_config(f_default, f_override):
     f_default = join(openbird_dir, f_default)
 
     if not isfile(f_default):
-        raise FileNotFoundError("{} doesn't exist!".format(f_default))
+        raise FileNotFoundError(f"{f_default} doesn't exist!")
     if not isfile(f_override):
-        raise FileNotFoundError("{} doesn't exist!".format(f_override))
+        raise FileNotFoundError(f"{f_override} doesn't exist!")
 
     config = ConfigParser()
     config.read(f_default)
@@ -81,7 +81,7 @@ def yes_no(question, default='no'):
         yn_def_ret = True
 
     while True:
-        choice = input("{} {}: ".format(question, yn_def_str)).lower()
+        choice = input(f"{question} {yn_def_str}: ").lower()
         if choice in yes:
            return True
         elif choice in no:

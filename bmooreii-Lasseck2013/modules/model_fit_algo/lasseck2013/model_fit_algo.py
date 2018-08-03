@@ -298,19 +298,43 @@ def fit_model(X, y, config):
 
     y_train_pred = grid_search.best_estimator_.predict(X_train)
     y_test_pred = grid_search.best_estimator_.predict(X_test)
-    print("ROC AUC Train: {}".format(roc_auc_score(y_train, y_train_pred)))
-    print("ROC AUC Test: {}".format(roc_auc_score(y_test, y_test_pred)))
-    print("Precision Train: {}".format(precision_score(y_train, y_train_pred)))
-    print("Precision Test: {}".format(precision_score(y_test, y_test_pred)))
-    print("Recall Train: {}".format(recall_score(y_train, y_train_pred)))
-    print("Recall Test: {}".format(recall_score(y_test, y_test_pred)))
-    print("F1 Score Train: {}".format(f1_score(y_train, y_train_pred)))
-    print("F1 Score Test: {}".format(f1_score(y_test, y_test_pred)))
-    print("Confusion Matrix Train:")
-    print(confusion_matrix(y_train, y_train_pred))
-    print("Confusion Matrix Test:")
-    print(confusion_matrix(y_test, y_test_pred))
-    return grid_search.best_estimator_, scaler
+
+    results = (
+        f"ROC AUC Train: {roc_auc_score(y_train, y_train_pred)}\n"
+        f"ROC AUC Test: {roc_auc_score(y_test, y_test_pred)}\n"
+        f"Precision Train: {precision_score(y_train, y_train_pred)}\n"
+        f"Precision Test: {precision_score(y_test, y_test_pred)}\n"
+        f"Recall Train: {recall_score(y_train, y_train_pred)}\n"
+        f"Recall Test: {recall_score(y_test, y_test_pred)}\n"
+        f"F1 Score Train: {f1_score(y_train, y_train_pred)}\n"
+        f"F1 Score Test: {f1_score(y_test, y_test_pred)}\n"
+        f"Confusion Matrix Train:\n"
+        f"{confusion_matrix(y_train, y_train_pred)}\n"
+        f"Confusion Matrix Test:\n"
+        f"{confusion_matrix(y_test, y_test_pred)}\n"
+    )
+
+    return grid_search.best_estimator_, scaler, results
+
+
+def build_model(column, labels_df, config):
+    '''Build the lasseck2013 model
+
+    We were directed here from model_fit to fit the lasseck2013 model.
+
+    Args:
+        config: The parsed ini file for this run
+
+    Returns:
+        Something or possibly writes to MongoDB
+
+    Raises:
+        Nothing.
+    '''
+    X, y = build_X_y(labels_df[column], config)
+    model, scaler, results = fit_model(X, y, config)
+    write_model(column, model, scaler, config)
+    return results
 
 
 def model_fit_algo(config):
@@ -329,8 +353,9 @@ def model_fit_algo(config):
     '''
 
     # First, we need labels and files
-    labels_df = pd.read_csv("{}/{}".format(config['general']['data_dir'],
-        config['general']['train_file']), index_col=0)
+    labels_df = pd.read_csv(
+        f"{config['general']['data_dir']}/{config['general']['train_file']}",
+        index_col=0)
 
     # Get the processor counts
     nprocs = return_cpu_count(config)
@@ -348,11 +373,16 @@ def model_fit_algo(config):
     # print("Running serial code...")
     # for idx, item in enumerate(labels_df.index):
     #     run_stats(item, labels_df, config)
-    #
-    # Now that file stats are available, build the models in parallel
-    for bird in labels_df.columns:
-        X, y = build_X_y(labels_df[bird], config)
-        # print("Bird: {}".format(bird))
-        # print("---")
-        model, scaler = fit_model(X, y, config)
-        write_model(bird, model, scaler, config)
+
+    with progressbar.ProgressBar(max_value=labels_df.shape[1]) as bar:
+        with ProcessPoolExecutor(nprocs) as executor:
+            for idx, ret in zip(np.arange(labels_df.shape[1]),
+                executor.map(build_model, labels_df.columns,
+                    repeat(labels_df), repeat(config))):
+                print(ret)
+                bar.update(idx)
+
+    # Serial code for debugging
+    # print("Running serial code...")
+    # for bird in labels_df.columns:
+    #     print(build_model(bird, labels_df, config))

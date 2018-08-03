@@ -139,7 +139,7 @@ def preprocess(label, config):
     '''
 
     # Resample
-    sample_rate, samples = wavfile.read("{}/{}".format(config['general']['data_dir'], label))
+    sample_rate, samples = wavfile.read(f"{config['general']['data_dir']}/{label}")
     sample_rate, samples = resample_audio(samples, sample_rate,
             config['spect_gen'].getfloat('resample_rate'))
 
@@ -219,17 +219,21 @@ def spect_gen_algo(config):
     # Generate a Series of file names
     preprocess_files = pd.Series()
     if config['general']['train_file']:
-        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['general']['data_dir'],
-            config['general']['train_file']))['Filename'], ignore_index=True)
+        filename = f"{config['general']['data_dir']}/{config['general']['train_file']}"
+        preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
+            ignore_index=True)
     if config['general']['test_file']:
-        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['general']['data_dir'],
-            config['general']['test_file']))['Filename'], ignore_index=True)
+        filename = f"{config['general']['data_dir']}/{config['general']['test_file']}"
+        preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
+            ignore_index=True)
     if config['general']['validate_file']:
-        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['general']['data_dir'],
-            config['general']['validate_file']))['Filename'], ignore_index=True)
+        filename = f"{config['general']['data_dir']}/{config['general']['validate_file']}"
+        preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
+            ignore_index=True)
     if config['general']['predict_file']:
-        preprocess_files = preprocess_files.append(pd.read_csv('{}/{}'.format(config['general']['data_dir'],
-            config['general']['predict_file']))['Filename'], ignore_index=True)
+        filename = f"{config['general']['data_dir']}/{config['general']['predict_file']}"
+        preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
+            ignore_index=True)
 
     # Get the processor counts
     if config['general']['num_processors'] == '':

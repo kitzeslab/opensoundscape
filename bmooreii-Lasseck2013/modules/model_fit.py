@@ -20,7 +20,7 @@ def model_fit(config):
         Nothing
     '''
 
-    sys.path.append("modules/model_fit_algo/{}".format(config['model_fit']['algo']))
+    sys.path.append(f"modules/model_fit_algo/{config['model_fit']['algo']}")
     from model_fit_algo import model_fit_algo
 
     if config['general'].getboolean('db_rw'):
