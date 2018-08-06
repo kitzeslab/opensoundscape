@@ -331,11 +331,14 @@ def fit_model(X, y, labels_df, config):
     train_filenames = labels_df.iloc[y_train.index.values].index.values
     test_filenames = labels_df.iloc[y_test.index.values].index.values
 
-    train_classify = "\n".join([f"{name}: {binary_classify(actual, pred)}"
-        for name, actual, pred in zip(train_filenames, y_train, y_train_pred)])
+    train_classify = [f"{name}: {binary_classify(actual, pred)}"
+        for name, actual, pred in zip(train_filenames, y_train, y_train_pred)]
 
-    test_classify = "\n".join([f"{name}: {binary_classify(actual, pred)}"
-        for name, actual, pred in zip(test_filenames, y_test, y_test_pred)])
+    test_classify = [f"{name}: {binary_classify(actual, pred)}"
+        for name, actual, pred in zip(test_filenames, y_test, y_test_pred)]
+
+    train_classify = "\n".join([x for x in train_classify if 'false' in x])
+    test_classify = "\n".join([x for x in test_classify if 'false' in x])
 
     results = (
         f"ROC AUC Train: {roc_auc_score(y_train, y_train_pred)}\n"
