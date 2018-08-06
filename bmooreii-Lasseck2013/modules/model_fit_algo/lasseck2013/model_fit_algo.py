@@ -28,6 +28,33 @@ from sklearn.metrics import precision_score
 from sklearn.metrics import f1_score
 
 
+def binary_classify(correct, predicted):
+    '''Return type of classification
+
+    Given the correct and predicted classification, return whether the
+    prediction is a true/false positive/negative.
+
+    Args:
+        correct: the correct binary label
+        predicted: the predicted binary label
+
+    Returns:
+        string
+
+    Raises:
+        Nothing.
+    '''
+
+    if correct == 1 and predicted == 1:
+        return "true positive"
+    elif correct == 0 and predicted == 0:
+        return "true negative"
+    elif correct == 1 and predicted == 0:
+        return "false negative"
+    else:
+        return "false positive"
+
+
 def file_stats(label, config):
     '''Generate the first order statistics
 
@@ -263,7 +290,7 @@ def build_X_y(labels_df, config):
         (file_stats, file_file_stats.reshape(file_file_stats.shape[0], -1)))), pd.Series(labels_df.values)
 
 
-def fit_model(X, y, config):
+def fit_model(X, y, labels_df, config):
     '''Fit model on X, y
 
     Given X, y perform train/test split, scaling, and model fitting
@@ -271,6 +298,8 @@ def fit_model(X, y, config):
     Args:
         X: dataframe containing model data
         y: labels series
+        labels_df: labels for this run
+        config: the config for this run
 
     Returns:
         model: The sklearn model
@@ -299,6 +328,15 @@ def fit_model(X, y, config):
     y_train_pred = grid_search.best_estimator_.predict(X_train)
     y_test_pred = grid_search.best_estimator_.predict(X_test)
 
+    train_filenames = labels_df.iloc[y_train.index.values].index.values
+    test_filenames = labels_df.iloc[y_test.index.values].index.values
+
+    train_classify = "\n".join([f"{name}: {binary_classify(actual, pred)}"
+        for name, actual, pred in zip(train_filenames, y_train, y_train_pred)])
+
+    test_classify = "\n".join([f"{name}: {binary_classify(actual, pred)}"
+        for name, actual, pred in zip(test_filenames, y_test, y_test_pred)])
+
     results = (
         f"ROC AUC Train: {roc_auc_score(y_train, y_train_pred)}\n"
         f"ROC AUC Test: {roc_auc_score(y_test, y_test_pred)}\n"
@@ -312,6 +350,10 @@ def fit_model(X, y, config):
         f"{confusion_matrix(y_train, y_train_pred)}\n"
         f"Confusion Matrix Test:\n"
         f"{confusion_matrix(y_test, y_test_pred)}\n"
+        f"Confusion Breakdown Train:\n"
+        f"{train_classify}\n"
+        f"Confusion Breakdown Test:\n"
+        f"{test_classify}\n"
     )
 
     return grid_search.best_estimator_, scaler, results
@@ -332,7 +374,7 @@ def build_model(column, labels_df, config):
         Nothing.
     '''
     X, y = build_X_y(labels_df[column], config)
-    model, scaler, results = fit_model(X, y, config)
+    model, scaler, results = fit_model(X, y, labels_df, config)
     write_model(column, model, scaler, config)
     return results
 
