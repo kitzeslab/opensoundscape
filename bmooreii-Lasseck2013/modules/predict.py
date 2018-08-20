@@ -20,7 +20,8 @@ def predict(config):
         -
     '''
 
-    sys.path.append(f"modules/predict_algo/{config['predict']['algo']}")
+    openbird_dir = sys.path[0]
+    sys.path.append(f"{openbird_dir}/modules/predict_algo/{config['predict']['algo']}")
     from predict_algo import predict_algo
 
     if config['general'].getboolean('db_rw'):

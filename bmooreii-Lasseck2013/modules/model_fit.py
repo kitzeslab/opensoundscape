@@ -20,7 +20,8 @@ def model_fit(config):
         Nothing
     '''
 
-    sys.path.append(f"modules/model_fit_algo/{config['model_fit']['algo']}")
+    openbird_dir = sys.path[0]
+    sys.path.append(f"{openbird_dir}/modules/model_fit_algo/{config['model_fit']['algo']}")
     from model_fit_algo import model_fit_algo
 
     if config['general'].getboolean('db_rw'):

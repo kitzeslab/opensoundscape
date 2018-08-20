@@ -16,7 +16,8 @@ def spect_gen(config):
         Nothing
     '''
 
-    sys.path.append(f"modules/spect_gen_algo/{config['spect_gen']['algo']}")
+    openbird_dir = sys.path[0]
+    sys.path.append(f"{openbird_dir}/modules/spect_gen_algo/{config['spect_gen']['algo']}")
     from spect_gen_algo import spect_gen_algo
 
     if config['general'].getboolean('db_rw'):

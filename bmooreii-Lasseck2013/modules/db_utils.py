@@ -53,6 +53,8 @@ def write_ini_section(config, section):
         if item == None:
             ini_dict['section'] = section
             coll.insert(ini_dict)
+            if section == 'model_fit':
+                db['model_fit_statistics_skip'].insert({'skip': False})
         else:
             item.pop('section')
             item.pop('_id')
@@ -64,6 +66,9 @@ def write_ini_section(config, section):
                 else:
                     coll.update_one({'section': section}, {'$set': ini_dict},
                         upsert=True)
+                    if section == 'model_fit':
+                        db['model_fit_statistics_skip'].update_one({},
+                            {'$set': {'skip': False}}, upsert=True)
 
 
 def write_spectrogram(label, df, spec, normal, config):
@@ -274,3 +279,40 @@ def recall_model(label, config):
         coll = db['models']
         item = coll.find_one({'label': label})
         return pickle.loads(item['model']), pickle.loads(item['scaler'])
+
+
+def get_model_fit_skip(config):
+    '''Get model_fit_statistics_skip
+
+    Open connection to MongoDB and get model_fit_statistics_skip
+
+    Args:
+        config: The openbird configuration
+
+    Returns:
+        Boolean
+    '''
+
+    with pymongo.MongoClient(config['general']['db_uri']) as client:
+        db = client[config['general']['db_name']]
+        coll = db['model_fit_statistics_skip']
+        return coll.find_one({})['skip']
+
+
+def set_model_fit_skip(config):
+    '''Set model_fit_statistics_skip to True
+
+    Open connection to MongoDB and set model_fit_statistics_skip to True so
+    we can generate models more quickly after statsistics have been run
+
+    Args:
+        config: The openbird configuration
+
+    Returns:
+        Nothing
+    '''
+
+    with pymongo.MongoClient(config['general']['db_uri']) as client:
+        db = client[config['general']['db_name']]
+        coll = db['model_fit_statistics_skip']
+        coll.update_one({}, {'$set': {'skip': True}}, upsert=True)

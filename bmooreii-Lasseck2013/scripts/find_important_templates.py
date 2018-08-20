@@ -52,7 +52,7 @@ def sampled_X_y(species_found, species_not_found):
     sampled_df = pd.concat((species_found, dummies))
 
     # Get the cursor of items
-    items = return_cursor(list(sampled_df.index.values), 'spectrograms', config)
+    items = return_cursor(list(sampled_df.index.values), 'statistics', config)
 
     # Generate the file_file_stats
     all_file_file_statistics = [None] * sampled_df.shape[0]
@@ -133,17 +133,18 @@ from itertools import repeat
 
 # Need some functions from our module
 import sys
-sys.path.append("../modules")
+script_dir = sys.path[0]
+sys.path.insert(0, f"{script_dir}/..")
 
-from utils import generate_config, return_cpu_count
-from db_utils import cursor_item_to_stats
-from db_utils import return_cursor
+from modules.utils import generate_config, return_cpu_count
+from modules.db_utils import cursor_item_to_stats
+from modules.db_utils import return_cursor
 
 # From the docstring, generate the arguments dictionary
 arguments = docopt(__doc__, version='find_important_templates.py version 0.0.1')
 
 # Generate the config instance
-config = generate_config('../config/openbird.ini', arguments['--ini'])
+config = generate_config('config/openbird.ini', arguments['--ini'])
 
 # Generate list of files which identify <label>
 labels_df = pd.read_csv(f"{config['general']['data_dir']}/{config['general']['train_file']}",

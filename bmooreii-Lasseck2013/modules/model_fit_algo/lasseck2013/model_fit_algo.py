@@ -6,6 +6,8 @@ from modules.db_utils import read_spectrogram
 from modules.db_utils import return_cursor
 from modules.db_utils import write_file_stats
 from modules.db_utils import write_model
+from modules.db_utils import get_model_fit_skip
+from modules.db_utils import set_model_fit_skip
 from modules.spect_gen import spect_gen
 from modules.view import extract_segments
 from modules.utils import return_cpu_count
@@ -286,8 +288,12 @@ def build_X_y(labels_df, config):
             range(len(file_file_stats[o_idx]))])
     file_file_stats = np.array(_tmp)
 
-    return pd.DataFrame(np.hstack(
-        (file_stats, file_file_stats.reshape(file_file_stats.shape[0], -1)))), pd.Series(labels_df.values)
+    # Short circuit return for only cross correlations
+    if config['model_fit'].getboolean('cross_correlations_only'):
+        return pd.DataFrame(file_file_stats[:, :, 0].reshape(file_file_stats.shape[0], -1)), pd.Series(labels_df.values)
+
+    return pd.DataFrame(np.hstack((file_stats,
+        file_file_stats.reshape(file_file_stats.shape[0], -1)))), pd.Series(labels_df.values)
 
 
 def fit_model(X, y, labels_df, config):
@@ -401,18 +407,25 @@ def model_fit_algo(config):
     labels_df = pd.read_csv(
         f"{config['general']['data_dir']}/{config['general']['train_file']}",
         index_col=0)
+    labels_df = labels_df.fillna(0).astype(int)
+
+    if config['model_fit']['labels_list'] != "":
+        labels_df = labels_df.loc[:, config['model_fit']['labels_list'].split(',')]
 
     # Get the processor counts
     nprocs = return_cpu_count(config)
 
     # For each file, we need to create a new DF with first and second order
     # statistics
-    with progressbar.ProgressBar(max_value=labels_df.shape[0]) as bar:
-        with ProcessPoolExecutor(nprocs) as executor:
-            for idx, ret in zip(np.arange(labels_df.shape[0]),
-                    executor.map(run_stats, labels_df.index,
-                        repeat(labels_df), repeat(config))):
-                bar.update(idx)
+    if not get_model_fit_skip(config):
+        with progressbar.ProgressBar(max_value=labels_df.shape[0]) as bar:
+            with ProcessPoolExecutor(nprocs) as executor:
+                for idx, ret in zip(np.arange(labels_df.shape[0]),
+                        executor.map(run_stats, labels_df.index,
+                            repeat(labels_df), repeat(config))):
+                    bar.update(idx)
+
+    set_model_fit_skip(config)
 
     # Serial code for debugging
     # print("Running serial code...")
