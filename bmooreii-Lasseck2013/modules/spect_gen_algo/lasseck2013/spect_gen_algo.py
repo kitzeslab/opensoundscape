@@ -250,3 +250,7 @@ def spect_gen_algo(config):
                     executor.map(preprocess, preprocess_files.values,
                         repeat(config))):
                 bar.update(idx)
+
+    # Serial Code
+    # for file in preprocess_files.values:
+    #     preprocess(file, config)

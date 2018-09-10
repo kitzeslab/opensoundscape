@@ -11,8 +11,7 @@ Prerequisites:
     - The <ini>'s must match!
 
 Usage:
-    find_important_templates.py [-hv]
-    find_important_templates.py <label> [-i <ini>] [-s <template_pool.csv>]
+    find_important_templates.py <label> [-i <ini>] [-s <template_pool.csv>] [-hv]
 
 Positional Arguments:
     <label>             The label you would like to interrogate,

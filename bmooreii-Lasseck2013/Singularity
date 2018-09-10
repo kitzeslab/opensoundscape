@@ -1,0 +1,28 @@
+Bootstrap: docker
+From: archlinux/base
+
+%setup
+    mkdir -p ${SINGULARITY_ROOTFS}/opt/openbird
+    cp -r /home/bmooreii/projects/openbird/openbird/bmooreii-Lasseck2013/* ${SINGULARITY_ROOTFS}/opt/openbird
+
+%labels
+    AUTHOR moore0557@gmail.com
+
+
+%post
+    pacman -Syyu --noconfirm
+    pacman -S python python-pip libsamplerate git gcc python-pandas python-numpy \
+        python-matplotlib python-docopt python-scipy python-pymongo python-progressbar \
+        python-pytest tk mongodb mongodb-tools opencv hdf5 gtk3 python-scikit-learn \
+        xorg-xeyes \
+        --noconfirm
+    pip install -r /opt/openbird/requirements.txt
+
+%apprun openbird
+    python /opt/openbird/openbird.py $*
+
+%appenv openbird
+    export MPLBACKEND="TkAgg"
+
+%apprun mongodb
+    mongod $*
