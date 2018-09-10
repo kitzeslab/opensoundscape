@@ -20,7 +20,6 @@ Options:
     -v --version                    Print the version of crc-squeue.py
     -i --ini <ini>                  Specify an override file [default: openbird.ini]
     -s --save <template_pool.csv>   Generate a <template_pool.csv> for openbird.py
-    -c --chunks <chunks>            The size of chunks [default: 1]
 '''
 
 def generate_ff_stats(stats_df, species_found_df):
@@ -70,11 +69,6 @@ from modules.db_utils import return_cursor
 # From the docstring, generate the arguments dictionary
 arguments = docopt(__doc__, version='find_high_cross_correlations.py version 0.0.1')
 
-try:
-    chunks = int(arguments['--chunks'])
-except ValueError:
-    exit(f"Error: --chunks must be given an integer! Given: {arguments['--chunks']}")
-
 # Generate the config instance
 config = generate_config('config/openbird.ini', arguments['--ini'])
 
@@ -90,11 +84,11 @@ species = arguments["<label>"]
 species_found = labels_df[species][labels_df[species] == 1]
 species_not_found = labels_df[species][labels_df[species] == 0]
 
-chunk_species_not_found = np.array_split(species_not_found, chunks)
-
 nprocs = return_cpu_count(config)
+
+chunk_species_not_found = np.array_split(species_not_found, nprocs)
+
 with ProcessPoolExecutor(nprocs) as executor:
-    # results = executor.map(high_cc, chunk_species_not_found.iteritems(), repeat(species_found))
     results = executor.map(high_cc, chunk_species_not_found, repeat(species_found))
 
 for res in results:
