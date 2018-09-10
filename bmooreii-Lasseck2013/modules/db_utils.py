@@ -5,11 +5,51 @@ from scipy.sparse import csr_matrix
 from datetime import datetime
 from modules.utils import yes_no
 
+# This is a thread local global variable
+client = None
 
 class OpenbirdAttemptOverrideINISection(Exception):
     '''Override INI Section Exception
     '''
     pass
+
+
+def init_client(config):
+    '''Initialize a MongoDB Client
+
+    Initialize the MongoDB Client
+
+    Args:
+        config: The openbird configuration
+
+    Returns:
+        Nothing.
+
+    Raises:
+        Nothing
+    '''
+
+    global client
+    client = pymongo.MongoClient(config['general']['db_uri'])
+
+
+def close_client():
+    '''Close MongoDB Client Connection
+
+    Close the MongoDB Client Connection
+
+    Args:
+        config: The openbird configuration
+
+    Returns:
+        Nothing.
+
+    Raises:
+        Nothing
+    '''
+
+    global client
+    client.close()
 
 
 def write_ini_section(config, section):
@@ -32,43 +72,48 @@ def write_ini_section(config, section):
             doesn't override
     '''
 
+    global client
+    init_client(config)
+
     ini_dict = dict(config[section].items())
     gen_dict = dict(config['general'].items())
 
-    with pymongo.MongoClient(config['general']['db_uri']) as client:
-        db = client[config['general']['db_name']]
-        coll = db['ini']
+    db = client[config['general']['db_name']]
+    coll = db['ini']
 
-        if section != 'general':
-            item = coll.find_one({'section': 'general'})
-            if item == None:
-                raise OpenbirdAttemptOverrideINISection("Please run `openbird.py init`")
-            else:
-                item.pop('section')
-                item.pop('_id')
-                if gen_dict != item:
-                    raise OpenbirdAttemptOverrideINISection("Please run `openbird.py init`")
-
-        item = coll.find_one({'section': section})
+    if section != 'general':
+        item = coll.find_one({'section': 'general'})
         if item == None:
-            ini_dict['section'] = section
-            coll.insert(ini_dict)
-            if section == 'model_fit':
-                db['model_fit_statistics_skip'].insert({'skip': False})
+            raise OpenbirdAttemptOverrideINISection("Please run `openbird.py init`")
         else:
             item.pop('section')
             item.pop('_id')
-            if ini_dict != item:
-                print("WARNING: Detected a change to your configuration!")
-                answer = yes_no("Do you want to override the current config?")
-                if not answer:
-                    raise OpenbirdAttemptOverrideINISection("Check your INI file!")
-                else:
-                    coll.update_one({'section': section}, {'$set': ini_dict},
-                        upsert=True)
-                    if section == 'model_fit':
-                        db['model_fit_statistics_skip'].update_one({},
-                            {'$set': {'skip': False}}, upsert=True)
+            if gen_dict != item:
+                raise OpenbirdAttemptOverrideINISection("Please run `openbird.py init`")
+
+    item = coll.find_one({'section': section})
+    if item == None:
+        ini_dict['section'] = section
+        coll.insert(ini_dict)
+        if section == 'model_fit':
+            db['model_fit_statistics_skip'].insert({'skip': False})
+    else:
+        item.pop('section')
+        item.pop('_id')
+        if ini_dict != item:
+            print("WARNING: Detected a change to your configuration!")
+            answer = yes_no("Do you want to override the current config?")
+            if not answer:
+                raise OpenbirdAttemptOverrideINISection("Check your INI file!")
+            else:
+                coll.update_one({'section': section}, {'$set': ini_dict},
+                    upsert=True)
+                if section == 'model_fit':
+                    db['model_fit_statistics_skip'].update_one({},
+                        {'$set': {'skip': False}}, upsert=True)
+
+    # Make sure to close the client!
+    close_client()
 
 
 def write_spectrogram(label, df, spec, normal, config):
@@ -88,6 +133,7 @@ def write_spectrogram(label, df, spec, normal, config):
     Returns:
         Nothing.
     '''
+    global client
 
     df_bytes = pickle.dumps(df)
 
@@ -98,13 +144,12 @@ def write_spectrogram(label, df, spec, normal, config):
     else:
         spec_bytes = pickle.dumps(spec)
 
-    with pymongo.MongoClient(config['general']['db_uri']) as client:
-        db = client[config['general']['db_name']]
-        coll = db['spectrograms']
-        coll.update_one({'label': label},
-            {'$set': {'df': df_bytes, 'spectrogram': spec_bytes,
-                'normalization_factor': normal, 'preprocess_date': datetime.now()}},
-            upsert=True)
+    db = client[config['general']['db_name']]
+    coll = db['spectrograms']
+    coll.update_one({'label': label},
+        {'$set': {'df': df_bytes, 'spectrogram': spec_bytes,
+            'normalization_factor': normal, 'preprocess_date': datetime.now()}},
+        upsert=True)
 
 
 def read_spectrogram(label, config):
@@ -123,13 +168,14 @@ def read_spectrogram(label, config):
         normalization factor
     '''
 
-    with pymongo.MongoClient(config['general']['db_uri']) as client:
-        db = client[config['general']['db_name']]
-        coll = db['spectrograms']
+    global client
 
-        # Extract DF and Spectrogram
-        item = coll.find_one({'label': label})
-        df, spec, normal = cursor_item_to_data(item, config)
+    db = client[config['general']['db_name']]
+    coll = db['spectrograms']
+
+    # Extract DF and Spectrogram
+    item = coll.find_one({'label': label})
+    df, spec, normal = cursor_item_to_data(item, config)
 
     return df, spec, normal
 
@@ -150,15 +196,16 @@ def return_cursor(indices, coll, config, db_name=''):
         MongoDB Cursor
     '''
 
-    with pymongo.MongoClient(config['general']['db_uri']) as client:
-        if db_name:
-            db = client[db_name]
-        else:
-            db = client[config['general']['db_name']]
-        coll = db[coll]
+    global client
 
-        items = coll.find({'label': {'$in': indices}})
-        return items
+    if db_name:
+        db = client[db_name]
+    else:
+        db = client[config['general']['db_name']]
+    coll = db[coll]
+
+    items = coll.find({'label': {'$in': indices}})
+    return items
 
 
 def cursor_item_to_data(item, config):
@@ -222,18 +269,19 @@ def write_file_stats(label, file_stats, file_file_stats, config):
         Nothing.
     '''
 
+    global client
+
     # Pickle it up
     file_stats_bytes = pickle.dumps(file_stats)
     file_file_stats_bytes = pickle.dumps(file_file_stats)
 
     # Update or insert item into collection
-    with pymongo.MongoClient(config['general']['db_uri']) as client:
-        db = client[config['general']['db_name']]
-        coll = db['statistics']
-        coll.update_one({'label': label},
-            {'$set': {'file_stats': file_stats_bytes,
-                'file_file_stats': file_file_stats_bytes}},
-            upsert=True)
+    db = client[config['general']['db_name']]
+    coll = db['statistics']
+    coll.update_one({'label': label},
+        {'$set': {'file_stats': file_stats_bytes,
+            'file_file_stats': file_file_stats_bytes}},
+        upsert=True)
 
 
 def write_model(label, model, scaler, config):
@@ -250,14 +298,15 @@ def write_model(label, model, scaler, config):
         Nothing.
     '''
 
+    global client
+
     model_bytes = pickle.dumps(model)
     scaler_bytes = pickle.dumps(scaler)
 
-    with pymongo.MongoClient(config['general']['db_uri']) as client:
-        db = client[config['general']['db_name']]
-        coll = db['models']
-        coll.update_one({'label': label}, {'$set': {'model': model_bytes,
-            'scaler': scaler_bytes}}, upsert=True)
+    db = client[config['general']['db_name']]
+    coll = db['models']
+    coll.update_one({'label': label}, {'$set': {'model': model_bytes,
+        'scaler': scaler_bytes}}, upsert=True)
 
 
 def recall_model(label, config):
@@ -273,12 +322,12 @@ def recall_model(label, config):
         Nothing.
     '''
 
+    global client
 
-    with pymongo.MongoClient(config['general']['db_uri']) as client:
-        db = client[config['general']['db_name']]
-        coll = db['models']
-        item = coll.find_one({'label': label})
-        return pickle.loads(item['model']), pickle.loads(item['scaler'])
+    db = client[config['general']['db_name']]
+    coll = db['models']
+    item = coll.find_one({'label': label})
+    return pickle.loads(item['model']), pickle.loads(item['scaler'])
 
 
 def get_model_fit_skip(config):
@@ -293,10 +342,11 @@ def get_model_fit_skip(config):
         Boolean
     '''
 
-    with pymongo.MongoClient(config['general']['db_uri']) as client:
-        db = client[config['general']['db_name']]
-        coll = db['model_fit_statistics_skip']
-        return coll.find_one({})['skip']
+    global client
+
+    db = client[config['general']['db_name']]
+    coll = db['model_fit_statistics_skip']
+    return coll.find_one({})['skip']
 
 
 def set_model_fit_skip(config):
@@ -312,7 +362,8 @@ def set_model_fit_skip(config):
         Nothing
     '''
 
-    with pymongo.MongoClient(config['general']['db_uri']) as client:
-        db = client[config['general']['db_name']]
-        coll = db['model_fit_statistics_skip']
-        coll.update_one({}, {'$set': {'skip': True}}, upsert=True)
+    global client
+
+    db = client[config['general']['db_name']]
+    coll = db['model_fit_statistics_skip']
+    coll.update_one({}, {'$set': {'skip': True}}, upsert=True)

@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+from modules.db_utils import init_client
+from modules.db_utils import close_client
 from modules.db_utils import cursor_item_to_data
 from modules.db_utils import cursor_item_to_stats
 from modules.db_utils import read_spectrogram
@@ -219,6 +221,32 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
     return match_stats_dict
 
 
+def chunk_run_stats(chunk, labels_df, config):
+    '''For each chunk call run_stats
+
+    Run within a parallel executor to generate file and file-file Statistics
+    for a given label.
+
+    Args:
+        chunk: A chunk of file labels
+        labels_df: Passed through to `file_file_stats` function
+        config: The parsed ini file for this run
+
+    Returns:
+        Nothing, writes to MongoDB
+
+    Raises:
+        Nothing.
+    '''
+
+    init_client(config)
+
+    for label in chunk:
+        run_stats(label, labels_df, config)
+
+    close_client()
+
+
 def run_stats(idx_one, labels_df, config):
     '''Wrapper for parallel stats execution
 
@@ -368,12 +396,40 @@ def fit_model(X, y, labels_df, config):
     return grid_search.best_estimator_, scaler, results
 
 
+def chunk_build_model(chunk, labels_df, config):
+    '''Build the lasseck2013 model
+
+    Given a chunk, run build_model on each label
+
+    Args:
+        chunk: Some columns to process in parallel
+        labels_df: The labels_df to build model with
+        config: The parsed ini file for this run
+
+    Returns:
+        Something or possibly writes to MongoDB
+
+    Raises:
+        Nothing.
+    '''
+
+    init_client(config)
+
+    results = [build_model(col, labels_df, config) for col in chunk]
+
+    close_client()
+
+    return results
+
+
 def build_model(column, labels_df, config):
     '''Build the lasseck2013 model
 
     We were directed here from model_fit to fit the lasseck2013 model.
 
     Args:
+        column: The column to build a model with
+        labels_df: The labels for the column
         config: The parsed ini file for this run
 
     Returns:
@@ -415,15 +471,14 @@ def model_fit_algo(config):
     # Get the processor counts
     nprocs = return_cpu_count(config)
 
+    # Split into chunks
+    chunks = np.array_split(labels_df.index, nprocs)
+
     # For each file, we need to create a new DF with first and second order
     # statistics
     if not get_model_fit_skip(config):
-        with progressbar.ProgressBar(max_value=labels_df.shape[0]) as bar:
-            with ProcessPoolExecutor(nprocs) as executor:
-                for idx, ret in zip(np.arange(labels_df.shape[0]),
-                        executor.map(run_stats, labels_df.index,
-                            repeat(labels_df), repeat(config))):
-                    bar.update(idx)
+        with ProcessPoolExecutor(nprocs) as executor:
+            executor.map(chunk_run_stats, chunks, repeat(labels_df), repeat(config))
 
     set_model_fit_skip(config)
 
@@ -432,13 +487,12 @@ def model_fit_algo(config):
     # for idx, item in enumerate(labels_df.index):
     #     run_stats(item, labels_df, config)
 
-    with progressbar.ProgressBar(max_value=labels_df.shape[1]) as bar:
-        with ProcessPoolExecutor(nprocs) as executor:
-            for idx, ret in zip(np.arange(labels_df.shape[1]),
-                executor.map(build_model, labels_df.columns,
-                    repeat(labels_df), repeat(config))):
-                print(ret)
-                bar.update(idx)
+    chunks = np.array_split(labels_df.columns, nprocs)
+
+    with ProcessPoolExecutor(nprocs) as executor:
+        for ret in executor.map(chunk_build_model, chunks, repeat(labels_df), repeat(config)):
+            if len(ret) != 0:
+                [print(x) for x in ret]
 
     # Serial code for debugging
     # print("Running serial code...")
