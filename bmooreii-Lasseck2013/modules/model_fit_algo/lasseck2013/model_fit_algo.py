@@ -241,8 +241,7 @@ def chunk_run_stats(chunk, labels_df, config):
 
     init_client(config)
 
-    for label in chunk:
-        run_stats(label, labels_df, config)
+    [run_stats(label, labels_df, config) for label in chunk]
 
     close_client()
 
@@ -482,12 +481,13 @@ def model_fit_algo(config):
 
     set_model_fit_skip(config)
 
+    # Split into chunks
+    chunks = np.array_split(labels_df.columns, nprocs)
+
     # Serial code for debugging
     # print("Running serial code...")
     # for idx, item in enumerate(labels_df.index):
     #     run_stats(item, labels_df, config)
-
-    chunks = np.array_split(labels_df.columns, nprocs)
 
     with ProcessPoolExecutor(nprocs) as executor:
         for ret in executor.map(chunk_build_model, chunks, repeat(labels_df), repeat(config)):

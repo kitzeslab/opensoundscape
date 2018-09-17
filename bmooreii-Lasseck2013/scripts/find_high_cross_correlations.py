@@ -41,14 +41,25 @@ def generate_ff_stats(stats_df, species_found_df):
 
     return all_file_file_statistics
 
-def high_cc(l, species_found):
-    # all_file_file_statistics = generate_ff_stats(pd.Series(data=[tup[1]], index=[tup[0]]), species_found)
-    all_file_file_statistics = generate_ff_stats(l, species_found)
-    highest_cc = all_file_file_statistics.max()
-    if highest_cc >= 0.75:
-        return f"{tup[0]}: {highest_cc:.2f}"
+def high_cc(l, species_found, config):
+    if len(l) != 0:
+        init_client(config)
+        all_file_file_statistics = generate_ff_stats(l, species_found)
+        close_client()
+
+        try:
+            results_str = ""
+            for idx, row in zip(l.index.values, all_file_file_statistics):
+                highest_cc = row.max()
+                if highest_cc >= 0.75:
+                    build_str = np.array_str(row).replace('\n', '')
+                    results_str += f"{idx}: {build_str}\n"
+        except ValueError:
+            pass
+
+        return results_str
     else:
-        return f""
+        return ""
 
 from docopt import docopt
 import pandas as pd
@@ -63,6 +74,8 @@ script_dir = sys.path[0]
 sys.path.insert(0, f"{script_dir}/..")
 
 from modules.utils import generate_config, return_cpu_count
+from modules.db_utils import init_client
+from modules.db_utils import close_client
 from modules.db_utils import cursor_item_to_stats
 from modules.db_utils import return_cursor
 
@@ -87,18 +100,20 @@ species_not_found = labels_df[species][labels_df[species] == 0]
 nprocs = return_cpu_count(config)
 
 chunk_species_not_found = np.array_split(species_not_found, nprocs)
+chunk_species_found = np.array_split(species_found, nprocs)
 
 with ProcessPoolExecutor(nprocs) as executor:
-    results = executor.map(high_cc, chunk_species_not_found, repeat(species_found))
+    results = executor.map(high_cc, chunk_species_not_found, repeat(species_found), repeat(config))
 
 for res in results:
     if res != "":
         print(res)
 
-#nprocs = return_cpu_count(config)
-#with ProcessPoolExecutor(nprocs) as executor:
-#    results = executor.map(high_cc, species_found.iteritems(), repeat(species_found))
-#
-#for res in results:
-#    if res != "":
-#        print(res)
+print("--> Identified <--")
+
+with ProcessPoolExecutor(nprocs) as executor:
+    results = executor.map(high_cc, chunk_species_found, repeat(species_found), repeat(config))
+
+for res in results:
+    if res != "":
+        print(res)
