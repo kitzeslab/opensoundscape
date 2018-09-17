@@ -1,30 +1,42 @@
-`openbird`
+Quick Instructions
 ---
 
-1. `legacy-Lasseck2013` - contains Lasseck's 2013 code
-  - Modified to on a modern machine w/ Python 3 (very slowly)
-2. `bmooreii-Lasseck2013` - Modernize Lasseck's code towards mix-and-match models
-  - Key Features:
-    - Parallelism: Use all the cores on your machine when possible
-    - Pluggable: Easily add new preprocessing, model fit, and prediction routines
-  - Current State:
-    - Only available with `lasseck2013` preprocessing and model_fitting
-    - Models aren't actually generated, simply storing all data in MongoDB
-      for Jupyter Notebook shenanigans.
-    - `spect_gen`: Alpha, preprocess training, testing, and prediction files
-    - `view`: Alpha, should be able to see segments and spectrograms for
-      training, testing, and prediction files
-    - `model_fit`: Not done, only generates statistics necessary for fitting a model
-    - `predict`: Not done, only generates statistics necessary for making predictions
-  - To Do:
-    - Look for opportunities for abstracting parameters into the INI files
-    - `model_fit`:
-      - Actually fit a model
-      - Test the model if testing files are requested, else cross-validate
-      - Save the model for later recollection
-    - `predict`:
-      - Recall, or train, a model from `model_fit`
-      - Make the predictions with statistics
-    - Build a testing/validation framework, automate with Travis CI
-    - Deploy Anaconda packages
-    - Deploy Docker and Singularity containers (maybe others?)
+### Prerequisites
+
+Install:
+1. `libsamplerate`:
+  - Arch Linux: `pacman -S libsamplerate`
+  - OSX: `brew install libsamplerate`
+1. MongoDB:
+  - Arch Linux: `pacman -S mongodb`
+  - OSX: `brew install mongodb`
+2. Python 3:
+  - Arch Linux: `pacman -S python`
+  - OSX: `brew install python3` or Anaconda
+3. Python 3 Dependencies:
+  - `pip3 install -r requirements.txt`
+
+### Setup
+
+1. Start MongoDB:
+  - Arch Linux: `systemctl start mongodb`
+  - OSX: `mongod --dbpath <path>` # Default <path>=/data/db
+
+### Running the Code
+
+1. Define `openbird.ini` with updated parameters from `config/openbird.ini`
+  - Minimally need to define `data_dir` and `train_file`
+2. Generate spectrograms `./openbird.py spect_gen`
+    - This will preprocess in parallel using all cores (minus 1) on your
+      machine, to further limit please define `num_processors` in your
+      `openbird.ini`
+3. Fit a Model `./openbird.py model_fit`
+    - This will generate all file and file-file statistics necessary for training
+    - To do:
+        - Actually train a model
+        - Save the model for later predictions
+7. Make a prediction `./openbird predict`
+    - This will generate all file and file-file statistics necessary for predictions
+    - To do:
+        - Recall the model (or train it)
+        - Make a prediction
