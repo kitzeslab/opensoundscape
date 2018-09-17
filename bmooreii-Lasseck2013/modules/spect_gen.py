@@ -1,4 +1,6 @@
 import sys
+from modules.db_utils import init_client
+from modules.db_utils import close_client
 from modules.db_utils import write_ini_section
 
 def spect_gen(config):

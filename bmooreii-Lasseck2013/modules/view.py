@@ -5,6 +5,8 @@ import pickle
 import pymongo
 from modules.spect_gen import spect_gen
 from modules.image_utils import apply_gaussian_filter
+from modules.db_utils import init_client
+from modules.db_utils import close_client
 from modules.db_utils import read_spectrogram
 
 
@@ -142,7 +144,9 @@ def view(label, image, seg_only, config):
     '''
 
     # Get the data, from the database or recreate
+    init_client(config)
     df, spectrogram, normalization_factor = read_spectrogram(label, config)
+    close_client()
 
     # Apply Gaussian Filter
     spectrogram = apply_gaussian_filter(spectrogram,

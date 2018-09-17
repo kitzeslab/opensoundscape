@@ -8,7 +8,10 @@ from scipy import signal, ndimage
 from scipy.io import wavfile
 from scikits.samplerate import resample
 from skimage.morphology import remove_small_objects
+from modules.db_utils import init_client
+from modules.db_utils import close_client
 from modules.db_utils import write_spectrogram
+from modules.utils import return_cpu_count
 
 def generate_segments_from_binary_spectrogram(binary_spec, buffer):
     '''Identify feature bounding boxes
@@ -115,6 +118,33 @@ def frequency_based_spectrogram_filter(spec, freq, low_freq_thr, high_freq_thr):
     '''
     indices = np.argwhere((freq > low_freq_thr) & (freq < high_freq_thr)).flatten()
     return spec[indices, :], freq[indices]
+
+
+def chunk_preprocess(chunk, config):
+    '''Preprocess all images
+
+    This is a super function which provides all of the functionality to
+    preprocess many wav file for model fitting.
+
+    Args:
+        chunk: A chunk of files to process
+        config: The parsed ini file for this particular run
+
+    Returns:
+        Nothing
+
+    Raises:
+        Nothing
+    '''
+
+    # Before running the chunk, we need to initialize the global MongoDB client
+    init_client(config)
+
+    for label in chunk:
+        preprocess(label, config)
+
+    # Don't forget to close the client!
+    close_client()
 
 
 def preprocess(label, config):
@@ -235,21 +265,17 @@ def spect_gen_algo(config):
         preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
             ignore_index=True)
 
-    # Get the processor counts
-    if config['general']['num_processors'] == '':
-        nprocs = cpu_count()
-    else:
-        nprocs = config['general'].getint('num_processors')
+    # Get the number of processors
+    nprocs = return_cpu_count(config)
+
+    # Split into chunks
+    chunks = np.array_split(preprocess_files, nprocs)
 
     # Create a ProcessPoolExecutor, run:
     # -> Wrap everything in a ProgressBar
     # -> Async process everything
     with ProcessPoolExecutor(nprocs) as executor:
-        with progressbar.ProgressBar(max_value=preprocess_files.shape[0]) as bar:
-            for idx, ret in zip(np.arange(preprocess_files.shape[0]),
-                    executor.map(preprocess, preprocess_files.values,
-                        repeat(config))):
-                bar.update(idx)
+        executor.map(chunk_preprocess, chunks, repeat(config))
 
     # Serial Code
     # for file in preprocess_files.values:
