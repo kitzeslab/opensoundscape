@@ -24,18 +24,18 @@ Install:
 
 ### Running the Code
 
-1. Define `openbird.ini` with updated parameters from `config/openbird.ini`
+1. Define `opensoundscape.ini` with updated parameters from `config/opensoundscape.ini`
   - Minimally need to define `data_dir` and `train_file`
-2. Generate spectrograms `./openbird.py spect_gen`
+2. Generate spectrograms `./opensoundscape.py spect_gen`
     - This will preprocess in parallel using all cores (minus 1) on your
       machine, to further limit please define `num_processors` in your
-      `openbird.ini`
-3. Fit a Model `./openbird.py model_fit`
+      `opensoundscape.ini`
+3. Fit a Model `./opensoundscape.py model_fit`
     - This will generate all file and file-file statistics necessary for training
     - To do:
         - Actually train a model
         - Save the model for later predictions
-7. Make a prediction `./openbird predict`
+7. Make a prediction `./opensoundscape predict`
     - This will generate all file and file-file statistics necessary for predictions
     - To do:
         - Recall the model (or train it)

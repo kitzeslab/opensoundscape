@@ -1,13 +1,12 @@
 #!/usr/bin/env python
-''' openbird.py -- OpenBird
+''' opensoundscape.py -- Opensoundscape
 Usage:
-    openbird.py [-hv]
-    openbird.py init [-i <ini>]
-    openbird.py sampling [-i <ini>]
-    openbird.py spect_gen [-i <ini>]
-    openbird.py view <label> [<image>] [-i <ini>] [-s]
-    openbird.py model_fit [-i <ini>]
-    openbird.py predict [-i <ini>]
+    opensoundscape.py [-hv]
+    opensoundscape.py init [-i <ini>]
+    opensoundscape.py spect_gen [-i <ini>]
+    opensoundscape.py view <label> [<image>] [-i <ini>] [-s]
+    opensoundscape.py model_fit [-i <ini>]
+    opensoundscape.py predict [-i <ini>]
 
 Positional Arguments:
     <label>             The label you would like to view, must be in the configs
@@ -17,13 +16,12 @@ Positional Arguments:
 Options:
     -h --help           Print this screen and exit
     -v --version        Print the version of crc-squeue.py
-    -i --ini <ini>      Specify an override file [default: openbird.ini]
+    -i --ini <ini>      Specify an override file [default: opensoundscape.ini]
     -s --segments       View the segments only [default: False]
 '''
 
 
 from docopt import docopt
-from modules.sampling import sampling
 from modules.spect_gen import spect_gen
 from modules.view import view
 from modules.model_fit import model_fit
@@ -32,19 +30,16 @@ from modules.utils import generate_config
 from modules.init import init
 
 # From the docstring, generate the arguments dictionary
-arguments = docopt(__doc__, version='openbird.py version 0.0.1')
+arguments = docopt(__doc__, version='opensoundscape.py version 0.0.1')
 
 # Get the default config variables
-config = generate_config("config/openbird.ini", arguments["--ini"])
+config = generate_config("config/opensoundscape.ini", arguments["--ini"])
 
 # Initialize empty string for arguments['<image>'] (not supported by docopt)
 if not arguments['<image>']:
     arguments['<image>'] = ''
 
-if arguments['sampling']:
-    raise NotImplementedError("sampling is not implemented!")
-
-elif arguments['spect_gen']:
+if arguments['spect_gen']:
     # Pass the configuration to spect_gen
     spect_gen(config)
 

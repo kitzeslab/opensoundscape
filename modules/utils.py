@@ -26,13 +26,13 @@ def return_cpu_count(config):
 def generate_config(f_default, f_override):
     '''Generate the configuration
 
-    Simply return a ConfigParser for openbird. We have a default config in
+    Simply return a ConfigParser for opensoundscape. We have a default config in
     `config/` as well as a potential override file. Access elements via
     `config[<section>].get{float,boolean,int}('key')`.
 
     Args:
-        f_default: The default config `config/openbird.ini`
-        f_override: The override config `openbird.ini`
+        f_default: The default config `config/opensoundscape.ini`
+        f_override: The override config `opensoundscape.ini`
 
     Returns:
         A ConfigParser instance
@@ -40,8 +40,8 @@ def generate_config(f_default, f_override):
     Raises:
         FileNotFoundError if INI file doesn't exist
     '''
-    openbird_dir = sys.path[0]
-    f_default = join(openbird_dir, f_default)
+    opensoundscape_dir = sys.path[0]
+    f_default = join(opensoundscape_dir, f_default)
 
     if not isfile(f_default):
         raise FileNotFoundError(f"{f_default} doesn't exist!")
