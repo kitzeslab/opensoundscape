@@ -29,7 +29,7 @@ def run_stats(predict_idx, train_labels_df, config):
     Args:
         predict_idx: The label to make predictions on
         train_labels_df: Labels of the templates to slide over current prediction label
-        config: The openbird ini configuration
+        config: The opensoundscape ini configuration
 
     Returns:
         Nothing. Writes prediction data to MongoDB collection.
@@ -41,8 +41,8 @@ def run_stats(predict_idx, train_labels_df, config):
     #     file_stats.__name__
     #     file_file_stats.__name__
     # except UnboundLocalError:
-    openbird_dir = sys.path[0]
-    sys.path.append(f"{openbird_dir}/modules/model_fit_algo/{config['predict']['algo']}")
+    opensoundscape_dir = sys.path[0]
+    sys.path.append(f"{opensoundscape_dir}/modules/model_fit_algo/{config['predict']['algo']}")
     from model_fit_algo import file_stats, file_file_stats
 
     df_predict, spec_predict, normal_predict, row_predict = file_stats(predict_idx, config)
@@ -59,7 +59,7 @@ def build_X(predict_df, train_df, config):
     Args:
         predict_df: labels dataframe for prediction
         train_df: labels dataframe for training
-        config: The openbird ini configuration
+        config: The opensoundscape ini configuration
 
     Returns:
         X: dataframe containing data to fit on

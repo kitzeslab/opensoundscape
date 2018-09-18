@@ -2,8 +2,8 @@ Bootstrap: docker
 From: archlinux/base
 
 %setup
-    mkdir -p ${SINGULARITY_ROOTFS}/opt/openbird
-    cp -r /home/bmooreii/projects/openbird/openbird/bmooreii-Lasseck2013/* ${SINGULARITY_ROOTFS}/opt/openbird
+    mkdir -p ${SINGULARITY_ROOTFS}/opt/opensoundscape
+    cp -r /home/bmooreii/projects/openbird/opensoundscape/* ${SINGULARITY_ROOTFS}/opt/opensoundscape
 
 %labels
     AUTHOR moore0557@gmail.com
@@ -15,12 +15,12 @@ From: archlinux/base
         python-matplotlib python-docopt python-scipy python-pymongo python-progressbar \
         python-pytest tk mongodb mongodb-tools opencv hdf5 gtk3 python-scikit-learn \
         --noconfirm
-    pip install -r /opt/openbird/requirements.txt
+    pip install -r /opt/opensoundscape/requirements.txt
 
-%apprun openbird
-    python /opt/openbird/openbird.py $*
+%apprun opensoundscape
+    python /opt/opensoundscape/opensoundscape.py $*
 
-%appenv openbird
+%appenv opensoundscape
     export MPLBACKEND="TkAgg"
 
 %apprun mongodb
