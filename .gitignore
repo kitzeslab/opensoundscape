@@ -3,4 +3,4 @@
 *.png
 __pycache__/
 containers/
-mesting/
+testing/
