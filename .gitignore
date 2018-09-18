@@ -1,3 +1,6 @@
 *.pyc
-.idea/
 *.pdf
+*.png
+__pycache__/
+containers/
+testing/

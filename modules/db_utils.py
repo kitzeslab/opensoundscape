@@ -8,7 +8,7 @@ from modules.utils import yes_no
 # This is a thread local global variable
 client = None
 
-class OpenbirdAttemptOverrideINISection(Exception):
+class OpensoundscapeAttemptOverrideINISection(Exception):
     '''Override INI Section Exception
     '''
     pass
@@ -20,7 +20,7 @@ def init_client(config):
     Initialize the MongoDB Client
 
     Args:
-        config: The openbird configuration
+        config: The opensoundscape configuration
 
     Returns:
         Nothing.
@@ -39,7 +39,7 @@ def close_client():
     Close the MongoDB Client Connection
 
     Args:
-        config: The openbird configuration
+        config: The opensoundscape configuration
 
     Returns:
         Nothing.
@@ -61,14 +61,14 @@ def write_ini_section(config, section):
     change the config, we will warn the user it is happening.
 
     Args:
-        config: The openbird configuration
+        config: The opensoundscape configuration
         section: Which database section to work on
 
     Returns:
         Nothing.
 
     Raises:
-        OpenbirdAttemptOverrideINISection: When INI section exists and user
+        OpensoundscapeAttemptOverrideINISection: When INI section exists and user
             doesn't override
     '''
 
@@ -84,19 +84,19 @@ def write_ini_section(config, section):
     if section != 'general':
         item = coll.find_one({'section': 'general'})
         if item == None:
-            raise OpenbirdAttemptOverrideINISection("Please run `openbird.py init`")
+            raise OpensoundscapeAttemptOverrideINISection("Please run `opensoundscape.py init`")
         else:
             item.pop('section')
             item.pop('_id')
             if gen_dict != item:
-                raise OpenbirdAttemptOverrideINISection("Please run `openbird.py init`")
+                raise OpensoundscapeAttemptOverrideINISection("Please run `opensoundscape.py init`")
 
     item = coll.find_one({'section': section})
     if item == None:
         ini_dict['section'] = section
-        coll.insert(ini_dict)
+        coll.insert_one(ini_dict)
         if section == 'model_fit':
-            db['model_fit_statistics_skip'].insert({'skip': False})
+            db['model_fit_statistics_skip'].insert_one({'skip': False})
     else:
         item.pop('section')
         item.pop('_id')
@@ -104,7 +104,7 @@ def write_ini_section(config, section):
             print("WARNING: Detected a change to your configuration!")
             answer = yes_no("Do you want to override the current config?")
             if not answer:
-                raise OpenbirdAttemptOverrideINISection("Check your INI file!")
+                raise OpensoundscapeAttemptOverrideINISection("Check your INI file!")
             else:
                 coll.update_one({'section': section}, {'$set': ini_dict},
                     upsert=True)
@@ -128,7 +128,7 @@ def write_spectrogram(label, df, spec, normal, config):
         df: The bounding box DataFrame
         spec: The numpy 2D matrix containing the spectrogram
         normal: The np.max() of the original spectrogram
-        config: The openbird configuration
+        config: The opensoundscape configuration
 
     Returns:
         Nothing.
@@ -161,7 +161,7 @@ def read_spectrogram(label, config):
 
     Args:
         label: The label for the MongoDB entry (the filename)
-        config: The openbird configuration, need the uri and names
+        config: The opensoundscape configuration, need the uri and names
 
     Returns:
         Tuple containing dataframe, spectrogram (dense representation), and
@@ -189,7 +189,7 @@ def return_cursor(indices, coll, config, db_name=''):
     Args:
         indices: A list of the labels to return
         coll: The collection to draw items from
-        config: The openbird configuration, need the uri and names
+        config: The opensoundscape configuration, need the uri and names
         db_name: Draw items from a different database
 
     Returns:
@@ -216,7 +216,7 @@ def cursor_item_to_data(item, config):
 
     Args:
         item: A database item
-        config: The openbird configuration
+        config: The opensoundscape configuration
 
     Returns:
         df: The bounding box dataframe,
@@ -263,7 +263,7 @@ def write_file_stats(label, file_stats, file_file_stats, config):
         label: The label for the MongoDB entry
         file_stats: The file stats as a numpy array
         file_file_stats: An array containing file file statistics for training files
-        config: The openbird configuration
+        config: The opensoundscape configuration
 
     Returns:
         Nothing.
@@ -292,7 +292,7 @@ def write_model(label, model, scaler, config):
     Args:
         label: The label for the MongoDB entry
         model: The sklearn model
-        config: The openbird configuration
+        config: The opensoundscape configuration
 
     Returns:
         Nothing.
@@ -316,7 +316,7 @@ def recall_model(label, config):
 
     Args:
         label: The label for the MongoDB entry
-        config: The openbird configuration
+        config: The opensoundscape configuration
 
     Returns:
         Nothing.
@@ -336,7 +336,7 @@ def get_model_fit_skip(config):
     Open connection to MongoDB and get model_fit_statistics_skip
 
     Args:
-        config: The openbird configuration
+        config: The opensoundscape configuration
 
     Returns:
         Boolean
@@ -356,7 +356,7 @@ def set_model_fit_skip(config):
     we can generate models more quickly after statsistics have been run
 
     Args:
-        config: The openbird configuration
+        config: The opensoundscape configuration
 
     Returns:
         Nothing

@@ -2,19 +2,19 @@
 import sys
 sys.path.append("..")
 from modules.utils import generate_config
-from modules.db_utils import write_ini_section, OpenbirdAttemptOverrideINISection
+from modules.db_utils import write_ini_section, OpensoundscapeAttemptOverrideINISection
 import pymongo
 import pytest
 
 
 @pytest.fixture()
 def ini_test():
-    return generate_config('../config/openbird.ini', 'ini_test.ini')
+    return generate_config('../config/opensoundscape.ini', 'ini_test.ini')
 
 
 @pytest.fixture()
 def ini_test_change():
-    return generate_config('../config/openbird.ini', 'ini_test_change.ini')
+    return generate_config('../config/opensoundscape.ini', 'ini_test_change.ini')
 
 
 @pytest.fixture()
@@ -41,17 +41,17 @@ def coll_write_ini_section(coll, ini_test):
 
 
 def test_db_empty(db):
-    assert len(db.collection_names()) == 0
+    assert len(db.list_collection_names()) == 0
 
 
 def test_insert(coll):
-    coll.insert({'test': 'test'})
+    coll.insert_one({'test': 'test'})
     item = coll.find_one({'test': 'test'})
     assert item != None
 
 
 def test_drop(coll):
-    coll.insert({'test': 'test'})
+    coll.insert_one({'test': 'test'})
     coll.drop()
     item = coll.find_one({'test': 'test'})
     assert item == None
@@ -77,13 +77,13 @@ def test_write_ini_section_feed_same_ini_no_change(coll_write_ini_section, ini_t
 
 def test_write_ini_section_override_answer_no(monkeypatch, coll_write_ini_section, ini_test_change):
     monkeypatch.setattr('builtins.input', lambda prompt: 'no')
-    with pytest.raises(OpenbirdAttemptOverrideINISection):
+    with pytest.raises(OpensoundscapeAttemptOverrideINISection):
         write_ini_section(ini_test_change, 'general')
 
 
 def test_write_ini_section_override_answer_default(monkeypatch, coll_write_ini_section, ini_test_change):
     monkeypatch.setattr('builtins.input', lambda prompt: '')
-    with pytest.raises(OpenbirdAttemptOverrideINISection):
+    with pytest.raises(OpensoundscapeAttemptOverrideINISection):
         write_ini_section(ini_test_change, 'general')
 
 

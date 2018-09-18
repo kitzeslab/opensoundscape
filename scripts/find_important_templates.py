@@ -7,7 +7,7 @@ generate many decision trees which do well on a train/test split labeled dataset
 to the decision tree.
 
 Prerequisites:
-    - You should have run `openbird.py spect_gen -i <ini>`
+    - You should have run `opensoundscape.py spect_gen -i <ini>`
     - The <ini>'s must match!
 
 Usage:
@@ -20,8 +20,8 @@ Positional Arguments:
 Options:
     -h --help                       Print this screen and exit
     -v --version                    Print the version of crc-squeue.py
-    -i --ini <ini>                  Specify an override file [default: openbird.ini]
-    -s --save <template_pool.csv>   Generate a <template_pool.csv> for openbird.py
+    -i --ini <ini>                  Specify an override file [default: opensoundscape.ini]
+    -s --save <template_pool.csv>   Generate a <template_pool.csv> for opensoundscape.py
 '''
 
 
@@ -143,7 +143,7 @@ from modules.db_utils import return_cursor
 arguments = docopt(__doc__, version='find_important_templates.py version 0.0.1')
 
 # Generate the config instance
-config = generate_config('config/openbird.ini', arguments['--ini'])
+config = generate_config('config/opensoundscape.ini', arguments['--ini'])
 
 # Generate list of files which identify <label>
 labels_df = pd.read_csv(f"{config['general']['data_dir']}/{config['general']['train_file']}",

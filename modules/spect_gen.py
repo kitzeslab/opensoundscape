@@ -18,8 +18,8 @@ def spect_gen(config):
         Nothing
     '''
 
-    openbird_dir = sys.path[0]
-    sys.path.append(f"{openbird_dir}/modules/spect_gen_algo/{config['spect_gen']['algo']}")
+    opensoundscape_dir = sys.path[0]
+    sys.path.append(f"{opensoundscape_dir}/modules/spect_gen_algo/{config['spect_gen']['algo']}")
     from spect_gen_algo import spect_gen_algo
 
     if config['general'].getboolean('db_rw'):
