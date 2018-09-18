@@ -3,11 +3,10 @@ From: archlinux/base
 
 %setup
     mkdir -p ${SINGULARITY_ROOTFS}/opt/opensoundscape
-    cp -r /home/bmooreii/projects/openbird/opensoundscape/* ${SINGULARITY_ROOTFS}/opt/opensoundscape
+    cp -rv . ${SINGULARITY_ROOTFS}/opt/opensoundscape
 
 %labels
     AUTHOR moore0557@gmail.com
-
 
 %post
     pacman -Syyu --noconfirm
