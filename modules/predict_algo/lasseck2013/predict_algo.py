@@ -20,6 +20,31 @@ import sys
 import json
 
 
+def chunk_run_stats(chunk, train_labels_df, config):
+    '''For each chunk call run_stats
+
+    Run within a parallel executor to generate file and file-file Statistics
+    for a given label.
+
+    Args:
+        chunk: A chunk of file labels
+        labels_df: Passed through to `file_file_stats` function
+        config: The parsed ini file for this run
+
+    Returns:
+        Nothing, writes to MongoDB
+
+    Raises:
+        Nothing.
+    '''
+
+    init_client(config)
+
+    [run_stats(label, train_labels_df, config) for label in chunk]
+
+    close_client()
+
+
 def run_stats(predict_idx, train_labels_df, config):
     '''Wrapper to run parallel statistics generation
 
@@ -96,6 +121,10 @@ def build_X(predict_df, train_df, config):
             range(len(file_file_stats[o_idx]))])
     file_file_stats = np.array(_tmp)
 
+    # Short circuit return for only cross correlations
+    if config['model_fit'].getboolean('cross_correlations_only'):
+        return pd.DataFrame(file_file_stats[:, :, 0].reshape(file_file_stats.shape[0], -1))
+
     return pd.DataFrame(np.hstack(
         (file_stats, file_file_stats.reshape(file_file_stats.shape[0], -1))))
 
@@ -120,11 +149,7 @@ def run_prediction(column, train_labels_df, predict_labels_df, config):
     X = build_X(predict_labels_df, train_labels_df[column], config)
     X = scaler.transform(X)
 
-    return (
-        f"Class: {column}\n"
-        "---\n"
-        f"{model.predict_proba(X)}\n"
-    )
+    return model.predict_proba(X)
 
 
 def predict_algo(config):
@@ -153,21 +178,13 @@ def predict_algo(config):
     if config['model_fit']['labels_list'] != "":
         train_labels_df = train_labels_df.loc[:, config['model_fit']['labels_list'].split(',')]
 
-    # Get the number of processors
     nprocs = return_cpu_count(config)
 
-    # Parallel process
-    with progressbar.ProgressBar(max_value=predict_labels_df.shape[0]) as bar:
-        with ProcessPoolExecutor(nprocs) as executor:
-            for idx, ret in zip(np.arange(predict_labels_df.shape[0]),
-                    executor.map(run_stats, predict_labels_df.index,
-                        repeat(train_labels_df), repeat(config))):
-                bar.update(idx)
+    chunks = np.array_split(predict_labels_df.index, nprocs)
 
-    # Serial code for debugging
-    # print("Running serial code...")
-    # for idx, item in enumerate(predict_labels_df.index):
-    #     run_stats(item, train_labels_df, config)
+    # Run the statistics
+    with ProcessPoolExecutor(nprocs) as executor:
+        executor.map(chunk_run_stats, chunks, repeat(train_labels_df), repeat(config))
 
     print("For each class,")
     print("-> format `[no, yes]`, where `no` means probability it is not identified")
@@ -177,7 +194,7 @@ def predict_algo(config):
             for idx, ret in zip(np.arange(train_labels_df.shape[1]),
                 executor.map(run_prediction, train_labels_df.columns, repeat(train_labels_df),
                     repeat(predict_labels_df), repeat(config))):
-                print(ret)
+                [print(idx, r) for idx, r in zip(predict_labels_df.index.values, ret) if r[1] > 0.75]
                 bar.update(idx)
 
     # Serial code for debugging
