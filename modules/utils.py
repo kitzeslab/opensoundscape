@@ -5,6 +5,29 @@ from os.path import join
 import sys
 from difflib import get_close_matches
 
+
+def get_stratification_percent(config):
+    '''Return the stratification_percent
+
+    Get stratification_percent and verify it. If it is greater than 1 assume
+    it needs to be divided by 100, otherwise return it.
+
+    Args:
+        config: The parsed ini file for this run
+
+    Returns:
+        percent stratification between 0 and 1
+    '''
+
+    val = config['model_fit'].getfloat(['stratification_percent'])
+    if val > 0.0 and val < 1.0:
+        return val
+    elif val < 100.0:
+        return val / 100.0
+    else:
+        raise ValueError("stratification_percent can be (0,1), e.g. 0.33, or [1,100), e.g. 33.3")
+
+
 def return_cpu_count(config):
     '''Return the number of CPUs requested
 
