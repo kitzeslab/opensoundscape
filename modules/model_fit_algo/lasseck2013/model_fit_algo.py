@@ -443,13 +443,14 @@ def build_model(column, labels_df, config):
     return results
 
 
-def model_fit_algo(config):
+def model_fit_algo(config, rerun_statistics):
     '''Fit the lasseck2013 model
 
     We were directed here from model_fit to fit the lasseck2013 model.
 
     Args:
         config: The parsed ini file for this run
+        rerun_statistics: Force rerun of model_fit statistics
 
     Returns:
         Something or possibly writes to MongoDB
@@ -470,31 +471,17 @@ def model_fit_algo(config):
     # Get the processor counts
     nprocs = return_cpu_count(config)
 
-    # Split into chunks
+    # Run the statistics, if not already complete
     chunks = np.array_split(labels_df.index, nprocs)
-
-    # For each file, we need to create a new DF with first and second order
-    # statistics
-    if not get_model_fit_skip(config):
+    if not get_model_fit_skip(config) or rerun_statistics:
         with ProcessPoolExecutor(nprocs) as executor:
             executor.map(chunk_run_stats, chunks, repeat(labels_df), repeat(config))
 
     set_model_fit_skip(config)
 
-    # Split into chunks
+    # Build the models
     chunks = np.array_split(labels_df.columns, nprocs)
-
-    # Serial code for debugging
-    # print("Running serial code...")
-    # for idx, item in enumerate(labels_df.index):
-    #     run_stats(item, labels_df, config)
-
     with ProcessPoolExecutor(nprocs) as executor:
         for ret in executor.map(chunk_build_model, chunks, repeat(labels_df), repeat(config)):
             if len(ret) != 0:
                 [print(x) for x in ret]
-
-    # Serial code for debugging
-    # print("Running serial code...")
-    # for bird in labels_df.columns:
-    #     print(build_model(bird, labels_df, config))
