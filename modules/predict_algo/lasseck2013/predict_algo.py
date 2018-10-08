@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+from modules.db_utils import init_client
+from modules.db_utils import close_client
 from modules.db_utils import cursor_item_to_data
 from modules.db_utils import cursor_item_to_stats
 from modules.db_utils import read_spectrogram
@@ -129,20 +131,49 @@ def build_X(predict_df, train_df, config):
         (file_stats, file_file_stats.reshape(file_file_stats.shape[0], -1))))
 
 
-def run_prediction(column, train_labels_df, predict_labels_df, config):
+def chunk_run_prediction(chunk, train_labels_df, predict_labels_df, config):
     '''Make a prediction based on a model
 
     Given a directory of data, make a prediction using a model
 
     Args:
-        dir: A directory containing data
+        chunk: A list of columns to process
+        train_labels_df: The training labels to run predictions from
+        predict_labels_df: The prediction labels to make predictions on
         config: The parsed ini file for this run
 
     Returns:
         Nothing. Writes prediction data to MongoDB collection.
 
     Raises:
-        NotImplementedError: Not written yet.
+        A list of `model.predict_proba` outputs
+    '''
+
+    init_client(config)
+
+    predict_proba = [run_prediction(col, train_labels_df, predict_labels_df, config)
+                        for col in chunk]
+
+    close_client()
+
+    return predict_proba
+
+def run_prediction(column, train_labels_df, predict_labels_df, config):
+    '''Make a prediction based on a model
+
+    Given a directory of data, make a prediction using a model
+
+    Args:
+        column: The label to process
+        train_labels_df: The training labels to run predictions from
+        predict_labels_df: The prediction labels to make predictions on
+        config: The parsed ini file for this run
+
+    Returns:
+        Nothing. Writes prediction data to MongoDB collection.
+
+    Raises:
+        Nothing
     '''
 
     model, scaler = recall_model(column, config)
@@ -180,24 +211,17 @@ def predict_algo(config):
 
     nprocs = return_cpu_count(config)
 
-    chunks = np.array_split(predict_labels_df.index, nprocs)
-
     # Run the statistics
+    chunks = np.array_split(predict_labels_df.index, nprocs)
     with ProcessPoolExecutor(nprocs) as executor:
         executor.map(chunk_run_stats, chunks, repeat(train_labels_df), repeat(config))
 
-    print("For each class,")
-    print("-> format `[no, yes]`, where `no` means probability it is not identified")
-    print("-> and no is probability it is identified")
-    with progressbar.ProgressBar(max_value=train_labels_df.shape[1]) as bar:
-        with ProcessPoolExecutor(nprocs) as executor:
-            for idx, ret in zip(np.arange(train_labels_df.shape[1]),
-                executor.map(run_prediction, train_labels_df.columns, repeat(train_labels_df),
-                    repeat(predict_labels_df), repeat(config))):
-                [print(idx, r) for idx, r in zip(predict_labels_df.index.values, ret) if r[1] > 0.75]
-                bar.update(idx)
-
-    # Serial code for debugging
-    # print("Running serial code...")
-    # for bird in train_labels_df.columns:
-    #     print(run_prediction(bird, train_labels_df, predict_labels_df, config))
+    # Run the predictions
+    chunks = np.array_split(train_labels_df.columns, nprocs)
+    with ProcessPoolExecutor(nprocs) as executor:
+        for indices, probas in zip(chunks,
+            executor.map(chunk_run_prediction, chunks, repeat(train_labels_df),
+                repeat(predict_labels_df), repeat(config))):
+            for idx, proba in zip(indices, probas):
+                print(idx)
+                [print(name, pred) for name, pred in zip(predict_labels_df.index.values, proba)]
