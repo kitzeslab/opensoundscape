@@ -62,7 +62,7 @@ def generate_config(f_default, f_override):
             close_matches = get_close_matches(section, config.keys())
             print(f"ERROR: From {f_override}, section '{section}' isn't recognized!")
             if close_matches:
-                print(f"-> did you mean: {close_matches}")
+                print(f"-> did you mean: {' '.join(close_matches)}")
             exit()
 
         # Second, do the keys even exist?
