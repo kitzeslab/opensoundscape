@@ -3,6 +3,7 @@ from configparser import ConfigParser
 from os.path import isfile
 from os.path import join
 import sys
+from difflib import get_close_matches
 
 def return_cpu_count(config):
     '''Return the number of CPUs requested
@@ -50,6 +51,30 @@ def generate_config(f_default, f_override):
 
     config = ConfigParser()
     config.read(f_default)
+
+    override_config = ConfigParser()
+    override_config.read(f_override)
+
+    # Verification of override sections and keys
+    for section in override_config.keys():
+        # -> First, does the section even exist?
+        if not section in config.keys():
+            close_matches = get_close_matches(section, config.keys())
+            print(f"ERROR: From {f_override}, section '{section}' isn't recognized!")
+            if close_matches:
+                print(f"-> did you mean: {close_matches}")
+            exit()
+
+        # Second, do the keys even exist?
+        for key in override_config[section].keys():
+            if not key in config[section].keys():
+                close_matches = get_close_matches(key, config[section].keys())
+                print(f"ERROR: From {f_override}, section {section}, key '{key}' isn't recognized!")
+                if close_matches:
+                    print(f"-> did you mean: {' '.join(close_matches)}")
+                exit()
+
+    # If we make it here, our override config contains valid sections and keys
     config.read(f_override)
     return config
 
