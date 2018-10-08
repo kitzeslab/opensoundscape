@@ -252,10 +252,6 @@ def spect_gen_algo(config):
         filename = f"{config['general']['data_dir']}/{config['general']['train_file']}"
         preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
             ignore_index=True)
-    if config['general']['test_file']:
-        filename = f"{config['general']['data_dir']}/{config['general']['test_file']}"
-        preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
-            ignore_index=True)
     if config['general']['validate_file']:
         filename = f"{config['general']['data_dir']}/{config['general']['validate_file']}"
         preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
