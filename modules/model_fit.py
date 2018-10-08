@@ -1,7 +1,7 @@
 import sys
 from modules.db_utils import write_ini_section
 
-def model_fit(config):
+def model_fit(config, rerun_statistics):
     '''Fit a model
 
     Given a directory and method (from config), fit a model against the
@@ -12,6 +12,7 @@ def model_fit(config):
 
     Args:
         config: The parsed ini file for this run
+        rerun_statistics: Force recalculation of model_fit statistics
 
     Returns:
         Something or possibly writes to MongoDB?
@@ -27,4 +28,4 @@ def model_fit(config):
     if config['general'].getboolean('db_rw'):
         write_ini_section(config, 'model_fit')
 
-    model_fit_algo(config)
+    model_fit_algo(config, rerun_statistics)

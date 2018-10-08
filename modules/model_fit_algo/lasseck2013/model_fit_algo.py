@@ -443,13 +443,14 @@ def build_model(column, labels_df, config):
     return results
 
 
-def model_fit_algo(config):
+def model_fit_algo(config, rerun_statistics):
     '''Fit the lasseck2013 model
 
     We were directed here from model_fit to fit the lasseck2013 model.
 
     Args:
         config: The parsed ini file for this run
+        rerun_statistics: Force rerun of model_fit statistics
 
     Returns:
         Something or possibly writes to MongoDB
@@ -472,7 +473,7 @@ def model_fit_algo(config):
 
     # Run the statistics, if not already complete
     chunks = np.array_split(labels_df.index, nprocs)
-    if not get_model_fit_skip(config):
+    if not get_model_fit_skip(config) or rerun_statistics:
         with ProcessPoolExecutor(nprocs) as executor:
             executor.map(chunk_run_stats, chunks, repeat(labels_df), repeat(config))
 
