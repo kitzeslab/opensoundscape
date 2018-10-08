@@ -14,6 +14,7 @@ from modules.spect_gen import spect_gen
 from modules.view import extract_segments
 from modules.utils import return_cpu_count
 from modules.image_utils import apply_gaussian_filter
+from modules.utils import get_stratification_percent
 from scipy import stats
 from cv2 import matchTemplate, minMaxLoc
 from concurrent.futures import ProcessPoolExecutor
@@ -340,7 +341,8 @@ def fit_model(X, y, labels_df, config):
     Raises:
         Nothing.
     '''
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33,
+    test_size = get_stratification_percent(config)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size,
         stratify=y)
 
     scaler = MinMaxScaler()
