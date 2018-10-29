@@ -19,7 +19,7 @@ def get_stratification_percent(config):
         percent stratification between 0 and 1
     '''
 
-    val = config['model_fit'].getfloat(['stratification_percent'])
+    val = config['model_fit'].getfloat('stratification_percent')
     if val > 0.0 and val < 1.0:
         return val
     elif val < 100.0:
