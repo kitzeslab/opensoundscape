@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-''' find_high_cross_correlations.py
+""" find_high_cross_correlations.py
 
 Help find more matches for training
 
@@ -20,46 +20,38 @@ Options:
     -v --version                    Print the version of crc-squeue.py
     -i --ini <ini>                  Specify an override file [default: opensoundscape.ini]
     -s --save <template_pool.csv>   Generate a <template_pool.csv> for opensoundscape.py
-'''
+"""
+
 
 def generate_ff_stats(stats_df, species_found_df):
-    items = return_cursor(list(stats_df.index.values), 'statistics', config)
+    items = return_cursor(list(stats_df.index.values), "statistics", config)
 
+    # Get all of the file_file_statistics
+    # Use the mono_idx to insert the correct value in the correct place!
     all_file_file_statistics = [None] * stats_df.shape[0]
-    for idx, item in enumerate(items):
+    for item in items:
+        mono_idx = stats_df.index.get_loc(item['label'])
         _, file_file_stats = cursor_item_to_stats(item)
-        all_file_file_statistics[idx] = [file_file_stats[found] for found in species_found_df.index.values]
+        all_file_file_statistics[mono_idx] = [
+            file_file_stats[found] for found in species_found_df.index.values
+        ]
 
-    # Stack internal stats
-    # -> convert to NP array
-    # -> extract only template matching stat specifically [:, :, 0]
-    npify = [None] * stats_df.shape[0]
-    for o_idx in range(len(all_file_file_statistics)):
-        stack = np.vstack([all_file_file_statistics[o_idx][x] for x in range(len(all_file_file_statistics[o_idx]))])
-        npify[o_idx] = copy(stack)
-    all_file_file_statistics = np.array(npify)[:, :, 0]
+    # Convert to numpy array and reshape
+    # Dims: n_files, n_templates, 1, n_features
+    # Only need the zeroth feature
+    # Output Dims: n_files, n_templates
+    npify = np.array(all_file_file_statistics)
+    return npify[:, :, :, 0].reshape(stats_df.shape[0], -1)
 
-    return all_file_file_statistics
-
-def high_cc(l, species_found, config):
-    if len(l) != 0:
+def high_cc(chunk, species_found, config):
+    if len(chunk) != 0:
         init_client(config)
-        all_file_file_statistics = generate_ff_stats(l, species_found)
+        all_file_file_statistics = generate_ff_stats(chunk, species_found)
         close_client()
-
-        try:
-            results_str = ""
-            for idx, row in zip(l.index.values, all_file_file_statistics):
-                highest_cc = row.max()
-                if highest_cc >= 0.75:
-                    build_str = np.array_str(row).replace('\n', '')
-                    results_str += f"{idx}: {build_str}\n"
-        except ValueError:
-            pass
-
-        return results_str
+        return all_file_file_statistics
     else:
-        return ""
+        return []
+
 
 from docopt import docopt
 import pandas as pd
@@ -70,6 +62,7 @@ from itertools import repeat
 
 # Need some functions from our module
 import sys
+
 script_dir = sys.path[0]
 sys.path.insert(0, f"{script_dir}/..")
 
@@ -80,14 +73,16 @@ from modules.db_utils import cursor_item_to_stats
 from modules.db_utils import return_cursor
 
 # From the docstring, generate the arguments dictionary
-arguments = docopt(__doc__, version='find_high_cross_correlations.py version 0.0.1')
+arguments = docopt(__doc__, version="find_high_cross_correlations.py version 0.0.1")
 
 # Generate the config instance
-config = generate_config('config/opensoundscape.ini', arguments['--ini'])
+config = generate_config("config/opensoundscape.ini", arguments["--ini"])
 
 # Generate list of files which identify <label>
-labels_df = pd.read_csv(f"{config['general']['data_dir']}/{config['general']['train_file']}",
-    index_col="Filename")
+labels_df = pd.read_csv(
+    f"{config['general']['data_dir']}/{config['general']['train_file']}",
+    index_col="Filename",
+)
 labels_df = labels_df.fillna(0).astype(int)
 
 # Downsample to particular species
@@ -102,18 +97,25 @@ nprocs = return_cpu_count(config)
 chunk_species_not_found = np.array_split(species_not_found, nprocs)
 chunk_species_found = np.array_split(species_found, nprocs)
 
-with ProcessPoolExecutor(nprocs) as executor:
-    results = executor.map(high_cc, chunk_species_not_found, repeat(species_found), repeat(config))
-
-for res in results:
-    if res != "":
-        print(res)
-
-print("--> Identified <--")
-
-with ProcessPoolExecutor(nprocs) as executor:
-    results = executor.map(high_cc, chunk_species_found, repeat(species_found), repeat(config))
-
-for res in results:
-    if res != "":
-        print(res)
+with open("gt9.txt", "w") as gt, \
+     open("7-9.txt", "w") as sn, \
+     open("4-6.txt", "w") as fs, \
+     open("1-3.txt", "w") as ot, \
+     ProcessPoolExecutor(nprocs) as executor:
+    for chunk, res in zip(
+        chunk_species_not_found,
+        executor.map(
+            high_cc, chunk_species_not_found, repeat(species_found), repeat(config)
+        ),
+    ):
+        for idx, row in zip(chunk.index.values, res):
+            highest_cc = row.max()
+            build_str = np.array_str(row).replace("\n", "")
+            if highest_cc > 0.9:
+                gt.write(f"{idx}: {build_str}\n")
+            elif highest_cc >= 0.7 and highest_cc <= 0.9:
+                sn.write(f"{idx}: {build_str}\n")
+            elif highest_cc >= 0.4 and highest_cc <= 0.6:
+                fs.write(f"{idx}: {build_str}\n")
+            elif highest_cc >= 0.1 and highest_cc <= 0.3:
+                ot.write(f"{idx}: {build_str}\n")
