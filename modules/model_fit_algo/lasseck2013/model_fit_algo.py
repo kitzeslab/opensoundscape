@@ -18,6 +18,7 @@ from modules.utils import get_stratification_percent
 from scipy import stats
 from cv2 import matchTemplate, minMaxLoc
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import wait
 import progressbar
 from itertools import repeat
 from copy import copy
@@ -477,7 +478,8 @@ def model_fit_algo(config, rerun_statistics):
     chunks = np.array_split(labels_df.index, nprocs)
     if not get_model_fit_skip(config) or rerun_statistics:
         with ProcessPoolExecutor(nprocs) as executor:
-            executor.map(chunk_run_stats, chunks, repeat(labels_df), repeat(config))
+            fs = executor.map(chunk_run_stats, chunks, repeat(labels_df), repeat(config))
+        wait(fs)
 
     set_model_fit_skip(config)
 
