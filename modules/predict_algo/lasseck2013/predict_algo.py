@@ -216,6 +216,9 @@ def predict_algo(config):
     with ProcessPoolExecutor(nprocs) as executor:
         executor.map(chunk_run_stats, chunks, repeat(train_labels_df), repeat(config))
 
+    # Create a DF to store the results
+    results_df = pd.DataFrame(index=predict_labels_df.index)
+
     # Run the predictions
     chunks = np.array_split(train_labels_df.columns, nprocs)
     with ProcessPoolExecutor(nprocs) as executor:
@@ -223,5 +226,6 @@ def predict_algo(config):
             executor.map(chunk_run_prediction, chunks, repeat(train_labels_df),
                 repeat(predict_labels_df), repeat(config))):
             for idx, proba in zip(indices, probas):
-                print(idx)
-                [print(name, pred) for name, pred in zip(predict_labels_df.index.values, proba)]
+                results_df[idx] = [pred[1] for pred in proba]
+
+    print(results_df.to_csv())
