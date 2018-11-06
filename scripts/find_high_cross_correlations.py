@@ -34,7 +34,7 @@ def generate_ff_stats(stats_df, species_found_df):
     # -> convert to NP array
     # -> extract only template matching stat specifically [:, :, 0]
     npify = [None] * stats_df.shape[0]
-    for o_idx, outer in enumerate(all_file_file_statistics):
+    for o_idx in range(len(all_file_file_statistics)):
         stack = np.vstack([all_file_file_statistics[o_idx][x] for x in range(len(all_file_file_statistics[o_idx]))])
         npify[o_idx] = copy(stack)
     all_file_file_statistics = np.array(npify)[:, :, 0]
