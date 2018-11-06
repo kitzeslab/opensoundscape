@@ -21,7 +21,7 @@ Options:
     -h --help                       Print this screen and exit
     -v --version                    Print the version of crc-squeue.py
     -i --ini <ini>                  Specify an override file [default: opensoundscape.ini]
-    -s --save <template_pool.csv>   Generate a <template_pool.csv> for opensoundscape.py
+    -s --save <template_pool.csv>   Generate a <template_pool.csv> for opensoundscape.py [default: template_pool.csv]
 '''
 
 
@@ -63,7 +63,7 @@ def sampled_X_y(species_found, species_not_found):
     # -> convert to NP array
     # -> extract only template matching stat specifically [:, :, 0]
     npify = [None] * sampled_df.shape[0]
-    for o_idx, outer in enumerate(all_file_file_statistics):
+    for o_idx in range(len(all_file_file_statistics)):
         stack = np.vstack([all_file_file_statistics[o_idx][x] for x in range(len(all_file_file_statistics[o_idx]))])
         npify[o_idx] = copy(stack)
     all_file_file_statistics = np.array(npify)[:, :, 0]
@@ -83,7 +83,7 @@ def identify_templates(X, y, identifiers):
     X_test = scaler.transform(X_test)
 
     good_templates = []
-    for idx in range(1000):
+    for _ in range(1000):
         clf = DecisionTreeClassifier()
 
         params = {
@@ -106,8 +106,10 @@ def identify_templates(X, y, identifiers):
     return good_templates
 
 
-def gen_results_df(idx, species_found, species_not_found, identifiers_list):
+def gen_results_df(_, species_found, species_not_found, identifiers_list):
+    init_client(config)
     X, y = sampled_X_y(species_found, species_not_found)
+    close_client()
     results_df = pd.DataFrame(columns=["weight", "template"])
     output = identify_templates(X, y, identifiers_list)
     for outer in output:
@@ -136,8 +138,10 @@ script_dir = sys.path[0]
 sys.path.insert(0, f"{script_dir}/..")
 
 from modules.utils import generate_config, return_cpu_count
-from modules.db_utils import cursor_item_to_stats
+from modules.db_utils import init_client
+from modules.db_utils import close_client
 from modules.db_utils import return_cursor
+from modules.db_utils import cursor_item_to_stats
 
 # From the docstring, generate the arguments dictionary
 arguments = docopt(__doc__, version='find_important_templates.py version 0.0.1')
@@ -158,14 +162,15 @@ species_found = labels_df[species][labels_df[species] == 1]
 species_not_found = labels_df[species][labels_df[species] == 0]
 
 # Generate list of tuples with identifying features for templates
+init_client(config)
 identifiers_list = build_identification_list(species_found)
+close_client()
 
 # Now, run a loop to identify useful templates
 # -> Don't use
-its = 100
 nprocs = return_cpu_count(config)
 with ProcessPoolExecutor(nprocs) as executor:
-    results = executor.map(gen_results_df, range(its), repeat(species_found),
+    results = executor.map(gen_results_df, range(100), repeat(species_found),
         repeat(species_not_found), repeat(identifiers_list))
 
 # Concatenate all results
@@ -185,4 +190,4 @@ for idx, (key, item) in enumerate(gb_filenames):
     by_filename[idx] = (key, sorted(gb_filenames.get_group(key)["templates"].values))
 
 df = pd.DataFrame(by_filename, columns=["Filename", "templates"])
-df.to_csv("template_pool.csv", index=False)
+df.to_csv(arguments['--save'], index=False)
