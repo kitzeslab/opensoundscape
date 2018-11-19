@@ -129,6 +129,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 import pickle
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import wait
 import progressbar
 from itertools import repeat
 
@@ -172,6 +173,7 @@ nprocs = return_cpu_count(config)
 with ProcessPoolExecutor(nprocs) as executor:
     results = executor.map(gen_results_df, range(100), repeat(species_found),
         repeat(species_not_found), repeat(identifiers_list))
+    wait(results)
 
 # Concatenate all results
 results_df = pd.concat(results)

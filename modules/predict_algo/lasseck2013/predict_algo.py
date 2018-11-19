@@ -15,6 +15,7 @@ from modules.image_utils import apply_gaussian_filter
 from scipy import stats
 from cv2 import matchTemplate, minMaxLoc
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import wait
 import progressbar
 from itertools import repeat
 from copy import copy
@@ -214,7 +215,8 @@ def predict_algo(config):
     # Run the statistics
     chunks = np.array_split(predict_labels_df.index, nprocs)
     with ProcessPoolExecutor(nprocs) as executor:
-        executor.map(chunk_run_stats, chunks, repeat(train_labels_df), repeat(config))
+        fs = executor.map(chunk_run_stats, chunks, repeat(train_labels_df), repeat(config))
+        wait(fs)
 
     # Create a DF to store the results
     results_df = pd.DataFrame(index=predict_labels_df.index)

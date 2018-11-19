@@ -272,7 +272,3 @@ def spect_gen_algo(config):
     # -> Async process everything
     with ProcessPoolExecutor(nprocs) as executor:
         executor.map(chunk_preprocess, chunks, repeat(config))
-
-    # Serial Code
-    # for file in preprocess_files.values:
-    #     preprocess(file, config)

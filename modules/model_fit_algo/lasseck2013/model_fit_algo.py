@@ -1,4 +1,5 @@
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import wait
 from itertools import repeat
 import json
 import pandas as pd
@@ -520,7 +521,8 @@ def model_fit_algo(config, rerun_statistics):
     chunks = np.array_split(labels_df.index, nprocs)
     if not get_model_fit_skip(config) or rerun_statistics:
         with ProcessPoolExecutor(nprocs) as executor:
-            executor.map(chunk_run_stats, chunks, repeat(labels_df), repeat(config))
+            fs = executor.map(chunk_run_stats, chunks, repeat(labels_df), repeat(config))
+            wait(fs)
 
     set_model_fit_skip(config)
 
