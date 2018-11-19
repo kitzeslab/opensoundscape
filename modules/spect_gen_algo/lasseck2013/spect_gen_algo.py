@@ -13,8 +13,9 @@ from modules.db_utils import close_client
 from modules.db_utils import write_spectrogram
 from modules.utils import return_cpu_count
 
+
 def generate_segments_from_binary_spectrogram(binary_spec, buffer):
-    '''Identify feature bounding boxes
+    """Identify feature bounding boxes
 
     Given a binary spectrogram, label the segments and find the bounding
     boxes (plus a buffer) around each feature segment.
@@ -25,11 +26,13 @@ def generate_segments_from_binary_spectrogram(binary_spec, buffer):
 
     Returns:
         A dataframe containing the bounding boxes
-    '''
+    """
     # Label the segments and get raw bounding boxes
     labeled_segments, num_of_segments = ndimage.label(binary_spec)
-    raw_bboxes = [ndimage.find_objects(labeled_segments == x)
-            for x in range(1, num_of_segments + 1)]
+    raw_bboxes = [
+        ndimage.find_objects(labeled_segments == x)
+        for x in range(1, num_of_segments + 1)
+    ]
 
     def is_too_small(pixel):
         val = pixel - buffer
@@ -54,7 +57,7 @@ def generate_segments_from_binary_spectrogram(binary_spec, buffer):
 
 
 def scaled_median_filter(spec, factor):
-    '''Filter via scaled median threshold
+    """Filter via scaled median threshold
 
     Given a spectrogram, filter rows and columns by the median with a scaling
     factor anything below the threshold is set to 0.0. _filter_by_scaled_median
@@ -67,7 +70,7 @@ def scaled_median_filter(spec, factor):
 
     Returns:
         A binary spectrogram
-    '''
+    """
 
     def _filter_by_scaled_median(arr):
         _temp = np.copy(arr)
@@ -83,7 +86,7 @@ def scaled_median_filter(spec, factor):
 
 
 def resample_audio(samples, current_sample_rate, new_sample_rate):
-    '''Resamples audio samples
+    """Resamples audio samples
 
     Given an audio sample and the current sample rate, resample to a new
     sample rate.
@@ -96,13 +99,15 @@ def resample_audio(samples, current_sample_rate, new_sample_rate):
     Returns:
         A tuple with the new sample rate and the new audio samples. This
         is exactly similar to wavfile.read(<filename>)
-    '''
-    return new_sample_rate, resample(samples,
-            new_sample_rate/current_sample_rate, 'sinc_best')
+    """
+    return (
+        new_sample_rate,
+        resample(samples, new_sample_rate / current_sample_rate, "sinc_best"),
+    )
 
 
 def frequency_based_spectrogram_filter(spec, freq, low_freq_thr, high_freq_thr):
-    '''Filter any useless low and high frequency ranges
+    """Filter any useless low and high frequency ranges
 
     Given a spectrogram and frequencies generated from signal.spectrogram
     filter any low and high frequencies we aren't interested in analyzing.
@@ -115,13 +120,13 @@ def frequency_based_spectrogram_filter(spec, freq, low_freq_thr, high_freq_thr):
 
     Returns:
         A tuple containing the new spectrogram and frequencies
-    '''
+    """
     indices = np.argwhere((freq > low_freq_thr) & (freq < high_freq_thr)).flatten()
     return spec[indices, :], freq[indices]
 
 
 def chunk_preprocess(chunk, config):
-    '''Preprocess all images
+    """Preprocess all images
 
     This is a super function which provides all of the functionality to
     preprocess many wav file for model fitting.
@@ -135,7 +140,7 @@ def chunk_preprocess(chunk, config):
 
     Raises:
         Nothing
-    '''
+    """
 
     # Before running the chunk, we need to initialize the global MongoDB client
     init_client(config)
@@ -148,7 +153,7 @@ def chunk_preprocess(chunk, config):
 
 
 def preprocess(label, config):
-    '''Preprocess all images
+    """Preprocess all images
 
     This is a super function which provides all of the functionality to
     preprocess many wav file for model fitting. Later, this function will call
@@ -166,67 +171,95 @@ def preprocess(label, config):
             factor
     Raises:
         Nothing
-    '''
+    """
 
     # Resample
     sample_rate, samples = wavfile.read(f"{config['general']['data_dir']}/{label}")
-    sample_rate, samples = resample_audio(samples, sample_rate,
-            config['spect_gen'].getfloat('resample_rate'))
+    sample_rate, samples = resample_audio(
+        samples, sample_rate, config["spect_gen"].getfloat("resample_rate")
+    )
 
     # Generate Spectrogram
-    nperseg = config['spect_gen'].getint('spectrogram_segment_length')
-    noverlap = int(nperseg * config['spect_gen'].getfloat('spectrogram_overlap') / 100.)
-    frequencies, times, spectrogram = signal.spectrogram(samples, sample_rate,
-            window='hann', nperseg=nperseg, noverlap=noverlap, nfft=nperseg)
+    nperseg = config["spect_gen"].getint("spectrogram_segment_length")
+    noverlap = int(
+        nperseg * config["spect_gen"].getfloat("spectrogram_overlap") / 100.0
+    )
+    frequencies, times, spectrogram = signal.spectrogram(
+        samples,
+        sample_rate,
+        window="hann",
+        nperseg=nperseg,
+        noverlap=noverlap,
+        nfft=nperseg,
+    )
 
     # Frequency Selection
-    spectrogram, frequencies = frequency_based_spectrogram_filter(spectrogram,
-            frequencies, config['spect_gen'].getint('low_freq_thresh'),
-            config['spect_gen'].getint('high_freq_thresh'))
+    spectrogram, frequencies = frequency_based_spectrogram_filter(
+        spectrogram,
+        frequencies,
+        config["spect_gen"].getint("low_freq_thresh"),
+        config["spect_gen"].getint("high_freq_thresh"),
+    )
 
     # Normalization, need spectrogram_max later
     spectrogram_max = float(spectrogram.max())
     spectrogram /= spectrogram_max
 
     # Scaled Median Column/Row Filters
-    binary_spectrogram = scaled_median_filter(spectrogram,
-            config['spect_gen'].getfloat('median_filter_factor'))
+    binary_spectrogram = scaled_median_filter(
+        spectrogram, config["spect_gen"].getfloat("median_filter_factor")
+    )
 
     # Binary Closing
-    binary_spectrogram = ndimage.morphology.binary_closing(binary_spectrogram,
-            structure=np.ones((
-                config['spect_gen'].getint('binary_closing_kernel_height'),
-                config['spect_gen'].getint('binary_closing_kernel_width'))))
+    binary_spectrogram = ndimage.morphology.binary_closing(
+        binary_spectrogram,
+        structure=np.ones(
+            (
+                config["spect_gen"].getint("binary_closing_kernel_height"),
+                config["spect_gen"].getint("binary_closing_kernel_width"),
+            )
+        ),
+    )
 
     # Binary Dilation
-    binary_spectrogram = ndimage.morphology.binary_dilation(binary_spectrogram,
-            structure=np.ones((
-                config['spect_gen'].getint('binary_dilation_kernel_height'),
-                config['spect_gen'].getint('binary_dilation_kernel_width'))))
+    binary_spectrogram = ndimage.morphology.binary_dilation(
+        binary_spectrogram,
+        structure=np.ones(
+            (
+                config["spect_gen"].getint("binary_dilation_kernel_height"),
+                config["spect_gen"].getint("binary_dilation_kernel_width"),
+            )
+        ),
+    )
 
     # Binary Median Filter
-    binary_spectrogram = ndimage.median_filter(binary_spectrogram,
-            size=(
-                config['spect_gen'].getint('median_filter_kernel_height'),
-                config['spect_gen'].getint('median_filter_kernel_width')))
+    binary_spectrogram = ndimage.median_filter(
+        binary_spectrogram,
+        size=(
+            config["spect_gen"].getint("median_filter_kernel_height"),
+            config["spect_gen"].getint("median_filter_kernel_width"),
+        ),
+    )
 
     # Remove Small Objects
-    binary_spectrogram = remove_small_objects(binary_spectrogram,
-            config['spect_gen'].getint('small_objects_kernel_size'))
+    binary_spectrogram = remove_small_objects(
+        binary_spectrogram, config["spect_gen"].getint("small_objects_kernel_size")
+    )
 
     # Get the bounding box dataframe from the labeled segments
-    bboxes_df = generate_segments_from_binary_spectrogram(binary_spectrogram,
-            config['spect_gen'].getint('segment_pixel_buffer'))
+    bboxes_df = generate_segments_from_binary_spectrogram(
+        binary_spectrogram, config["spect_gen"].getint("segment_pixel_buffer")
+    )
 
     # Write to DB, if defined:
-    if config['general'].getboolean('db_rw'):
+    if config["general"].getboolean("db_rw"):
         write_spectrogram(label, bboxes_df, spectrogram, spectrogram_max, config)
     else:
         return bboxes_df, spectrogram, spectrogram_max
 
 
 def spect_gen_algo(config):
-    '''Preprocess all images
+    """Preprocess all images
 
     This is a super function which provides all of the functionality to
     preprocess many wav file for model fitting. Later, this function will call
@@ -240,26 +273,33 @@ def spect_gen_algo(config):
 
     Raises:
         Nothing
-    '''
+    """
 
     # If not writing to DB, no reason to do any preprocessing now
-    if not config['general'].getboolean('db_rw'):
+    if not config["general"].getboolean("db_rw"):
         return
 
     # Generate a Series of file names
     preprocess_files = pd.Series()
-    if config['general']['train_file']:
+    if config["general"]["train_file"]:
         filename = f"{config['general']['data_dir']}/{config['general']['train_file']}"
-        preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
-            ignore_index=True)
-    if config['general']['validate_file']:
-        filename = f"{config['general']['data_dir']}/{config['general']['validate_file']}"
-        preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
-            ignore_index=True)
-    if config['general']['predict_file']:
-        filename = f"{config['general']['data_dir']}/{config['general']['predict_file']}"
-        preprocess_files = preprocess_files.append(pd.read_csv(filename)['Filename'],
-            ignore_index=True)
+        preprocess_files = preprocess_files.append(
+            pd.read_csv(filename)["Filename"], ignore_index=True
+        )
+    if config["general"]["validate_file"]:
+        filename = (
+            f"{config['general']['data_dir']}/{config['general']['validate_file']}"
+        )
+        preprocess_files = preprocess_files.append(
+            pd.read_csv(filename)["Filename"], ignore_index=True
+        )
+    if config["general"]["predict_file"]:
+        filename = (
+            f"{config['general']['data_dir']}/{config['general']['predict_file']}"
+        )
+        preprocess_files = preprocess_files.append(
+            pd.read_csv(filename)["Filename"], ignore_index=True
+        )
 
     # Get the number of processors
     nprocs = return_cpu_count(config)
@@ -272,7 +312,3 @@ def spect_gen_algo(config):
     # -> Async process everything
     with ProcessPoolExecutor(nprocs) as executor:
         executor.map(chunk_preprocess, chunks, repeat(config))
-
-    # Serial Code
-    # for file in preprocess_files.values:
-    #     preprocess(file, config)

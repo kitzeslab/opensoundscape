@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-''' find_important_templates.py
+""" find_important_templates.py
 
 Help find important templates for a given label in a dataset. This script will
 generate many decision trees which do well on a train/test split labeled dataset
@@ -22,21 +22,25 @@ Options:
     -v --version                    Print the version of crc-squeue.py
     -i --ini <ini>                  Specify an override file [default: opensoundscape.ini]
     -s --save <template_pool.csv>   Generate a <template_pool.csv> for opensoundscape.py [default: template_pool.csv]
-'''
+"""
 
 
 def build_identification_list(found_df):
     # 1. Generate a dictionary
     num_of_segments_d = {}
-    items = return_cursor(list(found_df.index), 'spectrograms', config)
+    items = return_cursor(list(found_df.index), "spectrograms", config)
     for item in items:
-        num_of_segments_d[item['label']] = pd.DataFrame(pickle.loads(item['df'])).shape[0]
+        num_of_segments_d[item["label"]] = pd.DataFrame(pickle.loads(item["df"])).shape[
+            0
+        ]
 
     # 2. Order the output
     ordered_num_of_segments = [num_of_segments_d[idx] for idx in found_df.index]
 
     # 3. Generate list-of-list to expand number of segments to file names
-    to_filenames = [[idx] * n for idx, n in zip(found_df.index, ordered_num_of_segments)]
+    to_filenames = [
+        [idx] * n for idx, n in zip(found_df.index, ordered_num_of_segments)
+    ]
 
     # 4. Flatten and tuple up
     return [(idx, item) for sl in to_filenames for idx, item in enumerate(sl)]
@@ -51,20 +55,27 @@ def sampled_X_y(species_found, species_not_found):
     sampled_df = pd.concat((species_found, dummies))
 
     # Get the cursor of items
-    items = return_cursor(list(sampled_df.index.values), 'statistics', config)
+    items = return_cursor(list(sampled_df.index.values), "statistics", config)
 
     # Generate the file_file_stats
     all_file_file_statistics = [None] * sampled_df.shape[0]
     for idx, item in enumerate(items):
         _, file_file_stats = cursor_item_to_stats(item)
-        all_file_file_statistics[idx] = [file_file_stats[found] for found in species_found.index.values]
+        all_file_file_statistics[idx] = [
+            file_file_stats[found] for found in species_found.index.values
+        ]
 
     # Stack internal stats
     # -> convert to NP array
     # -> extract only template matching stat specifically [:, :, 0]
     npify = [None] * sampled_df.shape[0]
     for o_idx in range(len(all_file_file_statistics)):
-        stack = np.vstack([all_file_file_statistics[o_idx][x] for x in range(len(all_file_file_statistics[o_idx]))])
+        stack = np.vstack(
+            [
+                all_file_file_statistics[o_idx][x]
+                for x in range(len(all_file_file_statistics[o_idx]))
+            ]
+        )
         npify[o_idx] = copy(stack)
     all_file_file_statistics = np.array(npify)[:, :, 0]
 
@@ -75,7 +86,9 @@ def sampled_X_y(species_found, species_not_found):
 def identify_templates(X, y, identifiers):
     # Train/test split w/ stratification
     # -> No random state!
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.33, stratify=y
+    )
 
     # Scale features
     scaler = MinMaxScaler()
@@ -86,11 +99,7 @@ def identify_templates(X, y, identifiers):
     for _ in range(1000):
         clf = DecisionTreeClassifier()
 
-        params = {
-            "criterion": ["gini"],
-            "min_samples_split": [3],
-            "max_features": [4]
-        }
+        params = {"criterion": ["gini"], "min_samples_split": [3], "max_features": [4]}
 
         # Maximum cross-validation is number of identified species
         max_cv = len([x for x in y_train if x == 1])
@@ -100,8 +109,16 @@ def identify_templates(X, y, identifiers):
         y_pred = gs.best_estimator_.predict(X_test)
         if roc_auc_score(y_test, y_pred) >= 0.85:
             feature_importances = gs.best_estimator_.feature_importances_
-            important_templates = list(np.where(feature_importances != 0.)[0])
-            good_templates.append(sorted([(feature_importances[x], identifiers[x]) for x in important_templates], reverse=True))
+            important_templates = list(np.where(feature_importances != 0.0)[0])
+            good_templates.append(
+                sorted(
+                    [
+                        (feature_importances[x], identifiers[x])
+                        for x in important_templates
+                    ],
+                    reverse=True,
+                )
+            )
 
     return good_templates
 
@@ -115,7 +132,9 @@ def gen_results_df(_, species_found, species_not_found, identifiers_list):
     for outer in output:
         for inner in outer:
             weight, template = inner
-            results_df = results_df.append({"weight": weight, "template": template}, ignore_index=True)
+            results_df = results_df.append(
+                {"weight": weight, "template": template}, ignore_index=True
+            )
     return results_df
 
 
@@ -129,11 +148,13 @@ from sklearn.metrics import roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 import pickle
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import wait
 import progressbar
 from itertools import repeat
 
 # Need some functions from our module
 import sys
+
 script_dir = sys.path[0]
 sys.path.insert(0, f"{script_dir}/..")
 
@@ -144,14 +165,16 @@ from modules.db_utils import return_cursor
 from modules.db_utils import cursor_item_to_stats
 
 # From the docstring, generate the arguments dictionary
-arguments = docopt(__doc__, version='find_important_templates.py version 0.0.1')
+arguments = docopt(__doc__, version="find_important_templates.py version 0.0.1")
 
 # Generate the config instance
-config = generate_config('config/opensoundscape.ini', arguments['--ini'])
+config = generate_config("config/opensoundscape.ini", arguments["--ini"])
 
 # Generate list of files which identify <label>
-labels_df = pd.read_csv(f"{config['general']['data_dir']}/{config['general']['train_file']}",
-    index_col="Filename")
+labels_df = pd.read_csv(
+    f"{config['general']['data_dir']}/{config['general']['train_file']}",
+    index_col="Filename",
+)
 labels_df = labels_df.fillna(0).astype(int)
 
 # Downsample to particular species
@@ -170,8 +193,14 @@ close_client()
 # -> Don't use
 nprocs = return_cpu_count(config)
 with ProcessPoolExecutor(nprocs) as executor:
-    results = executor.map(gen_results_df, range(100), repeat(species_found),
-        repeat(species_not_found), repeat(identifiers_list))
+    results = executor.map(
+        gen_results_df,
+        range(100),
+        repeat(species_found),
+        repeat(species_not_found),
+        repeat(identifiers_list),
+    )
+    wait(results)
 
 # Concatenate all results
 results_df = pd.concat(results)
@@ -190,4 +219,4 @@ for idx, (key, item) in enumerate(gb_filenames):
     by_filename[idx] = (key, sorted(gb_filenames.get_group(key)["templates"].values))
 
 df = pd.DataFrame(by_filename, columns=["Filename", "templates"])
-df.to_csv(arguments['--save'], index=False)
+df.to_csv(arguments["--save"], index=False)
