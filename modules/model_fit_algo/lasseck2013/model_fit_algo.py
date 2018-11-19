@@ -13,6 +13,8 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import recall_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import f1_score
+from cv2 import matchTemplate
+from cv2 import minMaxLoc
 from modules.db_utils import init_client
 from modules.db_utils import close_client
 from modules.db_utils import cursor_item_to_data
@@ -28,8 +30,23 @@ from modules.view import extract_segments
 from modules.utils import return_cpu_count
 from modules.image_utils import apply_gaussian_filter
 from modules.utils import get_stratification_percent
-from cv2 import matchTemplate
-from cv2 import minMaxLoc
+
+
+def generate_raw_blurred_spectrogram(spec, normal, sigma):
+    """Given a scaled spectrogram
+
+    Recreate the raw spectrogram and apply a gaussian blur
+
+    Args:
+        spec: The scaled spectrogram
+        normal: The normalization factor
+        sigma: The gaussian blur factor
+
+    Returns:
+        raw_blurred_spectrogram: The original blurred spectrogram
+    """
+    raw_spec = spec * normal
+    return apply_gaussian_filter(raw_spec, sigma)
 
 
 def binary_classify(correct, predicted):
@@ -59,7 +76,7 @@ def binary_classify(correct, predicted):
         return "false positive"
 
 
-def file_stats(label, config):
+def get_file_stats(label, config):
     """Generate the first order statistics
 
     Given a single label, generate the statistics for the corresponding file
@@ -139,15 +156,13 @@ def file_stats(label, config):
     return df, spec, normal, row
 
 
-def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
+def get_file_file_stats(spec_one, normal_one, labels_df, config):
     """Generate the second order statistics
 
     Given a df, spec, and normal for label_one, generate the file-file statistics
     for all files (or downselect w/ template_pool.csv file)
 
     Args:
-        monotonic_idx_one: The monotonic index for df_one
-        df_one: The bounding box dataframe for label_one
         spec_one: The spectrum for label_one
         normal_one: The normalization factor for label_one
         labels_df: All other labels
@@ -168,7 +183,7 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
     if config["general"].getboolean("db_rw"):
         if config["model_fit"]["template_pool"]:
             pools_df = pd.read_csv(config["model_fit"]["template_pool"], index_col=0)
-            pools_df.templates = pools_df.templates.apply(lambda x: json.loads(x))
+            pools_df.templates = pools_df.templates.apply(json.loads)
 
             if config["model_fit"]["template_pool_db"]:
                 items = return_cursor(
@@ -190,6 +205,11 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
 
     match_stats_dict = {}
 
+
+    spec_one = generate_raw_blurred_spectrogram(
+        spec_one, normal_one, config["model_fit"]["gaussian_filter_sigma"]
+    )
+
     # Iterate through the cursor
     for item in items:
         # Need to get the index for match_stats
@@ -198,12 +218,12 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
         # monotonic_idx_two = monotonic_idx_two[0]
 
         if config["general"].getboolean("db_rw"):
-            df_two, spec_two, _ = cursor_item_to_data(item, config)
+            df_two, spec_two, normal_two = cursor_item_to_data(item, config)
         else:
-            df_two, spec_two, _ = spect_gen(config)
+            df_two, spec_two, normal_two = spect_gen(config)
 
-        spec_two = apply_gaussian_filter(
-            spec_two, config["model_fit"]["gaussian_filter_sigma"]
+        spec_two = generate_raw_blurred_spectrogram(
+            spec_two, normal_two, config["model_fit"]["gaussian_filter_sigma"]
         )
 
         # Extract segments
@@ -266,7 +286,7 @@ def chunk_run_stats(chunk, labels_df, config):
 
     init_client(config)
 
-    [run_stats(label, labels_df, config) for label in chunk]
+    _ = [run_stats(label, labels_df, config) for label in chunk]
 
     close_client()
 
@@ -288,12 +308,8 @@ def run_stats(idx_one, labels_df, config):
     Raises:
         Nothing.
     """
-    df_one, spec_one, normal_one, row_f = file_stats(idx_one, config)
-    # Blur spec_one before feeding to file_file_stats
-    spec_one = apply_gaussian_filter(
-        spec_one, config["model_fit"]["gaussian_filter_sigma"]
-    )
-    match_stats = file_file_stats(df_one, spec_one, normal_one, labels_df, config)
+    _, spec_one, normal_one, row_f = get_file_stats(idx_one, config)
+    match_stats = get_file_file_stats(spec_one, normal_one, labels_df, config)
     write_file_stats(idx_one, row_f, match_stats, config)
 
 
@@ -315,7 +331,7 @@ def build_X_y(labels_df, config):
 
     if config["model_fit"]["template_pool"]:
         pools_df = pd.read_csv(config["model_fit"]["template_pool"], index_col=0)
-        pools_df.templates = pools_df.templates.apply(lambda x: json.loads(x))
+        pools_df.templates = pools_df.templates.apply(json.loads)
         get_file_file_stats_for = [x for x in pools_df.index]
     else:
         get_file_file_stats_for = [x for x in labels_df.index if labels_df[x] == 1]
@@ -531,4 +547,4 @@ def model_fit_algo(config, rerun_statistics):
             chunk_build_model, chunks, repeat(labels_df), repeat(config)
         ):
             if ret:
-                [print(x) for x in ret]
+                _ = [print(x) for x in ret]

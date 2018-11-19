@@ -1,9 +1,7 @@
+from itertools import repeat
 import pandas as pd
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
-from multiprocessing import cpu_count
-import progressbar
-from itertools import repeat
 from scipy import signal, ndimage
 from scipy.io import wavfile
 from scikits.samplerate import resample
@@ -176,7 +174,7 @@ def preprocess(label, config):
     # Generate Spectrogram
     nperseg = config['spect_gen'].getint('spectrogram_segment_length')
     noverlap = int(nperseg * config['spect_gen'].getfloat('spectrogram_overlap') / 100.)
-    frequencies, times, spectrogram = signal.spectrogram(samples, sample_rate,
+    frequencies, _, spectrogram = signal.spectrogram(samples, sample_rate,
             window='hann', nperseg=nperseg, noverlap=noverlap, nfft=nperseg)
 
     # Frequency Selection
