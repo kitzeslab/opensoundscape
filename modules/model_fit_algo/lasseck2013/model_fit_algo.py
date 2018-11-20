@@ -341,7 +341,7 @@ def build_X_y(labels_df, config):
 
     # Input Shape: (num_files, num_templates, 1, num_features)
     # Output Shape: (num_files, num_templates, num_features)
-    file_file_stats = np.array(file_file_stats).reshape(file_file_stats.shape[0], -1, 3)
+    file_file_stats = np.array(file_file_stats).reshape(labels_df.shape[0], -1, 3)
 
     # Short circuit return for only cross correlations
     if config["model_fit"].getboolean("cross_correlations_only"):
@@ -517,22 +517,22 @@ def model_fit_algo(config, rerun_statistics):
     # Get the processor counts
     nprocs = return_cpu_count(config)
 
+    # Define the parallel executor
+    executor = ProcessPoolExecutor(nprocs)
+
     # Run the statistics, if not already complete
     chunks = np.array_split(labels_df.index, nprocs)
     if not get_model_fit_skip(config) or rerun_statistics:
-        with ProcessPoolExecutor(nprocs) as executor:
-            fs = executor.map(
-                chunk_run_stats, chunks, repeat(labels_df), repeat(config)
-            )
-            wait(fs)
+        fs = [executor.submit(chunk_run_stats, chunk, labels_df, config) for chunk in chunks]
+        wait(fs)
 
     set_model_fit_skip(config)
 
     # Build the models
     chunks = np.array_split(labels_df.columns, nprocs)
-    with ProcessPoolExecutor(nprocs) as executor:
-        for ret in executor.map(
-            chunk_build_model, chunks, repeat(labels_df), repeat(config)
-        ):
-            if ret:
-                [print(x) for x in ret]
+    fs = [executor.submit(chunk_build_model, chunk, labels_df, config) for chunk in chunks]
+    wait(fs)
+
+    # Print the results, if any
+    for res in fs:
+        _ = [print(x) for x in res.result() if x]
