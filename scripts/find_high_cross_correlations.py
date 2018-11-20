@@ -30,7 +30,7 @@ def generate_ff_stats(stats_df, species_found_df):
     # Use the mono_idx to insert the correct value in the correct place!
     all_file_file_statistics = [None] * stats_df.shape[0]
     for item in items:
-        mono_idx = stats_df.index.get_loc(item['label'])
+        mono_idx = stats_df.index.get_loc(item["label"])
         _, file_file_stats = cursor_item_to_stats(item)
         all_file_file_statistics[mono_idx] = [
             file_file_stats[found] for found in species_found_df.index.values
@@ -42,6 +42,7 @@ def generate_ff_stats(stats_df, species_found_df):
     # Output Dims: n_files, n_templates
     npify = np.array(all_file_file_statistics)
     return npify[:, :, :, 0].reshape(stats_df.shape[0], -1)
+
 
 def high_cc(chunk, species_found, config):
     if len(chunk) != 0:
@@ -99,13 +100,15 @@ executor = ProcessPoolExecutor(nprocs)
 chunk_species_not_found = np.array_split(species_not_found, nprocs)
 chunk_species_found = np.array_split(species_found, nprocs)
 
-futs = [executor.submit(high_cc, chunk, species_found, config) for chunk in chunk_species_not_found]
+futs = [
+    executor.submit(high_cc, chunk, species_found, config)
+    for chunk in chunk_species_not_found
+]
 wait(futs)
 
-with open("gt9.txt", "w") as gt, \
-     open("7-9.txt", "w") as sn, \
-     open("4-6.txt", "w") as fs, \
-     open("1-3.txt", "w") as ot:
+with open("gt9.txt", "w") as gt, open("7-9.txt", "w") as sn, open(
+    "4-6.txt", "w"
+) as fs, open("1-3.txt", "w") as ot:
     for res in futs:
         indices, rows = res.result()
         for idx, row in zip(indices.index.values, rows):

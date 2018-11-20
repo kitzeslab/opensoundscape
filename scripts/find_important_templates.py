@@ -193,7 +193,10 @@ close_client()
 # -> Don't use
 nprocs = return_cpu_count(config)
 executor = ProcessPoolExecutor(nprocs)
-fs = [executor.submit(gen_results_df, species_found, species_not_found, identifiers_list) for x in range(100)]
+fs = [
+    executor.submit(gen_results_df, species_found, species_not_found, identifiers_list)
+    for x in range(100)
+]
 wait(fs)
 
 # Concatenate all results

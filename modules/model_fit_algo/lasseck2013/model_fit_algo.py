@@ -523,14 +523,19 @@ def model_fit_algo(config, rerun_statistics):
     # Run the statistics, if not already complete
     chunks = np.array_split(labels_df.index, nprocs)
     if not get_model_fit_skip(config) or rerun_statistics:
-        fs = [executor.submit(chunk_run_stats, chunk, labels_df, config) for chunk in chunks]
+        fs = [
+            executor.submit(chunk_run_stats, chunk, labels_df, config)
+            for chunk in chunks
+        ]
         wait(fs)
 
     set_model_fit_skip(config)
 
     # Build the models
     chunks = np.array_split(labels_df.columns, nprocs)
-    fs = [executor.submit(chunk_build_model, chunk, labels_df, config) for chunk in chunks]
+    fs = [
+        executor.submit(chunk_build_model, chunk, labels_df, config) for chunk in chunks
+    ]
     wait(fs)
 
     # Print the results, if any

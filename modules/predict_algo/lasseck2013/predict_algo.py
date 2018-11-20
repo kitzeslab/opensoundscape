@@ -232,10 +232,13 @@ def predict_algo(config):
 
     nprocs = return_cpu_count(config)
     executor = ProcessPoolExecutor(nprocs)
-    
+
     # Run the statistics
     chunks = np.array_split(predict_labels_df.index, nprocs)
-    fs = [executor.submit(chunk_run_stats, chunk, train_labels_df, config) for chunk in chunks]
+    fs = [
+        executor.submit(chunk_run_stats, chunk, train_labels_df, config)
+        for chunk in chunks
+    ]
     wait(fs)
 
     # Create a DF to store the results
@@ -243,7 +246,12 @@ def predict_algo(config):
 
     # Run the predictions
     chunks = np.array_split(train_labels_df.columns, nprocs)
-    fs = [executor.submit(chunk_run_prediction, chunk, train_labels_df, predict_labels_df, config) for chunk in chunks]
+    fs = [
+        executor.submit(
+            chunk_run_prediction, chunk, train_labels_df, predict_labels_df, config
+        )
+        for chunk in chunks
+    ]
     wait(fs)
 
     for res in fs:
