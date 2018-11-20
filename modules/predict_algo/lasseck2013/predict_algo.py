@@ -172,7 +172,7 @@ def chunk_run_prediction(chunk, train_labels_df, predict_labels_df, config):
 
     close_client()
 
-    return predict_proba
+    return chunk, predict_proba
 
 
 def run_prediction(column, train_labels_df, predict_labels_df, config):
@@ -231,32 +231,32 @@ def predict_algo(config):
         ]
 
     nprocs = return_cpu_count(config)
+    executor = ProcessPoolExecutor(nprocs)
 
     # Run the statistics
     chunks = np.array_split(predict_labels_df.index, nprocs)
-    with ProcessPoolExecutor(nprocs) as executor:
-        fs = executor.map(
-            chunk_run_stats, chunks, repeat(train_labels_df), repeat(config)
-        )
-        wait(fs)
+    fs = [
+        executor.submit(chunk_run_stats, chunk, train_labels_df, config)
+        for chunk in chunks
+    ]
+    wait(fs)
 
     # Create a DF to store the results
     results_df = pd.DataFrame(index=predict_labels_df.index)
 
     # Run the predictions
     chunks = np.array_split(train_labels_df.columns, nprocs)
-    with ProcessPoolExecutor(nprocs) as executor:
-        for indices, probas in zip(
-            chunks,
-            executor.map(
-                chunk_run_prediction,
-                chunks,
-                repeat(train_labels_df),
-                repeat(predict_labels_df),
-                repeat(config),
-            ),
-        ):
-            for idx, proba in zip(indices, probas):
-                results_df[idx] = [pred[1] for pred in proba]
+    fs = [
+        executor.submit(
+            chunk_run_prediction, chunk, train_labels_df, predict_labels_df, config
+        )
+        for chunk in chunks
+    ]
+    wait(fs)
+
+    for res in fs:
+        indices, probas = res.result()
+        for idx, proba in zip(indices, probas):
+            results_df[idx] = [pred[1] for pred in proba]
 
     print(results_df.to_csv())

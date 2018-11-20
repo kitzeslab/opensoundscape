@@ -123,7 +123,7 @@ def identify_templates(X, y, identifiers):
     return good_templates
 
 
-def gen_results_df(_, species_found, species_not_found, identifiers_list):
+def gen_results_df(species_found, species_not_found, identifiers_list):
     init_client(config)
     X, y = sampled_X_y(species_found, species_not_found)
     close_client()
@@ -192,18 +192,15 @@ close_client()
 # Now, run a loop to identify useful templates
 # -> Don't use
 nprocs = return_cpu_count(config)
-with ProcessPoolExecutor(nprocs) as executor:
-    results = executor.map(
-        gen_results_df,
-        range(100),
-        repeat(species_found),
-        repeat(species_not_found),
-        repeat(identifiers_list),
-    )
-    wait(results)
+executor = ProcessPoolExecutor(nprocs)
+fs = [
+    executor.submit(gen_results_df, species_found, species_not_found, identifiers_list)
+    for x in range(100)
+]
+wait(fs)
 
 # Concatenate all results
-results_df = pd.concat(results)
+results_df = pd.concat([res.result() for res in fs])
 
 # Keep any weights above 0.35
 results_df = results_df[results_df["weight"] >= 0.35]
