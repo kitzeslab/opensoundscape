@@ -106,9 +106,10 @@ futs = [
 ]
 wait(futs)
 
-with open("gt9.txt", "w") as gt, open("7-9.txt", "w") as sn, open(
-    "4-6.txt", "w"
-) as fs, open("1-3.txt", "w") as ot:
+with open("gt9.txt", "w") as gt, \
+     open("7-9.txt", "w") as sn, \
+     open("4-6.txt", "w") as fs, \
+     open("1-3.txt", "w") as ot:
     for res in futs:
         indices, rows = res.result()
         for idx, row in zip(indices.index.values, rows):
