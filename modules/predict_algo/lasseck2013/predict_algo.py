@@ -73,15 +73,12 @@ def run_stats(predict_idx, train_labels_df, config):
     sys.path.append(
         f"{opensoundscape_dir}/modules/model_fit_algo/{config['predict']['algo']}"
     )
-    from model_fit_algo import file_stats, file_file_stats
+    from model_fit_algo import get_file_stats, get_file_file_stats
 
-    df_predict, spec_predict, normal_predict, row_predict = file_stats(
+    df_predict, spec_predict, normal_predict, row_predict = get_file_stats(
         predict_idx, config
     )
-    spec_predict = apply_gaussian_filter(
-        spec_predict, config["model_fit"]["gaussian_filter_sigma"]
-    )
-    match_stats_dict = file_file_stats(
+    match_stats_dict = get_file_file_stats(
         df_predict, spec_predict, normal_predict, train_labels_df, config
     )
     write_file_stats(predict_idx, row_predict, match_stats_dict, config)

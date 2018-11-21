@@ -74,7 +74,7 @@ def binary_classify(correct, predicted):
         return "false positive"
 
 
-def file_stats(label, config):
+def get_file_stats(label, config):
     """Generate the first order statistics
 
     Given a single label, generate the statistics for the corresponding file
@@ -154,7 +154,7 @@ def file_stats(label, config):
     return df, spec, normal, row
 
 
-def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
+def get_file_file_stats(df_one, spec_one, normal_one, labels_df, config):
     """Generate the second order statistics
 
     Given a df, spec, and normal for label_one, generate the file-file statistics
@@ -307,8 +307,8 @@ def run_stats(idx_one, labels_df, config):
     Raises:
         Nothing.
     """
-    df_one, spec_one, normal_one, row_f = file_stats(idx_one, config)
-    match_stats = file_file_stats(df_one, spec_one, normal_one, labels_df, config)
+    df_one, spec_one, normal_one, row_f = get_file_stats(idx_one, config)
+    match_stats = get_file_file_stats(df_one, spec_one, normal_one, labels_df, config)
     write_file_stats(idx_one, row_f, match_stats, config)
 
 
