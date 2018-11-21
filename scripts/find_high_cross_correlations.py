@@ -45,7 +45,7 @@ def generate_ff_stats(stats_df, species_found_df):
 
 
 def high_cc(chunk, species_found, config):
-    if len(chunk) != 0:
+    if len(chunk):
         init_client(config)
         all_file_file_statistics = generate_ff_stats(chunk, species_found)
         close_client()
@@ -106,10 +106,9 @@ futs = [
 ]
 wait(futs)
 
-with open("gt9.txt", "w") as gt, \
-     open("7-9.txt", "w") as sn, \
-     open("4-6.txt", "w") as fs, \
-     open("1-3.txt", "w") as ot:
+with open("gt9.txt", "w") as gt, open("7-9.txt", "w") as sn, open(
+    "4-6.txt", "w"
+) as fs, open("1-3.txt", "w") as ot:
     for res in futs:
         indices, rows = res.result()
         for idx, row in zip(indices.index.values, rows):
@@ -123,3 +122,16 @@ with open("gt9.txt", "w") as gt, \
                 fs.write(f"{idx}: {build_str}\n")
             elif highest_cc >= 0.1 and highest_cc <= 0.3:
                 ot.write(f"{idx}: {build_str}\n")
+
+futs = [
+    executor.submit(high_cc, chunk, species_found, config)
+    for chunk in chunk_species_found
+]
+wait(futs)
+
+with open("template_ccs.txt", "w") as tcc:
+    for res in futs:
+        indices, rows = res.result()
+        for idx, row in zip(indices.index.values, rows):
+            build_str = np.array_str(row).replace("\n", "")
+            tcc.write(f"{idx}: {build_str}\n")
