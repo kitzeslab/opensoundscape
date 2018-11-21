@@ -1,6 +1,5 @@
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import wait
-from itertools import repeat
 import json
 import pandas as pd
 import numpy as np
@@ -31,6 +30,21 @@ from modules.image_utils import apply_gaussian_filter
 from modules.utils import get_stratification_percent
 from cv2 import matchTemplate
 from cv2 import minMaxLoc
+
+
+def generate_raw_blurred_spectrogram(spectrogram, normalization_factor, gaussian_blur_sigma):
+    """Given a normalized spectrogram
+
+    Recreate the raw spectrogram and apply a gaussian filter
+
+    Args:
+        spectrogram: The normalized spectrogram
+        normalization_factor: The factor to multiply the spectrogram
+        gaussian_blur_sigma: The gaussian blur amount
+    """
+
+    raw_spectrogram = spectrogram * normalization_factor
+    return apply_gaussian_filter(raw_spectrogram, gaussian_blur_sigma)
 
 
 def binary_classify(correct, predicted):
@@ -191,6 +205,10 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
 
     match_stats_dict = {}
 
+    spec_one = generate_raw_blurred_spectrogram(
+        spec_one, normal_one, config["model_fit"]["gaussian_filter_sigma"]
+    )
+
     # Iterate through the cursor
     for item in items:
         # Need to get the index for match_stats
@@ -199,12 +217,12 @@ def file_file_stats(df_one, spec_one, normal_one, labels_df, config):
         # monotonic_idx_two = monotonic_idx_two[0]
 
         if config["general"].getboolean("db_rw"):
-            df_two, spec_two, _ = cursor_item_to_data(item, config)
+            df_two, spec_two, normal_two = cursor_item_to_data(item, config)
         else:
-            df_two, spec_two, _ = spect_gen(config)
+            df_two, spec_two, normal_two = spect_gen(config)
 
-        spec_two = apply_gaussian_filter(
-            spec_two, config["model_fit"]["gaussian_filter_sigma"]
+        spec_two = generate_raw_blurred_spectrogram(
+            spec_two, normal_two, config["model_fit"]["gaussian_filter_sigma"]
         )
 
         # Extract segments
@@ -290,10 +308,6 @@ def run_stats(idx_one, labels_df, config):
         Nothing.
     """
     df_one, spec_one, normal_one, row_f = file_stats(idx_one, config)
-    # Blur spec_one before feeding to file_file_stats
-    spec_one = apply_gaussian_filter(
-        spec_one, config["model_fit"]["gaussian_filter_sigma"]
-    )
     match_stats = file_file_stats(df_one, spec_one, normal_one, labels_df, config)
     write_file_stats(idx_one, row_f, match_stats, config)
 
