@@ -29,11 +29,13 @@ from concurrent.futures import wait
 
 # Need some functionality from our modules
 import sys
+
 script_dir = sys.path[0]
 sys.path.insert(0, f"{script_dir}/..")
 from modules.db_utils import generate_cross_correlation_matrix
 from modules.utils import generate_config
 from modules.utils import return_cpu_count
+
 
 def cross_correlations(chunk, species_found, config):
     if len(chunk) != 0:
@@ -41,13 +43,14 @@ def cross_correlations(chunk, species_found, config):
     else:
         return chunk, []
 
+
 arguments = docopt(__doc__, version="dump_cross_correlations.py version 0.0.1")
 config = generate_config("config/opensoundscape.ini", arguments["--ini"])
 
 species = arguments["<label>"]
 labels_df = pd.read_csv(
     f"{config['general']['data_dir']}/{config['general']['train_file']}",
-    index_col="Filename"
+    index_col="Filename",
 )
 labels_df = labels_df.fillna(0).astype(int)
 species_found = labels_df[species][labels_df[species] == 1]
