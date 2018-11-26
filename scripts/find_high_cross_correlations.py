@@ -60,7 +60,6 @@ import numpy as np
 from copy import copy
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import wait
-from itertools import repeat
 
 # Need some functions from our module
 import sys
@@ -123,3 +122,16 @@ with open("gt9.txt", "w") as gt, \
                 fs.write(f"{idx}: {build_str}\n")
             elif highest_cc >= 0.1 and highest_cc <= 0.3:
                 ot.write(f"{idx}: {build_str}\n")
+
+futs = [
+    executor.submit(high_cc, chunk, species_found, config)
+    for chunk in chunk_species_found
+]
+wait(futs)
+
+with open("template_ccs.txt", "w") as tcc:
+    for res in futs:
+        indices, rows = res.result()
+        for idx, row in zip(indices.index.values, rows):
+            build_str = np.array_str(row).replace("\n", "")
+            tcc.write(f"{idx}: {build_str}\n")
