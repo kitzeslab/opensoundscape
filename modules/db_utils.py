@@ -1,8 +1,9 @@
-import pymongo
-import pickle
-import pandas as pd
-from scipy.sparse import csr_matrix
 from datetime import datetime
+import pickle
+import pymongo
+import pandas as pd
+import numpy as np
+from scipy.sparse import csr_matrix
 from modules.utils import yes_no
 
 # This is a thread local global variable
@@ -12,6 +13,40 @@ class OpensoundscapeAttemptOverrideINISection(Exception):
     '''Override INI Section Exception
     '''
     pass
+
+
+def generate_cross_correlation_matrix(needed_df, found_df, config):
+    """ Given a DataFrame of needed_df
+
+    Generate a numpy matrix of cross correlations for the found_df
+
+    Args:
+        needed_df: Used to generate the rows of the output matrix
+        found_df: Used to generate the columns of the output matrix
+        config: The opensoundscape configuration
+
+    Returns:
+        A 2D numpy matrix with dimensions: needed_df.shape[0], number of CCs
+
+    Raises:
+        Nothing
+    """
+
+    init_client(config)
+
+    items = return_cursor(list(needed_df.index.values), "statistics", config)
+    all_file_file_stats = [None] * needed_df.shape[0]
+    for item in items:
+        mono_idx = needed_df.get_loc(item["label"])
+        _, file_file_stats = cursor_item_to_stats(item)
+        all_file_file_stats[mono_idx] = [
+            file_file_stats[found] for found in found_df.index.values
+        ]
+    
+    close_client()
+
+    npify = np.array(all_file_file_stats)
+    return npify[:, :, :, 0].reshape(needed_df.shape[0], -1)
 
 
 def init_client(config):
