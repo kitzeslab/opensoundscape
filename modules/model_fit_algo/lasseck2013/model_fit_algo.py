@@ -1,5 +1,5 @@
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures import wait
+from concurrent.futures import as_completed
 import json
 import pandas as pd
 import numpy as np
@@ -293,6 +293,8 @@ def chunk_run_stats(chunk, labels_df, config):
 
     close_client()
 
+    return
+
 
 def run_stats(idx_one, labels_df, config):
     """Wrapper for parallel stats execution
@@ -545,7 +547,9 @@ def model_fit_algo(config, rerun_statistics):
             executor.submit(chunk_run_stats, chunk, labels_df, config)
             for chunk in chunks
         ]
-        wait(fs)
+        # This shouldn't be necessary, but doesn't work otherwise...
+        for future in as_completed(fs):
+            _ = future.result()
 
     set_model_fit_skip(config)
 
@@ -554,8 +558,5 @@ def model_fit_algo(config, rerun_statistics):
     fs = [
         executor.submit(chunk_build_model, chunk, labels_df, config) for chunk in chunks
     ]
-    wait(fs)
-
-    # Print the results, if any
-    for res in fs:
+    for future in as_completed(fs):
         _ = [print(x) for x in res.result() if x]

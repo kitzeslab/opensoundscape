@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures import wait
+from concurrent.futures import as_completed
 from multiprocessing import cpu_count
 import progressbar
 from itertools import repeat
@@ -151,6 +151,8 @@ def chunk_preprocess(chunk, config):
 
     # Don't forget to close the client!
     close_client()
+
+    return
 
 
 def preprocess(label, config):
@@ -313,4 +315,5 @@ def spect_gen_algo(config):
     # -> Async process everything
     executor = ProcessPoolExecutor(nprocs)
     fs = [executor.submit(chunk_preprocess, chunk, config) for chunk in chunks]
-    wait(fs)
+    for future in as_completed(fs):
+        _ = future.result()
