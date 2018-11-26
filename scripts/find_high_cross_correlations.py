@@ -45,7 +45,7 @@ def generate_ff_stats(stats_df, species_found_df):
 
 
 def high_cc(chunk, species_found, config):
-    if len(chunk):
+    if len(chunk) == 0:
         init_client(config)
         all_file_file_statistics = generate_ff_stats(chunk, species_found)
         close_client()
@@ -60,7 +60,6 @@ import numpy as np
 from copy import copy
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import wait
-from itertools import repeat
 
 # Need some functions from our module
 import sys
@@ -106,9 +105,10 @@ futs = [
 ]
 wait(futs)
 
-with open("gt9.txt", "w") as gt, open("7-9.txt", "w") as sn, open(
-    "4-6.txt", "w"
-) as fs, open("1-3.txt", "w") as ot:
+with open("gt9.txt", "w") as gt, \
+     open("7-9.txt", "w") as sn, \
+     open("4-6.txt", "w") as fs, \
+     open("1-3.txt", "w") as ot:
     for res in futs:
         indices, rows = res.result()
         for idx, row in zip(indices.index.values, rows):
