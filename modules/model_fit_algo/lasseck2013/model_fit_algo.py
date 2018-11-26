@@ -559,4 +559,4 @@ def model_fit_algo(config, rerun_statistics):
         executor.submit(chunk_build_model, chunk, labels_df, config) for chunk in chunks
     ]
     for future in as_completed(fs):
-        _ = [print(x) for x in res.result() if x]
+        _ = [print(x) for x in future.result() if x]
