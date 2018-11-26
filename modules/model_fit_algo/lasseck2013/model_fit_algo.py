@@ -47,7 +47,7 @@ def generate_raw_blurred_spectrogram(
 
     raw_spectrogram = spectrogram * normalization_factor
     return apply_gaussian_filter(raw_spectrogram, gaussian_blur_sigma).astype(
-        "float32", casting="safe"
+        "float32", casting="same_kind"
     )
 
 
