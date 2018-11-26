@@ -67,7 +67,7 @@ _tmp = [None] * labels_df.shape[0]
 for res in futs:
     indices, rows = res.result()
     for idx, row in zip(indices.index.values, rows):
-        mono_idx = labels_df.get_loc(idx)
+        mono_idx = labels_df.index.get_loc(idx)
         _tmp[mono_idx] = row
 
 results_df = pd.DataFrame(_tmp, index=labels_df.index.values)

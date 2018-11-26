@@ -37,7 +37,7 @@ def generate_cross_correlation_matrix(needed_df, found_df, config):
     items = return_cursor(list(needed_df.index.values), "statistics", config)
     all_file_file_stats = [None] * needed_df.shape[0]
     for item in items:
-        mono_idx = needed_df.get_loc(item["label"])
+        mono_idx = needed_df.index.get_loc(item["label"])
         _, file_file_stats = cursor_item_to_stats(item)
         all_file_file_stats[mono_idx] = [
             file_file_stats[found] for found in found_df.index.values
