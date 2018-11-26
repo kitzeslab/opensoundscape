@@ -32,7 +32,9 @@ from cv2 import matchTemplate
 from cv2 import minMaxLoc
 
 
-def generate_raw_blurred_spectrogram(spectrogram, normalization_factor, gaussian_blur_sigma):
+def generate_raw_blurred_spectrogram(
+    spectrogram, normalization_factor, gaussian_blur_sigma
+):
     """Given a normalized spectrogram
 
     Recreate the raw spectrogram and apply a gaussian filter
@@ -44,7 +46,9 @@ def generate_raw_blurred_spectrogram(spectrogram, normalization_factor, gaussian
     """
 
     raw_spectrogram = spectrogram * normalization_factor
-    return apply_gaussian_filter(raw_spectrogram, gaussian_blur_sigma)
+    return apply_gaussian_filter(raw_spectrogram, gaussian_blur_sigma).astype(
+        "float32", casting="safe"
+    )
 
 
 def binary_classify(correct, predicted):
