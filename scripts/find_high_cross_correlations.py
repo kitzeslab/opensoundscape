@@ -45,7 +45,7 @@ def generate_ff_stats(stats_df, species_found_df):
 
 
 def high_cc(chunk, species_found, config):
-    if len(chunk) == 0:
+    if len(chunk) != 0:
         init_client(config)
         all_file_file_statistics = generate_ff_stats(chunk, species_found)
         close_client()
