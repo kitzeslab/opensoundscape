@@ -75,10 +75,12 @@ futs = [
     executor.submit(high_cc, chunk, species_found, config)
     for chunk in chunk_species_not_found
 ]
+# fmt: off
 with open("gt9.txt", "w") as gt, \
      open("7-9.txt", "w") as sn, \
      open("4-6.txt", "w") as fs, \
      open("1-3.txt", "w") as ot:
+# fmt: on
     for future in as_completed(futs):
         indices, rows = future.result()
         for idx, row in zip(indices.index.values, rows):

@@ -8,3 +8,5 @@
 #pytest==3.6.1
 git+https://github.com/gregorias/samplerate@master
 scikit-image
+pre-commit
+black
