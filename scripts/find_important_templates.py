@@ -148,7 +148,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 import pickle
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures import wait
+from concurrent.futures import as_completed
 import progressbar
 from itertools import repeat
 
@@ -197,10 +197,8 @@ fs = [
     executor.submit(gen_results_df, species_found, species_not_found, identifiers_list)
     for x in range(100)
 ]
-wait(fs)
-
 # Concatenate all results
-results_df = pd.concat([res.result() for res in fs])
+results_df = pd.concat([future.result() for future in as_completed(fs)])
 
 # Keep any weights above 0.35
 results_df = results_df[results_df["weight"] >= 0.35]

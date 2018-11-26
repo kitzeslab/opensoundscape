@@ -25,7 +25,7 @@ from docopt import docopt
 import pandas as pd
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures import wait
+from concurrent.futures import as_completed
 
 # Need some functionality from our modules
 import sys
@@ -60,15 +60,13 @@ executor = ProcessPoolExecutor(nprocs)
 
 chunks = np.array_split(labels_df, nprocs)
 
-futs = [
+fs = [
     executor.submit(cross_correlations, chunk, species_found, config)
     for chunk in chunks
 ]
-wait(futs)
-
 _tmp = [None] * labels_df.shape[0]
-for res in futs:
-    indices, rows = res.result()
+for future in as_completed(fs):
+    indices, rows = future.result()
     for idx, row in zip(indices.index.values, rows):
         mono_idx = labels_df.index.get_loc(idx)
         _tmp[mono_idx] = row

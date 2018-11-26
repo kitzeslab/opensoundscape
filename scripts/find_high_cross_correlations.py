@@ -59,7 +59,7 @@ import pandas as pd
 import numpy as np
 from copy import copy
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures import wait
+from concurrent.futures import as_completed
 
 # Need some functions from our module
 import sys
@@ -103,14 +103,12 @@ futs = [
     executor.submit(high_cc, chunk, species_found, config)
     for chunk in chunk_species_not_found
 ]
-wait(futs)
-
 with open("gt9.txt", "w") as gt, \
      open("7-9.txt", "w") as sn, \
      open("4-6.txt", "w") as fs, \
      open("1-3.txt", "w") as ot:
-    for res in futs:
-        indices, rows = res.result()
+    for future in as_completed(futs):
+        indices, rows = future.result()
         for idx, row in zip(indices.index.values, rows):
             highest_cc = row.max()
             build_str = np.array_str(row).replace("\n", "")
@@ -127,11 +125,9 @@ futs = [
     executor.submit(high_cc, chunk, species_found, config)
     for chunk in chunk_species_found
 ]
-wait(futs)
-
 with open("template_ccs.txt", "w") as tcc:
-    for res in futs:
-        indices, rows = res.result()
+    for future in as_completed(futs):
+        indices, rows = future.result()
         for idx, row in zip(indices.index.values, rows):
             build_str = np.array_str(row).replace("\n", "")
             tcc.write(f"{idx}: {build_str}\n")
