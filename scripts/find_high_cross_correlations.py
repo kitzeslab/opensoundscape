@@ -9,47 +9,22 @@ Prerequisites:
     - The <ini>'s must match!
 
 Usage:
-    find_high_cross_correlations.py <label> [-i <ini>] [-s <template_pool.csv>] [-c <chunk_size>] [-hv]
+    find_high_cross_correlations.py <label> [-i <ini>] [-hv]
 
 Positional Arguments:
-    <label>             The label you would like to interrogate,
-                            must be in the CSV defined as `train_file`
+    <label>                         The label you would like to interrogate,
+                                        must be in the CSV defined as `train_file`
 
 Options:
     -h --help                       Print this screen and exit
     -v --version                    Print the version of crc-squeue.py
     -i --ini <ini>                  Specify an override file [default: opensoundscape.ini]
-    -s --save <template_pool.csv>   Generate a <template_pool.csv> for opensoundscape.py
 """
-
-
-def generate_ff_stats(stats_df, species_found_df):
-    items = return_cursor(list(stats_df.index.values), "statistics", config)
-
-    # Get all of the file_file_statistics
-    # Use the mono_idx to insert the correct value in the correct place!
-    all_file_file_statistics = [None] * stats_df.shape[0]
-    for item in items:
-        mono_idx = stats_df.index.get_loc(item["label"])
-        _, file_file_stats = cursor_item_to_stats(item)
-        all_file_file_statistics[mono_idx] = [
-            file_file_stats[found] for found in species_found_df.index.values
-        ]
-
-    # Convert to numpy array and reshape
-    # Dims: n_files, n_templates, 1, n_features
-    # Only need the zeroth feature
-    # Output Dims: n_files, n_templates
-    npify = np.array(all_file_file_statistics)
-    return npify[:, :, :, 0].reshape(stats_df.shape[0], -1)
 
 
 def high_cc(chunk, species_found, config):
     if len(chunk) != 0:
-        init_client(config)
-        all_file_file_statistics = generate_ff_stats(chunk, species_found)
-        close_client()
-        return chunk, all_file_file_statistics
+        return chunk, generate_cross_correlation_matrix(chunk, species_found, config)
     else:
         return chunk, []
 
@@ -68,10 +43,7 @@ script_dir = sys.path[0]
 sys.path.insert(0, f"{script_dir}/..")
 
 from modules.utils import generate_config, return_cpu_count
-from modules.db_utils import init_client
-from modules.db_utils import close_client
-from modules.db_utils import cursor_item_to_stats
-from modules.db_utils import return_cursor
+from modules.db_utils import generate_cross_correlation_matrix
 
 # From the docstring, generate the arguments dictionary
 arguments = docopt(__doc__, version="find_high_cross_correlations.py version 0.0.1")
