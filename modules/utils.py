@@ -7,7 +7,7 @@ from difflib import get_close_matches
 
 
 def get_stratification_percent(config):
-    '''Return the stratification_percent
+    """Return the stratification_percent
 
     Get stratification_percent and verify it. If it is greater than 1 assume
     it needs to be divided by 100, otherwise return it.
@@ -17,19 +17,21 @@ def get_stratification_percent(config):
 
     Returns:
         percent stratification between 0 and 1
-    '''
+    """
 
-    val = config['model_fit'].getfloat('stratification_percent')
+    val = config["model_fit"].getfloat("stratification_percent")
     if val > 0.0 and val < 1.0:
         return val
     elif val < 100.0:
         return val / 100.0
     else:
-        raise ValueError("stratification_percent can be (0,1), e.g. 0.33, or [1,100), e.g. 33.3")
+        raise ValueError(
+            "stratification_percent can be (0,1), e.g. 0.33, or [1,100), e.g. 33.3"
+        )
 
 
 def return_cpu_count(config):
-    '''Return the number of CPUs requested
+    """Return the number of CPUs requested
 
     If num_processors defined in the config, return that number. else return
     the number of CPUs on the machine minus 1 (leave some space for system).
@@ -39,16 +41,16 @@ def return_cpu_count(config):
 
     Returns:
         nprocs: Integer number of cores
-    '''
-    if config['general']['num_processors'] == '':
+    """
+    if config["general"]["num_processors"] == "":
         nprocs = cpu_count() - 1
     else:
-        nprocs = config['general'].getint('num_processors')
+        nprocs = config["general"].getint("num_processors")
     return nprocs
 
 
 def generate_config(f_default, f_override):
-    '''Generate the configuration
+    """Generate the configuration
 
     Simply return a ConfigParser for opensoundscape. We have a default config in
     `config/` as well as a potential override file. Access elements via
@@ -63,7 +65,7 @@ def generate_config(f_default, f_override):
 
     Raises:
         FileNotFoundError if INI file doesn't exist
-    '''
+    """
     opensoundscape_dir = sys.path[0]
     f_default = join(opensoundscape_dir, f_default)
 
@@ -92,7 +94,9 @@ def generate_config(f_default, f_override):
         for key in override_config[section].keys():
             if not key in config[section].keys():
                 close_matches = get_close_matches(key, config[section].keys())
-                print(f"ERROR: From {f_override}, section {section}, key '{key}' isn't recognized!")
+                print(
+                    f"ERROR: From {f_override}, section {section}, key '{key}' isn't recognized!"
+                )
                 if close_matches:
                     print(f"-> did you mean: {' '.join(close_matches)}")
                 exit()
@@ -102,8 +106,8 @@ def generate_config(f_default, f_override):
     return config
 
 
-def yes_no(question, default='no'):
-    ''' Ask a yes/no question
+def yes_no(question, default="no"):
+    """ Ask a yes/no question
 
     Ask a yes/no question with a default.
 
@@ -116,25 +120,25 @@ def yes_no(question, default='no'):
 
     Raises:
         Nothing
-    '''
+    """
 
-    yes = set(['yes', 'y', 'ye'])
-    no = set(['no', 'n'])
+    yes = set(["yes", "y", "ye"])
+    no = set(["no", "n"])
 
-    if default == 'no':
-        yn_def_str = '[yN]'
+    if default == "no":
+        yn_def_str = "[yN]"
         yn_def_ret = False
     else:
-        yn_def_str = '[Yn]'
+        yn_def_str = "[Yn]"
         yn_def_ret = True
 
     while True:
         choice = input(f"{question} {yn_def_str}: ").lower()
         if choice in yes:
-           return True
+            return True
         elif choice in no:
-           return False
-        elif choice == '':
-           return yn_def_ret
+            return False
+        elif choice == "":
+            return yn_def_ret
         else:
-           print("Please respond with 'yes' or 'no'")
+            print("Please respond with 'yes' or 'no'")

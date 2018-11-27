@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-''' opensoundscape.py -- Opensoundscape
+""" opensoundscape.py -- Opensoundscape
 Usage:
     opensoundscape.py [-hv]
     opensoundscape.py init [-i <ini>]
@@ -19,7 +19,7 @@ Options:
     -i --ini <ini>          Specify an override file [default: opensoundscape.ini]
     -s --segments           View the segments only [default: False]
     -r --rerun_statistics   Override to model_fit statistics lock [default: False]
-'''
+"""
 
 
 from docopt import docopt
@@ -31,32 +31,32 @@ from modules.utils import generate_config
 from modules.init import init
 
 # From the docstring, generate the arguments dictionary
-arguments = docopt(__doc__, version='opensoundscape.py version 0.0.1')
+arguments = docopt(__doc__, version="opensoundscape.py version 0.0.1")
 
 # Get the default config variables
 config = generate_config("config/opensoundscape.ini", arguments["--ini"])
 
 # Initialize empty string for arguments['<image>'] (not supported by docopt)
-if not arguments['<image>']:
-    arguments['<image>'] = ''
+if not arguments["<image>"]:
+    arguments["<image>"] = ""
 
-if arguments['spect_gen']:
+if arguments["spect_gen"]:
     # Pass the configuration to spect_gen
     spect_gen(config)
 
-elif arguments['view']:
+elif arguments["view"]:
     # Preprocess the file with the defaults
     # -> optionally write image to a file
-    view(arguments['<label>'], arguments['<image>'], arguments['--segments'], config)
+    view(arguments["<label>"], arguments["<image>"], arguments["--segments"], config)
 
-elif arguments['model_fit']:
+elif arguments["model_fit"]:
     # Using defined algorithm, create model
-    model_fit(config, arguments['--rerun_statistics'])
+    model_fit(config, arguments["--rerun_statistics"])
 
-elif arguments['predict']:
+elif arguments["predict"]:
     # Make a prediction based on a model
     predict(config)
 
-elif arguments['init']:
+elif arguments["init"]:
     # Initialize INI section
     init(config)

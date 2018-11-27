@@ -2,7 +2,7 @@ from scipy.ndimage.filters import gaussian_filter
 
 
 def apply_gaussian_filter(spec, sigma):
-    '''Apply a Gaussian filter to a spectrogram
+    """Apply a Gaussian filter to a spectrogram
 
     Apply a Gaussian filter to a spectrogram with a given sigma value.
 
@@ -12,5 +12,5 @@ def apply_gaussian_filter(spec, sigma):
 
     Returns:
         The Gaussian filtered spectrogram
-    '''
+    """
     return gaussian_filter(spec, sigma=float(sigma))
