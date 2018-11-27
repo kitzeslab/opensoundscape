@@ -1,8 +1,9 @@
 import sys
 from modules.db_utils import write_ini_section
 
+
 def model_fit(config, rerun_statistics):
-    '''Fit a model
+    """Fit a model
 
     Given a directory and method (from config), fit a model against the
     training data. This is an abstraction layer from the actual fitting.
@@ -19,13 +20,15 @@ def model_fit(config, rerun_statistics):
 
     Raises:
         Nothing
-    '''
+    """
 
     opensoundscape_dir = sys.path[0]
-    sys.path.append(f"{opensoundscape_dir}/modules/model_fit_algo/{config['model_fit']['algo']}")
+    sys.path.append(
+        f"{opensoundscape_dir}/modules/model_fit_algo/{config['model_fit']['algo']}"
+    )
     from model_fit_algo import model_fit_algo
 
-    if config['general'].getboolean('db_rw'):
-        write_ini_section(config, 'model_fit')
+    if config["general"].getboolean("db_rw"):
+        write_ini_section(config, "model_fit")
 
     model_fit_algo(config, rerun_statistics)

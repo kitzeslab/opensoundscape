@@ -11,7 +11,7 @@ from modules.db_utils import read_spectrogram
 
 
 def show_or_write(image):
-    '''Show or write
+    """Show or write
 
     Do we want to show a plot, or write an image file
 
@@ -20,7 +20,7 @@ def show_or_write(image):
 
     Returns:
         Nothing
-    '''
+    """
 
     if len(image) == 0:
         plt.show()
@@ -29,7 +29,7 @@ def show_or_write(image):
 
 
 def extract_segments(spec, df):
-    '''Extract the segments from a spectrogram
+    """Extract the segments from a spectrogram
 
     Given a spectrogram and a bounding box DataFrame, extract the
     segments
@@ -40,16 +40,18 @@ def extract_segments(spec, df):
 
     Returns:
         A list containing the segments
-    '''
+    """
     segments = [None] * len(df.index)
     for seg_idx, idx in enumerate(df.index):
-        segments[seg_idx] = spec[df.loc[idx]['y_min']: df.loc[idx]['y_max'],
-            df.loc[idx]['x_min']: df.loc[idx]['x_max']]
+        segments[seg_idx] = spec[
+            df.loc[idx]["y_min"] : df.loc[idx]["y_max"],
+            df.loc[idx]["x_min"] : df.loc[idx]["x_max"],
+        ]
     return segments
 
 
 def gen_spec_with_segs(label, spec, df, image):
-    '''Plot spectrogram w/ bounding boxes
+    """Plot spectrogram w/ bounding boxes
 
     Plots the spectrogram with bounding boxes labeling segments
 
@@ -61,37 +63,40 @@ def gen_spec_with_segs(label, spec, df, image):
 
     Returns:
         Nothing
-    '''
+    """
 
     # Extract the segments
     segments = extract_segments(spec, df)
 
     # Generate Color Map
     if df.shape[0] != 0:
-        cmap = plt.cm.get_cmap('jet', df.shape[0])
+        cmap = plt.cm.get_cmap("jet", df.shape[0])
         rgb_vals = cmap(np.arange(df.shape[0]))[:, :-1]
 
     # Plot, flip the y-axis
     fig, ax = plt.subplots(1, figsize=(15, 5))
-    ax.imshow(spec, cmap=plt.get_cmap('gray_r'))
+    ax.imshow(spec, cmap=plt.get_cmap("gray_r"))
     ax.set_ylim(ax.get_ylim()[::-1])
     ax.set_title(label)
 
     for idx, row in df.iterrows():
-        rect = patches.Rectangle((row['x_min'], row['y_min']),
-                (row['x_max'] - row['x_min'] + 1),
-                (row['y_max'] - row['y_min'] + 1),
-                linewidth=1, edgecolor=rgb_vals[idx], facecolor='none')
+        rect = patches.Rectangle(
+            (row["x_min"], row["y_min"]),
+            (row["x_max"] - row["x_min"] + 1),
+            (row["y_max"] - row["y_min"] + 1),
+            linewidth=1,
+            edgecolor=rgb_vals[idx],
+            facecolor="none",
+        )
         ax.add_patch(rect)
-        ax.text(row['x_min'], row['y_min'] - 2, idx, color=rgb_vals[idx],
-                fontsize=12)
+        ax.text(row["x_min"], row["y_min"] - 2, idx, color=rgb_vals[idx], fontsize=12)
 
     # Write or show image
     show_or_write(image)
 
 
 def gen_segs(spec, df, image):
-    '''Plot the segments only
+    """Plot the segments only
 
     Plots the segments of the spectrogram
 
@@ -102,7 +107,7 @@ def gen_segs(spec, df, image):
 
     Returns:
         Nothing
-    '''
+    """
 
     # Extract the segments
     segments = extract_segments(spec, df)
@@ -125,7 +130,7 @@ def gen_segs(spec, df, image):
 
 
 def view(label, image, seg_only, config):
-    '''View a spectrogram
+    """View a spectrogram
 
     This is a super function which provides all of the functionality to
     view a spectrogram, either from the database itself or recreated
@@ -141,7 +146,7 @@ def view(label, image, seg_only, config):
 
     Raises:
         FileNotFoundError: If the wavfile doesn't exist, it can't be processed
-    '''
+    """
 
     # Get the data, from the database or recreate
     init_client(config)
@@ -149,8 +154,9 @@ def view(label, image, seg_only, config):
     close_client()
 
     # Apply Gaussian Filter
-    spectrogram = apply_gaussian_filter(spectrogram,
-            config['model_fit'].getfloat('gaussian_filter_sigma'))
+    spectrogram = apply_gaussian_filter(
+        spectrogram, config["model_fit"].getfloat("gaussian_filter_sigma")
+    )
 
     # Either vizualize spectrogram w/ bounding boxes
     # -> or, segments
