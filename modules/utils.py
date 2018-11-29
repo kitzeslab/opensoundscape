@@ -3,7 +3,14 @@ from configparser import ConfigParser
 from os.path import isfile
 from os.path import join
 import sys
-from difflib import get_close_matches
+from modules.config_check import ini_section_and_keys_exists
+from modules.config_check import config_checks
+from cv2 import TM_CCOEFF
+from cv2 import TM_CCOEFF_NORMED
+from cv2 import TM_CCORR
+from cv2 import TM_CCORR_NORMED
+from cv2 import TM_SQDIFF
+from cv2 import TM_SQDIFF_NORMED
 
 
 def get_stratification_percent(config):
@@ -28,6 +35,27 @@ def get_stratification_percent(config):
         raise ValueError(
             "stratification_percent can be (0,1), e.g. 0.33, or [1,100), e.g. 33.3"
         )
+
+
+def get_template_matching_algorithm(config):
+    """ Return the template matching algorithm for OpenCV
+
+    Input:
+        The opensoundscape config
+
+    Output:
+        An integer
+    """
+
+    options = {
+        "TM_CCOEFF": TM_CCOEFF,
+        "TM_CCOEFF_NORMED": TM_CCOEFF_NORMED,
+        "TM_CCORR": TM_CCORR,
+        "TM_CCORR_NORMED": TM_CCORR_NORMED,
+        "TM_SQDIFF": TM_SQDIFF,
+        "TM_SQDIFF_NORMED": TM_SQDIFF_NORMED,
+    }
+    return options[config["model_fit"].get("template_match_algorithm")]
 
 
 def return_cpu_count(config):
@@ -80,29 +108,12 @@ def generate_config(f_default, f_override):
     override_config = ConfigParser()
     override_config.read(f_override)
 
-    # Verification of override sections and keys
-    for section in override_config.keys():
-        # -> First, does the section even exist?
-        if not section in config.keys():
-            close_matches = get_close_matches(section, config.keys())
-            print(f"ERROR: From {f_override}, section '{section}' isn't recognized!")
-            if close_matches:
-                print(f"-> did you mean: {' '.join(close_matches)}")
-            exit()
-
-        # Second, do the keys even exist?
-        for key in override_config[section].keys():
-            if not key in config[section].keys():
-                close_matches = get_close_matches(key, config[section].keys())
-                print(
-                    f"ERROR: From {f_override}, section {section}, key '{key}' isn't recognized!"
-                )
-                if close_matches:
-                    print(f"-> did you mean: {' '.join(close_matches)}")
-                exit()
-
-    # If we make it here, our override config contains valid sections and keys
+    # Check that the override config makes sense, then read it
+    ini_section_and_keys_exists(config, override_config, f_override)
     config.read(f_override)
+
+    config_checks(config)
+
     return config
 
 
