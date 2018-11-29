@@ -28,6 +28,7 @@ from modules.view import extract_segments
 from modules.utils import return_cpu_count
 from modules.image_utils import apply_gaussian_filter
 from modules.utils import get_stratification_percent
+from modules.utils import get_template_matching_algorithm
 from cv2 import matchTemplate
 from cv2 import minMaxLoc
 
@@ -260,7 +261,9 @@ def get_file_file_stats(df_one, spec_one, normal_one, labels_df, config):
                 and row["x_max"] - row["x_min"] <= spec_one.shape[1]
             ):
                 output_stats = matchTemplate(
-                    spec_one[y_min_target:y_max_target, :], row["segments"], 5
+                    spec_one[y_min_target:y_max_target, :],
+                    row["segments"],
+                    get_template_matching_algorithm(config),
                 )
                 _, max_val, _, max_loc = minMaxLoc(output_stats)
                 match_stats_dict[idx_two][idx][0] = max_val
