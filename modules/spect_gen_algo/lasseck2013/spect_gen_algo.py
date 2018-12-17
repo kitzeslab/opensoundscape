@@ -6,8 +6,8 @@ from multiprocessing import cpu_count
 import progressbar
 from itertools import repeat
 from scipy import signal, ndimage
-from scipy.io import wavfile
-from scikits.samplerate import resample
+from librosa import load, to_wav
+from warnings import warn
 from skimage.morphology import remove_small_objects
 from modules.db_utils import init_client
 from modules.db_utils import close_client
@@ -86,27 +86,6 @@ def scaled_median_filter(spec, factor):
     return np.logical_and(row_filt, col_filt)
 
 
-def resample_audio(samples, current_sample_rate, new_sample_rate):
-    """Resamples audio samples
-
-    Given an audio sample and the current sample rate, resample to a new
-    sample rate.
-
-    Args:
-        samples: The audio samples from wavfile.read(<file>)[0]
-        current_sample_rate: The current sample rate from wavfile.read(<file>)[1]
-        new_sample_rate: The new sample rate
-
-    Returns:
-        A tuple with the new sample rate and the new audio samples. This
-        is exactly similar to wavfile.read(<filename>)
-    """
-    return (
-        new_sample_rate,
-        resample(samples, new_sample_rate / current_sample_rate, "sinc_best"),
-    )
-
-
 def frequency_based_spectrogram_filter(spec, freq, low_freq_thr, high_freq_thr):
     """Filter any useless low and high frequency ranges
 
@@ -154,7 +133,6 @@ def chunk_preprocess(chunk, config):
 
     return
 
-
 def preprocess(label, config):
     """Preprocess all images
 
@@ -177,10 +155,16 @@ def preprocess(label, config):
     """
 
     # Resample
-    sample_rate, samples = wavfile.read(f"{config['general']['data_dir']}/{label}")
-    sample_rate, samples = resample_audio(
-        samples, sample_rate, config["spect_gen"].getfloat("resample_rate")
+    samples, sample_rate = load(
+        f"{config['general']['data_dir']}/{label}", 
+        mono=False, # Don't automatically load as mono, so we can warn if we force to mono
+        sr=config["spect_gen"].getfloat("resample_rate"),
+        res_type=config["spect_gen"]["resample_type"]
     )
+    if samples.ndim > 1:
+        samples = to_mono(samples)
+        warn('Multiple-channel file detected ({}). Automatically mixed to mono.'.format(f"{config['general']['data_dir']}/{label}"), UserWarning)
+        # TODO: add user warning here
 
     # Generate Spectrogram
     nperseg = config["spect_gen"].getint("spectrogram_segment_length")
