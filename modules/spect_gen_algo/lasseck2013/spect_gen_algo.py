@@ -7,7 +7,6 @@ import progressbar
 from itertools import repeat
 from scipy import signal, ndimage
 from librosa import load, to_mono
-from warnings import warn
 from skimage.morphology import remove_small_objects
 from modules.db_utils import init_client
 from modules.db_utils import close_client
