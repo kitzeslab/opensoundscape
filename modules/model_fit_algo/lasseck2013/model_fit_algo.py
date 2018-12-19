@@ -346,25 +346,29 @@ def build_X_y(labels_df, config):
 
     items = return_cursor(labels_df.index.values.tolist(), "statistics", config)
 
-    # What we want: numpy arrays
-    # Issue: one of the inner dimensions is unknown (below num_templates)
-    # Solution: generate [[numpy arrays]] and reshape
+    # What we need is numpy arrays for file_stats and file_file_stats
+    # Issue: The dimensionality for file_file_stats[mono_idx] is
+    # -> (num_labeled_files, num_templates_in_labeled_file, 3)
+    # -> num_templates_in_labeled_file varies, therefore we need a
+    # -> np.vstack to collapse them to (num_labeled_files * num_templates_in_labeled_file, 3)
+    # -> to create our final file_file_stats with dimensions:
+    # -> (num_files, num_labeled_files * num_templates_in_labeled_file, 3)
     file_stats = [None] * labels_df.shape[0]
     file_file_stats = [None] * labels_df.shape[0]
     for item in items:
         mono_idx = labels_df.index.get_loc(item["label"])
         file_stats[mono_idx], file_file_stats[mono_idx] = cursor_item_to_stats(item)
-        file_file_stats[mono_idx] = [
+        file_file_stats[mono_idx] = np.vstack([
             file_file_stats[mono_idx][x] for x in get_file_file_stats_for
-        ]
+        ])
 
     # Shape: (num_files, 80), 80 is number of file statistics
     # -> sometimes garbage data in file_stats (i.e. need nan_to_num)
     file_stats = np.nan_to_num(np.array(file_stats))
 
-    # Input Shape: (num_files, num_templates, 1, num_features)
-    # Output Shape: (num_files, num_templates, num_features)
-    file_file_stats = np.array(file_file_stats).reshape(labels_df.shape[0], -1, 3)
+    # Input Shape: [num_files, np.array(num_templates, num_features)]
+    # Output Shape: np.array(num_files, num_templates, num_features)
+    file_file_stats = np.array(file_file_stats)
 
     # Short circuit return for only cross correlations
     if config["model_fit"].getboolean("cross_correlations_only"):
