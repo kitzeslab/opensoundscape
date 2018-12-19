@@ -161,12 +161,11 @@ def preprocess(label, config):
         sr=config["spect_gen"].getfloat("resample_rate"),
         res_type=config["spect_gen"]["resample_type"]
     )
+
+    # Force to mono if wav has multiple channels
     if samples.ndim > 1:
         samples = to_mono(samples)
-        warn('Multiple-channel file detected ({}). Automatically mixed to mono.'.format(f"{config['general']['data_dir']}/{label}"), UserWarning)
-        # TODO: add user warning here
-    else:
-        print('Single-channel file ({})'.format(f"{config['general']['data_dir']}/{label}"))
+        print(f"Multiple-channel file detected ({config['general']['data_dir']}/{label}). Automatically mixed to mono.")
 
     # Generate Spectrogram
     nperseg = config["spect_gen"].getint("spectrogram_segment_length")
