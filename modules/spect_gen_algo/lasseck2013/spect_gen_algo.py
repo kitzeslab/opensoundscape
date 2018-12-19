@@ -3,7 +3,6 @@ import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
 from multiprocessing import cpu_count
-import progressbar
 from itertools import repeat
 from scipy import signal, ndimage
 from librosa import load, to_mono
@@ -155,7 +154,7 @@ def preprocess(label, config):
 
     # Resample
     samples, sample_rate = load(
-        f"{config['general']['data_dir']}/{label}", 
+        f"{config['general']['data_dir']}/{label}",
         mono=False, # Don't automatically load as mono, so we can warn if we force to mono
         sr=config["spect_gen"].getfloat("resample_rate"),
         res_type=config["spect_gen"]["resample_type"]
@@ -294,8 +293,7 @@ def spect_gen_algo(config):
     # Split into chunks
     chunks = np.array_split(preprocess_files, nprocs)
 
-    # Create a ProcessPoolExecutor, run:
-    # -> Wrap everything in a ProgressBar
+    # Create a ProcessPoolExecutor,
     # -> Async process everything
     executor = ProcessPoolExecutor(nprocs)
     fs = [executor.submit(chunk_preprocess, chunk, config) for chunk in chunks]
