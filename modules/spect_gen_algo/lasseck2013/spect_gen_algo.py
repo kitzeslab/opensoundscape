@@ -6,7 +6,7 @@ from multiprocessing import cpu_count
 import progressbar
 from itertools import repeat
 from scipy import signal, ndimage
-from librosa import load, to_wav
+from librosa import load, to_mono
 from warnings import warn
 from skimage.morphology import remove_small_objects
 from modules.db_utils import init_client
@@ -165,6 +165,8 @@ def preprocess(label, config):
         samples = to_mono(samples)
         warn('Multiple-channel file detected ({}). Automatically mixed to mono.'.format(f"{config['general']['data_dir']}/{label}"), UserWarning)
         # TODO: add user warning here
+    else:
+        print('Single-channel file ({})'.format(f"{config['general']['data_dir']}/{label}"))
 
     # Generate Spectrogram
     nperseg = config["spect_gen"].getint("spectrogram_segment_length")
