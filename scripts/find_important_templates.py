@@ -149,7 +149,6 @@ from sklearn.tree import DecisionTreeClassifier
 import pickle
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
-import progressbar
 from itertools import repeat
 
 # Need some functions from our module
