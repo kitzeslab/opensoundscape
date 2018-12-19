@@ -337,65 +337,38 @@ def build_X_y(labels_df, config):
         Nothing.
     """
 
-    # TODO: this needs better commenting: what is "get_file_file_stats_for"?
     if config["model_fit"]["template_pool"]:
         pools_df = pd.read_csv(config["model_fit"]["template_pool"], index_col=0)
         pools_df.templates = pools_df.templates.apply(lambda x: json.loads(x))
         get_file_file_stats_for = [x for x in pools_df.index]
-        print('if')
     else:
-        print('else')
-        # Create list of files for which templates should be drawn for
-        # computation of file_file stats, i.e., a list of files where
-        # the desired species is present # TODO: is this even right?
         get_file_file_stats_for = [x for x in labels_df.index if labels_df[x] == 1]
-        print('len getter: ', len(get_file_file_stats_for))
 
     items = return_cursor(labels_df.index.values.tolist(), "statistics", config)
 
-    # TODO: better commenting of this section...
-    # What we want: numpy arrays
-    # Issue: one of the inner dimensions is unknown (below num_templates)
-    # Solution: generate [[numpy arrays]] and reshape 
-    # Shape: (num_files, num_templates, 1, num_features)
+    # What we need is numpy arrays for file_stats and file_file_stats
+    # Issue: The dimensionality for file_file_stats[mono_idx] is
+    # -> (num_labeled_files, num_templates_in_labeled_file, 3)
+    # -> num_templates_in_labeled_file varies, therefore we need a
+    # -> np.vstack to collapse them to (num_labeled_files * num_templates_in_labeled_file, 3)
+    # -> to create our final file_file_stats with dimensions:
+    # -> (num_files, num_labeled_files * num_templates_in_labeled_file, 3)
     file_stats = [None] * labels_df.shape[0]
     file_file_stats = [None] * labels_df.shape[0]
-    print(items)
     for item in items:
-        #print('item', item)
         mono_idx = labels_df.index.get_loc(item["label"])
-        print('mono index', mono_idx)
         file_stats[mono_idx], file_file_stats[mono_idx] = cursor_item_to_stats(item)
-        
-        file_file_stats[mono_idx] = [
+        file_file_stats[mono_idx] = np.vstack([
             file_file_stats[mono_idx][x] for x in get_file_file_stats_for
-        ]
-        print('new assignment len: ', len(file_file_stats[mono_idx]))
-        print('new assignment sublens: ')
-        for sub in file_file_stats[mono_idx]:
-            print(len(sub))
-        #file_file_stats[mono_idx] = [
-        #    file_file_stats[mono_idx][x] for x in get_file_file_stats_for
-        #]
+        ])
 
     # Shape: (num_files, 80), 80 is number of file statistics
     # -> sometimes garbage data in file_stats (i.e. need nan_to_num)
     file_stats = np.nan_to_num(np.array(file_stats))
 
-    # Input Shape: (num_files, num_templates, 1, num_features)
-    # Output Shape: (num_files, num_templates, num_features)
-    #print(file_file_stats) # TODO remove print
-    done = 0
-    counter = 0
-    test_arr = file_file_stats
-    while not done:
-        try:
-            print("level {}: length {}".format(counter, len(test_arr)))
-            test_arr = test_arr[1]
-            counter += 1
-        except:
-            done = 1
-    file_file_stats = np.array(file_file_stats).reshape(labels_df.shape[0], -1, 3)
+    # Input Shape: [num_files, np.array(num_templates, num_features)]
+    # Output Shape: np.array(num_files, num_templates, num_features)
+    file_file_stats = np.array(file_file_stats)
 
     # Short circuit return for only cross correlations
     if config["model_fit"].getboolean("cross_correlations_only"):
