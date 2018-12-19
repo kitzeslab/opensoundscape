@@ -4,7 +4,7 @@ import numpy as np
 import pickle
 import pymongo
 from modules.spect_gen import spect_gen
-from modules.image_utils import apply_gaussian_filter
+from modules.image_utils import generate_raw_blurred_spectrogram
 from modules.db_utils import init_client
 from modules.db_utils import close_client
 from modules.db_utils import read_spectrogram
@@ -153,9 +153,10 @@ def view(label, image, seg_only, config):
     df, spectrogram, normalization_factor = read_spectrogram(label, config)
     close_client()
 
-    # Apply Gaussian Filter
-    spectrogram = apply_gaussian_filter(
-        spectrogram, config["model_fit"].getfloat("gaussian_filter_sigma")
+    spectrogram = generate_raw_blurred_spectrogram(
+        spectrogram,
+        normalization_factor,
+        config["model_fit"]["gaussian_filter_sigma"]
     )
 
     # Either vizualize spectrogram w/ bounding boxes
