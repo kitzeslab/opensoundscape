@@ -10,10 +10,9 @@
 * Use HomeBrew to install a few other packages: `brew install libsamplerate mongodb git wget`
 * Set up the Python environment:
 
-        conda install -c conda-forge python=3.6 pip=18.0 pandas=0.23.4 numpy=1.15.1 matplotlib=2.1.2 docopt=0.6.2 scipy=1.0.0 scikit-image=0.13.1 pymongo=3.4.0 progressbar2=3.36.0 pytest=3.6.1 opencv=3.4.3 scikit-learn=0.20.0
-        
-        pip install git+git://github.com/gregorias/samplerate@master
+        conda install -c conda-forge python=3.6 pip=18.0 pandas=0.23.4 numpy=1.15.1 matplotlib=2.1.2 docopt=0.6.2 scipy=1.0.0 scikit-image=0.13.1 pymongo=3.4.0 progressbar2=3.36.0 opencv=3.4.3 scikit-learn=0.20.0 #for dev: pytest==3.6.1 black==18.9b0
 
+	pip install librosa==0.6.2 #for dev: pre-commit==1.12.0
 
 * Download data files, the [CLO-43SD-AUDIO](https://datadryad.org/resource/doi:10.5061/dryad.j2t92) dataset:
 

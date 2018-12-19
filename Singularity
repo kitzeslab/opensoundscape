@@ -10,11 +10,11 @@ From: archlinux/base
 
 %post
     pacman -Syyu --noconfirm
-    pacman -S python python-pip libsamplerate git gcc python-pandas python-numpy \
-        python-matplotlib python-docopt python-scipy python-pymongo python-progressbar \
-        python-pytest tk mongodb mongodb-tools opencv hdf5 gtk3 python-scikit-learn \
+    pacman -S python python-pip gcc python-pandas python-numpy \
+        python-matplotlib python-docopt python-scipy python-pymongo \
+        tk mongodb mongodb-tools opencv hdf5 gtk3 python-scikit-learn \
         --noconfirm
-    pip install -r /opt/opensoundscape/requirements.txt
+    pip install -r /opt/opensoundscape/requirements-singularity.txt
 
 %apprun opensoundscape
     python /opt/opensoundscape/opensoundscape.py $*
