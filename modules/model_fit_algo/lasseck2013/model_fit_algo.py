@@ -26,30 +26,11 @@ from modules.db_utils import set_model_fit_skip
 from modules.spect_gen import spect_gen
 from modules.view import extract_segments
 from modules.utils import return_cpu_count
-from modules.image_utils import apply_gaussian_filter
+from modules.image_utils import generate_raw_blurred_spectrogram
 from modules.utils import get_stratification_percent
 from modules.utils import get_template_matching_algorithm
 from cv2 import matchTemplate
 from cv2 import minMaxLoc
-
-
-def generate_raw_blurred_spectrogram(
-    spectrogram, normalization_factor, gaussian_blur_sigma
-):
-    """Given a normalized spectrogram
-
-    Recreate the raw spectrogram and apply a gaussian filter
-
-    Args:
-        spectrogram: The normalized spectrogram
-        normalization_factor: The factor to multiply the spectrogram
-        gaussian_blur_sigma: The gaussian blur amount
-    """
-
-    raw_spectrogram = spectrogram * normalization_factor
-    return apply_gaussian_filter(raw_spectrogram, gaussian_blur_sigma).astype(
-        "float32", casting="same_kind"
-    )
 
 
 def binary_classify(correct, predicted):

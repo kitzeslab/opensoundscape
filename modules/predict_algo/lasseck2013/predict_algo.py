@@ -11,7 +11,6 @@ from modules.db_utils import write_file_stats
 from modules.spect_gen import spect_gen
 from modules.view import extract_segments
 from modules.utils import return_cpu_count
-from modules.image_utils import apply_gaussian_filter
 from scipy import stats
 from cv2 import matchTemplate, minMaxLoc
 from concurrent.futures import ProcessPoolExecutor
