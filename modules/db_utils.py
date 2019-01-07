@@ -157,7 +157,7 @@ def write_ini_section(config, section):
     close_client()
 
 
-def write_spectrogram(label, df, spec, normal, config):
+def write_spectrogram(label, df, spec, mean, l2_norm, config):
     """Write spectrogram to MongoDB
 
     Open connection to MongoDB and write the bounding box DataFrame,
@@ -168,7 +168,8 @@ def write_spectrogram(label, df, spec, normal, config):
         label: The label for the MongoDB entry (the filename)
         df: The bounding box DataFrame
         spec: The numpy 2D matrix containing the spectrogram
-        normal: The np.max() of the original spectrogram
+        mean: The np.mean() of the original spectrogram
+        l2_norm: The np.linalg.norm(_, ord=2) of the original spectrogram
         config: The opensoundscape configuration
 
     Returns:
@@ -194,7 +195,8 @@ def write_spectrogram(label, df, spec, normal, config):
             "$set": {
                 "df": df_bytes,
                 "spectrogram": spec_bytes,
-                "normalization_factor": normal,
+                "spectrogram_mean": mean,
+                "spectrogram_l2_norm": l2_norm,
                 "preprocess_date": datetime.now(),
             }
         },
@@ -206,7 +208,7 @@ def read_spectrogram(label, config):
     """Read spectrogram from MongoDB
 
     Open connection to MongoDB and read the bounding box DataFrame, spectrogram
-    (compressed sparse row 2D matrix), and normalization factor. The DataFrame
+    (compressed sparse row 2D matrix), and normalization factors. The DataFrame
     and spectrogram are pickled to reduce size
 
     Args:
@@ -215,7 +217,7 @@ def read_spectrogram(label, config):
 
     Returns:
         Tuple containing dataframe, spectrogram (dense representation), and
-        normalization factor
+        normalization factors
     """
 
     global client
@@ -225,9 +227,9 @@ def read_spectrogram(label, config):
 
     # Extract DF and Spectrogram
     item = coll.find_one({"label": label})
-    df, spec, normal = cursor_item_to_data(item, config)
+    df, spec, mean, l2_norm = cursor_item_to_data(item, config)
 
-    return df, spec, normal
+    return df, spec, mean, l2_norm
 
 
 def return_cursor(indices, coll, config, db_name=""):
@@ -262,7 +264,7 @@ def cursor_item_to_data(item, config):
     """Given an item, return necessary spectrogram data
 
     Utility function to convert an item in the database to bounding
-    box dataframe, spectogram, and normalization factor.
+    box dataframe, spectogram, and normalization factors.
 
     Args:
         item: A database item
@@ -271,18 +273,20 @@ def cursor_item_to_data(item, config):
     Returns:
         df: The bounding box dataframe,
         spec: The dense spectrogram
-        normal: The normalization factor
+        mean: The spectrogram mean
+        l2_norm: The spectrogram l2 norm
     """
     df_bytes = item["df"]
     spec_bytes = item["spectrogram"]
-    normal = item["normalization_factor"]
+    mean = item["spectrogram_mean"]
+    l2_norm = item["spectrogram_l2_norm"]
 
     # Recreate Data
     df = pd.DataFrame(pickle.loads(df_bytes))
     spec = pickle.loads(spec_bytes)
     if config["general"].getboolean("db_sparse"):
         spec = spec.todense()
-    return df, spec, normal
+    return df, spec, mean, l2_norm
 
 
 def cursor_item_to_stats(item):

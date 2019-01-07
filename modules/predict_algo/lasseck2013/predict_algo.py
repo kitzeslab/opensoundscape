@@ -75,11 +75,16 @@ def run_stats(predict_idx, train_labels_df, config):
     )
     from model_fit_algo import get_file_stats, get_file_file_stats
 
-    df_predict, spec_predict, normal_predict, row_predict = get_file_stats(
+    df_predict, spec_predict, spec_mean_predict, spec_l2_norm_predict, row_predict = get_file_stats(
         predict_idx, config
     )
     match_stats_dict = get_file_file_stats(
-        df_predict, spec_predict, normal_predict, train_labels_df, config
+        df_predict,
+        spec_predict,
+        spec_mean_predict,
+        spec_l2_norm_predict,
+        train_labels_df,
+        config,
     )
     write_file_stats(predict_idx, row_predict, match_stats_dict, config)
 
