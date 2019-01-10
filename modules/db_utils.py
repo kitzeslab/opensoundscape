@@ -187,6 +187,9 @@ def write_spectrogram(label, df, spec, mean, l2_norm, config):
     else:
         spec_bytes = pickle.dumps(spec)
 
+    mean_bytes = pickle.dumps(mean)
+    l2_norm_bytes = pickle.dumps(l2_norm)
+
     db = client[config["general"]["db_name"]]
     coll = db["spectrograms"]
     coll.update_one(
@@ -195,8 +198,8 @@ def write_spectrogram(label, df, spec, mean, l2_norm, config):
             "$set": {
                 "df": df_bytes,
                 "spectrogram": spec_bytes,
-                "spectrogram_mean": mean,
-                "spectrogram_l2_norm": l2_norm,
+                "spectrogram_mean": mean_bytes,
+                "spectrogram_l2_norm": l2_norm_bytes,
                 "preprocess_date": datetime.now(),
             }
         },
@@ -278,12 +281,14 @@ def cursor_item_to_data(item, config):
     """
     df_bytes = item["df"]
     spec_bytes = item["spectrogram"]
-    mean = item["spectrogram_mean"]
-    l2_norm = item["spectrogram_l2_norm"]
+    mean_bytes = item["spectrogram_mean"]
+    l2_norm_bytes = item["spectrogram_l2_norm"]
 
     # Recreate Data
     df = pd.DataFrame(pickle.loads(df_bytes))
     spec = pickle.loads(spec_bytes)
+    mean = pickle.loads(mean_bytes)
+    l2_norm = pickle.loads(l2_norm_bytes)
     if config["general"].getboolean("db_sparse"):
         spec = spec.todense()
     return df, spec, mean, l2_norm
