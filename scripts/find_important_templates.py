@@ -61,23 +61,13 @@ def sampled_X_y(species_found, species_not_found):
     all_file_file_statistics = [None] * sampled_df.shape[0]
     for idx, item in enumerate(items):
         _, file_file_stats = cursor_item_to_stats(item)
-        all_file_file_statistics[idx] = [
+        all_file_file_statistics[idx] = np.vstack([
             file_file_stats[found] for found in species_found.index.values
-        ]
+        ])
 
-    # Stack internal stats
-    # -> convert to NP array
-    # -> extract only template matching stat specifically [:, :, 0]
-    npify = [None] * sampled_df.shape[0]
-    for o_idx in range(len(all_file_file_statistics)):
-        stack = np.vstack(
-            [
-                all_file_file_statistics[o_idx][x]
-                for x in range(len(all_file_file_statistics[o_idx]))
-            ]
-        )
-        npify[o_idx] = copy(stack)
-    all_file_file_statistics = np.array(npify)[:, :, 0]
+    # Convert all_file_file_statistics to numpy array
+    # -> extract the cross correlations only
+    all_file_file_statistics = np.array(all_file_file_statistics)[:, :, 0]
 
     # Generate X and y
     return pd.DataFrame(all_file_file_statistics), pd.Series(sampled_df.values)
