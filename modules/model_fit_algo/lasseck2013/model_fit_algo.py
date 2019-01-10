@@ -29,8 +29,69 @@ from modules.utils import return_cpu_count
 from modules.image_utils import generate_raw_blurred_spectrogram
 from modules.utils import get_stratification_percent
 from modules.utils import get_template_matching_algorithm
-from cv2 import matchTemplate
+from cv2 import matchTemplate as opencvMatchTemplate
 from cv2 import minMaxLoc
+
+
+def znccMatchTemplate(spectrogram, template):
+    """Use ZNCC template matching algorithm
+
+    Given a template and a spectrogram, slide the template along
+    the spectrogram using the ZNCC method and return the cross correlations
+
+    Args:
+        spectrogram: The target spectrogram to match against
+        template: The template to slide over the spectrogram
+
+    Returns:
+        cross_corrs: A 2d matrix of cross correlations
+    """
+
+    # Dimensions of the cross_corrs matrix
+    o_max = spectrogram.shape[0] - template.shape[0] + 1
+    i_max = spectrogram.shape[1] - template.shape[1] + 1
+
+    output = np.zeros((o_max, i_max), dtype="float32")
+
+    # Compute (A - \bar{A}) / ||A||
+    T = (template - np.mean(template)) / np.linalg.norm(template, ord=2)
+    S = (spectrogram - np.mean(spectrogram)) / np.linalg.norm(spectrogram, ord=2)
+
+    for o_idx in range(o_max):
+        for i_idx in range(i_max):
+            o_up_bound = o_idx + template.shape[0]
+            i_up_bound = i_idx + template.shape[1]
+            output[o_idx, i_idx] = np.sum(S[o_idx:o_up_bound, i_idx:i_up_bound] * T)
+
+    return np.nan_to_num(output)
+
+
+def matchTemplate(spectrogram, template, config):
+    """Use template matching to produce cross correlations
+
+    Given a spectrogram and a template, use an algorithm to generate
+    the maximum cross correlation and locations.
+
+    Args:
+        spectrogram: The target spectrogram to match against
+        template: The template to slide over the spectrogram
+        config: The opensoundscape config
+
+    Returns:
+        max_ccorr: The maximum cross correlation value
+        max_loc_bot_left: The bottom left location of template for max_ccor
+        max_loc_top_right: The top right location of template for max_ccor
+    """
+    method = config["model_fit"]["template_match_method"]
+    if method == "opencv":
+        output_stats = opencvMatchTemplate(
+            spectrogram, template, get_template_matching_algorithm(config)
+        )
+    elif method == "zncc":
+        output_stats = znccMatchTemplate(spectrogram, template)
+
+    _, max_ccorr, _, (max_loc_bot_left, max_loc_top_right) = minMaxLoc(output_stats)
+    return max_ccorr, max_loc_bot_left, max_loc_top_right
 
 
 def binary_classify(correct, predicted):
@@ -241,15 +302,21 @@ def get_file_file_stats(df_one, spec_one, normal_one, labels_df, config):
                 y_max_target - y_min_target <= spec_one.shape[0]
                 and row["x_max"] - row["x_min"] <= spec_one.shape[1]
             ):
-                output_stats = matchTemplate(
-                    spec_one[y_min_target:y_max_target, :],
-                    row["segments"],
-                    get_template_matching_algorithm(config),
+                # output_stats = matchTemplate(
+                #     spec_one[y_min_target:y_max_target, :],
+                #     row["segments"],
+                #     get_template_matching_algorithm(config),
+                # )
+                # _, max_val, _, max_loc = minMaxLoc(output_stats)
+                max_val, max_loc_bot_left, max_loc_top_right = matchTemplate(
+                    spec_one[y_min_target:y_max_target, :], row["segments"], config
                 )
-                _, max_val, _, max_loc = minMaxLoc(output_stats)
+                # match_stats_dict[idx_two][idx][0] = max_val
+                # match_stats_dict[idx_two][idx][1] = max_loc[0]
+                # match_stats_dict[idx_two][idx][2] = max_loc[1] + y_min_target
                 match_stats_dict[idx_two][idx][0] = max_val
-                match_stats_dict[idx_two][idx][1] = max_loc[0]
-                match_stats_dict[idx_two][idx][2] = max_loc[1] + y_min_target
+                match_stats_dict[idx_two][idx][1] = max_loc_bot_left
+                match_stats_dict[idx_two][idx][2] = max_loc_top_right + y_min_target
     return match_stats_dict
 
 
@@ -339,9 +406,9 @@ def build_X_y(labels_df, config):
     for item in items:
         mono_idx = labels_df.index.get_loc(item["label"])
         file_stats[mono_idx], file_file_stats[mono_idx] = cursor_item_to_stats(item)
-        file_file_stats[mono_idx] = np.vstack([
-            file_file_stats[mono_idx][x] for x in get_file_file_stats_for
-        ])
+        file_file_stats[mono_idx] = np.vstack(
+            [file_file_stats[mono_idx][x] for x in get_file_file_stats_for]
+        )
 
     # Shape: (num_files, 80), 80 is number of file statistics
     # -> sometimes garbage data in file_stats (i.e. need nan_to_num)
