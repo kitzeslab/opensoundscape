@@ -26,6 +26,7 @@ from modules.db_utils import set_model_fit_skip
 from modules.spect_gen import spect_gen
 from modules.view import extract_segments
 from modules.utils import return_cpu_count
+from modules.image_utils import generate_raw_spectrogram
 from modules.image_utils import generate_raw_blurred_spectrogram
 from modules.utils import get_stratification_percent
 from modules.utils import get_template_matching_algorithm
@@ -131,22 +132,22 @@ def get_file_stats(label, config):
         config: The parsed ini configuration
 
     Returns:
-        The bounding box DF, spectrogram, and normalization factor for the input
+        The bounding box DF, spectrogram, and normalization factors for the input
         label
 
     Raises:
         Nothing.
     """
 
-    # Generate the df, spectrogram, and normalization factor
+    # Generate the df, spectrogram, and normalization factors
     # -> Read from MongoDB or preprocess
     if config["general"].getboolean("db_rw"):
-        df, spec, normal = read_spectrogram(label, config)
+        df, spec, spec_mean, spec_l2_norm = read_spectrogram(label, config)
     else:
-        df, spec, normal = spect_gen(config)
+        df, spec, spec_mean, spec_l2_norm = spect_gen(config)
 
     # Generate the Raw Spectrogram
-    raw_spec = spec * normal
+    raw_spec = generate_raw_spectrogram(spec, spec_mean, spec_l2_norm)
 
     # Raw Spectrogram Stats
     raw_spec_stats = stats.describe(raw_spec, axis=None)
@@ -198,20 +199,23 @@ def get_file_stats(label, config):
     # The row is now a complicated object, need to flatten it
     row = np.ravel(row)
 
-    return df, spec, normal, row
+    return df, spec, spec_mean, spec_l2_norm, row
 
 
-def get_file_file_stats(df_one, spec_one, normal_one, labels_df, config):
+def get_file_file_stats(
+    df_one, spec_one, spec_mean_one, spec_l2_norm_one, labels_df, config
+):
     """Generate the second order statistics
 
-    Given a df, spec, and normal for label_one, generate the file-file statistics
+    Given a df, spec, and normalization factors for label_one, generate the file-file statistics
     for all files (or downselect w/ template_pool.csv file)
 
     Args:
         monotonic_idx_one: The monotonic index for df_one
         df_one: The bounding box dataframe for label_one
         spec_one: The spectrum for label_one
-        normal_one: The normalization factor for label_one
+        spec_mean_one: The raw spectrogram mean
+        spec_l2_norm_one: The raw spectrogram l2 norm
         labels_df: All other labels
         config: The parsed ini configuration
 
@@ -253,7 +257,10 @@ def get_file_file_stats(df_one, spec_one, normal_one, labels_df, config):
     match_stats_dict = {}
 
     spec_one = generate_raw_blurred_spectrogram(
-        spec_one, normal_one, config["model_fit"]["gaussian_filter_sigma"]
+        spec_one,
+        spec_mean_one,
+        spec_l2_norm_one,
+        config["model_fit"]["gaussian_filter_sigma"],
     )
 
     # Iterate through the cursor
@@ -264,12 +271,17 @@ def get_file_file_stats(df_one, spec_one, normal_one, labels_df, config):
         # monotonic_idx_two = monotonic_idx_two[0]
 
         if config["general"].getboolean("db_rw"):
-            df_two, spec_two, normal_two = cursor_item_to_data(item, config)
+            df_two, spec_two, spec_mean_two, spec_l2_norm_two = cursor_item_to_data(
+                item, config
+            )
         else:
-            df_two, spec_two, normal_two = spect_gen(config)
+            df_two, spec_two, spec_mean_two, spec_l2_norm_two = spect_gen(config)
 
         spec_two = generate_raw_blurred_spectrogram(
-            spec_two, normal_two, config["model_fit"]["gaussian_filter_sigma"]
+            spec_two,
+            spec_mean_two,
+            spec_l2_norm_two,
+            config["model_fit"]["gaussian_filter_sigma"],
         )
 
         # Extract segments
@@ -364,8 +376,12 @@ def run_stats(idx_one, labels_df, config):
     Raises:
         Nothing.
     """
-    df_one, spec_one, normal_one, row_f = get_file_stats(idx_one, config)
-    match_stats = get_file_file_stats(df_one, spec_one, normal_one, labels_df, config)
+    df_one, spec_one, spec_mean_one, spec_l2_norm_one, row_f = get_file_stats(
+        idx_one, config
+    )
+    match_stats = get_file_file_stats(
+        df_one, spec_one, spec_mean_one, spec_l2_norm_one, labels_df, config
+    )
     write_file_stats(idx_one, row_f, match_stats, config)
 
 

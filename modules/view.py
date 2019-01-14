@@ -150,13 +150,16 @@ def view(label, image, seg_only, config):
 
     # Get the data, from the database or recreate
     init_client(config)
-    df, spectrogram, normalization_factor = read_spectrogram(label, config)
+    df, spectrogram, spectrogram_mean, spectrogram_l2_norm = read_spectrogram(
+        label, config
+    )
     close_client()
 
     spectrogram = generate_raw_blurred_spectrogram(
         spectrogram,
-        normalization_factor,
-        config["model_fit"]["gaussian_filter_sigma"]
+        spectrogram_mean,
+        spectrogram_l2_norm,
+        config["model_fit"]["gaussian_filter_sigma"],
     )
 
     # Either vizualize spectrogram w/ bounding boxes

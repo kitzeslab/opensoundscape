@@ -131,6 +131,7 @@ def chunk_preprocess(chunk, config):
 
     return
 
+
 def preprocess(label, config):
     """Preprocess all images
 
@@ -163,7 +164,9 @@ def preprocess(label, config):
     # Force to mono if wav has multiple channels
     if samples.ndim > 1:
         samples = to_mono(samples)
-        print(f"WARNING: Multiple-channel file detected ({config['general']['data_dir']}/{label}). Automatically mixed to mono.")
+        print(
+            f"WARNING: Multiple-channel file detected ({config['general']['data_dir']}/{label}). Automatically mixed to mono."
+        )
 
     # Generate Spectrogram
     nperseg = config["spect_gen"].getint("spectrogram_segment_length")
@@ -187,9 +190,10 @@ def preprocess(label, config):
         config["spect_gen"].getint("high_freq_thresh"),
     )
 
-    # Normalization, need spectrogram_max later
-    spectrogram_max = float(spectrogram.max())
-    spectrogram /= spectrogram_max
+    # Z-score normalization, need mean and l2 norm later
+    spectrogram_mean = spectrogram.mean()
+    spectrogram_l2_norm = np.linalg.norm(spectrogram, ord=2)
+    spectrogram = (spectrogram - spectrogram_mean) / spectrogram_l2_norm
 
     # Scaled Median Column/Row Filters
     binary_spectrogram = scaled_median_filter(
@@ -239,9 +243,11 @@ def preprocess(label, config):
 
     # Write to DB, if defined:
     if config["general"].getboolean("db_rw"):
-        write_spectrogram(label, bboxes_df, spectrogram, spectrogram_max, config)
+        write_spectrogram(
+            label, bboxes_df, spectrogram, spectrogram_mean, spectrogram_l2_norm, config
+        )
     else:
-        return bboxes_df, spectrogram, spectrogram_max
+        return bboxes_df, spectrogram, spectrogram_mean, spectrogram_l2_norm
 
 
 def spect_gen_algo(config):
