@@ -34,7 +34,7 @@ from cv2 import matchTemplate as opencvMatchTemplate
 from cv2 import minMaxLoc
 
 
-def znccMatchTemplate(spectrogram, template):
+def crossCorrMatchTemplate(spectrogram, template):
     """Use ZNCC template matching algorithm
 
     Given a template and a spectrogram, slide the template along
@@ -53,10 +53,6 @@ def znccMatchTemplate(spectrogram, template):
     i_max = spectrogram.shape[1] - template.shape[1] + 1
 
     output = np.zeros((o_max, i_max), dtype="float32")
-
-    # Compute (A - \bar{A}) / ||A||
-    # T = (template - np.mean(template)) / np.linalg.norm(template, ord=2)
-    # S = (spectrogram - np.mean(spectrogram)) / np.linalg.norm(spectrogram, ord=2)
 
     for o_idx in range(o_max):
         for i_idx in range(i_max):
@@ -90,8 +86,8 @@ def matchTemplate(spectrogram, template, config):
         output_stats = opencvMatchTemplate(
             spectrogram, template, get_template_matching_algorithm(config)
         )
-    elif method == "zncc":
-        output_stats = znccMatchTemplate(spectrogram, template)
+    elif method == "cross_corr":
+        output_stats = crossCorrMatchTemplate(spectrogram, template)
 
     _, max_ccorr, _, (max_loc_bot_left, max_loc_top_right) = minMaxLoc(output_stats)
     return max_ccorr, max_loc_bot_left, max_loc_top_right
@@ -310,18 +306,9 @@ def get_file_file_stats(
                 y_max_target - y_min_target <= spec_one.shape[0]
                 and row["x_max"] - row["x_min"] <= spec_one.shape[1]
             ):
-                # output_stats = matchTemplate(
-                #     spec_one[y_min_target:y_max_target, :],
-                #     row["segments"],
-                #     get_template_matching_algorithm(config),
-                # )
-                # _, max_val, _, max_loc = minMaxLoc(output_stats)
                 max_val, max_loc_bot_left, max_loc_top_right = matchTemplate(
                     spec_one[y_min_target:y_max_target, :], row["segments"], config
                 )
-                # match_stats_dict[idx_two][idx][0] = max_val
-                # match_stats_dict[idx_two][idx][1] = max_loc[0]
-                # match_stats_dict[idx_two][idx][2] = max_loc[1] + y_min_target
                 match_stats_dict[idx_two][idx][0] = max_val
                 match_stats_dict[idx_two][idx][1] = max_loc_bot_left
                 match_stats_dict[idx_two][idx][2] = max_loc_top_right + y_min_target
