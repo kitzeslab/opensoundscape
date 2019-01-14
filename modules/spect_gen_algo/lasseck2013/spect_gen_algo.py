@@ -156,7 +156,7 @@ def preprocess(label, config):
     # Resample
     samples, sample_rate = load(
         f"{config['general']['data_dir']}/{label}",
-        mono=False,  # Don't automatically load as mono, so we can warn if we force to mono
+        mono=False, # Don't automatically load as mono, so we can warn if we force to mono
         sr=config["spect_gen"].getfloat("resample_rate"),
         res_type=config["spect_gen"]["resample_type"]
     )
