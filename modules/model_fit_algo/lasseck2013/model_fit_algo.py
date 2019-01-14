@@ -26,6 +26,7 @@ from modules.db_utils import set_model_fit_skip
 from modules.spect_gen import spect_gen
 from modules.view import extract_segments
 from modules.utils import return_cpu_count
+from modules.image_utils import apply_gaussian_filter
 from modules.image_utils import generate_raw_spectrogram
 from modules.image_utils import generate_raw_blurred_spectrogram
 from modules.utils import get_stratification_percent
@@ -55,14 +56,16 @@ def znccMatchTemplate(spectrogram, template):
     output = np.zeros((o_max, i_max), dtype="float32")
 
     # Compute (A - \bar{A}) / ||A||
-    T = (template - np.mean(template)) / np.linalg.norm(template, ord=2)
-    S = (spectrogram - np.mean(spectrogram)) / np.linalg.norm(spectrogram, ord=2)
+    # T = (template - np.mean(template)) / np.linalg.norm(template, ord=2)
+    # S = (spectrogram - np.mean(spectrogram)) / np.linalg.norm(spectrogram, ord=2)
 
     for o_idx in range(o_max):
         for i_idx in range(i_max):
             o_up_bound = o_idx + template.shape[0]
             i_up_bound = i_idx + template.shape[1]
-            output[o_idx, i_idx] = np.sum(S[o_idx:o_up_bound, i_idx:i_up_bound] * T)
+            output[o_idx, i_idx] = np.sum(
+                spectrogram[o_idx:o_up_bound, i_idx:i_up_bound] * template
+            )
 
     return np.nan_to_num(output)
 
@@ -256,11 +259,14 @@ def get_file_file_stats(
 
     match_stats_dict = {}
 
-    spec_one = generate_raw_blurred_spectrogram(
-        spec_one,
-        spec_mean_one,
-        spec_l2_norm_one,
-        config["model_fit"]["gaussian_filter_sigma"],
+    # spec_one = generate_raw_blurred_spectrogram(
+    #     spec_one,
+    #     spec_mean_one,
+    #     spec_l2_norm_one,
+    #     config["model_fit"]["gaussian_filter_sigma"],
+    # )
+    spec_one = apply_gaussian_filter(
+        spec_one, config["model_fit"]["gaussian_filter_sigma"]
     )
 
     # Iterate through the cursor
@@ -277,11 +283,14 @@ def get_file_file_stats(
         else:
             df_two, spec_two, spec_mean_two, spec_l2_norm_two = spect_gen(config)
 
-        spec_two = generate_raw_blurred_spectrogram(
-            spec_two,
-            spec_mean_two,
-            spec_l2_norm_two,
-            config["model_fit"]["gaussian_filter_sigma"],
+        # spec_two = generate_raw_blurred_spectrogram(
+        #     spec_two,
+        #     spec_mean_two,
+        #     spec_l2_norm_two,
+        #     config["model_fit"]["gaussian_filter_sigma"],
+        # )
+        spec_two = apply_gaussian_filter(
+            spec_two, config["model_fit"]["gaussian_filter_sigma"]
         )
 
         # Extract segments
