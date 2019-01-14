@@ -28,7 +28,6 @@ from modules.view import extract_segments
 from modules.utils import return_cpu_count
 from modules.image_utils import apply_gaussian_filter
 from modules.image_utils import generate_raw_spectrogram
-from modules.image_utils import generate_raw_blurred_spectrogram
 from modules.utils import get_stratification_percent
 from modules.utils import get_template_matching_algorithm
 from cv2 import matchTemplate as opencvMatchTemplate
@@ -259,12 +258,6 @@ def get_file_file_stats(
 
     match_stats_dict = {}
 
-    # spec_one = generate_raw_blurred_spectrogram(
-    #     spec_one,
-    #     spec_mean_one,
-    #     spec_l2_norm_one,
-    #     config["model_fit"]["gaussian_filter_sigma"],
-    # )
     spec_one = apply_gaussian_filter(
         spec_one, config["model_fit"]["gaussian_filter_sigma"]
     )
@@ -283,12 +276,6 @@ def get_file_file_stats(
         else:
             df_two, spec_two, spec_mean_two, spec_l2_norm_two = spect_gen(config)
 
-        # spec_two = generate_raw_blurred_spectrogram(
-        #     spec_two,
-        #     spec_mean_two,
-        #     spec_l2_norm_two,
-        #     config["model_fit"]["gaussian_filter_sigma"],
-        # )
         spec_two = apply_gaussian_filter(
             spec_two, config["model_fit"]["gaussian_filter_sigma"]
         )
