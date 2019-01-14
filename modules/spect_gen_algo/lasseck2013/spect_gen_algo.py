@@ -10,6 +10,7 @@ from skimage.morphology import remove_small_objects
 from modules.db_utils import init_client
 from modules.db_utils import close_client
 from modules.db_utils import write_spectrogram
+from modules.utils import get_percent_from_section
 from modules.utils import return_cpu_count
 
 
@@ -73,6 +74,28 @@ def decible_filter(spectrogram, db_cutoff):
     return 10.0 ** (inDb / 10.0)
 
 
+def low_values_filter(spectrogram, percent_threshold):
+    """Filter values lower than percent_threshold
+
+    Given a spectrogram, set anything below the percent_threshold to
+    False. Then, return the logical_and with itself.
+
+    Args:
+        spectrogram: The input spectrogram
+        percent_threshold: The percent threshold to drop under
+    
+    Returns:
+        new_spectrogram: A binary spectrogram
+    """
+
+    _temp = np.copy(spectrogram)
+    _min = np.min(_temp)
+    _max = np.max(_temp)
+    _threshold = _min + ((_max - _min) * percent_threshold)
+    _temp[_temp <= _threshold] = False
+    return np.logical_and(_temp, _temp)
+
+
 def scaled_median_filter(spec, factor):
     """Filter via scaled median threshold
 
@@ -89,19 +112,18 @@ def scaled_median_filter(spec, factor):
         A binary spectrogram
     """
 
-    _minimum = np.min(spec)
-    _temp = np.copy(spec)
-    _temp[_temp == _minimum] = np.nan
-
     def _filter_by_scaled_median(array, minimum):
-        _i_temp = np.copy(array)
-        _median = factor * np.nanmedian(_i_temp)
-        _i_temp[np.isnan(_i_temp)] = minimum
-        _i_temp[_i_temp < _median] = False
-        return _i_temp
+        _temp = np.copy(array)
+        if np.any(_temp != minimum):
+            _median = factor * np.median(_temp[_temp != minimum])
+            _temp[_temp < _median] = False
+        else:
+            _temp.fill(False)
+        return _temp
 
-    row_filt = np.apply_along_axis(_filter_by_scaled_median, 0, _temp, _minimum)
-    col_filt = np.apply_along_axis(_filter_by_scaled_median, 1, _temp, _minimum)
+    minimum = np.min(spec)
+    row_filt = np.apply_along_axis(_filter_by_scaled_median, 0, spec, minimum)
+    col_filt = np.apply_along_axis(_filter_by_scaled_median, 1, spec, minimum)
     return np.logical_and(row_filt, col_filt)
 
 
@@ -222,9 +244,16 @@ def preprocess(label, config):
     spectrogram_l2_norm = np.linalg.norm(spectrogram, ord=2)
     spectrogram = (spectrogram - spectrogram_mean) / spectrogram_l2_norm
 
-    # Scaled Median Column/Row Filters
-    binary_spectrogram = scaled_median_filter(
-        spectrogram, config["spect_gen"].getfloat("median_filter_factor")
+    # # Scaled Median Column/Row Filters
+    # -> this filter stinks after z-score normalization
+    # binary_spectrogram = scaled_median_filter(
+    #     spectrogram, config["spect_gen"].getfloat("median_filter_factor")
+    # )
+
+    # Low values filter
+    binary_spectrogram = low_values_filter(
+        spectrogram,
+        get_percent_from_section(config, "spect_gen", "low_values_filter_percent"),
     )
 
     # Binary Closing
