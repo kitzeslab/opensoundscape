@@ -10,6 +10,7 @@ from skimage.morphology import remove_small_objects
 from modules.db_utils import init_client
 from modules.db_utils import close_client
 from modules.db_utils import write_spectrogram
+from modules.utils import get_percent_from_section
 from modules.utils import return_cpu_count
 
 
@@ -55,11 +56,51 @@ def generate_segments_from_binary_spectrogram(binary_spec, buffer):
     return df
 
 
+def decible_filter(spectrogram, db_cutoff):
+    """Filter spectrogram with a minimum decibel cutoff
+
+    Given a spectrogram, set anything below the cutoff to the cutoff
+
+    Args:
+        spectrogram: The input spectrogram in V**2
+        db_cutoff: The minimum cutoff value in dB
+
+    Returns:
+        new_spectrogram: The output spectogram in V**2
+    """
+
+    inDb = 10.0 * np.log10(spectrogram)
+    inDb[inDb <= db_cutoff] = db_cutoff
+    return 10.0 ** (inDb / 10.0)
+
+
+def low_values_filter(spectrogram, percent_threshold):
+    """Filter values lower than percent_threshold
+
+    Given a spectrogram, set anything below the percent_threshold to
+    False. Then, return the logical_and with itself.
+
+    Args:
+        spectrogram: The input spectrogram
+        percent_threshold: The percent threshold to drop under
+    
+    Returns:
+        new_spectrogram: A binary spectrogram
+    """
+
+    _temp = np.copy(spectrogram)
+    _min = np.min(_temp)
+    _max = np.max(_temp)
+    _threshold = _min + ((_max - _min) * percent_threshold)
+    _temp[_temp <= _threshold] = False
+    return np.logical_and(_temp, _temp)
+
+
 def scaled_median_filter(spec, factor):
     """Filter via scaled median threshold
 
     Given a spectrogram, filter rows and columns by the median with a scaling
-    factor anything below the threshold is set to 0.0. _filter_by_scaled_median
+    factor anything below the threshold is set to False. _filter_by_scaled_median
     is the function which allows us to do this.  By returning the logical_and
     we are converting the spectrogram to binary for additional processing.
 
@@ -71,16 +112,18 @@ def scaled_median_filter(spec, factor):
         A binary spectrogram
     """
 
-    def _filter_by_scaled_median(arr):
-        _temp = np.copy(arr)
-        median = factor * np.median(_temp)
-        for i, val in enumerate(_temp):
-            if val < median:
-                _temp[i] = 0.0
+    def _filter_by_scaled_median(array, minimum):
+        _temp = np.copy(array)
+        if np.any(_temp != minimum):
+            _median = factor * np.median(_temp[_temp != minimum])
+            _temp[_temp < _median] = False
+        else:
+            _temp.fill(False)
         return _temp
 
-    row_filt = np.apply_along_axis(_filter_by_scaled_median, 0, spec)
-    col_filt = np.apply_along_axis(_filter_by_scaled_median, 1, spec)
+    minimum = np.min(spec)
+    row_filt = np.apply_along_axis(_filter_by_scaled_median, 0, spec, minimum)
+    col_filt = np.apply_along_axis(_filter_by_scaled_median, 1, spec, minimum)
     return np.logical_and(row_filt, col_filt)
 
 
@@ -156,9 +199,9 @@ def preprocess(label, config):
     # Resample
     samples, sample_rate = load(
         f"{config['general']['data_dir']}/{label}",
-        mono=False, # Don't automatically load as mono, so we can warn if we force to mono
+        mono=False,  # Don't automatically load as mono, so we can warn if we force to mono
         sr=config["spect_gen"].getfloat("resample_rate"),
-        res_type=config["spect_gen"]["resample_type"]
+        res_type=config["spect_gen"]["resample_type"],
     )
 
     # Force to mono if wav has multiple channels
@@ -180,6 +223,7 @@ def preprocess(label, config):
         nperseg=nperseg,
         noverlap=noverlap,
         nfft=nperseg,
+        scaling="spectrum",
     )
 
     # Frequency Selection
@@ -190,14 +234,26 @@ def preprocess(label, config):
         config["spect_gen"].getint("high_freq_thresh"),
     )
 
+    # Decibel filter
+    spectrogram = decible_filter(
+        spectrogram, config["spect_gen"].getfloat("decibel_threshold")
+    )
+
     # Z-score normalization, need mean and l2 norm later
     spectrogram_mean = spectrogram.mean()
     spectrogram_l2_norm = np.linalg.norm(spectrogram, ord=2)
     spectrogram = (spectrogram - spectrogram_mean) / spectrogram_l2_norm
 
-    # Scaled Median Column/Row Filters
-    binary_spectrogram = scaled_median_filter(
-        spectrogram, config["spect_gen"].getfloat("median_filter_factor")
+    # # Scaled Median Column/Row Filters
+    # -> this filter stinks after z-score normalization
+    # binary_spectrogram = scaled_median_filter(
+    #     spectrogram, config["spect_gen"].getfloat("median_filter_factor")
+    # )
+
+    # Low values filter
+    binary_spectrogram = low_values_filter(
+        spectrogram,
+        get_percent_from_section(config, "spect_gen", "low_values_filter_percent"),
     )
 
     # Binary Closing

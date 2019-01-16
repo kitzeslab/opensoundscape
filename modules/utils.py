@@ -13,10 +13,10 @@ from cv2 import TM_SQDIFF
 from cv2 import TM_SQDIFF_NORMED
 
 
-def get_stratification_percent(config):
-    """Return the stratification_percent
+def get_percent_from_section(config, section, item):
+    """Return a percent
 
-    Get stratification_percent and verify it. If it is greater than 1 assume
+    Get percent and verify it. If it is greater than 1 assume
     it needs to be divided by 100, otherwise return it.
 
     Args:
@@ -26,14 +26,14 @@ def get_stratification_percent(config):
         percent stratification between 0 and 1
     """
 
-    val = config["model_fit"].getfloat("stratification_percent")
-    if val > 0.0 and val < 1.0:
+    val = config[section].getfloat(item)
+    if val > 0.0 and val <= 1.0:
         return val
-    elif val < 100.0:
+    elif val <= 100.0:
         return val / 100.0
     else:
         raise ValueError(
-            "stratification_percent can be (0,1), e.g. 0.33, or [1,100), e.g. 33.3"
+            f"Percent {section}.{item} can be (0,1), e.g. 0.33, or [1,100), e.g. 33.3"
         )
 
 
