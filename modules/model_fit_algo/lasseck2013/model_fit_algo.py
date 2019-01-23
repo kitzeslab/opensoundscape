@@ -54,13 +54,19 @@ def crossCorrMatchTemplate(spectrogram, template):
 
     output = np.zeros((o_max, i_max), dtype="float32")
 
+    T = (template - np.mean(template)) / np.linalg.norm(template, ord=1)
+
     for o_idx in range(o_max):
         for i_idx in range(i_max):
             o_up_bound = o_idx + template.shape[0]
             i_up_bound = i_idx + template.shape[1]
-            output[o_idx, i_idx] = np.sum(
-                spectrogram[o_idx:o_up_bound, i_idx:i_up_bound] * template
+
+            image_slice = spectrogram[o_idx:o_up_bound, i_idx:i_up_bound]
+            I = (image_slice - np.mean(image_slice)) / np.linalg.norm(
+                image_slice, ord=1
             )
+
+            output[o_idx, i_idx] = np.sum(I * T)
 
     return np.nan_to_num(output)
 
