@@ -54,7 +54,7 @@ def crossCorrMatchTemplate(spectrogram, template):
 
     output = np.zeros((o_max, i_max), dtype="float32")
 
-    T = (template - np.mean(template)) / np.linalg.norm(template, ord=1)
+    T = (template - np.mean(template)) / np.std(template)
 
     for o_idx in range(o_max):
         for i_idx in range(i_max):
@@ -62,11 +62,9 @@ def crossCorrMatchTemplate(spectrogram, template):
             i_up_bound = i_idx + template.shape[1]
 
             image_slice = spectrogram[o_idx:o_up_bound, i_idx:i_up_bound]
-            I = (image_slice - np.mean(image_slice)) / np.linalg.norm(
-                image_slice, ord=1
-            )
+            I = (image_slice - np.mean(image_slice)) / np.std(image_slice)
 
-            output[o_idx, i_idx] = np.sum(I * T)
+            output[o_idx, i_idx] = np.sum(I * T) / I.size
 
     return np.nan_to_num(output)
 
@@ -146,12 +144,12 @@ def get_file_stats(label, config):
     # Generate the df, spectrogram, and normalization factors
     # -> Read from MongoDB or preprocess
     if config["general"].getboolean("db_rw"):
-        df, spec, spec_mean, spec_l2_norm = read_spectrogram(label, config)
+        df, spec, spec_mean, spec_std = read_spectrogram(label, config)
     else:
-        df, spec, spec_mean, spec_l2_norm = spect_gen(config)
+        df, spec, spec_mean, spec_std = spect_gen(config)
 
     # Generate the Raw Spectrogram
-    raw_spec = generate_raw_spectrogram(spec, spec_mean, spec_l2_norm)
+    raw_spec = generate_raw_spectrogram(spec, spec_mean, spec_std)
 
     # Raw Spectrogram Stats
     raw_spec_stats = stats.describe(raw_spec, axis=None)
@@ -203,11 +201,11 @@ def get_file_stats(label, config):
     # The row is now a complicated object, need to flatten it
     row = np.ravel(row)
 
-    return df, spec, spec_mean, spec_l2_norm, row
+    return df, spec, spec_mean, spec_std, row
 
 
 def get_file_file_stats(
-    df_one, spec_one, spec_mean_one, spec_l2_norm_one, labels_df, config
+    df_one, spec_one, spec_mean_one, spec_std_one, labels_df, config
 ):
     """Generate the second order statistics
 
@@ -219,7 +217,7 @@ def get_file_file_stats(
         df_one: The bounding box dataframe for label_one
         spec_one: The spectrum for label_one
         spec_mean_one: The raw spectrogram mean
-        spec_l2_norm_one: The raw spectrogram l2 norm
+        spec_std_one: The raw spectrogram standard deviation
         labels_df: All other labels
         config: The parsed ini configuration
 
@@ -272,11 +270,11 @@ def get_file_file_stats(
         # monotonic_idx_two = monotonic_idx_two[0]
 
         if config["general"].getboolean("db_rw"):
-            df_two, spec_two, spec_mean_two, spec_l2_norm_two = cursor_item_to_data(
+            df_two, spec_two, spec_mean_two, spec_std_two = cursor_item_to_data(
                 item, config
             )
         else:
-            df_two, spec_two, spec_mean_two, spec_l2_norm_two = spect_gen(config)
+            df_two, spec_two, spec_mean_two, spec_std_two = spect_gen(config)
 
         spec_two = apply_gaussian_filter(
             spec_two, config["model_fit"]["gaussian_filter_sigma"]
@@ -365,11 +363,11 @@ def run_stats(idx_one, labels_df, config):
     Raises:
         Nothing.
     """
-    df_one, spec_one, spec_mean_one, spec_l2_norm_one, row_f = get_file_stats(
+    df_one, spec_one, spec_mean_one, spec_std_one, row_f = get_file_stats(
         idx_one, config
     )
     match_stats = get_file_file_stats(
-        df_one, spec_one, spec_mean_one, spec_l2_norm_one, labels_df, config
+        df_one, spec_one, spec_mean_one, spec_std_one, labels_df, config
     )
     write_file_stats(idx_one, row_f, match_stats, config)
 
