@@ -239,10 +239,10 @@ def preprocess(label, config):
         spectrogram, config["spect_gen"].getfloat("decibel_threshold")
     )
 
-    # Z-score normalization, need mean and l2 norm later
-    spectrogram_mean = spectrogram.mean()
-    spectrogram_l2_norm = np.linalg.norm(spectrogram, ord=2)
-    spectrogram = (spectrogram - spectrogram_mean) / spectrogram_l2_norm
+    # Z-score normalization, need mean and std later
+    spectrogram_mean = np.mean(spectrogram)
+    spectrogram_std = np.std(spectrogram)
+    spectrogram = (spectrogram - spectrogram_mean) / spectrogram_std
 
     # # Scaled Median Column/Row Filters
     # -> this filter stinks after z-score normalization
@@ -300,10 +300,10 @@ def preprocess(label, config):
     # Write to DB, if defined:
     if config["general"].getboolean("db_rw"):
         write_spectrogram(
-            label, bboxes_df, spectrogram, spectrogram_mean, spectrogram_l2_norm, config
+            label, bboxes_df, spectrogram, spectrogram_mean, spectrogram_std, config
         )
     else:
-        return bboxes_df, spectrogram, spectrogram_mean, spectrogram_l2_norm
+        return bboxes_df, spectrogram, spectrogram_mean, spectrogram_std
 
 
 def spect_gen_algo(config):
