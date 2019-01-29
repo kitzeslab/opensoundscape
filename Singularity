@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: archlinux/base
+From: ubuntu:bionic
 
 %setup
     mkdir -p ${SINGULARITY_ROOTFS}/opt/opensoundscape
@@ -9,12 +9,14 @@ From: archlinux/base
     AUTHOR moore0557@gmail.com
 
 %post
-    pacman -Syyu --noconfirm
-    pacman -S python python-pip gcc python-pandas python-numpy \
-        python-matplotlib python-docopt python-scipy python-pymongo \
-        tk mongodb mongodb-tools opencv hdf5 gtk3 python-scikit-learn \
-        --noconfirm
-    pip install -r /opt/opensoundscape/requirements-singularity.txt
+    apt-get update
+    apt-get upgrade
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        python3 python3-pip python3-pandas python3-numpy \
+        python3-matplotlib python3-scipy python3-pymongo \
+        python3-opencv python3-docopt mongodb
+    pip3 install -r /opt/opensoundscape/requirements-singularity.txt
+    apt-get clean
 
 %apprun opensoundscape
     python /opt/opensoundscape/opensoundscape.py $*
