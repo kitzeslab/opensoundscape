@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """ opensoundscape.py -- Opensoundscape
 Usage:
     opensoundscape.py [-hv]

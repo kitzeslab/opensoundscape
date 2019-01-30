@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """ find_important_templates.py
 
 Help find important templates for a given label in a dataset. This script will
@@ -61,9 +61,9 @@ def sampled_X_y(species_found, species_not_found):
     all_file_file_statistics = [None] * sampled_df.shape[0]
     for idx, item in enumerate(items):
         _, file_file_stats = cursor_item_to_stats(item)
-        all_file_file_statistics[idx] = np.vstack([
-            file_file_stats[found] for found in species_found.index.values
-        ])
+        all_file_file_statistics[idx] = np.vstack(
+            [file_file_stats[found] for found in species_found.index.values]
+        )
 
     # Convert all_file_file_statistics to numpy array
     # -> extract the cross correlations only
