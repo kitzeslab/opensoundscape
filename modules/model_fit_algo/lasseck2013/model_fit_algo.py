@@ -34,6 +34,29 @@ from cv2 import matchTemplate as opencvMatchTemplate
 from cv2 import minMaxLoc
 
 
+def should_we_match_templates(box, detections):
+    """Should we even waste time matching templates?
+
+    If there are no boxes in the source image to match against return False,
+    else return True (succeed fast)
+
+    Args:
+        box: The template which should be slid
+        detections: A Dataframe containing the image boxes
+
+    Returns:
+        Boolean: representing whether we should match templates (True) or not (False)
+    """
+
+    for image_box in detections.iterrows():
+        if (
+            image_box["y_min"] >= box["y_min"] and image_box["y_min"] < box["y_max"]
+        ) or (image_box["y_max"] <= box["y_max"] and image_box["y_max"] > box["y_min"]):
+            return True
+
+    return False
+
+
 def crossCorrMatchTemplate(spectrogram, template):
     """Use ZNCC template matching algorithm
 
@@ -292,6 +315,7 @@ def get_file_file_stats(
         # Slide segments over all other spectrograms
         frequency_buffer = config["model_fit"].getint("template_match_frequency_buffer")
         for idx, (_, row) in enumerate(df_two.iterrows()):
+
             # Determine minimum y target
             y_min_target = 0
             if row["y_min"] > frequency_buffer:
@@ -310,12 +334,13 @@ def get_file_file_stats(
                 y_max_target - y_min_target <= spec_one.shape[0]
                 and row["x_max"] - row["x_min"] <= spec_one.shape[1]
             ):
-                max_val, max_loc_bot_left, max_loc_top_right = matchTemplate(
-                    spec_one[y_min_target:y_max_target, :], row["segments"], config
-                )
-                match_stats_dict[idx_two][idx][0] = max_val
-                match_stats_dict[idx_two][idx][1] = max_loc_bot_left
-                match_stats_dict[idx_two][idx][2] = max_loc_top_right + y_min_target
+                if should_we_match_templates(row, df_one):
+                    max_val, max_loc_bot_left, max_loc_top_right = matchTemplate(
+                        spec_one[y_min_target:y_max_target, :], row["segments"], config
+                    )
+                    match_stats_dict[idx_two][idx][0] = max_val
+                    match_stats_dict[idx_two][idx][1] = max_loc_bot_left
+                    match_stats_dict[idx_two][idx][2] = max_loc_top_right + y_min_target
     return match_stats_dict
 
 
