@@ -24,5 +24,14 @@ From: ubuntu:bionic
 %appenv opensoundscape
     export MPLBACKEND="TkAgg"
 
+%apprun opso-script
+    python3 /opt/opensoundscape/scripts/$*
+
+%appenv opso-script
+    export MPLBACKEND="TkAgg"
+
+%apprun opso-script-ls
+    ls /opt/opensoundscape/scripts/*
+
 %apprun mongodb
     mongod $*
