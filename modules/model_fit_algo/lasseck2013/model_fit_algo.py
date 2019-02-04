@@ -525,22 +525,22 @@ def fit_model(X, y, labels_df, config):
         ]
     )
 
-    results = (
-        f"{roc_auc_score(y_train, y_train_pred)},"
-        f"{roc_auc_score(y_test, y_test_pred)},"
-        f"{precision_score(y_train, y_train_pred)},"
-        f"{precision_score(y_test, y_test_pred)},"
-        f"{recall_score(y_train, y_train_pred)},"
-        f"{recall_score(y_test, y_test_pred)},"
-        f"{f1_score(y_train, y_train_pred)},"
-        f"{f1_score(y_test, y_test_pred)},"
-        f'"{confusion_matrix(y_train, y_train_pred).tolist()}",'
-        f'"{confusion_matrix(y_test, y_test_pred).tolist()}",'
-        f"{train_false_neg},"
-        f"{train_false_pos},"
-        f"{test_false_neg},"
-        f"{test_false_pos}"
-    )
+    results = [
+        f"{roc_auc_score(y_train, y_train_pred)}",
+        f"{roc_auc_score(y_test, y_test_pred)}",
+        f"{precision_score(y_train, y_train_pred)}",
+        f"{precision_score(y_test, y_test_pred)}",
+        f"{recall_score(y_train, y_train_pred)}",
+        f"{recall_score(y_test, y_test_pred)}",
+        f"{f1_score(y_train, y_train_pred)}",
+        f"{f1_score(y_test, y_test_pred)}",
+        f'"{confusion_matrix(y_train, y_train_pred).tolist()}"',
+        f'"{confusion_matrix(y_test, y_test_pred).tolist()}"',
+        f"{train_false_neg}",
+        f"{train_false_pos}",
+        f"{test_false_neg}",
+        f"{test_false_pos}",
+    ]
 
     return grid_search.best_estimator_, scaler, results
 
@@ -590,17 +590,16 @@ def build_model(column, labels_df, config):
     X, y = build_X_y(labels_df[column], config)
     model, scaler, results = fit_model(X, y, labels_df, config)
     write_model(column, model, scaler, config)
-    return f"{column},{results}"
+    return column, results
 
 
-def model_fit_algo(config, rerun_statistics):
+def model_fit_algo(config):
     """Fit the lasseck2013 model
 
     We were directed here from model_fit to fit the lasseck2013 model.
 
     Args:
         config: The parsed ini file for this run
-        rerun_statistics: Force rerun of model_fit statistics
 
     Returns:
         Something or possibly writes to MongoDB
@@ -627,7 +626,9 @@ def model_fit_algo(config, rerun_statistics):
 
     # Run the statistics, if not already complete
     chunks = np.array_split(labels_df.index, nprocs)
-    if not get_model_fit_skip(config) or rerun_statistics:
+    if not get_model_fit_skip(config) or config["docopt"].getboolean(
+        "rerun_statistics"
+    ):
         fs = [
             executor.submit(chunk_run_stats, chunk, labels_df, config)
             for chunk in chunks
@@ -638,18 +639,45 @@ def model_fit_algo(config, rerun_statistics):
 
     set_model_fit_skip(config)
 
+    # Column Labels
+    metric_labels = [
+        "ROC AUC Train",
+        "ROC AUC Test",
+        "Precision Train",
+        "Precision Test",
+        "Recall Train",
+        "Recall Test",
+        "F1 Score Train",
+        "F1 Score Test",
+        "Confusion Matrix Train",
+        "Confusion Matrix Test",
+        "Train False Negative",
+        "Train False Positive",
+        "Test False Negative",
+        "Test False Positive",
+    ]
+
     # Build the models
     chunks = np.array_split(labels_df.columns, nprocs)
     fs = [
         executor.submit(chunk_build_model, chunk, labels_df, config) for chunk in chunks
     ]
-    print(
-        f"Label,ROC AUC Train,ROC AUC Test,Precision Train,Precision Test,Recall Train,"
-        f"Recall Test,F1 Score Train,F1 Score Test,Confusion Matrix Train,"
-        f"Confusion Matrix Test,Train False Negative,Train False Positive,"
-        f"Test False Negative, Test False Positive"
-    )
+    # Start a csv file if defined
+    # -> "x" fails if the file exists!
+    if config["docopt"]["csv_file"]:
+        with open(config["docopt"]["csv_file"], "x") as csv:
+            csv.write(f"Label,{','.join(metric_labels)}\n")
     for future in as_completed(fs):
         result = future.result()
         if result:
-            print(result[0])
+            for column, metrics in result:
+                # Append to csv, if defined
+                if config["docopt"]["csv_file"]:
+                    with open(config["docopt"]["csv_file"], "a") as csv:
+                        csv.write(f"{column},{','.join(metrics)}\n")
+
+                # Print metrics to command line
+                print(f"Label: {column}")
+                print("=" * 30)
+                for label, metric in zip(metric_labels, metrics):
+                    print(f"{label}: {metric}")
