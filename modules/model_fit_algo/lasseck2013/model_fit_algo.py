@@ -30,8 +30,36 @@ from modules.image_utils import apply_gaussian_filter
 from modules.image_utils import generate_raw_spectrogram
 from modules.utils import get_percent_from_section
 from modules.utils import get_template_matching_algorithm
-from cv2 import matchTemplate as opencvMatchTemplate
-from cv2 import minMaxLoc
+from importlib.util import find_spec
+
+# from cv2 import matchTemplate as opencvMatchTemplate
+# from cv2 import minMaxLoc
+
+
+def min_max_vals_locs(ccorrs):
+    """Given a 2D ccorrs matrix, find maxima
+
+    Given a 2D ccorrs matrix, find the maximum cross correlation,
+    bottom left location, and bottom right location. This function
+    mimics cv2.minMaxLoc
+
+    Args:
+        ccorrs: 2D numpy matrix of cross correlations
+
+    Output:
+        (max_ccorr, max_loc_bot_left, max_loc_bot_right)
+    """
+
+    min_val = np.min(ccorrs)
+    max_val = np.max(ccorrs)
+    min_loc = np.where(ccorrs == min_val)
+    max_loc = np.where(ccorrs == max_val)
+    return (
+        min_val,
+        max_val,
+        (min_loc[1][0], min_loc[0][0]),
+        (max_loc[1][0], max_loc[0][0]),
+    )
 
 
 def crossCorrMatchTemplate(spectrogram, template):
@@ -87,13 +115,20 @@ def matchTemplate(spectrogram, template, config):
     """
     method = config["model_fit"]["template_match_method"]
     if method == "opencv":
+        cv2_spec = find_spec("cv2")
+        if not cv2_spec:
+            raise ImportError("I can't find OpenCV optional library")
+        else:
+            from cv2 import matchTemplate as opencvMatchTemplate
         output_stats = opencvMatchTemplate(
             spectrogram, template, get_template_matching_algorithm(config)
         )
     elif method == "cross_corr":
         output_stats = crossCorrMatchTemplate(spectrogram, template)
 
-    _, max_ccorr, _, (max_loc_bot_left, max_loc_top_right) = minMaxLoc(output_stats)
+    _, max_ccorr, _, (max_loc_bot_left, max_loc_top_right) = min_max_vals_locs(
+        output_stats
+    )
     return max_ccorr, max_loc_bot_left, max_loc_top_right
 
 
