@@ -41,13 +41,14 @@ def min_max_vals_locs(ccorrs):
 
     Given a 2D ccorrs matrix, find the maximum cross correlation,
     bottom left location, and bottom right location. This function
-    mimics cv2.minMaxLoc
+    mimics cv2.minMaxLoc exporting the min and max values and location
+    of those matches (i.e. the top left of where the template matched)
 
     Args:
         ccorrs: 2D numpy matrix of cross correlations
 
     Output:
-        (max_ccorr, max_loc_bot_left, max_loc_bot_right)
+        (min_ccorr, max_ccorr, (min_loc_x, min_loc_y), (max_loc_x, max_loc_y))
     """
 
     min_val = np.min(ccorrs)
