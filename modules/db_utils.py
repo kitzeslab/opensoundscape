@@ -48,7 +48,7 @@ def generate_cross_correlation_matrix(needed_df, found_df, config):
     close_client()
 
     npify = np.array(all_file_file_stats)
-    return npify[:, :, :, 0].reshape(needed_df.shape[0], -1)
+    return npify[:, :, 0].reshape(needed_df.shape[0], -1)
 
 
 def init_client(config):
