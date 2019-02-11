@@ -22,10 +22,10 @@ def show_or_write(image):
         Nothing
     """
 
-    if len(image) == 0:
-        plt.show()
-    else:
+    if image:
         plt.savefig(image)
+    else:
+        plt.show()
 
 
 def extract_segments(spec, df):
@@ -129,16 +129,13 @@ def gen_segs(spec, df, image):
     show_or_write(image)
 
 
-def view(label, image, seg_only, config):
+def view(config):
     """View a spectrogram
 
     This is a super function which provides all of the functionality to
     view a spectrogram, either from the database itself or recreated
 
     Args:
-        label: The label for the file
-        image: If not '', write image to a file named this
-        seg_only: View segments only
         config: The parsed ini file for this particular run
 
     Returns:
@@ -147,6 +144,11 @@ def view(label, image, seg_only, config):
     Raises:
         FileNotFoundError: If the wavfile doesn't exist, it can't be processed
     """
+
+    # Need some command line arguments from config
+    label = config["docopt"]["label"]
+    image = config["docopt"]["image"]
+    seg_only = config["docopt"].getboolean("print_segments")
 
     # Get the data, from the database or recreate
     init_client(config)

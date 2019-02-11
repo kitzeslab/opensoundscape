@@ -5,13 +5,14 @@ Usage:
     opensoundscape.py init [-i <ini>]
     opensoundscape.py spect_gen [-i <ini>]
     opensoundscape.py view <label> [<image>] [-i <ini>] [-s]
-    opensoundscape.py model_fit [-i <ini>] [-r]
+    opensoundscape.py model_fit [-i <ini>] [-r] [<csv_file>]
     opensoundscape.py predict [-i <ini>]
 
 Positional Arguments:
     <label>                 The label you would like to view, must be in the configs
                                 defined as `data_dir`
     <image>                 An image file to write, e.g. 'image.png'
+    <csv_file>              Store model_fit metrics in a CSV file
 
 Options:
     -h --help               Print this screen and exit
@@ -34,7 +35,7 @@ from modules.init import init
 arguments = docopt(__doc__, version="opensoundscape.py version 0.0.1")
 
 # Get the default config variables
-config = generate_config("config/opensoundscape.ini", arguments["--ini"])
+config = generate_config("config/opensoundscape.ini", arguments)
 
 # Initialize empty string for arguments['<image>'] (not supported by docopt)
 if not arguments["<image>"]:
@@ -47,11 +48,11 @@ if arguments["spect_gen"]:
 elif arguments["view"]:
     # Preprocess the file with the defaults
     # -> optionally write image to a file
-    view(arguments["<label>"], arguments["<image>"], arguments["--segments"], config)
+    view(config)
 
 elif arguments["model_fit"]:
     # Using defined algorithm, create model
-    model_fit(config, arguments["--rerun_statistics"])
+    model_fit(config)
 
 elif arguments["predict"]:
     # Make a prediction based on a model
