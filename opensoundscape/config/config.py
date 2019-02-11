@@ -57,6 +57,7 @@ stratification_percent = 33.3
 template_match_method = cross_corr
 # Options: TM_CCOEFF, TM_CCOEFF_NORMED, TM_CCORR, TM_CCORR_NORMED, TM_SQDIFF, TM_SQDIFF_NORMED
 template_match_algorithm = TM_CCORR_NORMED
+only_match_if_detected_boxes = False
 
 [predict]
 algo = lasseck2013

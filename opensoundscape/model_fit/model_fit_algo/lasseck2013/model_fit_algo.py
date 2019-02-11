@@ -59,6 +59,34 @@ def min_max_vals_locs(ccorrs):
     )
 
 
+def should_match_templates(template_row, image_rows, freq_buffer):
+    """Should OpSo even waste time matching templates?
+
+    If there are no boxes in the source image to match against return False,
+    else return True (succeed fast)
+
+    Args:
+        template_row:   A Dataframe row with keys "y_min" and "y_max"
+        image_rows:     The detected boxes in an image which we might slide the template
+                        against.
+        freq_buffer:    The frequency buffer in the y dimension
+
+    Returns:
+        Boolean: representing whether we should match templates (True) or not (False)
+    """
+
+    match_y_min = template_row["y_min"] - freq_buffer
+    match_y_max = template_row["y_max"] + freq_buffer
+
+    for row in image_rows.iterrows():
+        if (row["y_min"] >= match_y_min and row["y_min"] < match_y_max) or (
+            row["y_max"] <= match_y_max and row["y_max"] > match_y_min
+        ):
+            return True
+
+    return False
+
+
 def crossCorrMatchTemplate(spectrogram, template):
     """Use ZNCC template matching algorithm
 
@@ -321,6 +349,7 @@ def get_file_file_stats(
         # Slide segments over all other spectrograms
         frequency_buffer = config["model_fit"].getint("template_match_frequency_buffer")
         for idx, (_, row) in enumerate(df_two.iterrows()):
+
             # Determine minimum y target
             y_min_target = 0
             if row["y_min"] > frequency_buffer:
@@ -339,12 +368,20 @@ def get_file_file_stats(
                 y_max_target - y_min_target <= spec_one.shape[0]
                 and row["x_max"] - row["x_min"] <= spec_one.shape[1]
             ):
-                max_val, max_loc_bot_left, max_loc_top_right = matchTemplate(
-                    spec_one[y_min_target:y_max_target, :], row["segments"], config
+                # If `only_match_if_detected_boxes` == False, just match as normal
+                #                                      True, rely on should_match_templates
+                match_anyway = not config["model_fit"].getboolean(
+                    "only_match_if_detected_boxes"
                 )
-                match_stats_dict[idx_two][idx][0] = max_val
-                match_stats_dict[idx_two][idx][1] = max_loc_bot_left
-                match_stats_dict[idx_two][idx][2] = max_loc_top_right + y_min_target
+                if match_anyway or should_match_templates(
+                    row, df_one, frequency_buffer
+                ):
+                    max_val, max_loc_bot_left, max_loc_top_right = matchTemplate(
+                        spec_one[y_min_target:y_max_target, :], row["segments"], config
+                    )
+                    match_stats_dict[idx_two][idx][0] = max_val
+                    match_stats_dict[idx_two][idx][1] = max_loc_bot_left
+                    match_stats_dict[idx_two][idx][2] = max_loc_top_right + y_min_target
     return match_stats_dict
 
 
