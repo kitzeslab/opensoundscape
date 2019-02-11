@@ -1,16 +1,4 @@
 from multiprocessing import cpu_count
-from configparser import ConfigParser
-from os.path import isfile
-from os.path import join
-import sys
-from opensoundscape.config.checks import ini_section_and_keys_exists
-from opensoundscape.config.checks import config_checks
-from cv2 import TM_CCOEFF
-from cv2 import TM_CCOEFF_NORMED
-from cv2 import TM_CCORR
-from cv2 import TM_CCORR_NORMED
-from cv2 import TM_SQDIFF
-from cv2 import TM_SQDIFF_NORMED
 
 
 def get_percent_from_section(config, section, item):
@@ -40,12 +28,22 @@ def get_percent_from_section(config, section, item):
 def get_template_matching_algorithm(config):
     """ Return the template matching algorithm for OpenCV
 
+    OpenCV is an optional library. If we hit this function, we will
+    have checked that OpenCV can be imported.
+
     Input:
-        The opensoundscape config
+        config: The opensoundscape config
 
     Output:
         An integer
     """
+
+    from cv2 import TM_CCOEFF
+    from cv2 import TM_CCOEFF_NORMED
+    from cv2 import TM_CCORR
+    from cv2 import TM_CCORR_NORMED
+    from cv2 import TM_SQDIFF
+    from cv2 import TM_SQDIFF_NORMED
 
     options = {
         "TM_CCOEFF": TM_CCOEFF,
@@ -75,55 +73,6 @@ def return_cpu_count(config):
     else:
         nprocs = config["general"].getint("num_processors")
     return nprocs
-
-
-def generate_config(f_default, arguments):
-    """Generate the configuration
-
-    Simply return a ConfigParser for opensoundscape. We have a default config in
-    `config/` as well as a potential override file (arguments["--ini"]). Access elements via
-    `config[<section>].get{float,boolean,int}('key')`.
-
-    Args:
-        f_default: The default config `config/opensoundscape.ini`
-        arguments: The docopt arguments to store
-
-    Returns:
-        A ConfigParser instance
-
-    Raises:
-        FileNotFoundError if INI file doesn't exist
-    """
-    opensoundscape_dir = sys.path[0]
-    f_default = join(opensoundscape_dir, f_default)
-    f_override = arguments["--ini"]
-
-    if not isfile(f_default):
-        raise FileNotFoundError(f"{f_default} doesn't exist!")
-    if not isfile(f_override):
-        raise FileNotFoundError(f"{f_override} doesn't exist!")
-
-    config = ConfigParser(allow_no_value=True)
-    config.read(f_default)
-
-    override_config = ConfigParser()
-    override_config.read(f_override)
-
-    # Check that the override config makes sense, then read it
-    ini_section_and_keys_exists(config, override_config, f_override)
-    config.read(f_override)
-
-    config_checks(config)
-
-    # Finally, store any command line options so we only need to pass config
-    config["docopt"] = {}
-    config["docopt"]["label"] = arguments["<label>"]
-    config["docopt"]["image"] = arguments["<image>"]
-    config["docopt"]["print_segments"] = str(arguments["--segments"]).lower()
-    config["docopt"]["rerun_statistics"] = str(arguments["--rerun_statistics"]).lower()
-    config["docopt"]["csv_file"] = arguments["<csv_file>"]
-
-    return config
 
 
 def yes_no(question, default="no"):

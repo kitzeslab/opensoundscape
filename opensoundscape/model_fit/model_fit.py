@@ -1,5 +1,12 @@
-import sys
 from opensoundscape.utils.db_utils import write_ini_section
+
+
+class OpensoundscapeModelFitAlgorithmDoesntExist(Exception):
+    """
+    model_fit algorithm doesn't exist exception
+    """
+
+    pass
 
 
 def model_fit(config):
@@ -21,11 +28,14 @@ def model_fit(config):
         Nothing
     """
 
-    opensoundscape_dir = sys.path[0]
-    sys.path.append(
-        f"{opensoundscape_dir}/opensoundscape/model_fit/model_fit_algo/{config['model_fit']['algo']}"
-    )
-    from model_fit_algo import model_fit_algo
+    if config["model_fit"]["algo"] == "lasseck2013":
+        from opensoundscape.model_fit.model_fit_algo.lasseck2013.model_fit_algo import (
+            model_fit_algo,
+        )
+    else:
+        raise OpensoundscapeModelFitAlgorithmDoesntExist(
+            f"The algorithm '{config['model_fit']['algo']}' doesn't exist?"
+        )
 
     if config["general"].getboolean("db_rw"):
         write_ini_section(config, "model_fit")

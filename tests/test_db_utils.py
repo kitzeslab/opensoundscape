@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-import sys
-
-sys.path.append("..")
-from modules.utils import generate_config
-from modules.db_utils import write_ini_section, OpensoundscapeAttemptOverrideINISection
+from opensoundscape.config.config import generate_config
+from opensoundscape.utils.db_utils import (
+    write_ini_section,
+    OpensoundscapeAttemptOverrideINISection,
+)
 import pymongo
 import pytest
 

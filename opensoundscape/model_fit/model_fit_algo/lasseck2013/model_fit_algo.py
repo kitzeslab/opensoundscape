@@ -30,8 +30,33 @@ from opensoundscape.utils.image_utils import generate_raw_spectrogram
 from opensoundscape.utils.utils import return_cpu_count
 from opensoundscape.utils.utils import get_percent_from_section
 from opensoundscape.utils.utils import get_template_matching_algorithm
-from cv2 import matchTemplate as opencvMatchTemplate
-from cv2 import minMaxLoc
+
+
+def min_max_vals_locs(ccorrs):
+    """Given a 2D ccorrs matrix, find maxima
+
+    Given a 2D ccorrs matrix, find the maximum cross correlation,
+    bottom left location, and bottom right location. This function
+    mimics cv2.minMaxLoc exporting the min and max values and location
+    of those matches (i.e. the top left of where the template matched)
+
+    Args:
+        ccorrs: 2D numpy matrix of cross correlations
+
+    Output:
+        (min_ccorr, max_ccorr, (min_loc_x, min_loc_y), (max_loc_x, max_loc_y))
+    """
+
+    min_val = np.min(ccorrs)
+    max_val = np.max(ccorrs)
+    min_loc = np.where(ccorrs == min_val)
+    max_loc = np.where(ccorrs == max_val)
+    return (
+        min_val,
+        max_val,
+        (min_loc[1][0], min_loc[0][0]),
+        (max_loc[1][0], max_loc[0][0]),
+    )
 
 
 def crossCorrMatchTemplate(spectrogram, template):
@@ -87,13 +112,17 @@ def matchTemplate(spectrogram, template, config):
     """
     method = config["model_fit"]["template_match_method"]
     if method == "opencv":
+        from cv2 import matchTemplate as opencvMatchTemplate
+
         output_stats = opencvMatchTemplate(
             spectrogram, template, get_template_matching_algorithm(config)
         )
     elif method == "cross_corr":
         output_stats = crossCorrMatchTemplate(spectrogram, template)
 
-    _, max_ccorr, _, (max_loc_bot_left, max_loc_top_right) = minMaxLoc(output_stats)
+    _, max_ccorr, _, (max_loc_bot_left, max_loc_top_right) = min_max_vals_locs(
+        output_stats
+    )
     return max_ccorr, max_loc_bot_left, max_loc_top_right
 
 

@@ -23,7 +23,7 @@ Options:
 """
 
 from docopt import docopt
-from opensoundscape.utils.utils import generate_config
+from opensoundscape.config.config import generate_config
 from opensoundscape import __version__ as opso_version
 from opensoundscape.init.init import init
 from opensoundscape.spect_gen.spect_gen import spect_gen
@@ -39,7 +39,7 @@ def run():
 
     arguments = docopt(__doc__, version=f"opensoundscape.py version {opso_version}")
 
-    config = generate_config("config/opensoundscape.ini", arguments)
+    config = generate_config(arguments)
 
     # Initialize empty string for arguments['<image>']
     # -> (not supported by docopt)

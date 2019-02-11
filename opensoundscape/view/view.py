@@ -3,11 +3,11 @@ import matplotlib.patches as patches
 import numpy as np
 import pickle
 import pymongo
-from modules.spect_gen import spect_gen
-from modules.image_utils import generate_raw_blurred_spectrogram
-from modules.db_utils import init_client
-from modules.db_utils import close_client
-from modules.db_utils import read_spectrogram
+from opensoundscape.spect_gen.spect_gen import spect_gen
+from opensoundscape.utils.image_utils import generate_raw_blurred_spectrogram
+from opensoundscape.utils.db_utils import init_client
+from opensoundscape.utils.db_utils import close_client
+from opensoundscape.utils.db_utils import read_spectrogram
 
 
 def show_or_write(image):

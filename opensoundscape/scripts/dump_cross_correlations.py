@@ -27,7 +27,7 @@ import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
 from opensoundscape.utils.db_utils import generate_cross_correlation_matrix
-from opensoundscape.utils.utils import generate_config
+from opensoundscape.config.config import generate_config
 from opensoundscape.utils.utils import return_cpu_count
 
 
@@ -40,7 +40,7 @@ def cross_correlations(chunk, species_found, config):
 
 def run():
     arguments = docopt(__doc__, version="dump_cross_correlations.py version 0.0.1")
-    config = generate_config("config/opensoundscape.ini", arguments["--ini"])
+    config = generate_config(arguments, store_options=False)
 
     species = arguments["<label>"]
     labels_df = pd.read_csv(

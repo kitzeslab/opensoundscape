@@ -1,4 +1,5 @@
 from difflib import get_close_matches
+from importlib.util import find_spec
 
 
 def ini_section_and_keys_exists(
@@ -37,10 +38,11 @@ def ini_section_and_keys_exists(
                 exit()
 
 
-def matchTemplate_algorithm_exists(config):
+def match_algorithm_exists(config):
     """ Given the parsed INI files
     
-    Check that the matchTemplate algorithm exists, potential options:
+    Check if the user wants to use OpenCV. If yes, can we import OpenCV?
+    Make sure that the algorithm they pick exists, potential options:
     TM_CCOEFF, TM_CCOEFF_NORMED, TM_CCORR, TM_CCORR_NORMED, TM_SQDIFF,
     TM_SQDIFF_NORMED
 
@@ -48,19 +50,27 @@ def matchTemplate_algorithm_exists(config):
         config: The opensoundscape configuration
     """
 
-    options = [
-        "TM_CCOEFF",
-        "TM_CCOEFF_NORMED",
-        "TM_CCORR",
-        "TM_CCORR_NORMED",
-        "TM_SQDIFF",
-        "TM_SQDIFF_NORMED",
-    ]
-    algo = config["model_fit"].get("template_match_algorithm")
-    if algo not in options:
-        raise ValueError(
-            f"The template matching algorithm chosen was {algo}, valid options: {' '.join(options)}"
-        )
+    match_method = config["model_fit"].get("template_match_method")
+    if match_method == "opencv":
+        cv2_spec = find_spec("cv2")
+        if not cv2_spec:
+            raise ImportError(
+                "You have requested `template_match_method = opencv`, but you haven't installed OpenCV?"
+            )
+
+        options = [
+            "TM_CCOEFF",
+            "TM_CCOEFF_NORMED",
+            "TM_CCORR",
+            "TM_CCORR_NORMED",
+            "TM_SQDIFF",
+            "TM_SQDIFF_NORMED",
+        ]
+        algo = config["model_fit"].get("template_match_algorithm")
+        if algo not in options:
+            raise ValueError(
+                f"The template matching algorithm chosen was {algo}, valid options: {' '.join(options)}"
+            )
 
 
 def config_checks(config):
@@ -80,4 +90,4 @@ def config_checks(config):
         Nothing, but can various functions will exit
     """
 
-    matchTemplate_algorithm_exists(config)
+    match_algorithm_exists(config)

@@ -141,7 +141,8 @@ from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
 from itertools import repeat
 
-from opensoundscape.utils.utils import generate_config, return_cpu_count
+from opensoundscape.config.config import generate_config
+from opensoundscape.utils.utils import return_cpu_count
 from opensoundscape.utils.db_utils import init_client
 from opensoundscape.utils.db_utils import close_client
 from opensoundscape.utils.db_utils import return_cursor
@@ -153,7 +154,7 @@ def run():
     arguments = docopt(__doc__, version="find_important_templates.py version 0.0.1")
 
     # Generate the config instance
-    config = generate_config("config/opensoundscape.ini", arguments["--ini"])
+    config = generate_config(arguments, store_options=False)
 
     # Generate list of files which identify <label>
     labels_df = pd.read_csv(

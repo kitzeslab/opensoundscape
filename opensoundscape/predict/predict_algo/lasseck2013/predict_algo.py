@@ -12,7 +12,6 @@ from opensoundscape.spect_gen.spect_gen import spect_gen
 from opensoundscape.view.view import extract_segments
 from opensoundscape.utils.utils import return_cpu_count
 from scipy import stats
-from cv2 import matchTemplate, minMaxLoc
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
 from itertools import repeat

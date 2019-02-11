@@ -4,6 +4,14 @@ from opensoundscape.utils.db_utils import close_client
 from opensoundscape.utils.db_utils import write_ini_section
 
 
+class OpensoundscapeSpectGenAlgorithmDoesntExist(Exception):
+    """
+    spect_gen algorithm doesn't exist exception
+    """
+
+    pass
+
+
 def spect_gen(config):
     """Fit a model
 
@@ -19,11 +27,14 @@ def spect_gen(config):
         Nothing
     """
 
-    opensoundscape_dir = sys.path[0]
-    sys.path.append(
-        f"{opensoundscape_dir}/opensoundscape/spect_gen/spect_gen_algo/{config['spect_gen']['algo']}"
-    )
-    from spect_gen_algo import spect_gen_algo
+    if config["spect_gen"]["algo"] == "lasseck2013":
+        from opensoundscape.spect_gen.spect_gen_algo.lasseck2013.spect_gen_algo import (
+            spect_gen_algo,
+        )
+    else:
+        raise OpensoundscapeSpectGenAlgorithmDoesntExist(
+            f"The algorithm '{config['spect_gen']['algo']}' doesn't exist!"
+        )
 
     if config["general"].getboolean("db_rw"):
         write_ini_section(config, "spect_gen")
