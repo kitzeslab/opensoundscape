@@ -484,43 +484,70 @@ def fit_model(X, y, labels_df, config):
     test_filenames = labels_df.iloc[y_test.index.values].index.values
 
     train_classify = [
-        f"{name}: {binary_classify(actual, pred)}"
+        f"{binary_classify(actual, pred)}"
         for name, actual, pred in zip(train_filenames, y_train, y_train_pred)
     ]
 
     test_classify = [
-        f"{name}: {binary_classify(actual, pred)}"
+        f"{binary_classify(actual, pred)}"
         for name, actual, pred in zip(test_filenames, y_test, y_test_pred)
     ]
 
-    train_classify = "\n".join([x for x in train_classify if "false" in x])
-    test_classify = "\n".join([x for x in test_classify if "false" in x])
-
-    results = (
-        f"ROC AUC Train: {roc_auc_score(y_train, y_train_pred)}\n"
-        f"ROC AUC Test: {roc_auc_score(y_test, y_test_pred)}\n"
-        f"Precision Train: {precision_score(y_train, y_train_pred)}\n"
-        f"Precision Test: {precision_score(y_test, y_test_pred)}\n"
-        f"Recall Train: {recall_score(y_train, y_train_pred)}\n"
-        f"Recall Test: {recall_score(y_test, y_test_pred)}\n"
-        f"F1 Score Train: {f1_score(y_train, y_train_pred)}\n"
-        f"F1 Score Test: {f1_score(y_test, y_test_pred)}\n"
-        f"Confusion Matrix Train:\n"
-        f"{confusion_matrix(y_train, y_train_pred)}\n"
-        f"Confusion Matrix Test:\n"
-        f"{confusion_matrix(y_test, y_test_pred)}\n"
-        f"Confusion Breakdown Train:\n"
-        f"{train_classify}\n"
-        f"Confusion Breakdown Test:\n"
-        f"{test_classify}\n"
+    train_false_pos = " ".join(
+        [
+            name
+            for name, classifier in zip(train_filenames, train_classify)
+            if classifier == "false positive"
+        ]
     )
+
+    train_false_neg = " ".join(
+        [
+            name
+            for name, classifier in zip(train_filenames, train_classify)
+            if classifier == "false negative"
+        ]
+    )
+
+    test_false_pos = " ".join(
+        [
+            name
+            for name, classifier in zip(test_filenames, test_classify)
+            if classifier == "false positive"
+        ]
+    )
+
+    test_false_neg = " ".join(
+        [
+            name
+            for name, classifier in zip(test_filenames, test_classify)
+            if classifier == "false negative"
+        ]
+    )
+
+    results = [
+        f"{roc_auc_score(y_train, y_train_pred)}",
+        f"{roc_auc_score(y_test, y_test_pred)}",
+        f"{precision_score(y_train, y_train_pred)}",
+        f"{precision_score(y_test, y_test_pred)}",
+        f"{recall_score(y_train, y_train_pred)}",
+        f"{recall_score(y_test, y_test_pred)}",
+        f"{f1_score(y_train, y_train_pred)}",
+        f"{f1_score(y_test, y_test_pred)}",
+        f'"{confusion_matrix(y_train, y_train_pred).tolist()}"',
+        f'"{confusion_matrix(y_test, y_test_pred).tolist()}"',
+        f"{train_false_neg}",
+        f"{train_false_pos}",
+        f"{test_false_neg}",
+        f"{test_false_pos}",
+    ]
 
     return grid_search.best_estimator_, scaler, results
 
 
 def chunk_build_model(chunk, labels_df, config):
-    """Build the lasseck2013 model
 
+    """Build the lasseck2013 model
     Given a chunk, run build_model on each label
 
     Args:
@@ -563,17 +590,16 @@ def build_model(column, labels_df, config):
     X, y = build_X_y(labels_df[column], config)
     model, scaler, results = fit_model(X, y, labels_df, config)
     write_model(column, model, scaler, config)
-    return results
+    return column, results
 
 
-def model_fit_algo(config, rerun_statistics):
+def model_fit_algo(config):
     """Fit the lasseck2013 model
 
     We were directed here from model_fit to fit the lasseck2013 model.
 
     Args:
         config: The parsed ini file for this run
-        rerun_statistics: Force rerun of model_fit statistics
 
     Returns:
         Something or possibly writes to MongoDB
@@ -589,8 +615,8 @@ def model_fit_algo(config, rerun_statistics):
     )
     labels_df = labels_df.fillna(0).astype(int)
 
-    if config["model_fit"]["labels_list"] != "":
-        labels_df = labels_df.loc[:, config["model_fit"]["labels_list"].split(",")]
+    if config["model_fit"]["species_list"] != "":
+        labels_df = labels_df.loc[:, config["model_fit"]["species_list"].split(",")]
 
     # Get the processor counts
     nprocs = return_cpu_count(config)
@@ -600,7 +626,9 @@ def model_fit_algo(config, rerun_statistics):
 
     # Run the statistics, if not already complete
     chunks = np.array_split(labels_df.index, nprocs)
-    if not get_model_fit_skip(config) or rerun_statistics:
+    if not get_model_fit_skip(config) or config["docopt"].getboolean(
+        "rerun_statistics"
+    ):
         fs = [
             executor.submit(chunk_run_stats, chunk, labels_df, config)
             for chunk in chunks
@@ -611,10 +639,45 @@ def model_fit_algo(config, rerun_statistics):
 
     set_model_fit_skip(config)
 
+    # Column Labels
+    metric_labels = [
+        "ROC AUC Train",
+        "ROC AUC Test",
+        "Precision Train",
+        "Precision Test",
+        "Recall Train",
+        "Recall Test",
+        "F1 Score Train",
+        "F1 Score Test",
+        "Confusion Matrix Train",
+        "Confusion Matrix Test",
+        "Train False Negative",
+        "Train False Positive",
+        "Test False Negative",
+        "Test False Positive",
+    ]
+
     # Build the models
     chunks = np.array_split(labels_df.columns, nprocs)
     fs = [
         executor.submit(chunk_build_model, chunk, labels_df, config) for chunk in chunks
     ]
+    # Start a csv file if defined
+    # -> "x" fails if the file exists!
+    if config["docopt"]["csv_file"]:
+        with open(config["docopt"]["csv_file"], "x") as csv:
+            csv.write(f"Label,{','.join(metric_labels)}\n")
     for future in as_completed(fs):
-        _ = [print(x) for x in future.result() if x]
+        result = future.result()
+        if result:
+            for column, metrics in result:
+                # Append to csv, if defined
+                if config["docopt"]["csv_file"]:
+                    with open(config["docopt"]["csv_file"], "a") as csv:
+                        csv.write(f"{column},{','.join(metrics)}\n")
+
+                # Print metrics to command line
+                print(f"Label: {column}")
+                print("=" * 30)
+                for label, metric in zip(metric_labels, metrics):
+                    print(f"{label}: {metric}")
