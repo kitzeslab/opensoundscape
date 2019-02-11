@@ -34,24 +34,29 @@ from cv2 import matchTemplate as opencvMatchTemplate
 from cv2 import minMaxLoc
 
 
-def should_we_match_templates(box, detections):
-    """Should we even waste time matching templates?
+def should_match_templates(template_row, image_rows, freq_buffer):
+    """Should OpSo even waste time matching templates?
 
     If there are no boxes in the source image to match against return False,
     else return True (succeed fast)
 
     Args:
-        box: The template which should be slid
-        detections: A Dataframe containing the image boxes
+        template_row:   A Dataframe row with keys "y_min" and "y_max"
+        image_rows:     The detected boxes in an image which we might slide the template
+                        against.
+        freq_buffer:    The frequency buffer in the y dimension
 
     Returns:
         Boolean: representing whether we should match templates (True) or not (False)
     """
 
-    for image_box in detections.iterrows():
-        if (
-            image_box["y_min"] >= box["y_min"] and image_box["y_min"] < box["y_max"]
-        ) or (image_box["y_max"] <= box["y_max"] and image_box["y_max"] > box["y_min"]):
+    match_y_min = template_row["y_min"] - freq_buffer
+    match_y_max = template_row["y_max"] + freq_buffer
+
+    for row in image_rows.iterrows():
+        if (row["y_min"] >= match_y_min and row["y_min"] < match_y_max) or (
+            row["y_max"] <= match_y_max and row["y_max"] > y_min
+        ):
             return True
 
     return False
@@ -334,7 +339,7 @@ def get_file_file_stats(
                 y_max_target - y_min_target <= spec_one.shape[0]
                 and row["x_max"] - row["x_min"] <= spec_one.shape[1]
             ):
-                if should_we_match_templates(row, df_one):
+                if should_match_templates(row, df_one, frequency_buffer):
                     max_val, max_loc_bot_left, max_loc_top_right = matchTemplate(
                         spec_one[y_min_target:y_max_target, :], row["segments"], config
                     )
