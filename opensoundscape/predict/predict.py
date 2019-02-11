@@ -1,5 +1,5 @@
 import sys
-from modules.db_utils import write_ini_section
+from opensoundscape.utils.db_utils import write_ini_section
 
 
 def predict(config):
@@ -23,7 +23,7 @@ def predict(config):
 
     opensoundscape_dir = sys.path[0]
     sys.path.append(
-        f"{opensoundscape_dir}/modules/predict_algo/{config['predict']['algo']}"
+        f"{opensoundscape_dir}/opensoundscape/predict/predict_algo/{config['predict']['algo']}"
     )
     from predict_algo import predict_algo
 

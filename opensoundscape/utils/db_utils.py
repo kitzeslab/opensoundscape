@@ -4,7 +4,7 @@ import pymongo
 import pandas as pd
 import numpy as np
 from scipy.sparse import csr_matrix
-from modules.utils import yes_no
+from opensoundscape.utils.utils import yes_no
 
 # This is a thread local global variable
 client = None

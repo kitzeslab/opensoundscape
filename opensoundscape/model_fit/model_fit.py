@@ -1,5 +1,5 @@
 import sys
-from modules.db_utils import write_ini_section
+from opensoundscape.utils.db_utils import write_ini_section
 
 
 def model_fit(config):
@@ -23,7 +23,7 @@ def model_fit(config):
 
     opensoundscape_dir = sys.path[0]
     sys.path.append(
-        f"{opensoundscape_dir}/modules/model_fit_algo/{config['model_fit']['algo']}"
+        f"{opensoundscape_dir}/opensoundscape/model_fit/model_fit_algo/{config['model_fit']['algo']}"
     )
     from model_fit_algo import model_fit_algo
 

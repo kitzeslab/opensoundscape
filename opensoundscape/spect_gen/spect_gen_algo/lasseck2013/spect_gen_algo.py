@@ -7,11 +7,11 @@ from itertools import repeat
 from scipy import signal, ndimage
 from librosa import load, to_mono
 from skimage.morphology import remove_small_objects
-from modules.db_utils import init_client
-from modules.db_utils import close_client
-from modules.db_utils import write_spectrogram
-from modules.utils import get_percent_from_section
-from modules.utils import return_cpu_count
+from opensoundscape.utils.db_utils import init_client
+from opensoundscape.utils.db_utils import close_client
+from opensoundscape.utils.db_utils import write_spectrogram
+from opensoundscape.utils.utils import get_percent_from_section
+from opensoundscape.utils.utils import return_cpu_count
 
 
 def generate_segments_from_binary_spectrogram(binary_spec, buffer):

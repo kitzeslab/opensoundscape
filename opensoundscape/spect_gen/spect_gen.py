@@ -1,7 +1,7 @@
 import sys
-from modules.db_utils import init_client
-from modules.db_utils import close_client
-from modules.db_utils import write_ini_section
+from opensoundscape.utils.db_utils import init_client
+from opensoundscape.utils.db_utils import close_client
+from opensoundscape.utils.db_utils import write_ini_section
 
 
 def spect_gen(config):
@@ -21,7 +21,7 @@ def spect_gen(config):
 
     opensoundscape_dir = sys.path[0]
     sys.path.append(
-        f"{opensoundscape_dir}/modules/spect_gen_algo/{config['spect_gen']['algo']}"
+        f"{opensoundscape_dir}/opensoundscape/spect_gen/spect_gen_algo/{config['spect_gen']['algo']}"
     )
     from spect_gen_algo import spect_gen_algo
 

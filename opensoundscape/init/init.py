@@ -1,4 +1,4 @@
-from modules.db_utils import write_ini_section
+from opensoundscape.utils.db_utils import write_ini_section
 
 
 def init(config):

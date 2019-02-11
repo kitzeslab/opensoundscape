@@ -3,8 +3,8 @@ from configparser import ConfigParser
 from os.path import isfile
 from os.path import join
 import sys
-from modules.config_check import ini_section_and_keys_exists
-from modules.config_check import config_checks
+from opensoundscape.config.checks import ini_section_and_keys_exists
+from opensoundscape.config.checks import config_checks
 from cv2 import TM_CCOEFF
 from cv2 import TM_CCOEFF_NORMED
 from cv2 import TM_CCORR

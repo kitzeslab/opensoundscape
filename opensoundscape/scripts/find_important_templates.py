@@ -141,66 +141,67 @@ from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
 from itertools import repeat
 
-# Need some functions from our module
-import sys
+from opensoundscape.utils.utils import generate_config, return_cpu_count
+from opensoundscape.utils.db_utils import init_client
+from opensoundscape.utils.db_utils import close_client
+from opensoundscape.utils.db_utils import return_cursor
+from opensoundscape.utils.db_utils import cursor_item_to_stats
 
-script_dir = sys.path[0]
-sys.path.insert(0, f"{script_dir}/..")
 
-from modules.utils import generate_config, return_cpu_count
-from modules.db_utils import init_client
-from modules.db_utils import close_client
-from modules.db_utils import return_cursor
-from modules.db_utils import cursor_item_to_stats
+def run():
+    # From the docstring, generate the arguments dictionary
+    arguments = docopt(__doc__, version="find_important_templates.py version 0.0.1")
 
-# From the docstring, generate the arguments dictionary
-arguments = docopt(__doc__, version="find_important_templates.py version 0.0.1")
+    # Generate the config instance
+    config = generate_config("config/opensoundscape.ini", arguments["--ini"])
 
-# Generate the config instance
-config = generate_config("config/opensoundscape.ini", arguments["--ini"])
+    # Generate list of files which identify <label>
+    labels_df = pd.read_csv(
+        f"{config['general']['data_dir']}/{config['general']['train_file']}",
+        index_col="Filename",
+    )
+    labels_df = labels_df.fillna(0).astype(int)
 
-# Generate list of files which identify <label>
-labels_df = pd.read_csv(
-    f"{config['general']['data_dir']}/{config['general']['train_file']}",
-    index_col="Filename",
-)
-labels_df = labels_df.fillna(0).astype(int)
+    # Downsample to particular species
+    species = arguments["<label>"]
 
-# Downsample to particular species
-species = arguments["<label>"]
+    # Identify files with and without bird
+    species_found = labels_df[species][labels_df[species] == 1]
+    species_not_found = labels_df[species][labels_df[species] == 0]
 
-# Identify files with and without bird
-species_found = labels_df[species][labels_df[species] == 1]
-species_not_found = labels_df[species][labels_df[species] == 0]
+    # Generate list of tuples with identifying features for templates
+    init_client(config)
+    identifiers_list = build_identification_list(species_found)
+    close_client()
 
-# Generate list of tuples with identifying features for templates
-init_client(config)
-identifiers_list = build_identification_list(species_found)
-close_client()
+    # Now, run a loop to identify useful templates
+    # -> Don't use
+    nprocs = return_cpu_count(config)
+    executor = ProcessPoolExecutor(nprocs)
+    fs = [
+        executor.submit(
+            gen_results_df, species_found, species_not_found, identifiers_list
+        )
+        for x in range(100)
+    ]
+    # Concatenate all results
+    results_df = pd.concat([future.result() for future in as_completed(fs)])
 
-# Now, run a loop to identify useful templates
-# -> Don't use
-nprocs = return_cpu_count(config)
-executor = ProcessPoolExecutor(nprocs)
-fs = [
-    executor.submit(gen_results_df, species_found, species_not_found, identifiers_list)
-    for x in range(100)
-]
-# Concatenate all results
-results_df = pd.concat([future.result() for future in as_completed(fs)])
+    # Keep any weights above 0.35
+    results_df = results_df[results_df["weight"] >= 0.35]
 
-# Keep any weights above 0.35
-results_df = results_df[results_df["weight"] >= 0.35]
+    # Sort by the weights
+    results_df.sort_values(by=["weight", "template"], ascending=False, inplace=True)
+    templates = list(set(results_df.template.unique()))
 
-# Sort by the weights
-results_df.sort_values(by=["weight", "template"], ascending=False, inplace=True)
-templates = list(set(results_df.template.unique()))
+    df = pd.DataFrame(templates, columns=["templates", "filenames"])
+    gb_filenames = df.groupby("filenames")
+    by_filename = [None] * len(gb_filenames.groups.keys())
+    for idx, (key, item) in enumerate(gb_filenames):
+        by_filename[idx] = (
+            key,
+            sorted(gb_filenames.get_group(key)["templates"].values),
+        )
 
-df = pd.DataFrame(templates, columns=["templates", "filenames"])
-gb_filenames = df.groupby("filenames")
-by_filename = [None] * len(gb_filenames.groups.keys())
-for idx, (key, item) in enumerate(gb_filenames):
-    by_filename[idx] = (key, sorted(gb_filenames.get_group(key)["templates"].values))
-
-df = pd.DataFrame(by_filename, columns=["Filename", "templates"])
-df.to_csv(arguments["--save"], index=False)
+    df = pd.DataFrame(by_filename, columns=["Filename", "templates"])
+    df.to_csv(arguments["--save"], index=False)

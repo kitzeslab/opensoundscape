@@ -12,10 +12,9 @@ From: ubuntu:bionic
     apt-get update
     apt-get upgrade
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        python3 python3-pip python3-pandas python3-numpy \
-        python3-matplotlib python3-scipy python3-pymongo \
-        python3-opencv python3-docopt mongodb
-    pip3 install -r /opt/opensoundscape/requirements-singularity.txt
+        python3 python3-pip mongodb
+    pip3 install poetry==0.12.11
+    TODO
     apt-get clean
 
 %apprun opensoundscape
