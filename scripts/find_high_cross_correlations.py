@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """ find_high_cross_correlations.py
 
 Help find more matches for training
