@@ -615,8 +615,8 @@ def model_fit_algo(config):
     )
     labels_df = labels_df.fillna(0).astype(int)
 
-    if config["model_fit"]["labels_list"] != "":
-        labels_df = labels_df.loc[:, config["model_fit"]["labels_list"].split(",")]
+    if config["model_fit"]["species_list"] != "":
+        labels_df = labels_df.loc[:, config["model_fit"]["species_list"].split(",")]
 
     # Get the processor counts
     nprocs = return_cpu_count(config)
