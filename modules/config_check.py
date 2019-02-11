@@ -90,4 +90,4 @@ def config_checks(config):
         Nothing, but can various functions will exit
     """
 
-    matchTemplate_algorithm_exists(config)
+    match_algorithm_exists(config)
