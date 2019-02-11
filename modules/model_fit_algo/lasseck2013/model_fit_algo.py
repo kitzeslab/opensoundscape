@@ -339,7 +339,14 @@ def get_file_file_stats(
                 y_max_target - y_min_target <= spec_one.shape[0]
                 and row["x_max"] - row["x_min"] <= spec_one.shape[1]
             ):
-                if should_match_templates(row, df_one, frequency_buffer):
+                # If `only_match_if_detected_boxes` == False, just match as normal
+                #                                      True, rely on should_match_templates
+                match_anyway = not config["model_fit"].getboolean(
+                    "only_match_if_detected_boxes"
+                )
+                if match_anyway or should_match_templates(
+                    row, df_one, frequency_buffer
+                ):
                     max_val, max_loc_bot_left, max_loc_top_right = matchTemplate(
                         spec_one[y_min_target:y_max_target, :], row["segments"], config
                     )
