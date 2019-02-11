@@ -5,12 +5,6 @@ from os.path import join
 import sys
 from modules.config_check import ini_section_and_keys_exists
 from modules.config_check import config_checks
-from cv2 import TM_CCOEFF
-from cv2 import TM_CCOEFF_NORMED
-from cv2 import TM_CCORR
-from cv2 import TM_CCORR_NORMED
-from cv2 import TM_SQDIFF
-from cv2 import TM_SQDIFF_NORMED
 
 
 def get_percent_from_section(config, section, item):
@@ -40,12 +34,22 @@ def get_percent_from_section(config, section, item):
 def get_template_matching_algorithm(config):
     """ Return the template matching algorithm for OpenCV
 
+    OpenCV is an optional library. If we hit this function, we will
+    have checked that OpenCV can be imported.
+
     Input:
-        The opensoundscape config
+        config: The opensoundscape config
 
     Output:
         An integer
     """
+
+    from cv2 import TM_CCOEFF
+    from cv2 import TM_CCOEFF_NORMED
+    from cv2 import TM_CCORR
+    from cv2 import TM_CCORR_NORMED
+    from cv2 import TM_SQDIFF
+    from cv2 import TM_SQDIFF_NORMED
 
     options = {
         "TM_CCOEFF": TM_CCOEFF,

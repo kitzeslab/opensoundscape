@@ -30,10 +30,6 @@ from modules.image_utils import apply_gaussian_filter
 from modules.image_utils import generate_raw_spectrogram
 from modules.utils import get_percent_from_section
 from modules.utils import get_template_matching_algorithm
-from importlib.util import find_spec
-
-# from cv2 import matchTemplate as opencvMatchTemplate
-# from cv2 import minMaxLoc
 
 
 def min_max_vals_locs(ccorrs):
@@ -116,11 +112,8 @@ def matchTemplate(spectrogram, template, config):
     """
     method = config["model_fit"]["template_match_method"]
     if method == "opencv":
-        cv2_spec = find_spec("cv2")
-        if not cv2_spec:
-            raise ImportError("I can't find OpenCV optional library")
-        else:
-            from cv2 import matchTemplate as opencvMatchTemplate
+        from cv2 import matchTemplate as opencvMatchTemplate
+
         output_stats = opencvMatchTemplate(
             spectrogram, template, get_template_matching_algorithm(config)
         )
