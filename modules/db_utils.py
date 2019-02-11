@@ -41,14 +41,14 @@ def generate_cross_correlation_matrix(needed_df, found_df, config):
     for item in items:
         mono_idx = needed_df.index.get_loc(item["label"])
         _, file_file_stats = cursor_item_to_stats(item)
-        all_file_file_stats[mono_idx] = [
-            file_file_stats[found] for found in found_df.index.values
-        ]
+        all_file_file_stats[mono_idx] = np.vstack(
+            [file_file_stats[found] for found in found_df.index.values]
+        )
 
     close_client()
 
     npify = np.array(all_file_file_stats)
-    return npify[:, :, :, 0].reshape(needed_df.shape[0], -1)
+    return npify[:, :, 0].reshape(needed_df.shape[0], -1)
 
 
 def init_client(config):

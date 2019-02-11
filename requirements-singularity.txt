@@ -1,1 +1,2 @@
 librosa==0.6.2
+scikit-image==0.13.1

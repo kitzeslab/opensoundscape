@@ -227,9 +227,9 @@ def predict_algo(config):
         index_col=0,
     )
 
-    if config["model_fit"]["labels_list"] != "":
+    if config["model_fit"]["species_list"] != "":
         train_labels_df = train_labels_df.loc[
-            :, config["model_fit"]["labels_list"].split(",")
+            :, config["model_fit"]["species_list"].split(",")
         ]
 
     nprocs = return_cpu_count(config)

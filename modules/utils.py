@@ -77,16 +77,16 @@ def return_cpu_count(config):
     return nprocs
 
 
-def generate_config(f_default, f_override):
+def generate_config(f_default, arguments):
     """Generate the configuration
 
     Simply return a ConfigParser for opensoundscape. We have a default config in
-    `config/` as well as a potential override file. Access elements via
+    `config/` as well as a potential override file (arguments["--ini"]). Access elements via
     `config[<section>].get{float,boolean,int}('key')`.
 
     Args:
         f_default: The default config `config/opensoundscape.ini`
-        f_override: The override config `opensoundscape.ini`
+        arguments: The docopt arguments to store
 
     Returns:
         A ConfigParser instance
@@ -96,13 +96,14 @@ def generate_config(f_default, f_override):
     """
     opensoundscape_dir = sys.path[0]
     f_default = join(opensoundscape_dir, f_default)
+    f_override = arguments["--ini"]
 
     if not isfile(f_default):
         raise FileNotFoundError(f"{f_default} doesn't exist!")
     if not isfile(f_override):
         raise FileNotFoundError(f"{f_override} doesn't exist!")
 
-    config = ConfigParser()
+    config = ConfigParser(allow_no_value=True)
     config.read(f_default)
 
     override_config = ConfigParser()
@@ -113,6 +114,14 @@ def generate_config(f_default, f_override):
     config.read(f_override)
 
     config_checks(config)
+
+    # Finally, store any command line options so we only need to pass config
+    config["docopt"] = {}
+    config["docopt"]["label"] = arguments["<label>"]
+    config["docopt"]["image"] = arguments["<image>"]
+    config["docopt"]["print_segments"] = str(arguments["--segments"]).lower()
+    config["docopt"]["rerun_statistics"] = str(arguments["--rerun_statistics"]).lower()
+    config["docopt"]["csv_file"] = arguments["<csv_file>"]
 
     return config
 
