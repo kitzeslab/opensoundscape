@@ -55,7 +55,7 @@ def should_match_templates(template_row, image_rows, freq_buffer):
 
     for row in image_rows.iterrows():
         if (row["y_min"] >= match_y_min and row["y_min"] < match_y_max) or (
-            row["y_max"] <= match_y_max and row["y_max"] > y_min
+            row["y_max"] <= match_y_max and row["y_max"] > match_y_min
         ):
             return True
 
