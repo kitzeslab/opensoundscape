@@ -20,7 +20,7 @@ validate_file =
 predict_file =
 
 [spect_gen]
-algo = lasseck2013
+algo = template_matching
 resample_rate = 22050.0
 # Options: kaiser_best, kaiser_fast, scipy
 resample_type = kaiser_best
@@ -41,7 +41,7 @@ small_objects_kernel_size = 50
 segment_pixel_buffer = 12
 
 [model_fit]
-algo = lasseck2013
+algo = template_matching
 num_frequency_bands = 16
 gaussian_filter_sigma = 1.5
 template_match_frequency_buffer = 5
@@ -60,7 +60,7 @@ template_match_algorithm = TM_CCORR_NORMED
 only_match_if_detected_boxes = False
 
 [predict]
-algo = lasseck2013
+algo = template_matching
 """
 
 

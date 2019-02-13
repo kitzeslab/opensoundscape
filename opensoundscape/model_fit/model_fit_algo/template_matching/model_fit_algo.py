@@ -613,7 +613,7 @@ def fit_model(X, y, labels_df, config):
 
 def chunk_build_model(chunk, labels_df, config):
 
-    """Build the lasseck2013 model
+    """Build the model
     Given a chunk, run build_model on each label
 
     Args:
@@ -638,9 +638,9 @@ def chunk_build_model(chunk, labels_df, config):
 
 
 def build_model(column, labels_df, config):
-    """Build the lasseck2013 model
+    """Build the model
 
-    We were directed here from model_fit to fit the lasseck2013 model.
+    We were directed here from model_fit to fit a template matching model.
 
     Args:
         column: The column to build a model with
@@ -660,9 +660,9 @@ def build_model(column, labels_df, config):
 
 
 def model_fit_algo(config):
-    """Fit the lasseck2013 model
+    """Fit the model
 
-    We were directed here from model_fit to fit the lasseck2013 model.
+    We were directed here from model_fit to fit the model.
 
     Args:
         config: The parsed ini file for this run

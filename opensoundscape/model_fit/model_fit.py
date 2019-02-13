@@ -28,8 +28,8 @@ def model_fit(config):
         Nothing
     """
 
-    if config["model_fit"]["algo"] == "lasseck2013":
-        from opensoundscape.model_fit.model_fit_algo.lasseck2013.model_fit_algo import (
+    if config["model_fit"]["algo"] == "template_matching":
+        from opensoundscape.model_fit.model_fit_algo.template_matching.model_fit_algo import (
             model_fit_algo,
         )
     else:

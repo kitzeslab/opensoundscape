@@ -28,8 +28,8 @@ def predict(config):
         -
     """
 
-    if config["predict"]["algo"] == "lasseck2013":
-        from opensoundscape.predict.predict_algo.lasseck2013.predict_algo import (
+    if config["predict"]["algo"] == "template_matching":
+        from opensoundscape.predict.predict_algo.template_matching.predict_algo import (
             predict_algo,
         )
     else:

@@ -27,8 +27,8 @@ def spect_gen(config):
         Nothing
     """
 
-    if config["spect_gen"]["algo"] == "lasseck2013":
-        from opensoundscape.spect_gen.spect_gen_algo.lasseck2013.spect_gen_algo import (
+    if config["spect_gen"]["algo"] == "template_matching":
+        from opensoundscape.spect_gen.spect_gen_algo.template_matching.spect_gen_algo import (
             spect_gen_algo,
         )
     else:
