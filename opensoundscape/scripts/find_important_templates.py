@@ -25,7 +25,7 @@ Options:
 """
 
 
-def build_identification_list(found_df):
+def build_identification_list(found_df, config):
     # 1. Generate a dictionary
     num_of_segments_d = {}
     items = return_cursor(list(found_df.index), "spectrograms", config)
@@ -46,9 +46,10 @@ def build_identification_list(found_df):
     return [(idx, item) for sl in to_filenames for idx, item in enumerate(sl)]
 
 
-def sampled_X_y(species_found, species_not_found):
+def sampled_X_y(species_found, species_not_found, config):
     # Downsample not_found DF to smaller size
-    found_length = 2 * species_found.shape[0]
+    # found_length = 2 * species_found.shape[0]
+    found_length = 5
     dummies = species_not_found.sample(n=found_length)
 
     # Merge the DataFrames
@@ -113,9 +114,9 @@ def identify_templates(X, y, identifiers):
     return good_templates
 
 
-def gen_results_df(species_found, species_not_found, identifiers_list):
+def gen_results_df(species_found, species_not_found, identifiers_list, config):
     init_client(config)
-    X, y = sampled_X_y(species_found, species_not_found)
+    X, y = sampled_X_y(species_found, species_not_found, config)
     close_client()
     results_df = pd.DataFrame(columns=["weight", "template"])
     output = identify_templates(X, y, identifiers_list)
@@ -172,7 +173,7 @@ def run():
 
     # Generate list of tuples with identifying features for templates
     init_client(config)
-    identifiers_list = build_identification_list(species_found)
+    identifiers_list = build_identification_list(species_found, config)
     close_client()
 
     # Now, run a loop to identify useful templates
@@ -181,7 +182,7 @@ def run():
     executor = ProcessPoolExecutor(nprocs)
     fs = [
         executor.submit(
-            gen_results_df, species_found, species_not_found, identifiers_list
+            gen_results_df, species_found, species_not_found, identifiers_list, config
         )
         for x in range(100)
     ]
