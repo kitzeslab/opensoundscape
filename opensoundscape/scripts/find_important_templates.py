@@ -48,8 +48,7 @@ def build_identification_list(found_df, config):
 
 def sampled_X_y(species_found, species_not_found, config):
     # Downsample not_found DF to smaller size
-    # found_length = 2 * species_found.shape[0]
-    found_length = 5
+    found_length = 2 * species_found.shape[0]
     dummies = species_not_found.sample(n=found_length)
 
     # Merge the DataFrames
