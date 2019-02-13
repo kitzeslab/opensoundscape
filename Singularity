@@ -1,21 +1,18 @@
 Bootstrap: docker
 From: ubuntu:bionic
 
-%setup
-    mkdir -p ${SINGULARITY_ROOTFS}/opt/opensoundscape
-    cp -rv . ${SINGULARITY_ROOTFS}/opt/opensoundscape
-
 %labels
     AUTHOR moore0557@gmail.com
 
 %post
     apt-get update
-    apt-get upgrade
+    apt-get upgrade -y --no-install-recommends
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        python3 python3-pip mongodb
-    pip3 install poetry==0.12.11
-    TODO
+        python3 python3-pip python3-setuptools python3-wheel python3-pyqt5 \
+        mongodb --no-install-recommends
+    pip3 install opensoundscape==0.2.2
     apt-get clean
+    rm -rf /var/lib/apt/lists/*
 
 %apprun opensoundscape
     python /opt/opensoundscape/opensoundscape.py $*
