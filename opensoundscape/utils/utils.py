@@ -1,4 +1,27 @@
 from multiprocessing import cpu_count
+from librosa import load
+
+
+def get_sample_rate(label, config):
+    """Given a label, return the native sample rate
+
+    Get the native sample rate of the file
+
+    Args:
+        label: The label of the file to generate a spectrogram for
+        config: The opensoundscape config file
+
+    Returns:
+        sample_rate: The native sample rate for the label
+    """
+
+    _, sample_rate = load(
+        f"{config['general']['data_dir']}/{label}",
+        mono=False,  # Don't automatically load as mono, so we can warn if we force to mono
+        res_type=config["spect_gen"]["resample_type"],
+    )
+
+    return sample_rate
 
 
 def get_percent_from_section(config, section, item):

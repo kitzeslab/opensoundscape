@@ -175,25 +175,23 @@ def chunk_preprocess(chunk, config):
     return
 
 
-def preprocess(label, config):
-    """Preprocess all images
+def return_spectrogram(label, config):
+    """Given a label, generate a spectrogram
 
-    This is a super function which provides all of the functionality to
-    preprocess many wav file for model fitting. Later, this function will call
-    an external algorithm to do image processing.
+    Given a label and the config generate the z-score normalized
+    spectrogram. We also need the raw spectrogram's mean and standard
+    deviation to recreate the raw spectrogram.
 
     Args:
         label: The label e.g. train/001.wav
         config: The parsed ini file for this particular run
 
     Returns:
-        if read write to DB defined (`db_rw` in INI)
-            Write data to MongoDB w/ `db_name`
-        else:
-            Return the bounding box dataframe, spectrogram, and normalization
-            factor
-    Raises:
-        Nothing
+        spectrogram: The 2D z-score normalized spectrogram
+        spectrogram_mean: The raw spectrogram's mean
+        spectrogram_std: The raw spectrogram's standard deviation
+        times: The array of times
+        frequencies: The array of frequencies
     """
 
     # Resample
@@ -243,6 +241,35 @@ def preprocess(label, config):
     spectrogram_mean = np.mean(spectrogram)
     spectrogram_std = np.std(spectrogram)
     spectrogram = (spectrogram - spectrogram_mean) / spectrogram_std
+
+    return spectrogram, spectrogram_mean, spectrogram_std, times, frequencies
+
+
+def preprocess(label, config):
+    """Preprocess all images
+
+    This is a super function which provides all of the functionality to
+    preprocess many wav file for model fitting. Later, this function will call
+    an external algorithm to do image processing.
+
+    Args:
+        label: The label e.g. train/001.wav
+        config: The parsed ini file for this particular run
+
+    Returns:
+        if read write to DB defined (`db_rw` in INI)
+            Write data to MongoDB w/ `db_name`
+        else:
+            Return the bounding box dataframe, spectrogram, and normalization
+            factor
+    Raises:
+        Nothing
+    """
+
+    # Get the spectrogram
+    spectrogram, spectrogram_mean, spectrogram_std, _, _ = return_spectrogram(
+        label, config
+    )
 
     # # Scaled Median Column/Row Filters
     # -> this filter stinks after z-score normalization
