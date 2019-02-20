@@ -35,7 +35,6 @@ from opensoundscape.spect_gen.spect_gen_algo.template_matching.spect_gen_algo im
 from opensoundscape.utils.db_utils import init_client
 from opensoundscape.utils.db_utils import close_client
 from opensoundscape.utils.db_utils import write_spectrogram
-from opensoundscape.utils.utils import get_sample_rate
 
 
 def run():
@@ -67,20 +66,12 @@ def run():
     init_client(config)
 
     for label in labels_df.index.values:
-        print(f"--> {label} <--")
-
         # Make sure there is a selections file
         f_name = list(data_dir.glob(f"{label}.*.selections.txt"))
         if len(f_name) == 0:
             raise OpenSoundscapeNoRavenSelectionsFile(
                 f"I can't find a selections file for {label}"
             )
-
-        # Need the source sample rate to "resample" the frequencies
-        source_sr = get_sample_rate(label, config)
-        dest_sr = config["spect_gen"].getfloat("resample_rate")
-        sr_scaling_factor = dest_sr / source_sr
-        print(dest_sr, source_sr, sr_scaling_factor)
 
         # Read the definitions from the selections file
         # -> Only need the 4 columns and rename them
@@ -93,11 +84,6 @@ def run():
         df = df.rename(index=str, columns=rename_dict)
         df.drop_duplicates(inplace=True)
         df = df[df["x_min"] != df["x_max"]].reset_index(drop=True)
-        df["y_min"] *= sr_scaling_factor
-        df["y_max"] *= sr_scaling_factor
-
-        print("--> Before <--")
-        print(df.head())
 
         # Write out the template_pool.csv
         with open("template_pool.csv", "a") as f:
@@ -108,20 +94,11 @@ def run():
             label, config
         )
 
-        print(f"times_min = {np.min(times)}")
-        print(f"times_max = {np.max(times)}")
-        print(f"freq_min = {np.min(frequencies)}")
-        print(f"freq_max = {np.max(frequencies)}")
-
         # Need to convert the dataframe from units of seconds and Hz to indices
         df["x_min"] = df["x_min"].apply(lambda x: find_closest_index_of(x, times))
         df["x_max"] = df["x_max"].apply(lambda x: find_closest_index_of(x, times))
         df["y_min"] = df["y_min"].apply(lambda x: find_closest_index_of(x, frequencies))
         df["y_max"] = df["y_max"].apply(lambda x: find_closest_index_of(x, frequencies))
-
-        print("--> After <--")
-        print(df.head())
-        exit()
 
         # Store the spectrogram
         write_spectrogram(label, df, spect, spect_mean, spect_std, config)

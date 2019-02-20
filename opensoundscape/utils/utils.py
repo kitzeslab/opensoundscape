@@ -19,6 +19,7 @@ def get_sample_rate(label, config):
         f"{config['general']['data_dir']}/{label}",
         mono=False,  # Don't automatically load as mono, so we can warn if we force to mono
         res_type=config["spect_gen"]["resample_type"],
+        sr=None,
     )
 
     return sample_rate
