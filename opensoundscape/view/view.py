@@ -74,10 +74,11 @@ def gen_spec_with_segs(label, spec, df, image):
         rgb_vals = cmap(np.arange(df.shape[0]))[:, :-1]
 
     # Plot, flip the y-axis
-    fig, ax = plt.subplots(1, figsize=(15, 5))
+    fig, ax = plt.subplots(1, figsize=(10, 10))
     ax.imshow(spec, cmap=plt.get_cmap("gray_r"))
     ax.set_ylim(ax.get_ylim()[::-1])
     ax.set_title(label)
+    ax.set_aspect(spec.shape[1] / (2 * spec.shape[0]))
 
     for idx, row in df.iterrows():
         rect = patches.Rectangle(
