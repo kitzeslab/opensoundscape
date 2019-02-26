@@ -15,19 +15,10 @@ From: ubuntu:bionic
     rm -rf /var/lib/apt/lists/*
 
 %apprun opensoundscape
-    python /opt/opensoundscape/opensoundscape.py $*
-
-%appenv opensoundscape
-    export MPLBACKEND="TkAgg"
-
-%apprun opso-script
-    python3 /opt/opensoundscape/scripts/$*
-
-%appenv opso-script
-    export MPLBACKEND="TkAgg"
-
-%apprun opso-script-ls
-    ls /opt/opensoundscape/scripts/*
+    opensoundscape $*
 
 %apprun mongodb
     mongod $*
+
+%environment
+    export MPLBACKEND="Qt5Agg"
