@@ -8,7 +8,7 @@ From: ubuntu:bionic
     apt-get update
     apt-get upgrade -y --no-install-recommends
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        python3 python3-pip python3-setuptools python3-wheel python3-pyqt5 \
+        python3 python3-pip python3-setuptools python3-wheel tk \
         mongodb --no-install-recommends
     pip3 install opensoundscape==0.2.2
     apt-get clean
@@ -21,4 +21,4 @@ From: ubuntu:bionic
     mongod $*
 
 %environment
-    export MPLBACKEND="Qt5Agg"
+    export MPLBACKEND="TkAgg"
