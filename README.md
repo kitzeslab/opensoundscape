@@ -1,51 +1,106 @@
-[![https://www.singularity-hub.org/static/img/hosted-singularity--hub-%23e32929.svg](https://www.singularity-hub.org/static/img/hosted-singularity--hub-%23e32929.svg)](https://singularity-hub.org/collections/1681)
+Opensoundscape
+---
 
-# OpenSoundscape
+### Installation
 
-## Quick start guide
+We recommend you run Opensoundscape into a Python 3.7 virtual environment. If
+you don't already have Python installed you can use [the Anaconda
+distribution](https://www.anaconda.com/distribution/#download-section). Simply
+select your platform (Windows, macOS, or Linux) and download a Python 3.7
+64-bit installer. You will also need to run a MongoDB server which is used to
+store data for Opensoundscape. The documentation for this process is available
+[here](https://docs.mongodb.com/manual/installation/#mongodb-community-edition).
+The documentation also explains how to start the service on various platforms.
 
-*Note: installation instructions are for MacOS systems only.*
+Now, you can get Opensoundscape via
+[PyPI](https://pypi.org/project/opensoundscape/0.2.2.dev0).  I will show the
+`conda` commands below, but we use `virtualenvwrapper` internally.
 
-* Install [Anaconda for Python 3](https://www.anaconda.com/download/#macos) and [HomeBrew](https://brew.sh/).
-* Use HomeBrew to install a few other packages: `brew install libsamplerate mongodb git wget`
-* Set up the Python environment:
+1. Create the environment and install Opensoundscape: `conda create --name
+   opensoundscape python=3.7 opensoundscape=0.2.2.dev0`
+2. Activate the environment: `conda activate opensoundscape`
+3. Check if everything worked: `opensoundscape -h`
+4. Deactivate the environment when finished: `conda deactivate`
 
-        conda install -c conda-forge python=3.6 pip=18.0 pandas=0.23.4 numpy=1.15.1 matplotlib=2.1.2 docopt=0.6.2 scipy=1.0.0 scikit-image=0.13.1 pymongo=3.4.0 opencv=3.4.3 scikit-learn=0.20.0 #for dev: pytest==3.6.1 black==18.9b0
+### Singularity Container
 
-	pip install librosa==0.6.2 #for dev: pre-commit==1.12.0
+Currently, Singularity is only working on Linux. The developers recently showed
+a development version which works on
+[macOS](https://www.linkedin.com/feed/update/urn:li:activity:6505987087735623680/).
+You can pull our container from
+[here](https://cloud.sylabs.io/library/_container/5c7d4c0f5cf3490001ca7987).
 
-* Download data files, the [CLO-43SD-AUDIO](https://datadryad.org/resource/doi:10.5061/dryad.j2t92) dataset:
+1. Get the container: `singularity pull
+   library://barrymoo/default/opensoundscape:0.2.2.dev0`
+2. Check if Opensoundscape can run: `singularity run --app opensoundscape
+   opensoundscape_0.2.2.dev0.sif -h`
+3. Check if MongoDB can run: `singularity run --app mongodb
+   opensoundscape_0.2.2.dev0.sif -h`
 
-        cd ~/Downloads
-        wget "https://datadryad.org/bitstream/handle/10255/dryad.111783/CLO-43SD-AUDIO.tar.gz"
-        tar -xzf CLO-43SD-AUDIO.tar.gz
-        rm CLO-43SD-AUDIO.tar.gz
+### Quick Start Guide
 
+Going to run through a quick example of running Opensoundscape. First, we need
+some data
 
-* Download our training & prediction split of a subset of the CLO-43SD dataset:
+- The [CLO-43SD-AUDIO](https://datadryad.org/resource/doi:10.5061/dryad.j2t92)
+  dataset:
 
-        cd ~/Downloads/CLO-43SD-AUDIO/
-        wget https://raw.github.com/rhine3/opso-support/master/clo-43sd-train-small.csv
-        wget https://raw.github.com/rhine3/opso-support/master/clo-43sd-predict-small.csv
+```
+cd ~/Downloads
+wget https://datadryad.org/bitstream/handle/10255/dryad.111783/CLO-43SD-AUDIO.tar.gz
+tar -xzf CLO-43SD-AUDIO.tar.gz
+rm CLO-43SD-AUDIO.tar.gz
+```
 
+- Download our training & prediction split of a subset of the CLO-43SD dataset:
 
-* Download OpenSoundscape:
+```
+cd ~/Downloads/CLO-43SD-AUDIO/
+wget https://raw.github.com/rhine3/opso-support/master/clo-43sd-train-small.csv
+wget https://raw.github.com/rhine3/opso-support/master/clo-43sd-predict-small.csv
+```
 
-        mkdir ~/Code && cd ~/Code
-        git clone https://github.com/jkitzes/opensoundscape
+- Make a new directory to run Opensoundscape in, using `~/clo-43sd` below
 
+```
+cd ~/clo-43sd
+wget https://raw.github.com/rhine3/opso-support/master/opso-test-small.ini
+```
 
-* Download our config file, `opso-test-small.ini`
+- Edit the `.ini` to reflect the absolute path of your `Downloads` folder, e.g.
+  with `vim`: `vim opso-test-small.ini`
+- Start the MongoDB daemon in another terminal: `mongod --config
+  /usr/local/etc/mongod.conf`
+- Run Opensoundscape:
 
-        cd ~/Code/opensoundscape/
-        wget https://raw.github.com/rhine3/opso-support/master/opso-test-small.ini
+```
+opensoundscape init -i opso-test-small.ini
+opensoundscape spect_gen -i opso-test-small.ini > spect-gen-output-small.txt
+opensoundscape model_fit -i opso-test-small.ini > model-fit-output-small.txt
+opensoundscape predict -i opso-test-small.ini > predict-output-small.txt
+```
 
+### Contributions
 
-* Edit the `.ini` to reflect the absolute path of your `Downloads` folder, e.g. with `vim`: `vim opso-test-small.ini`
-* Start the MongoDB daemon in another terminal: `mongod --config /usr/local/etc/mongod.conf`
-* Run OpenSoundscape:
+Contributions are highly encouraged! Our development workflow is a combination
+of `virtualenvwrapper` and `poetry`. 
 
-        ./opensoundscape.py init -i opso-test-small.ini
-        ./opensoundscape.py spect_gen -i opso-test-small.ini > spect-gen-output-small.txt
-        ./opensoundscape.py model_fit -i opso-test-small.ini > model-fit-output-small.txt
-        ./opensoundscape.py predict -i opso-test-small.ini > predict-output-small.txt
+- Get [poetry](https://poetry.eustace.io/docs/#installation)
+- Get
+  [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/install.html)
+- Link `poetry` and `virtualenvwrapper`, add something like the following to
+  your `~/.bashrc` (don't forget to source it!)
+
+```
+# virtualenvwrapper + poetry
+export WORKON_HOME=~/.cache/pypoetry/virtualenvs
+source /usr/bin/virtualenvwrapper_lazy.sh
+```
+
+- Fork the github repository, and clone it
+    - We use `black` pre-commit hooks for formatting
+- Build the virtual environment for opensoundscape: `poetry install`
+- Activate your opensoundscape environment: `workon opensoundscape-py3.7`
+- Check Opensoundscape runs: `opensoundscape -h`
+- To go back to your system's Python: `deactivate`
+- Running the tests: `poetry run pytest tests`
