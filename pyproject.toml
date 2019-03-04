@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "opensoundscape"
-version = "0.2.2"
+version = "0.2.2.dev0"
 description = "Open source, scalable acoustic classification for ecology and conservation"
 authors = ["Justin Kitzes <justin.kitzes@pitt.edu>",
            "Barry Moore <moore0557@gmail.com>",
