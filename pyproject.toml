@@ -41,6 +41,7 @@ opensoundscape = "opensoundscape.console:run"
 opso_dump_cross_corrs = "opensoundscape.scripts.dump_cross_correlations:run"
 opso_find_high_cross_corrs = "opensoundscape.scripts.find_high_cross_correlations:run"
 opso_find_important_templates = "opensoundscape.scripts.find_important_templates:run"
+opso_raven_selections_to_template_db = "opensoundscape.scripts.raven_selections_to_template_db:run"
 opso_generate_images = "opensoundscape.scripts.generate_images:run"
 
 [tool.black]
