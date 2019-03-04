@@ -29,6 +29,7 @@ numba = "=0.42.0"
 opencv-python-headless = {version = "4.0.0.21",optional = true}
 pyqt5 = "^5.12"
 toolz = "^0.9.0"
+Pillow = {version = "^5.4",optional = true}
 
 [tool.poetry.dev-dependencies]
 pytest = "=4.2.0"
@@ -41,6 +42,7 @@ opso_dump_cross_corrs = "opensoundscape.scripts.dump_cross_correlations:run"
 opso_find_high_cross_corrs = "opensoundscape.scripts.find_high_cross_correlations:run"
 opso_find_important_templates = "opensoundscape.scripts.find_important_templates:run"
 opso_raven_selections_to_template_db = "opensoundscape.scripts.raven_selections_to_template_db:run"
+opso_generate_images = "opensoundscape.scripts.generate_images:run"
 
 [tool.black]
 line-length = 88

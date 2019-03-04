@@ -6,3 +6,5 @@ containers/
 testing/
 dist/
 opensoundscape.egg-info/
+.idea/
+.vscode/
