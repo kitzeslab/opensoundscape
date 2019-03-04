@@ -20,6 +20,14 @@ import sys
 import json
 
 
+class OpensoundscapeModelFitAlgorithmDoesntExist(Exception):
+    """
+    model_fit algorithm doesn't exist exception
+    """
+
+    pass
+
+
 def chunk_run_stats(chunk, train_labels_df, config):
     """For each chunk call run_stats
 
@@ -62,17 +70,15 @@ def run_stats(predict_idx, train_labels_df, config):
         Nothing. Writes prediction data to MongoDB collection.
     """
 
-    # Expose the statistics functions necessary for making the prediction
-    # -> Can't do this at top of file because it is dependent on the config
-    # try:
-    #     file_stats.__name__
-    #     file_file_stats.__name__
-    # except UnboundLocalError:
-    opensoundscape_dir = sys.path[0]
-    sys.path.append(
-        f"{opensoundscape_dir}/modules/model_fit_algo/{config['predict']['algo']}"
-    )
-    from model_fit_algo import get_file_stats, get_file_file_stats
+    if config["model_fit"]["algo"] == "template_matching":
+        from opensoundscape.model_fit.model_fit_algo.template_matching.model_fit_algo import (
+            get_file_stats,
+            get_file_file_stats,
+        )
+    else:
+        raise OpensoundscapeModelFitAlgorithmDoesntExist(
+            f"The algorithm '{config['model_fit']['algo']}' doesn't exist?"
+        )
 
     df_predict, spec_predict, spec_mean_predict, spec_std_predict, row_predict = get_file_stats(
         predict_idx, config
