@@ -19,7 +19,7 @@ Positional Arguments:
 
 Options:
     -h --help                       Print this screen and exit
-    -v --version                    Print the version of crc-squeue.py
+    -v --version                    Print the version of find_important_templates.py
     -i --ini <ini>                  Specify an override file [default: opensoundscape.ini]
     -s --save <template_pool.csv>   Generate a <template_pool.csv> for opensoundscape.py [default: template_pool.csv]
 """
@@ -147,11 +147,14 @@ from opensoundscape.utils.db_utils import init_client
 from opensoundscape.utils.db_utils import close_client
 from opensoundscape.utils.db_utils import return_cursor
 from opensoundscape.utils.db_utils import cursor_item_to_stats
+from opensoundscape import __version__ as opso_version
 
 
 def run():
     # From the docstring, generate the arguments dictionary
-    arguments = docopt(__doc__, version="find_important_templates.py version 0.0.1")
+    arguments = docopt(
+        __doc__, version=f"find_important_templates.py version {opso_version}"
+    )
 
     # Generate the config instance
     config = generate_config(arguments, store_options=False)

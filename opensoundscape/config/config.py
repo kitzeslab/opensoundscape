@@ -54,7 +54,7 @@ cross_correlations_only = False
 species_list =
 stratification_percent = 33.3
 # Options: opencv, cross_corr
-template_match_method = cross_corr
+template_match_method = opencv
 # Options: TM_CCOEFF, TM_CCOEFF_NORMED, TM_CCORR, TM_CCORR_NORMED, TM_SQDIFF, TM_SQDIFF_NORMED
 template_match_algorithm = TM_CCORR_NORMED
 only_match_if_detected_boxes = False

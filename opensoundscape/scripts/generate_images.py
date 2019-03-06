@@ -25,10 +25,11 @@ from importlib.util import find_spec
 import pathlib
 from opensoundscape.config.config import generate_config
 from opensoundscape.view.view import view
+from opensoundscape import __version__ as opso_version
 
 
 def run():
-    arguments = docopt(__doc__, version="generate_images.py version 0.0.1")
+    arguments = docopt(__doc__, version=f"generate_images.py version {opso_version}")
     config = generate_config(arguments, store_options=False)
 
     labels_df = pd.read_csv(

@@ -17,7 +17,7 @@ Positional Arguments:
 
 Options:
     -h --help                       Print this screen and exit
-    -v --version                    Print the version of crc-squeue.py
+    -v --version                    Print the version of find_high_cross_correlations.py
     -i --ini <ini>                  Specify an override file [default: opensoundscape.ini]
 """
 
@@ -39,11 +39,14 @@ from concurrent.futures import as_completed
 from opensoundscape.config.config import generate_config
 from opensoundscape.utils.utils import return_cpu_count
 from opensoundscape.utils.db_utils import generate_cross_correlation_matrix
+from opensoundscape import __version__ as opso_version
 
 
 def run():
     # From the docstring, generate the arguments dictionary
-    arguments = docopt(__doc__, version="find_high_cross_correlations.py version 0.0.1")
+    arguments = docopt(
+        __doc__, version=f"find_high_cross_correlations.py version {opso_version}"
+    )
 
     # Generate the config instance
     config = generate_config(arguments, store_options=False)

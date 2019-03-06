@@ -16,7 +16,7 @@ Positional Arguments:
 
 Options:
     -h --help               Print this screen and exit
-    -v --version            Print the version of crc-squeue.py
+    -v --version            Print the version of opensoundscape.py
     -i --ini <ini>          Specify an override file [default: opensoundscape.ini]
     -s --segments           View the segments only [default: False]
     -r --rerun_statistics   Override to model_fit statistics lock [default: False]

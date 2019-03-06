@@ -10,7 +10,7 @@ Usage:
 
 Options:
     -h --help                       Print this screen and exit
-    -v --version                    Print the version of crc-squeue.py
+    -v --version                    Print the version of raven_selections_to_template_db.py
     -i --ini <ini>                  Specify an override file [default: opensoundscape.ini]
 """
 
@@ -35,11 +35,12 @@ from opensoundscape.spect_gen.spect_gen_algo.template_matching.spect_gen_algo im
 from opensoundscape.utils.db_utils import init_client
 from opensoundscape.utils.db_utils import close_client
 from opensoundscape.utils.db_utils import write_spectrogram
+from opensoundscape import __version__ as opso_version
 
 
 def run():
     arguments = docopt(
-        __doc__, version="raven_selections_to_template_db.py version 0.0"
+        __doc__, version=f"raven_selections_to_template_db.py version {opso_version}"
     )
 
     config = generate_config(arguments, store_options=False)

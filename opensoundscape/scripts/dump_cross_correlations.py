@@ -17,7 +17,7 @@ Positional Arguments:
 
 Options:
     -h --help                       Print this screen and exit
-    -v --version                    Print the version of crc-squeue.py
+    -v --version                    Print the version of dump_cross_correlations.py
     -i --ini <ini>                  Specify an override file [default: opensoundscape.ini]
     -c --csv <csv_name>             Specify a CSV filename [default: cross_correlations.csv]
 """
@@ -29,6 +29,7 @@ from concurrent.futures import as_completed
 from opensoundscape.utils.db_utils import generate_cross_correlation_matrix
 from opensoundscape.config.config import generate_config
 from opensoundscape.utils.utils import return_cpu_count
+from opensoundscape import __version__ as opso_version
 
 
 def cross_correlations(chunk, species_found, config):
@@ -39,7 +40,9 @@ def cross_correlations(chunk, species_found, config):
 
 
 def run():
-    arguments = docopt(__doc__, version="dump_cross_correlations.py version 0.0.1")
+    arguments = docopt(
+        __doc__, version=f"dump_cross_correlations.py version {opso_version}"
+    )
     config = generate_config(arguments, store_options=False)
 
     species = arguments["<label>"]
