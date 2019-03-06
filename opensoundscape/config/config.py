@@ -1,8 +1,6 @@
 from opensoundscape.config.checks import ini_section_and_keys_exists
 from opensoundscape.config.checks import config_checks
-import sys
 from os.path import isfile
-from os.path import join
 from configparser import ConfigParser
 
 

@@ -2,21 +2,13 @@ import pandas as pd
 import numpy as np
 from opensoundscape.utils.db_utils import init_client
 from opensoundscape.utils.db_utils import close_client
-from opensoundscape.utils.db_utils import cursor_item_to_data
 from opensoundscape.utils.db_utils import cursor_item_to_stats
-from opensoundscape.utils.db_utils import read_spectrogram
 from opensoundscape.utils.db_utils import recall_model
 from opensoundscape.utils.db_utils import return_cursor
 from opensoundscape.utils.db_utils import write_file_stats
-from opensoundscape.spect_gen.spect_gen import spect_gen
-from opensoundscape.view.view import extract_segments
 from opensoundscape.utils.utils import return_cpu_count
-from scipy import stats
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
-from itertools import repeat
-from copy import copy
-import sys
 import json
 
 

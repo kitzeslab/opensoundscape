@@ -32,7 +32,6 @@ def high_cc(chunk, species_found, config):
 from docopt import docopt
 import pandas as pd
 import numpy as np
-from copy import copy
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
 

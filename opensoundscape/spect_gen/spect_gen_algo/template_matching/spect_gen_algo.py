@@ -2,8 +2,6 @@ import pandas as pd
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
-from multiprocessing import cpu_count
-from itertools import repeat
 from scipy import signal, ndimage
 from librosa import load, to_mono
 from skimage.morphology import remove_small_objects

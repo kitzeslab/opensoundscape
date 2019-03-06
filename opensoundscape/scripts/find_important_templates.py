@@ -131,7 +131,6 @@ def gen_results_df(species_found, species_not_found, identifiers_list, config):
 from docopt import docopt
 import pandas as pd
 import numpy as np
-from copy import copy
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import roc_auc_score
@@ -139,7 +138,6 @@ from sklearn.tree import DecisionTreeClassifier
 import pickle
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
-from itertools import repeat
 
 from opensoundscape.config.config import generate_config
 from opensoundscape.utils.utils import return_cpu_count

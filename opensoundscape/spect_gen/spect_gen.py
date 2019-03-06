@@ -1,6 +1,3 @@
-import sys
-from opensoundscape.utils.db_utils import init_client
-from opensoundscape.utils.db_utils import close_client
 from opensoundscape.utils.db_utils import write_ini_section
 
 
