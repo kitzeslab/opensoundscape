@@ -1,37 +1,24 @@
 Bootstrap: docker
 From: ubuntu:bionic
 
-%setup
-    mkdir -p ${SINGULARITY_ROOTFS}/opt/opensoundscape
-    cp -rv . ${SINGULARITY_ROOTFS}/opt/opensoundscape
-
 %labels
     AUTHOR moore0557@gmail.com
 
 %post
     apt-get update
-    apt-get upgrade
+    apt-get upgrade -y --no-install-recommends
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        python3 python3-pip python3-pandas python3-numpy \
-        python3-matplotlib python3-scipy python3-pymongo \
-        python3-opencv python3-docopt mongodb
-    pip3 install -r /opt/opensoundscape/requirements-singularity.txt
+        python3 python3-pip python3-setuptools python3-wheel tk \
+        python3-tk mongodb --no-install-recommends
+    pip3 install opensoundscape==0.2.2.dev0
     apt-get clean
+    rm -rf /var/lib/apt/lists/*
 
 %apprun opensoundscape
-    python /opt/opensoundscape/opensoundscape.py $*
-
-%appenv opensoundscape
-    export MPLBACKEND="TkAgg"
-
-%apprun opso-script
-    python3 /opt/opensoundscape/scripts/$*
-
-%appenv opso-script
-    export MPLBACKEND="TkAgg"
-
-%apprun opso-script-ls
-    ls /opt/opensoundscape/scripts/*
+    opensoundscape $*
 
 %apprun mongodb
     mongod $*
+
+%environment
+    export MPLBACKEND="TkAgg"
