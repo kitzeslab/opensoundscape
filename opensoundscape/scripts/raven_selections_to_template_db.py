@@ -68,7 +68,8 @@ def run():
 
     for label in labels_df.index.values:
         # Make sure there is a selections file
-        f_name = list(data_dir.glob(f"{label}.*.selections.txt"))
+        label_no_extension = label.split('.')[:-1][0]
+        f_name = list(data_dir.glob(f"{label_no_extension}.*.selections.txt"))
         if len(f_name) == 0:
             raise OpenSoundscapeNoRavenSelectionsFile(
                 f"I can't find a selections file for {label}"
