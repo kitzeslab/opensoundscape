@@ -75,7 +75,7 @@ def run():
         f_name = list(data_dir.glob(f"{label_no_ext}.*.selections.txt"))
         if len(f_name) == 0:
             raise OpenSoundscapeNoRavenSelectionsFile(
-                f"I can't find a selections file for {label_no_ext}"
+                f"I can't find a selections file for {label}"
             )
 
         # Read the definitions from the selections file
