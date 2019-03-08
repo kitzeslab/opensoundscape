@@ -54,7 +54,7 @@ def generate_segments_from_binary_spectrogram(binary_spec, buffer):
     return df
 
 
-def decible_filter(spectrogram, db_cutoff):
+def decibel_filter(spectrogram, db_cutoff):
     """Filter spectrogram with a minimum decibel cutoff
 
     Given a spectrogram, set anything below the cutoff to the cutoff
@@ -233,7 +233,7 @@ def return_spectrogram(label, config):
     )
 
     # Decibel filter
-    spectrogram = decible_filter(
+    spectrogram = decibel_filter(
         spectrogram, config["spect_gen"].getfloat("decibel_threshold")
     )
 
