@@ -67,9 +67,11 @@ def decible_filter(spectrogram, db_cutoff):
         new_spectrogram: The output spectogram in V**2
     """
 
-    inDb = 10.0 * np.log10(spectrogram)
+    remove_zeros = np.copy(spectrogram)
+    remove_zeros[remove_zeros == 0.0] = np.nan
+    inDb = 10.0 * np.log10(remove_zeros)
     inDb[inDb <= db_cutoff] = db_cutoff
-    return 10.0 ** (inDb / 10.0)
+    return np.nan_to_num(10.0 ** (inDb / 10.0))
 
 
 def low_values_filter(spectrogram, percent_threshold):
