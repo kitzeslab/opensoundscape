@@ -67,8 +67,12 @@ def run():
     init_client(config)
 
     for label in labels_df.index.values:
+        # Remove file extension from path
+        path = pathlib.Path(label)
+        label_no_ext = f"{path.parent}/{path.stem}"
+
         # Make sure there is a selections file
-        f_name = list(data_dir.glob(f"{label}.*.selections.txt"))
+        f_name = list(data_dir.glob(f"{label_no_ext}.*.selections.txt"))
         if len(f_name) == 0:
             raise OpenSoundscapeNoRavenSelectionsFile(
                 f"I can't find a selections file for {label}"
