@@ -223,13 +223,19 @@ def return_spectrogram(label, config):
         nfft=nperseg,
         scaling="spectrum",
     )
+    
+    # By default, high_freq_thresh is 0;
+    # set to sample_rate divided by 2
+    high_freq_thresh = config["spect_gen"].getint("high_freq_thresh")
+    if high_freq_thresh == 0:
+        high_freq_thresh = sample_rate / 2
 
     # Frequency Selection
     spectrogram, frequencies = frequency_based_spectrogram_filter(
         spectrogram,
         frequencies,
         config["spect_gen"].getint("low_freq_thresh"),
-        config["spect_gen"].getint("high_freq_thresh"),
+        high_freq_thresh,
     )
 
     # Decibel filter
