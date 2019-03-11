@@ -24,6 +24,7 @@ Options:
 from docopt import docopt
 import pandas as pd
 import numpy as np
+import json
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import as_completed
 from opensoundscape.utils.db_utils import generate_cross_correlation_matrix
@@ -51,7 +52,14 @@ def run():
         index_col="Filename",
     )
     labels_df = labels_df.fillna(0).astype(int)
-    species_found = labels_df[species][labels_df[species] == 1]
+
+    # If using a template_pool_db, need to use a different set of labels
+    if config["model_fit"]["template_pool"]:
+        pools_df = pd.read_csv(config["model_fit"]["template_pool"], index_col=0)
+        pools_df.templates = pools_df.templates.apply(lambda x: json.loads(x))
+        species_found = pools_df
+    else:
+        species_found = labels_df[species][labels_df[species] == 1]
 
     nprocs = return_cpu_count(config)
     executor = ProcessPoolExecutor(nprocs)
