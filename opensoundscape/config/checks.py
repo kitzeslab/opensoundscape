@@ -1,5 +1,6 @@
 from difflib import get_close_matches
 from importlib.util import find_spec
+import pymongo
 
 
 def ini_section_and_keys_exists(
@@ -73,6 +74,29 @@ def match_algorithm_exists(config):
             )
 
 
+def template_pool_db_exists(config):
+    """ Given the parsed INI file
+
+    If the user asks for a template_pool_db, it better exist!
+
+    Input:
+        config: The opensoundscape config file
+    """
+
+    if config["model_fit"]["template_pool_db"]:
+        templ_pool_db = config["model_fit"]["template_pool_db"]
+        client = pymongo.MongoClient(config["general"]["db_uri"])
+        db_names = client.list_database_names()
+        if templ_pool_db not in db_names:
+            close_matches = get_close_matches(templ_pool_db, db_names)
+            print(
+                f"ERROR: You specified the template_pool_db '{templ_pool_db}', but it doesn't exist?"
+            )
+            if close_matches:
+                print(f"-> did you mean: {' '.join(close_matches)}")
+            exit()
+
+
 def config_checks(config):
     """ Given the parsed INI files
 
@@ -91,3 +115,4 @@ def config_checks(config):
     """
 
     match_algorithm_exists(config)
+    template_pool_db_exists(config)
