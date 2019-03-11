@@ -289,8 +289,11 @@ def cursor_item_to_data(item, config):
     spec = pickle.loads(spec_bytes)
     mean = pickle.loads(mean_bytes)
     std = pickle.loads(std_bytes)
-    if config["general"].getboolean("db_sparse"):
+
+    # Ensure spectrogram is in dense representation
+    if hasattr(spec, "todense"):
         spec = spec.todense()
+
     return df, spec, mean, std
 
 
