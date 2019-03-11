@@ -142,7 +142,7 @@ def frequency_based_spectrogram_filter(spec, freq, low_freq_thr, high_freq_thr):
     Returns:
         A tuple containing the new spectrogram and frequencies
     """
-    indices = np.argwhere((freq > low_freq_thr) & (freq < high_freq_thr)).flatten()
+    indices = np.argwhere((freq >= low_freq_thr) & (freq <= high_freq_thr)).flatten()
     return spec[indices, :], freq[indices]
 
 
