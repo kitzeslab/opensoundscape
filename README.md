@@ -13,11 +13,11 @@ store data for Opensoundscape. The documentation for this process is available
 The documentation also explains how to start the service on various platforms.
 
 Now, you can get Opensoundscape via
-[PyPI](https://pypi.org/project/opensoundscape/0.3.0).  I will show the
+[PyPI](https://pypi.org/project/opensoundscape/0.3.0.1).  I will show the
 `conda` commands below, but we use `virtualenvwrapper` internally.
 
 1. Create the environment and install Opensoundscape: `conda create --name
-   opensoundscape python=3.7 opensoundscape=0.3.0`
+   opensoundscape python=3.7 opensoundscape=0.3.0.1`
 2. Activate the environment: `conda activate opensoundscape`
 3. Check if everything worked: `opensoundscape -h`
 4. Deactivate the environment when finished: `conda deactivate`
@@ -31,11 +31,11 @@ You can pull our container from
 [here](https://cloud.sylabs.io/library/_container/5c7d4c0f5cf3490001ca7987).
 
 1. Get the container: `singularity pull
-   library://barrymoo/default/opensoundscape:0.3.0`
+   library://barrymoo/default/opensoundscape:0.3.0.1`
 2. Check if Opensoundscape can run: `singularity run --app opensoundscape
-   opensoundscape_0.3.0.sif -h`
+   opensoundscape_0.3.0.1.sif -h`
 3. Check if MongoDB can run: `singularity run --app mongodb
-   opensoundscape_0.3.0.sif -h`
+   opensoundscape_0.3.0.1.sif -h`
 
 ### Quick Start Guide
 
