@@ -9,7 +9,7 @@ From: ubuntu:bionic
     apt-get upgrade -y --no-install-recommends
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
         python3 python3-pip python3-setuptools python3-wheel tk \
-        python3-tk mongodb --no-install-recommends
+        python3-tk mongodb mongo-tools libglib2.0-0 --no-install-recommends
     pip3 install opensoundscape==0.3.0.1
     apt-get clean
     rm -rf /var/lib/apt/lists/*
