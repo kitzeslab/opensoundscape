@@ -1,7 +1,20 @@
 Opensoundscape
 ---
 
+### Motivation
+
+We originally wanted Opensoundscape to be an end-to-end machine/deep learning
+preprocessing, training, and prediction pipeline. However, we have recently
+realized this doesn't make sense for most. We have decided for 1.0.0 we wanted
+to create to move to a utility library...
+
 ### Installation
+
+We recommend installing Opensoundscape in a virtual environment. Barry
+uses `virtualenv/virtualenvwrapper` and Tessa uses `conda`. Either works.
+This is to avoid conflicting dependencies with your current environment.
+
+- `pip install opensoundscape==1.0.0.alpha0`
 
 ### Contributions
 
