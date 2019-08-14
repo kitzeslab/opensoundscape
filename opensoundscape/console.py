@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-""" opensoundscape.py -- Opensoundscape
+""" console.py: Entrypoint for opensoundscape
+"""
+
+from docopt import docopt
+from opensoundscape import __version__ as opensoundscape_version
+
+
+OPSO_DOCOPT = """ opensoundscape.py -- Opensoundscape
 Usage:
     opensoundscape.py [-hv]
 
@@ -8,15 +15,13 @@ Options:
     -v --version            Print the version of opensoundscape.py
 """
 
-from docopt import docopt
-from opensoundscape import __version__ as opensoundscape_version
-
 
 def entrypoint():
-    """
-    The Opensoundscape entrypoint for console interaction
+    """The Opensoundscape entrypoint for console interaction
     """
 
-    args = docopt(__doc__, version=f"opensoundscape version {opensoundscape_version}")
+    args = docopt(
+        OPSO_DOCOPT, version=f"opensoundscape version {opensoundscape_version}"
+    )
 
     print(args)

@@ -3,3 +3,4 @@ opensoundscape.save/
 opensoundscape.egg-info/
 dist/
 __pycache__/
+doc/_build/
