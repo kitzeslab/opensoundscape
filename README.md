@@ -40,3 +40,7 @@ source /usr/bin/virtualenvwrapper_lazy.sh
 - Check Opensoundscape runs: `opensoundscape -h`
 - To go back to your system's Python: `deactivate`
 - Running the tests: `poetry run pytest tests`
+
+### Building the Documentation
+
+- `sphinx-build doc doc/_build`
