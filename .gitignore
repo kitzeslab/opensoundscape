@@ -1,0 +1,5 @@
+opensoundscape.save/
+.mypy_cache/
+opensoundscape.egg-info/
+dist/
+__pycache__/
