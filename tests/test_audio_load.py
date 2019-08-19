@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import opensoundscape as opso
-from opensoundscape.load import *
+from opensoundscape.audio.load import *
 import pytest
 import pathlib
 import io
