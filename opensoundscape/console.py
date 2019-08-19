@@ -3,6 +3,8 @@
 """
 
 from docopt import docopt
+import subprocess
+import opensoundscape as opso
 from opensoundscape import __version__ as opensoundscape_version
 
 
@@ -25,3 +27,9 @@ def entrypoint():
     )
 
     print(args)
+
+
+def build_docs():
+    """ Run sphinx-build for our project
+    """
+    subprocess.run(["sphinx-build", "doc", "doc/_build"], cwd=f"{opso.__path__[0]}/..")

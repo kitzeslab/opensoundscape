@@ -39,8 +39,9 @@ source /usr/bin/virtualenvwrapper_lazy.sh
 - Activate your opensoundscape environment: `workon opensoundscape-py3.7`
 - Check Opensoundscape runs: `opensoundscape -h`
 - To go back to your system's Python: `deactivate`
-- Running the tests: `poetry run pytest tests`
+- Running the tests: `poetry run pytest`
 
 ### Building the Documentation
 
-- `sphinx-build doc doc/_build`
+- With poetry: `poetry run build_docs`
+- With sphinx-build: `sphinx-build doc doc/_build`
