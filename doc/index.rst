@@ -10,6 +10,9 @@ Welcome to opensoundscape's documentation!
 .. automodule:: opensoundscape.console
    :members:
 
+.. automodule:: opensoundscape.load
+   :members:
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:

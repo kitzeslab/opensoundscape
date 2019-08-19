@@ -5,6 +5,7 @@
 import pathlib
 import io
 import librosa
+import soundfile
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -21,7 +22,7 @@ class OpsoLoadAudioInputTooLong(Exception):
     pass
 
 
-def load(audio, sample_rate=22050, max_duration=600):
+def load(audio, sample_rate=22050, max_duration=600, resample_type="kaiser_fast"):
     """ Load audio in various formats and generate a spectrogram
 
     Deal with the various possible input types to load an audio
@@ -34,8 +35,7 @@ def load(audio, sample_rate=22050, max_duration=600):
                        None is no maximum (default: 600 seconds)
 
     Returns:
-        samples: np.ndarray [shape=(n,)]
-        sample_rate: int
+        samples: mono samples, np.ndarray [shape=(n,)]
     """
 
     # Deal with a string/path-like object
@@ -70,7 +70,16 @@ def load(audio, sample_rate=22050, max_duration=600):
                 f"Error: The file {path} is longer than {max_duration} seconds"
             )
 
-        # Safe to load w/ librosa
+        samples, _ = librosa.load(
+            path, sr=sample_rate, res_type=resample_type, mono=True
+        )
 
     else:
-        print("StringIO or BytesIO object")
+        input_samples, input_sample_rate = soundfile.read(audio)
+        samples = librosa.resample(
+            input_samples, input_sample_rate, sample_rate, res_type=resample_type
+        )
+        if samples.ndim > 1:
+            samples = librosa.to_mono(samples)
+
+    return samples

@@ -17,6 +17,7 @@ include = ["opensoundscape/**/*.py"]
 [tool.poetry.dependencies]
 python = "^3.6"
 docopt = "^0.6.2"
+librosa = "^0.7.0"
 
 [tool.poetry.dev-dependencies]
 black = "=19.3b0"
