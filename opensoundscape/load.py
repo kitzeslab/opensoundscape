@@ -21,10 +21,7 @@ class OpsoLoadAudioInputTooLong(Exception):
     pass
 
 
-def load(audio,
-         sample_rate=22050,
-         max_duration=600,
-         ):
+def load(audio, sample_rate=22050, max_duration=600):
     """ Load audio in various formats and generate a spectrogram
 
     Deal with the various possible input types to load an audio
@@ -61,10 +58,19 @@ def load(audio,
         print("BytesIO object")
         path = None
     else:
-        raise OpsoLoadAudioInputError(f"Error: can't load files of class {audio.__class__}")
+        raise OpsoLoadAudioInputError(
+            f"Error: can't load files of class {audio.__class__}"
+        )
 
     if path:
         if not path.is_file():
             raise FileNotFoundError(f"Error: The file {path} doesn't exist?")
         if librosa.get_duration(filename=path) > max_duration:
-            raise AudioFileTooLong(f"Error: The file {path} is longer than {max_duration} seconds")
+            raise OpsoLoadAudioInputTooLong(
+                f"Error: The file {path} is longer than {max_duration} seconds"
+            )
+
+        # Safe to load w/ librosa
+
+    else:
+        print("StringIO or BytesIO object")
