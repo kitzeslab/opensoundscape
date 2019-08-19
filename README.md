@@ -45,3 +45,17 @@ source /usr/bin/virtualenvwrapper_lazy.sh
 
 - With poetry: `poetry run build_docs`
 - With sphinx-build: `sphinx-build doc doc/_build`
+
+### Publish Documentation
+
+```
+rm -rf /tmp/gh-pages
+cp -r doc/_build /tmp/gh-pages
+git checkout gh-pages
+rm -rf *
+cp -r /tmp/gh-pages/* .
+git add .
+git commit -m "Updated gh-pages"
+git push
+git checkout master
+```
