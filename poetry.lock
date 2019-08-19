@@ -568,6 +568,17 @@ sphinxcontrib-serializinghtml = "*"
 
 [[package]]
 category = "dev"
+description = "Read the Docs theme for Sphinx"
+name = "sphinx-rtd-theme"
+optional = false
+python-versions = "*"
+version = "0.4.3"
+
+[package.dependencies]
+sphinx = "*"
+
+[[package]]
+category = "dev"
 description = ""
 name = "sphinxcontrib-applehelp"
 optional = false
@@ -655,7 +666,7 @@ python-versions = ">=2.7"
 version = "0.5.2"
 
 [metadata]
-content-hash = "ca7c565494f26ac702bcba4d69a0f38ce441d504956c4956561bdf94edb78c4d"
+content-hash = "4e18148ceaf2b6822ed3f3d0bb7006095c34c2c685a7e470cc3cbe1a8eb3601e"
 python-versions = "^3.6"
 
 [metadata.hashes]
@@ -713,6 +724,7 @@ six = ["3350809f0555b11f552448330d0b52d5f24c91a322ea4a15ef22629740f3761c", "d16a
 snowballstemmer = ["9f3b9ffe0809d174f7047e121431acf99c89a7040f0ca84f94ba53a498e6d0c9"]
 soundfile = ["181393f8daac38bda997c4284b760bcd726dc0e847f620020d7bf2d3d538a985", "3f90971bb1884575ada9a0731e878c91cc1ffde14a778f0857deaa2fd04849ac", "637f6218c867b8cae80f6989634a0813b416b3e6132480d056e6e5a89a921571", "7fe04272cbfb94ab648acb0db31ace0800f5a4cf46e9d45b4d71ddb15abce1a0", "80a3d2ed37199ffa7066c097d7b82b8413922e22870b62b54dc264bf0169f4c2"]
 sphinx = ["22538e1bbe62b407cf5a8aabe1bb15848aa66bb79559f42f5202bbce6b757a69", "f9a79e746b87921cabc3baa375199c6076d1270cee53915dbd24fdbeaaacc427"]
+sphinx-rtd-theme = ["00cf895504a7895ee433807c62094cf1e95f065843bf3acd17037c3e9a2becd4", "728607e34d60456d736cc7991fd236afb828b21b82f956c5ea75f94c8414040a"]
 sphinxcontrib-applehelp = ["edaa0ab2b2bc74403149cb0209d6775c96de797dfd5b5e2a71981309efab3897", "fb8dee85af95e5c30c91f10e7eb3c8967308518e0f7488a2828ef7bc191d0d5d"]
 sphinxcontrib-devhelp = ["6c64b077937330a9128a4da74586e8c2130262f014689b4b89e2d08ee7294a34", "9512ecb00a2b0821a146736b39f7aeb90759834b07e81e8cc23a9c70bacb9981"]
 sphinxcontrib-htmlhelp = ["4670f99f8951bd78cd4ad2ab962f798f5618b17675c35c5ac3b2132a14ea8422", "d4fd39a65a625c9df86d7fa8a2d9f3cd8299a3a4b15db63b50aac9e161d8eff7"]
