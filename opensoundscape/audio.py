@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" load.py: Utilities for loading audio files
+""" audio.py: Utilities for dealing with audio files
 """
 
 import pathlib
@@ -29,7 +29,7 @@ def load(audio, sample_rate=22050, max_duration=600, resample_type="kaiser_fast"
     file and generate a spectrogram
 
     Args:
-        audio: string, pathlib, or io object
+        audio: string, pathlib, or bytesio object
         sample_rate: the target sample rate (default: 22050 Hz)
         max_duration: the maximum length of an input file,
                        None is no maximum (default: 600 seconds)
@@ -49,10 +49,6 @@ def load(audio, sample_rate=22050, max_duration=600, resample_type="kaiser_fast"
     elif issubclass(audio.__class__, pathlib.PurePath):
         # We already have a pathlib object
         path = audio
-    elif issubclass(audio.__class__, io.TextIOBase):
-        # We have a StringIO object
-        print("StringIO object")
-        path = None
     elif issubclass(audio.__class__, io.BufferedIOBase):
         # We have a BytesIO object
         print("BytesIO object")

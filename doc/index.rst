@@ -10,7 +10,7 @@ Welcome to opensoundscape's documentation!
 .. automodule:: opensoundscape.console
    :members:
 
-.. automodule:: opensoundscape.audio.load
+.. automodule:: opensoundscape.audio
    :members:
 
 .. toctree::

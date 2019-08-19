@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import opensoundscape as opso
-from opensoundscape.audio.load import *
+from opensoundscape.audio import *
 import pytest
 import pathlib
 import io
@@ -10,6 +10,16 @@ import numpy as np
 @pytest.fixture()
 def veryshort_wav_str():
     return f"{opso.__path__[0]}/../tests/veryshort.wav"
+
+
+@pytest.fixture()
+def silence_10s_mp3_str():
+    return f"{opso.__path__[0]}/../tests/silence_10s.mp3"
+
+
+@pytest.fixture()
+def not_a_file_str():
+    return f"{opso.__path__[0]}/../tests/not_a_file.wav"
 
 
 @pytest.fixture()
@@ -23,42 +33,22 @@ def veryshort_wav_bytesio(veryshort_wav_str):
         return io.BytesIO(f.read())
 
 
-@pytest.fixture()
-def silence_10s_mp3_str():
-    return f"{opso.__path__[0]}/../tests/silence_10s.mp3"
-
-
-@pytest.fixture()
-def not_a_file_str():
-    return f"{opso.__path__[0]}/../tests/not_a_file.wav"
-
-
 def test_load_veryshort_wav_str_44100(veryshort_wav_str):
     samples = load(veryshort_wav_str, sample_rate=44100)
     assert samples.shape == (6266,)
 
 
-def test_load_veryshort_wav_str_22050(veryshort_wav_str):
+def test_load_veryshort_wav_str(veryshort_wav_str):
     samples = load(veryshort_wav_str)
     assert samples.shape == (3133,)
 
 
-def test_load_veryshort_wav_pathlib_44100(veryshort_wav_pathlib):
-    samples = load(veryshort_wav_pathlib, sample_rate=44100)
-    assert samples.shape == (6266,)
-
-
-def test_load_veryshort_wav_pathlib_22050(veryshort_wav_pathlib):
+def test_load_veryshort_wav_pathlib(veryshort_wav_pathlib):
     samples = load(veryshort_wav_pathlib)
     assert samples.shape == (3133,)
 
 
-def test_load_veryshort_wav_bytesio_44100(veryshort_wav_bytesio):
-    samples = load(veryshort_wav_bytesio, sample_rate=44100)
-    assert samples.shape == (6266,)
-
-
-def test_load_veryshort_wav_bytesio_22050(veryshort_wav_bytesio):
+def test_load_veryshort_wav_bytesio(veryshort_wav_bytesio):
     samples = load(veryshort_wav_bytesio)
     assert samples.shape == (3133,)
 
