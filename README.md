@@ -39,7 +39,7 @@ source /usr/bin/virtualenvwrapper_lazy.sh
 - Activate your opensoundscape environment: `workon opensoundscape-py3.7`
 - Check Opensoundscape runs: `opensoundscape -h`
 - To go back to your system's Python: `deactivate`
-- Running the tests: `poetry run pytest`
+- Running the tests (from top-level directory): `poetry run pytest`
 
 ### Building the Documentation
 

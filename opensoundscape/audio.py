@@ -6,6 +6,36 @@ import pathlib
 import io
 import librosa
 import soundfile
+import numpy as np
+
+
+class Samples:
+    """ Immutable container for audio samples
+
+    This immutable class contains the samples and sample_rate for a particular
+    audio file
+
+    Args:
+        samples: np.ndarray [shape (n,)], the audio samples
+        sample_rate: int, the sampling rate for the audio samples
+    """
+
+    __slots__ = ("samples", "sample_rate")
+
+    def __init__(self, samples, sample_rate):
+        if not isinstance(samples, np.ndarray):
+            raise TypeError("Samples is not an np.ndarray?")
+        if samples.ndim != 1:
+            raise AttributeError("Samples should be sampled in mono channel")
+
+        super(Samples, self).__setattr__("samples", samples)
+        super(Samples, self).__setattr__("sample_rate", sample_rate)
+
+    def __setattr__(self, name, value):
+        raise AttributeError("Samples is an immutable container")
+
+    def __repr__(self):
+        return f"<Samples(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -22,7 +52,7 @@ class OpsoLoadAudioInputTooLong(Exception):
     pass
 
 
-def load(audio, sample_rate=22050, max_duration=600, resample_type="kaiser_fast"):
+def load_samples(audio, sample_rate=22050, max_duration=600, resample_type="kaiser_fast"):
     """ Load audio in various formats and generate a spectrogram
 
     Deal with the various possible input types to load an audio
@@ -35,7 +65,7 @@ def load(audio, sample_rate=22050, max_duration=600, resample_type="kaiser_fast"
                        None is no maximum (default: 600 seconds)
 
     Returns:
-        samples: mono samples, np.ndarray [shape=(n,)]
+        Samples: class, attributes samples and sample_rate
     """
 
     # Deal with a string/path-like object
@@ -67,7 +97,7 @@ def load(audio, sample_rate=22050, max_duration=600, resample_type="kaiser_fast"
             )
 
         samples, _ = librosa.load(
-            path, sr=sample_rate, res_type=resample_type, mono=True
+            str(path.resolve()), sr=sample_rate, res_type=resample_type, mono=True
         )
 
     else:
@@ -78,4 +108,4 @@ def load(audio, sample_rate=22050, max_duration=600, resample_type="kaiser_fast"
         if samples.ndim > 1:
             samples = librosa.to_mono(samples)
 
-    return samples, sample_rate
+    return Samples(samples, sample_rate)
