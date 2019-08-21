@@ -9,17 +9,17 @@ import numpy as np
 
 @pytest.fixture()
 def veryshort_wav_str():
-    return f"{opso.__path__[0]}/../tests/veryshort.wav"
+    return f"tests/veryshort.wav"
 
 
 @pytest.fixture()
 def silence_10s_mp3_str():
-    return f"{opso.__path__[0]}/../tests/silence_10s.mp3"
+    return f"tests/silence_10s.mp3"
 
 
 @pytest.fixture()
 def not_a_file_str():
-    return f"{opso.__path__[0]}/../tests/not_a_file.wav"
+    return f"tests/not_a_file.wav"
 
 
 @pytest.fixture()
@@ -52,6 +52,15 @@ def test_load_veryshort_wav_bytesio(veryshort_wav_bytesio):
     s = load_samples(veryshort_wav_bytesio)
     assert s.samples.shape == (3133,)
 
+def test_samples_class_is_immutable_samples(veryshort_wav_bytesio):
+    with pytest.raises(AttributeError):
+        s = load_samples(veryshort_wav_bytesio)
+        s.samples = None
+
+def test_samples_class_is_immutable_sample_rate(veryshort_wav_bytesio):
+    with pytest.raises(AttributeError):
+        s = load_samples(veryshort_wav_bytesio)
+        s.sample_rate = None
 
 def test_load_pathlib_and_bytesio_are_almost_equal(
     veryshort_wav_pathlib, veryshort_wav_bytesio
