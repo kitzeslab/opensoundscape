@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import opensoundscape as opso
-from opensoundscape.audio import load_samples
+from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 import pytest
 import numpy as np
@@ -17,7 +17,8 @@ def test_spectrogram_raises_typeerror():
 
 
 def test_spectrogram_shape_of_veryshort(veryshort_wav_str):
-    spec = Spectrogram.from_audio(load_samples(veryshort_wav_str))
+    audio = Audio(veryshort_wav_str)
+    spec = Spectrogram.from_audio(audio)
     assert spec.spectrogram.shape == (257, 21)
     assert spec.frequencies.shape == (257,)
     assert spec.times.shape == (21,)
