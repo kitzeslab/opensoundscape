@@ -78,4 +78,4 @@ def load(audio, sample_rate=22050, max_duration=600, resample_type="kaiser_fast"
         if samples.ndim > 1:
             samples = librosa.to_mono(samples)
 
-    return samples
+    return samples, sample_rate
