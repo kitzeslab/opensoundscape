@@ -223,7 +223,7 @@ def return_spectrogram(label, config):
         nfft=nperseg,
         scaling="spectrum",
     )
-    
+
     # By default, high_freq_thresh is 0;
     # set to sample_rate divided by 2
     high_freq_thresh = config["spect_gen"].getint("high_freq_thresh")
@@ -242,6 +242,9 @@ def return_spectrogram(label, config):
     spectrogram = decibel_filter(
         spectrogram, config["spect_gen"].getfloat("decibel_threshold")
     )
+
+    # Logarithm of intensities
+    spectrogram = np.log10(spectrogram)
 
     # Z-score normalization, need mean and std later
     spectrogram_mean = np.mean(spectrogram)
