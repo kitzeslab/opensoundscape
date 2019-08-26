@@ -4,3 +4,4 @@ opensoundscape.egg-info/
 dist/
 __pycache__/
 doc/_build/
+*.ipynb_checkpoints/
