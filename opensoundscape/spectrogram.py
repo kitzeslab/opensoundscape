@@ -82,3 +82,21 @@ class Spectrogram:
         return Spectrogram(
             np.nan_to_num(10.0 ** (in_decibel / 10.0)), self.frequencies, self.times
         )
+
+    def min_max_scale(self, feature_range=(0, 1)):
+        """ Apply a min-max filter
+        """
+
+        if len(feature_range) != 2:
+            raise AttributeError(
+                "Error: `feature_range` doesn't look like a 2-element tuple?"
+            )
+        if feature_range[1] < feature_range[0]:
+            raise AttributeError("Error: `feature_range` isn't increasing?")
+
+        spect_min = self.spectrogram.min()
+        spect_max = self.spectrogram.min()
+        scale_factor = (feature_range[1] - feature_range[0]) / (spect_max - spect_min)
+        return Spectrogram(
+            scale_factor * (self.spectrogram - spect_min) + feature_range[0]
+        )
