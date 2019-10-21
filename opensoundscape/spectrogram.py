@@ -98,5 +98,16 @@ class Spectrogram:
         spect_max = self.spectrogram.min()
         scale_factor = (feature_range[1] - feature_range[0]) / (spect_max - spect_min)
         return Spectrogram(
-            scale_factor * (self.spectrogram - spect_min) + feature_range[0]
+            scale_factor * (self.spectrogram - spect_min) + feature_range[0],
+            self.frequencies,
+            self.times,
         )
+
+    def audacity_gain_range(self, spec_gain=20, spec_range=80):
+        """ Apply gain and range similar to Audacity
+        """
+
+        _spec = self.spectrogram
+        _spec[_spec > -spec_gain] = -spec_gain
+        _spec[_spec < -(spec_gain + spec_range)] = -(spec_gain + spec_range)
+        return Spectrogram(_spec, self.frequencies, self.times)
