@@ -69,7 +69,7 @@ class Audio:
                 raise FileNotFoundError(f"Error: The file {path} doesn't exist?")
             if (
                 max_duration != None
-                and librosa.get_duration(filename=path) > max_duration
+                and librosa.get_duration(filename=path.as_posix()) > max_duration
             ):
                 raise OpsoLoadAudioInputTooLong(
                     f"Error: The file {path} is longer than {max_duration} seconds"
