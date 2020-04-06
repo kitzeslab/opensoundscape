@@ -4,7 +4,7 @@
 
 from scipy import signal
 import numpy as np
-from opensoundscape.audio import Samples
+from opensoundscape.audio import Audio
 
 
 class Spectrogram:
@@ -51,7 +51,7 @@ class Spectrogram:
 
     @classmethod
     def from_audio(cls, audio, window="hann", overlap=75, segment_length=512):
-        if not isinstance(audio, Samples):
+        if not isinstance(audio, Audio):
             raise TypeError("Class method expects Samples class as input")
 
         frequencies, times, spectrogram = signal.spectrogram(
