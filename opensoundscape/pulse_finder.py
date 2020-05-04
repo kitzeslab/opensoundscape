@@ -47,7 +47,8 @@ def calculate_pulse_score(amplitude, sample_frequency_of_spec, pulserate_range, 
     return max_pxx
 
 def pulse_finder(spectrogram, freq_range, pulserate_range, window_len, rejection_bands=None, plot=False):
-    '''pulse rate method for repeated pulse calls: 
+    '''pulse rate method for repeated pulse calls
+    
     look in a box of frequency and pulse-rate, score on amplitude of fft of smooth signal amplitude
     divides the audio into segments of length window_len
     
@@ -100,7 +101,8 @@ def pulse_finder(spectrogram, freq_range, pulserate_range, window_len, rejection
 
 # the following functions are wrappers/workflows/recipies that make it easy to run pulse_finder on multiple files for multiple species. 
 def pulse_finder_file(file, freq_range, pulserate_range, window_len, rejection_bands=None, plot=False):
-    '''pulse rate method, breaking file into "windows" (segments of audio file) of length window_len (seconds): 
+    '''pulse rate method, breaking file into "windows" (segments of audio file) of length window_len (seconds)
+    
     look in a range of frequencies and pulse-rates, score is the amplitude of fft of net amplitude = [the amplitude in frequency band] 
     minus [the amplitude in rejection bands]
     
@@ -127,10 +129,15 @@ def pulse_finder_species_set(spec, species_df, window_len = 'from_df', plot=Fals
 
     parameters:
     spec: opensoundscape.Spectrogram object
-    species_df: a dataframe describing species by their pulsed calls. columns: species | pulse_rate_low (Hz)| pulse_rate_high (Hz) | low_f (Hz)| high_f (Hz)| reject_low (Hz)| reject_high (Hz) | window_length (sec) (optional) | reject_low2 (opt) | reject_high2 |
-    window_len: length of analysis window, in seconds. Or 'from_df' (default): read from dataframe. or 'dynamic': adjust window size based on pulse_rate
+    species_df: a dataframe describing species by their pulsed calls. 
+        columns: species | pulse_rate_low (Hz)| pulse_rate_high (Hz) | low_f (Hz)| high_f (Hz)| reject_low (Hz)| reject_high (Hz) | 
+                window_length (sec) (optional) | reject_low2 (opt) | reject_high2 |
+    window_len: length of analysis window, in seconds. 
+                Or 'from_df' (default): read from dataframe. 
+                or 'dynamic': adjust window size based on pulse_rate
     
-    returns: the same dataframe with a "score" (max score) column and "time_of_score" column
+    returns: 
+        the same dataframe with a "score" (max score) column and "time_of_score" column
     """
     
     species_df = species_df.copy()

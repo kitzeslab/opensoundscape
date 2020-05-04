@@ -4,6 +4,7 @@ import numpy as np
 from matplotlib import pyplot as plt 
 import scipy
 import os
+from scipy.signal import butter, sosfiltfilt, sosfreqz
 
 def run_command(cmd):
     from subprocess import Popen, PIPE
@@ -19,32 +20,9 @@ def audio_gate(source_path,destination_path,cutoff = -38):
         + f'attacks=0.1:points=-115/-115|{float(cutoff) - 0.1}/-115|{cutoff}/{cutoff}|20/20" {destination_path} ')
     
     return run_command(cmd)
-    
-# def bandpass_filter(signal, lowcut, highcut, sample_rate, order=9):
-#     """perform a butterworth bandpass filter on a discrete time signal
-#     using scipy.signal's butter and lfilter
-    
-#     signal: discrete time signal (audio samples, list of float)
-#     low_f: -3db point for highpass filter (Hz)
-#     high_f: -3db point for highpass filter (Hz)
-#     sample_rate: samples per second (Hz)
-#     order=9: higher values -> steeper dropoff
-    
-#     return: filtered time signal 
-#     """
-#     from scipy.signal import butter, lfilter
-
-#     nyq = 0.5 * sample_rate
-#     low = lowcut / nyq
-#     high = highcut / nyq
-#     b, a = butter(order, [low, high], btype='band')        
-    
-#     return lfilter(b, a, signal)
-
-from scipy.signal import butter, sosfiltfilt, sosfreqz
 
 def butter_bandpass(low_f, high_f, sample_rate, order=9):
-    """generate coefs for bandpass filter"""
+    """generate coefficients for bandpass filter"""
     nyq = 0.5 * sample_rate
     low = low_f / nyq
     high = high_f / nyq
@@ -65,6 +43,96 @@ def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
     """
     sos = butter_bandpass(low_f, high_f, sample_rate, order=order)
     return sosfiltfilt(sos, signal)
+
+def clipping_detector(samples,threshold=0.6):
+    ''' count the number of samples above a threshold value'''
+    return len(list(filter(lambda x: x > threshold, samples)))
+
+#helper for Tessa's silence detector, used for filtering xeno-canto and copied from crc: /ihome/sam/bmooreii/projects/opensoundscape/xeno-canto
+#move to Audio module?
+def window_energy(samples, window_len_samples = 256, overlap_len_samples = 128):
+    '''
+    Calculate audio energy with a sliding window
+    
+    Calculate the energy in an array of audio samples
+    
+    Args:
+        samples (np.ndarray): array of audio
+            samples loaded using librosa.load
+        window_len_samples: samples per window
+        overlap_len_samples: number of samples shared between consecutive windows
+    
+    Returns:
+        list of energy level (float) for each window
+    '''
+    def _energy(samples):
+        return np.sum(samples**2)/len(samples)
+    
+    windowed = []
+    skip = window_len_samples - overlap_len_samples
+    for start in range(0, len(samples), skip):
+        window_energy = _energy(samples[start : start + window_len_samples])
+        windowed.append(window_energy)
+
+    return windowed
+
+#Tessa's silence detector. was detect_silence. Flipped outputs so that 0 is silent 1 is non-silent
+def silence_filter(
+    filename,
+    smoothing_factor = 10,
+    window_len_samples = 256,
+    overlap_len_samples = 128,
+    threshold = None
+):
+    '''
+    Identify whether a file is silent (0) or not (1)
+    
+    Load samples from an mp3 file and identify
+    whether or not it is likely to be silent.
+    Silence is determined by finding the energy 
+    in windowed regions of these samples, and
+    normalizing the detected energy by the average
+    energy level in the recording.
+    
+    If any windowed region has energy above the 
+    threshold, returns a 0; else returns 1.
+    
+    Args:
+        filename (str): file to inspect
+        smoothing_factor (int): modifier
+            to window_len_samples
+        window_len_samples: number of samples per window segment
+        overlap_len_samples: number of samples to overlap
+            each window segment
+        threshold: threshold value (experimentally
+            determined)
+        
+    Returns:
+        0 if file contains no significant energy over bakcground
+        1 if file contains significant energy over bakcground
+    If threshold is None: returns net_energy over background noise
+    '''
+    try:
+        samples, sr = load(filename,sr=None)
+#     except NoBackendError:
+#         return -1.0
+    except RuntimeError:
+        return -2.0
+    except ZeroDivisionError:
+        return -3.0
+    except:
+        return -4.0
+
+    energy = window_energy(samples, window_len_samples*smoothing_factor, overlap_len_samples)
+    norm_factor = np.mean(energy)
+    net_energy = (energy - norm_factor)*100
+
+    #the default of "None" for threshold will return the max value of ys
+    if threshold is None:
+        return np.max(net_energy)
+    #if we pass a threshold (eg .05), we will return 0 or 1
+    else: 
+        return int(np.max(net_energy) > threshold)
 
 #move to Audio or Librosa scripts
 def mixdown(files_to_mix,out_dir,mix_name,levels=None,verbose=0,create_txt_file=True):
@@ -175,152 +243,5 @@ def convolve_files(in_files,out_dir,ir_menu):
             print(f'completed {i+1} convolutions of {len(split_files)}')
     print(f'completed {len(in_files)} convolutions')
 
-#can act on an audio file and be moved into Audio class
-def create_spectrum(path,bandpass_frequency_limits = None, start_end_times=None, plot=False):
-    ''' given a file path, create a spectrum of energy across frequencies
-    using a fast fourier transform
-    
-    if bandpass_frequency_limits is not none, the spectrum is band-passed
-    to the frequencies [lowF, highF] which are given in hertz (Hz)
-    
-    if start_end_times is not None, we analyze only a part of the file
-    start_end_time is given in seconds as [start, end]
-    
-    returns: fft, frequencies'''
-    
-    
-    #load audio file with librosa, converting to mono if multi-channel, and down-sampling to 20.5kHz
-    samples, sample_rate = load(
-        path, mono=True, sr=20500, res_type="kaiser_fast"
-    )
-    
-    #select the desired clip from the file using start_end_times
-    if start_end_times is not None:
-        start_sample = int(start_end_times[0]*sample_rate)
-        end_sample = int(start_end_times[1]*sample_rate)
-        samples = samples[start_sample:end_sample] #select samples in desired range
-        #^we may be excluding one sample at the end but thats better than overshooting
 
-    # Compute the fft (fast fourier transform) of the selected clip
-    #this gives us the energy at different frequencies
-    N = len(samples) #number of samples
-    T = 1/sample_rate #sampling time step
-    fft = scipy.fftpack.fft(samples) #compute fast fourier transform (fft)
-    xf = np.fft.fftfreq(N, d=T) #the frequencies corresponding to fft[] elements
-    
-    
-    #remove negative frequencies and scale magnitude by 2.0/N:
-    fft = 2.0/N * fft[0:int(N/2)]
-    frequencies = xf[0:int(N/2)]
-    
-    fft = np.abs(fft)
 
-    #band pass filter the fft result
-    if bandpass_frequency_limits is not None:
-        lowF = bandpass_frequency_limits[0] #minimum frequency to keep
-        highF = bandpass_frequency_limits[1] #maximum frequeny to keep
-        filterVectorBool = np.logical_and(frequencies>=lowF,frequencies<=highF)
-        fft = fft[filterVectorBool]
-        frequencies = frequencies[filterVectorBool]
-        
-    if plot:
-        plt.plot(frequencies, np.log(fft))
-        plt.xlabel('frequency')
-        plt.ylabel('fft')
-#         plt.ylim([0,np.log(.02)])
-        plt.xlim([50,10000])
-        plt.title(os.path.basename(path))
-        
-        plt.show()
-        
-    return fft, frequencies
-
-def clipping_detector(samples,threshold=0.6):
-    ''' count the number of samples above a threshold value'''
-    return len(list(filter(lambda x: x > threshold, samples)))
-
-#helper for Tessa's silence detector, used for filtering xeno-canto and copied from crc: /ihome/sam/bmooreii/projects/opensoundscape/xeno-canto
-#move to Audio module?
-def window_energy(samples, nperseg = 256, noverlap = 128):
-    '''
-    Calculate audio energy with a sliding window
-    
-    Calculate the energy in an array of audio samples
-    using a sliding window. Window includes nperseg
-    samples per window and each window overlaps by
-    noverlap samples. 
-    
-    Args:
-        samples (np.ndarray): array of audio
-            samples loaded using librosa.load
-        
-    
-    '''
-    def _energy(samples):
-        return np.sum(samples**2)/len(samples)
-    
-    windowed = []
-    skip = nperseg - noverlap
-    for start in range(0, len(samples), skip):
-        window_energy = _energy(samples[start : start + nperseg])
-        windowed.append(window_energy)
-
-    return windowed
-
-#was detect_silence. Flipped outputs so that 0 is silent 1 is non-silent
-def silence_filter(
-    filename,
-    smoothing_factor = 10,
-    nperseg = 256,
-    noverlap = 128,
-    thresh = None
-):
-    '''
-    Identify whether a file is silent
-    
-    Load samples from an mp3 file and identify
-    whether or not it is likely to be silent.
-    Silence is determined by finding the energy 
-    in windowed regions of these samples, and
-    normalizing the detected energy by the average
-    energy level in the recording.
-    
-    If any windowed region has energy above the 
-    threshold, returns a 0; else returns 1.
-    
-    Args:
-        filename (str): file to inspect
-        smoothing_factor (int): modifier
-            to window nperseg
-        nperseg: number of samples per window segment
-        noverlap: number of samples to overlap
-            each window segment
-        thresh: threshold value (experimentally
-            determined)
-        
-    Returns:
-        0 if file contains no significant energy over bakcground
-        1 if file contains significant energy over bakcground
-    If thresh is None: returns net_energy over background noise
-    '''
-    try:
-        samples, sr = load(filename,sr=None)
-#     except NoBackendError:
-#         return -1.0
-    except RuntimeError:
-        return -2.0
-    except ZeroDivisionError:
-        return -3.0
-    except:
-        return -4.0
-
-    energy = window_energy(samples, nperseg*smoothing_factor, noverlap)
-    norm_factor = np.mean(energy)
-    net_energy = (energy - norm_factor)*100
-
-    #the default of "None" for thresh will return the max value of ys
-    if thresh is None:
-        return np.max(net_energy)
-    #if we pass a threshold (eg .05), we will return 0 or 1
-    else: 
-        return int(np.max(net_energy) > thresh)
