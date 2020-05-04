@@ -26,9 +26,9 @@ def test_pulse_finder():
 
 def test_pulsefinder_species_set():
     path = './tests/great_plains_toad.wav'
-    df = pd.DataFrame(columns=["pulse_rate_low","pulse_rate_high","low_f","high_f", "reject_low", "reject_high", "window_length"])
-    df.at["sp1",:] = [5,10,1000,2000,0,500,1.0]
-    df.at["sp2",:] = [10,15,1000,2000,0,500,1.0]
+    df = pd.DataFrame(columns=["species", "pulse_rate_low", "pulse_rate_high", "low_f", "high_f", "reject_low", "reject_high", "window_length"])
+    df.at[0,:] = ['sp1',5,10,1000,2000,0,500,1.0]
+    df.at[1,:] = ['sp2',10,15,1000,2000,0,500,1.0]
     
     audio = Audio(path,sample_rate=32000)
     spec = Spectrogram.from_audio(audio,segment_length=256)

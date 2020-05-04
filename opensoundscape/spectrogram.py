@@ -6,14 +6,15 @@ from scipy import signal
 import numpy as np
 from opensoundscape.audio import Audio
 import warnings
+import pickle
 
 class Spectrogram:
     """ Immutable spectrogram container
     """
 
-    __slots__ = ("frequencies", "times", "spectrogram")
+    __slots__ = ("frequencies", "times", "spectrogram")#, "overlap", "segment_length")
 
-    def __init__(self, spectrogram, frequencies, times):
+    def __init__(self, spectrogram, frequencies, times, overlap=0, segment_length=512):
         if not isinstance(spectrogram, np.ndarray):
             raise TypeError(
                 f"Spectrogram.spectrogram should be a np.ndarray [shape=(n, m)]. Got {spectrogram.__class__}"
@@ -48,11 +49,15 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("frequencies", frequencies)
         super(Spectrogram, self).__setattr__("times", times)
         super(Spectrogram, self).__setattr__("spectrogram", spectrogram)
-
+#         super(Spectrogram, self).__setattr__("overlap", overlap)
+#         super(Spectrogram, self).__setattr__("segment_length", segment_length)
+        
+    #note: changing default overlap of spectrogram to 0
     @classmethod
-    def from_audio(cls, audio, window="hann", overlap=75, segment_length=512, decibels=True):
+    def from_audio(cls, audio, window="hann", overlap=0, segment_length=512, decibels=True):
+        """overlap: PERCENTAGE overlap of windows"""
         if not isinstance(audio, Audio):
-            raise TypeError("Class method expects Samples class as input")
+            raise TypeError("Class method expects Audio class as input")
 
         frequencies, times, spectrogram = signal.spectrogram(
             audio.samples,
@@ -68,6 +73,18 @@ class Spectrogram:
 
         return cls(spectrogram, frequencies, times)
 
+# this is tricky because class is immutable
+#     @classmethod
+#     def from_file(cls, path):
+#         if not isinstance(path, str):
+#             raise TypeError("Class method expects string (file path) as input")
+#         with open(path,'rb') as file:
+#             obj = pickle.load(file)
+#         if not isinstance(obj, cls):
+#             raise TypeError("Pickled object was not class Spectrogram")
+            
+#         return obj
+    
     def __setattr__(self, name, value):
         raise AttributeError("Spectrogram's cannot be modified")
 
@@ -194,42 +211,78 @@ class Spectrogram:
                 plt.show()       
 
     
-    def power_signal(self, freq_range=None):
+    def amplitude(self, freq_range=None): #used to be called "power_signal" which is misleading (not power)
         """ return a time-arry of the sum of spectrogram over all frequencies or a range of frequencies"""
         if freq_range is None:
             return np.sum(self.spectrogram,0)
         else:
             return np.sum(self.bandpass(freq_range).spectrogram,0)
     
-    def net_power_signal(self, signal_band, reject_bands = None):
-        """make power signal of file f in signal_band and subtract power from reject_bands
+    def net_amplitude(self, signal_band, reject_bands = None): #used to be called "net_power_signal" which is misleading (not power)
+        """make amplitude signal of file f in signal_band and subtract amplitude from reject_bands
 
         rescale the signal and reject bands by dividing by their bandwidths in Hz 
-        (power of each reject_band is divided by the total bandwidth of all reject_bands.
-        power of signal_band is divided by badwidth of signal_band. ) 
+        (amplitude of each reject_band is divided by the total bandwidth of all reject_bands.
+        amplitude of signal_band is divided by badwidth of signal_band. ) 
         
-        return: 1-d time series of net power """
+        return: 1-d time series of net amplitude """
 
-        #find the power signal for the desired frequency band
-        signal_band_power = self.power_signal(signal_band)
+        #find the amplitude signal for the desired frequency band
+        signal_band_amplitude = self.amplitude(signal_band)
 
         signal_band_bandwidth = signal_band[1]-signal_band[0]
 
-        #rescale power by 1 / size of frequency band in Hz ("power per unit Hz" ~= color on a spectrogram)
-        net_power = signal_band_power / signal_band_bandwidth 
+        #rescale amplitude by 1 / size of frequency band in Hz ("amplitude per unit Hz" ~= color on a spectrogram)
+        net_amplitude = signal_band_amplitude / signal_band_bandwidth 
 
-        #then subtract the energy in the the reject_bands from the signal_band_power to get net_power
+        #then subtract the energy in the the reject_bands from the signal_band_amplitude to get net_amplitude
         if not (reject_bands is None): 
             #we sum up the sizes of the rejection bands (to not overweight signal_band)
             reject_bands = np.array(reject_bands)
             reject_bands_total_bandwidth = sum(reject_bands[:,1]-reject_bands[:,0])
 
-            #subtract reject_band_power 
+            #subtract reject_band_amplitude
             for reject_band in reject_bands: 
-                reject_band_power = self.power_signal(reject_band)
-                net_power = net_power - (reject_band_power/reject_bands_total_bandwidth)
+                reject_band_amplitude = self.amplitude(reject_band)
+                net_amplitude = net_amplitude - (reject_band_amplitude/reject_bands_total_bandwidth)
 
             #negative signal shouldn't be kept, because it means reject was stronger than signal. Zero it:
-            net_power = [max(0,s) for s in net_power]
+            net_amplitude = [max(0,s) for s in net_amplitude]
 
-        return net_power
+        return net_amplitude
+    
+#     def save(self,destination):
+#         with open(destination,'wb') as file:
+#             pickle.dump(self,file)
+
+    def to_image(self,shape=None,mode="RGB"):
+        """
+        create a Pillow Image from spectrogram
+        
+        destination: a file path (string)
+        shape=None: tuple of image dimensions, eg (224,224)
+        mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
+        
+        returns: Pillow Image
+        """
+        from opensoundscape.helpers import min_max_scale
+        from PIL import Image
+        
+        #limit the high and low values
+        array = self.spectrogram.copy()
+        spec_gain = 20
+        spec_range = 80
+        array[array > -spec_gain] = -spec_gain
+        array[array < -(spec_gain + spec_range)] = -(spec_gain + spec_range)
+        
+        #rescale to image scaling
+        array = 255 - min_max_scale(array, feature_range=(0, 200))
+        
+        #create and save pillow Image 
+        #we pass the array upside-down to create right-side-up image
+        image = Image.fromarray(array[::-1, :])
+        image = image.convert(mode)
+        if shape is not None:
+            image = image.resize(shape)
+        
+        return image

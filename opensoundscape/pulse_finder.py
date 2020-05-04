@@ -11,11 +11,11 @@ from opensoundscape.helpers import isNan, bound
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 
-def calculate_pulse_score(power_signal, sample_frequency_of_spec, pulserate_range, plot=False):
-    """score a power signal by finding the maximum value of the power spectral density inside a range of pulse rates"""
+def calculate_pulse_score(amplitude, sample_frequency_of_spec, pulserate_range, plot=False,nfft=1024):#1024
+    """score an audio amplitude signal by finding the maximum value of the power spectral density inside a range of pulse rates"""
     
-    #calculate power spectral density
-    f, pxx = signal.welch(power_signal, fs=sample_frequency_of_spec, nfft=1024)
+    #calculate amplitude modulation spectral density
+    f, pxx = signal.welch(amplitude, fs=sample_frequency_of_spec, nfft=nfft)
     
     #look for the highest peak of power spectral density within pulserate_range    
     min_rate = pulserate_range[0]
@@ -38,7 +38,8 @@ def calculate_pulse_score(power_signal, sample_frequency_of_spec, pulserate_rang
             from time import time 
             print(f"peak freq: {f[np.argmax(pxx)]}")
             plt.plot(f,pxx)
-            plt.xlim([0,25])
+#             plt.xlim([0,100])
+#             plt.ylim([0,.001])
             plt.plot([pulserate_range[0],pulserate_range[0]],[0,max_pxx])
             plt.plot([pulserate_range[1],pulserate_range[1]],[0,max_pxx])
             plt.show()
@@ -62,28 +63,28 @@ def pulse_finder(spectrogram, freq_range, pulserate_range, window_len, rejection
         array of time: start time of each window
     '''
     
-    # Make a 1d power signal in a frequency range, subtracting energy in rejection bands
-    net_power_signal = spectrogram.net_power_signal(freq_range,rejection_bands)
+    # Make a 1d amplitude signal in a frequency range, subtracting energy in rejection bands
+    amplitude = spectrogram.net_amplitude(freq_range,rejection_bands)
     
     #next we split the spec into "windows" to analyze separately: (no overlap for now)
-    sample_frequency_of_spec = 1/(spectrogram.times[1]-spectrogram.times[0]) #in Hz, ie, 1/[width of a pixel in seconds]
+    sample_frequency_of_spec = (len(spectrogram.times)-1)/(spectrogram.times[-1]-spectrogram.times[0]) #in Hz, ie delta-t between consecutive pixels
     n_samples_per_window = int(window_len * sample_frequency_of_spec ) 
-    signal_len = len(net_power_signal)
+    signal_len = len(amplitude)
     
     start_sample = 0
     pulse_scores = []
     window_start_times = []
     
     #step through the file, analyzing in pieces that are window_len long, saving scores and start times for each window
-    while start_sample < signal_len -1:
+    while start_sample + n_samples_per_window < signal_len -1:
         ta = timer()
         
         end_sample = start_sample + n_samples_per_window
         if end_sample < signal_len:
-            window = net_power_signal[start_sample : end_sample ]
+            window = amplitude[start_sample : end_sample ]
         else:
             final_start_sample = max(0, signal_len-n_samples_per_window)
-            window = net_power_signal[final_start_sample : signal_len]
+            window = amplitude[final_start_sample : signal_len]
             
         # Make Pxx (Power spectral density or power spectrum of x) and find max
         pulse_score = calculate_pulse_score(window,sample_frequency_of_spec,pulserate_range, plot)
@@ -93,15 +94,15 @@ def pulse_finder(spectrogram, freq_range, pulserate_range, window_len, rejection
         window_start_times.append(start_sample/sample_frequency_of_spec)
         
         #update start_sample
-        start_sample = end_sample
+        start_sample = end_sample #end sample was excluded so use it as first sample in next window
         
     return pulse_scores, window_start_times
 
 # the following functions are wrappers/workflows/recipies that make it easy to run pulse_finder on multiple files for multiple species. 
 def pulse_finder_file(file, freq_range, pulserate_range, window_len, rejection_bands=None, plot=False):
     '''pulse rate method, breaking file into "windows" (segments of audio file) of length window_len (seconds): 
-    look in a range of frequencies and pulse-rates, score is the amplitude of fft of net power = [the power in frequency band] 
-    minus [the power in rejection bands]
+    look in a range of frequencies and pulse-rates, score is the amplitude of fft of net amplitude = [the amplitude in frequency band] 
+    minus [the amplitude in rejection bands]
     
     args:
         file: path to an audio file to search for pulsing call 
@@ -126,13 +127,14 @@ def pulse_finder_species_set(spec, species_df, window_len = 'from_df', plot=Fals
 
     parameters:
     spec: opensoundscape.Spectrogram object
-    species_df: a dataframe describing species by their pulsed calls. index: species. columns: pulse_rate_low (Hz)| pulse_rate_high (Hz) | low_f (Hz)| high_f (Hz)| reject_low (Hz)| reject_high (Hz) | window_length (sec) (optional) 
+    species_df: a dataframe describing species by their pulsed calls. columns: species | pulse_rate_low (Hz)| pulse_rate_high (Hz) | low_f (Hz)| high_f (Hz)| reject_low (Hz)| reject_high (Hz) | window_length (sec) (optional) | reject_low2 (opt) | reject_high2 |
     window_len: length of analysis window, in seconds. Or 'from_df' (default): read from dataframe. or 'dynamic': adjust window size based on pulse_rate
     
     returns: the same dataframe with a "score" (max score) column and "time_of_score" column
     """
     
     species_df = species_df.copy()
+    species_df = species_df.set_index(species_df.columns[0],drop=True)
     
     species_df['score'] = [ [] for i in range(len(species_df))]
     species_df['t'] = [ [] for i in range(len(species_df))]
@@ -142,7 +144,7 @@ def pulse_finder_species_set(spec, species_df, window_len = 'from_df', plot=Fals
                 
         #we can't analyze pulse rates of 0 or NaN
         if isNan(row.pulse_rate_low) or row.pulse_rate_low == 0:
-            species_scores.append(np.nan)
+            #cannot analyze
             continue
         
         pulserate_range = [row.pulse_rate_low,row.pulse_rate_high]
@@ -163,8 +165,11 @@ def pulse_finder_species_set(spec, species_df, window_len = 'from_df', plot=Fals
         rejection_bands = None
         if not isNan(row.reject_low):
             rejection_bands = [[row.reject_low,row.reject_high]]
-
+            if "reject_low2" in species_df.columns and not isNan(row.reject_low2):
+                rejection_bands.append([row.reject_low2,row.reject_high2])
+                    
         #score this species for each window using pulse_finder
+        if plot: print(f'{row.name}')
         pulse_scores, window_start_times = pulse_finder(spec, freq_range, pulserate_range, window_len, rejection_bands, plot)
         
         #add the scores to the species df
