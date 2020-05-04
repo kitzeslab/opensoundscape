@@ -115,6 +115,31 @@ class Audio:
         from audio_tools import bandpass_filter
         filtered_samples = bandpass_filter(self.samples,low_f,high_f,self.sample_rate,order=9)
         return Audio(filtered_samples,at.sample_rate)
+    
+    #can act on an audio file and be moved into Audio class
+    def spectrum(self):
+        '''create frequency spectrum from an Audio object using fft
+        
+        args:
+            self
+        returns: 
+            fft, frequencies
+        '''
+        from scipy.fftpack import fft
+        from scipy.fft import fftfreq
+        
+        # Compute the fft (fast fourier transform) of the selected clip
+        N = len(self.samples) 
+        T = 1/self.sample_rate
+        fft = fft(self.samples)
+        freq = fftfreq(N, d=T) #the frequencies corresponding to fft bins
+
+        #remove negative frequencies and scale magnitude by 2.0/N:
+        fft = 2.0/N * fft[0:int(N/2)]
+        frequencies = freq[0:int(N/2)]
+        fft = np.abs(fft)
+
+        return fft, frequencies
         
 
     
