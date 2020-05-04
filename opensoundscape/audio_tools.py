@@ -20,6 +20,52 @@ def audio_gate(source_path,destination_path,cutoff = -38):
     
     return run_command(cmd)
     
+# def bandpass_filter(signal, lowcut, highcut, sample_rate, order=9):
+#     """perform a butterworth bandpass filter on a discrete time signal
+#     using scipy.signal's butter and lfilter
+    
+#     signal: discrete time signal (audio samples, list of float)
+#     low_f: -3db point for highpass filter (Hz)
+#     high_f: -3db point for highpass filter (Hz)
+#     sample_rate: samples per second (Hz)
+#     order=9: higher values -> steeper dropoff
+    
+#     return: filtered time signal 
+#     """
+#     from scipy.signal import butter, lfilter
+
+#     nyq = 0.5 * sample_rate
+#     low = lowcut / nyq
+#     high = highcut / nyq
+#     b, a = butter(order, [low, high], btype='band')        
+    
+#     return lfilter(b, a, signal)
+
+from scipy.signal import butter, sosfiltfilt, sosfreqz
+
+def butter_bandpass(low_f, high_f, sample_rate, order=9):
+    """generate coefs for bandpass filter"""
+    nyq = 0.5 * sample_rate
+    low = low_f / nyq
+    high = high_f / nyq
+    sos = butter(order, [low, high], analog=False, btype='band', output='sos')
+    return sos
+
+def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
+    """perform a butterworth bandpass filter on a discrete time signal
+    using scipy.signal's butter and solfiltfilt (phase-preserving version of sosfilt)
+    
+    signal: discrete time signal (audio samples, list of float)
+    low_f: -3db point (?) for highpass filter (Hz)
+    high_f: -3db point (?) for highpass filter (Hz)
+    sample_rate: samples per second (Hz)
+    order=9: higher values -> steeper dropoff
+    
+    return: filtered time signal 
+    """
+    sos = butter_bandpass(low_f, high_f, sample_rate, order=order)
+    return sosfiltfilt(sos, signal)
+
 #move to Audio or Librosa scripts
 def mixdown(files_to_mix,out_dir,mix_name,levels=None,verbose=0,create_txt_file=True):
     """mix all files listed in file_to_mix into destination file as an mp3
@@ -189,7 +235,11 @@ def create_spectrum(path,bandpass_frequency_limits = None, start_end_times=None,
         
     return fft, frequencies
 
-#Tessa's silence detector, used for filtering xeno-canto and copied from crc: /ihome/sam/bmooreii/projects/opensoundscape/xeno-canto
+def clipping_detector(samples,threshold=0.6):
+    ''' count the number of samples above a threshold value'''
+    return len(list(filter(lambda x: x > threshold, samples)))
+
+#helper for Tessa's silence detector, used for filtering xeno-canto and copied from crc: /ihome/sam/bmooreii/projects/opensoundscape/xeno-canto
 #move to Audio module?
 def window_energy(samples, nperseg = 256, noverlap = 128):
     '''
