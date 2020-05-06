@@ -14,7 +14,7 @@ class Spectrogram:
 
     __slots__ = ("frequencies", "times", "spectrogram")#, "overlap", "segment_length")
 
-    def __init__(self, spectrogram, frequencies, times, overlap=0, segment_length=512):
+    def __init__(self, spectrogram, frequencies, times):
         if not isinstance(spectrogram, np.ndarray):
             raise TypeError(
                 f"Spectrogram.spectrogram should be a np.ndarray [shape=(n, m)]. Got {spectrogram.__class__}"
@@ -49,22 +49,30 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("frequencies", frequencies)
         super(Spectrogram, self).__setattr__("times", times)
         super(Spectrogram, self).__setattr__("spectrogram", spectrogram)
-#         super(Spectrogram, self).__setattr__("overlap", overlap)
-#         super(Spectrogram, self).__setattr__("segment_length", segment_length)
-        
-    #note: changing default overlap of spectrogram to 0
+
     @classmethod
-    def from_audio(cls, audio, window="hann", overlap=0, segment_length=512, decibels=True):
-        """overlap: PERCENTAGE overlap of windows"""
+    def from_audio(cls, audio, window_type="hann", window_samples=512, overlap_samples=0, decibels=True):
+        """
+        create a Spectrogram object from an Audio object
+        
+        parameters:
+            window_type="hann": see scipy.signal.spectrogram docs for description of window parameter
+            window_samples=512: number of audio samples per spectrogram window (pixel)
+            overlap_samples=0: number of samples shared by consecutive windows
+            decibels=True: convert the spectrogram values to decibelss (dB)
+            
+        returns:
+            opensoundscape.spectrogram.Spectrogram object
+        """
         if not isinstance(audio, Audio):
             raise TypeError("Class method expects Audio class as input")
 
         frequencies, times, spectrogram = signal.spectrogram(
             audio.samples,
             audio.sample_rate,
-            window=window,
-            nperseg=segment_length,
-            noverlap=segment_length * overlap / 100,
+            window=window_type,
+            nperseg=window_samples,
+            noverlap=int(window_samples * overlap_samples),
             scaling="spectrum",
         )
         
@@ -72,18 +80,6 @@ class Spectrogram:
             spectrogram = 10 * np.log10(spectrogram)
 
         return cls(spectrogram, frequencies, times)
-
-# this is tricky because class is immutable
-#     @classmethod
-#     def from_file(cls, path):
-#         if not isinstance(path, str):
-#             raise TypeError("Class method expects string (file path) as input")
-#         with open(path,'rb') as file:
-#             obj = pickle.load(file)
-#         if not isinstance(obj, cls):
-#             raise TypeError("Pickled object was not class Spectrogram")
-            
-#         return obj
     
     def __setattr__(self, name, value):
         raise AttributeError("Spectrogram's cannot be modified")

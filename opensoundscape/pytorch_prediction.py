@@ -86,7 +86,7 @@ def activation_region_to_box(activation_region,threshold=0.2):
     """draw a rectangle of the activation box as a boolean array
     (useful for plotting a mask over a spectrogram)"""
     img_shape = np.shape(activation_region)
-    box_lims = activation_region_limits(activation_region,threshold=0.2)
+    box_lims = activation_region_limits(activation_region,threshold)
     box_mask_arr = [[ 1 if in_box(xi,yi,box_lims) else 0 for yi in range(img_shape[0]) ] for xi in range(img_shape[1])]
     return box_mask_arr
 
@@ -103,8 +103,6 @@ def gradcam_region(model,
                    img_paths, 
                    img_shape,
                    predictions = None, 
-                   batch_size = 1, 
-                   num_workers = 12, 
                    save_gcams = True,
                    box_threshold = 0.2):
     """
@@ -114,8 +112,6 @@ def gradcam_region(model,
         model: a pytorch model object
         img_paths: list of paths to image files
         predictions = None: [list of float] optionally, provide model predictions per file to avoid re-computing
-        batch_size = 1: (int) parallelization parameter for number of simultaneous tasks
-        num_workers = 12: (int) parallelization paramete for number of cores
         save_gcams = True: bool, if False only box regions around gcams are saved
     
     returns:
@@ -151,7 +147,7 @@ def gradcam_region(model,
         else:
             logits = predictions[i]
         
-        #compute gradcam and guided back propogation
+        # gradcam and guided back propogation
         gcam = GradCAM(model=model)
         gcam.forward(image)#.cuda());
         
@@ -163,7 +159,7 @@ def gradcam_region(model,
         gcam = cv2.resize(region, img_shape)
 
         #find min/max indices of rows/columns that were activated
-        box_bounds = activation_region_limits(gcam)
+        box_bounds = activation_region_limits(gcam,threshold=box_threshold)
         
         if save_gcams:
             gcams[i] = gcam

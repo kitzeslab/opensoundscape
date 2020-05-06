@@ -51,7 +51,7 @@ class Audio:
 
         path = None
         from_samples = False
-        if audio.__class__ == str:
+        if audio.__class__ == str or audio.__class__ == np.str_:
             # Simply load the audio into a pathlib.Path object
             path = pathlib.Path(audio)
         elif issubclass(audio.__class__, pathlib.PurePath):
@@ -140,6 +140,8 @@ class Audio:
         fft = np.abs(fft)
 
         return fft, frequencies
-        
-
+    
+    def save(self,path):
+        from scipy.io.wavfile import write as write_wav
+        write_wav(path, self.sample_rate, self.samples)
     

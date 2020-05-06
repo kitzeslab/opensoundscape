@@ -1,3 +1,7 @@
+"""
+set of tools that work directly on audio files or samples
+
+"""
 from librosa import load 
 from scipy import signal
 import numpy as np
@@ -76,7 +80,7 @@ def window_energy(samples, window_len_samples = 256, overlap_len_samples = 128):
 
     return windowed
 
-#Tessa's silence detector. was detect_silence. Flipped outputs so that 0 is silent 1 is non-silent
+#Tessa's silence detector. was detect_silence(). Flipped outputs so that 0 is silent 1 is non-silent
 def silence_filter(
     filename,
     smoothing_factor = 10,
@@ -134,11 +138,11 @@ def silence_filter(
     else: 
         return int(np.max(net_energy) > threshold)
 
-#move to Audio or Librosa scripts
-def mixdown(files_to_mix,out_dir,mix_name,levels=None,verbose=0,create_txt_file=True):
+def mixdown(files_to_mix,out_dir,mix_name,levels=None,duration='longest',verbose=0,create_txt_file=True):
     """mix all files listed in file_to_mix into destination file as an mp3
     
     levels: optionally provide the ratios of each file's output amplitude in the mix as a list
+    duration='longest': duration of output mix, 'longest','shortest','first'
     
     we will generate a text file for each one listing the origin files """
     
@@ -152,9 +156,9 @@ def mixdown(files_to_mix,out_dir,mix_name,levels=None,verbose=0,create_txt_file=
     n_in = len(files_to_mix)
     overwrite = '-y' #-n to not overwrite
     
-    out_file = out_dir + mix_name + '.mp3'
+    out_file = f'{out_dir}/{mix_name}.mp3'
     
-    cmd = f'ffmpeg {overwrite} -i {inputs} -filter_complex amix=inputs={n_in}:duration=longest{levels_string} {out_file}'
+    cmd = f'ffmpeg {overwrite} -i {inputs} -filter_complex amix=inputs={n_in}:duration={duration}{levels_string} {out_file}'
     
     if verbose>0:
         print(cmd)
@@ -169,46 +173,121 @@ def mixdown(files_to_mix,out_dir,mix_name,levels=None,verbose=0,create_txt_file=
     
     return response
 
-#move to Audio or Librosa scripts
-def create_mixdowns(in_files,out_dir,files_per_mix):
-    """ take a set of audio files and layer them on top of eachother
+def mixdown_with_delays(files_to_mix,destination,delays=None, levels=None,duration='first',verbose=0,create_txt_file=False):
+    """use ffmpeg to mixdown a set of audio files, each starting at a specified time (padding beginnings with zeros)
     
-    this method divides the set of files into files_per_mix sets
-    and mixes (layers/sums) the audio: one file from each set
-    
+    parameters:
+        files_to_mix: list of audio file paths
+        destination: path to save mixdown to
+        delays=None: list of delays (how many seconds of zero-padding to add at beginning of each file)
+        levels=None: optionally provide a list of relative levels (amplitudes) for each input
+        duration='first': ffmpeg option for duration of output file: match duration of 'longest','shortest',or 'first' input file
+        verbose=0: if >0, prints ffmpeg command and doesn't suppress ffmpeg output (command line output is returned from this function)
+        create_txt_file=False: if True, also creates a second output file which lists all files that were included in the mixdown
+        
+    returns:
+        ffmpeg command line output
     """
-    t = timer()
-    print(f'saving mixdown files and logs to {out_dir}')
-    print(f'logs contain list of origin files for each mix')
+    
+    #I'm including lots of comments because ffmpeg has confusing syntax
+    #the trick with ffmpeg is to recognize the recurring syntax: [input][input2]function=option1=x:option2=y[output]
+    #square-bracket syntax [s0] is basically a variable name, a place to put and get temporarily created objects
+    #functions such as adelay (add delay at beginniing of audio) or amix (mix audio) are called with arguments
+    #like: function=option1=x:option2=y
+    #for instance: amix=inputs=2:duration=first
+    #if we want to pass [0] (the first input) and [s1] (something we saved) to amix and save result to [mymix],
+    #we would write: [0][s1]amix=inputs=2:duration=first[mymix]
+    #yes, confusing, but that's why I've written a wrapper for it :) 
+    
+    n_inputs = len(files_to_mix)
+    
+    #format list of input files for ffmpeg (will look like -i file1.mp3 -i file2.wav)
+    input_list = '-i ' + ' -i '.join(files_to_mix)
+    
+    #overwrite existing file by default? 'y' for yes, otherwise '' behavior is to not overwrite
+    overwrite = '-y'
+    
+    #print all of ffmpegs messages?
+    quiet_flag = '' if verbose>0 else ' -nostats -loglevel 0'
+    
+    options = f'{overwrite}{quiet_flag}'
+        
+    #if no delays are provided, they are all set to 0 (we could just skip it but syntax would be confusing)
+    if delays is None:
+        delays = np.zeros(n_inputs)
+    
+    #take each input {i}, delay it by delays[i], give the output a name
+    #0 refers to first input file
+    #here output of each adelay command is named s{i} (eg s0 for fist input)
+    #will look like [0]adelay=0[s0];[1]adelay=1000[s1];
+    delay_cmd = ''.join([ f'[{i}]adelay={delay}[s{i}];' for i, delay in enumerate(delays)] ) #for stereo, delay each chanel like adelay={delay}|{delay}
+    
+    #list of the outputs of adelay (these are the files we want to mixdown, so this is the input to amix)
+    #will look like [s0][s1][s2]
+    files_to_mix = ''.join([f'[s{i}]' for i in range(n_inputs)]) 
+    
+    #mixdown command 
+    #take the files_to_mix, use amix to combine them into [mixdown]. Final duration is an option 'longest','shortest','first'
+    #will look like [s0][s1]amix=inputs=2:duration=first[mixdown]
+    mixdown_result = '[mixdown]' #think of this as a variable name for the result of amix
+    mix_cmd = f'{files_to_mix}amix=inputs={n_inputs}:duration={duration}{mixdown_result}'
 
-    if len(in_files)<1:
-        print("didn't recieve any files!")
+    #compile the full ffmpeg command: 
+    #take inputs, apply delays, mix them together, and save to destination
+    cmd = f'ffmpeg {options} {input_list} -filter_complex "{delay_cmd}{mix_cmd}" -map {mixdown_result} {destination}'
+    
+    if verbose>0:
+        print(cmd)
+        
+    if create_txt_file:
+        #we write a list of all input files to this mix into a .txt file with same name as .mp3. file
+        metadata_file = destination +'_info.txt'
+        metadata = 'this file is a mixdown of: \n' + '\n'.join(files_to_mix)        
+        with open(metadata_file,'w') as file:
+            file.write(metadata)
+    
+    return run_command(cmd)
 
-    random.shuffle(in_files)
+# #move to scripts
+# def create_mixdowns(in_files,out_dir,files_per_mix):
+#     """ take a set of audio files and layer them on top of eachother
+    
+#     this method divides the set of files into files_per_mix sets
+#     and mixes (layers/sums) the audio: one file from each set
+    
+#     """
+#     t = timer()
+#     print(f'saving mixdown files and logs to {out_dir}')
+#     print(f'logs contain list of origin files for each mix')
 
-    #split the files into n groups and overlap n files in each mixdown
-    print(f'mixing {files_per_mix} files into each mixdown')
+#     if len(in_files)<1:
+#         print("didn't recieve any files!")
 
-    n_files = len(in_files)
-    print(f'total number of files: {n_files}')
-    print(f'resulting mixdowns: {n_files//files_per_mix}')
+#     random.shuffle(in_files)
 
-    #split the file set into files_per_mix sets 
-    idx = np.arange(0,n_files+1,n_files//files_per_mix)
-    file_sets = np.array([ in_files[idx[i]:idx[i+1]] for i in range(files_per_mix)])
+#     #split the files into n groups and overlap n files in each mixdown
+#     print(f'mixing {files_per_mix} files into each mixdown')
 
-    #now we have separated lists of files to combine with eachother
-    for i in range(len(file_sets[0])):
-        #take the ith file from each set and mix into one
-        files_to_mix = file_sets[:,i]
-        mix_name = f'mix-{files_per_mix}-files_{i}'
-        mixdown(files_to_mix,out_dir,mix_name)
-        if i%50==0:
-            print(f'completed {i} mixdowns of {len(file_sets[0])} in {timer()-t} seconds')
+#     n_files = len(in_files)
+#     print(f'total number of files: {n_files}')
+#     print(f'resulting mixdowns: {n_files//files_per_mix}')
+
+#     #split the file set into files_per_mix sets 
+#     idx = np.arange(0,n_files+1,n_files//files_per_mix)
+#     file_sets = np.array([ in_files[idx[i]:idx[i+1]] for i in range(files_per_mix)])
+
+#     #now we have separated lists of files to combine with eachother
+#     for i in range(len(file_sets[0])):
+#         #take the ith file from each set and mix into one
+#         files_to_mix = file_sets[:,i]
+#         mix_name = f'mix-{files_per_mix}-files_{i}'
+#         mixdown(files_to_mix,out_dir,mix_name)
+#         if i%50==0:
+#             print(f'completed {i} mixdowns of {len(file_sets[0])} in {timer()-t} seconds')
             
-    print(f'copmleted mixdown task in {timer()-t} seconds \n')
+#     print(f'copmleted mixdown task in {timer()-t} seconds \n')
 
-#move to Audio or Librosa scripts
+
 def convolve_file(in_file,out_file,ir_file,input_gain=1.0):
     """apply an impulse_response to a file using ffmpeg's afir convolution
     
@@ -225,23 +304,23 @@ def convolve_file(in_file,out_file,ir_file,input_gain=1.0):
 #     print(cmd)
     return run_command(cmd)
 
-#move to Audio or Librosa scripts
-def convolve_files(in_files,out_dir,ir_menu):
-    """apply ffmpeg convolution to a set of files, 
-    choosing the impulse response randomly from a list of paths (ir_menu)
-    and saving modified files to out_dir/"""
-    responses = []
-    for i, in_file in enumerate(in_files):
-        ir_file = random.choice(ir_menu)
-        ir_applied = "".join(os.path.basename(ir_file)).split(".")[0:-1]
-        out_file = f'{out_dir}{os.path.basename(in_file)}_{ir_applied}.mp3'
+#move to scripts
+# def convolve_files(in_files,out_dir,ir_menu):
+#     """apply ffmpeg convolution to a set of files, 
+#     choosing the impulse response randomly from a list of paths (ir_menu)
+#     and saving modified files to out_dir/"""
+#     responses = []
+#     for i, in_file in enumerate(in_files):
+#         ir_file = random.choice(ir_menu)
+#         ir_applied = "".join(os.path.basename(ir_file)).split(".")[0:-1]
+#         out_file = f'{out_dir}{os.path.basename(in_file)}_{ir_applied}.mp3'
 
-        response = convolve_file(in_file,out_file,ir_file)
-        responses.append(response)
+#         response = convolve_file(in_file,out_file,ir_file)
+#         responses.append(response)
 
-        if i%100 == 0:
-            print(f'completed {i+1} convolutions of {len(split_files)}')
-    print(f'completed {len(in_files)} convolutions')
+#         if i%100 == 0:
+#             print(f'completed {i+1} convolutions of {len(split_files)}')
+#     print(f'completed {len(in_files)} convolutions')
 
 
 
