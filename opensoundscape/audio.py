@@ -31,7 +31,7 @@ class Audio:
 
     #note: changing default sample rate from 22050 to 32000
     def __init__(
-        self, audio, sample_rate=32000, max_duration=600, resample_type="kaiser_fast"
+        self, audio, sample_rate=22050, max_duration=None, resample_type="kaiser_fast"
     ):
         """ Load audio in various formats and generate a spectrogram
 
@@ -42,7 +42,7 @@ class Audio:
             audio: string, pathlib, samples, or bytesio object
             sample_rate: the target sample rate (default: 32000 Hz)
             max_duration: the maximum length of an input file,
-                          None is no maximum (default: 600 seconds)
+                          None is no maximum (default: None)
             resample_type: method used to resample_type (default: kaiser_fast)
 
         Returns:

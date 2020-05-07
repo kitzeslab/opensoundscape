@@ -44,11 +44,12 @@ def predict(model,img_paths, img_shape, batch_size = 1, num_workers = 12, apply_
 
             return self.transform(image) #, torch.from_numpy(labels)
 
-    #turn list of files into a df (this maintains parallelism with training)
+    #turn list of files into a df (this maintains parallelism with training format)
     file_df = pd.DataFrame(columns=['filename'],data=img_paths)
+    
+    #create pytorch dataset and dataloader objects
     dataset = PredictionDataset(file_df)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    
     
     # run prediction
     all_predictions = []
@@ -56,7 +57,7 @@ def predict(model,img_paths, img_shape, batch_size = 1, num_workers = 12, apply_
         predictions = model(inputs)
         if apply_softmax:
             softmax_val = softmax(predictions, 1).detach().cpu().numpy()[0]
-            all_predictions.append(softmax_val)#list(predictions.detach().numpy()[0])) #.astype('float64')
+            all_predictions.append(softmax_val)
         else:
             all_predictions.append(list(predictions.detach().numpy()[0])) #.astype('float64')
             
@@ -72,7 +73,12 @@ def activation_region_limits(gcam,threshold=0.2):
     arr = np.array(gcam)
     binary_activation = np.array([binarize(row,threshold) for row in arr])
     non_zero_rows, non_zero_cols = np.nonzero(binary_activation)
-    box_lims = np.array([[min(non_zero_rows),max(non_zero_rows)],[min(non_zero_cols),max(non_zero_cols)]])
+    
+    #handle corner case: no rows / cols pass threshold
+    row_lims = [min(non_zero_rows),max(non_zero_rows)] if len(non_zero_rows)>0 else [0,img_shape[0]]
+    col_lims = [min(non_zero_cols),max(non_zero_cols)] if len(non_zero_cols)>0 else [0,img_shape[1]]
+    box_lims = np.array([row_lims,col_lims])
+    
     return box_lims
 
 def in_box(x,y,box_lims):

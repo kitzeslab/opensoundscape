@@ -42,12 +42,12 @@ def hex_to_time(s):
     timestamp = datetime.utcfromtimestamp(sec)
     return timestamp
 
-def min_max_scale(spect, feature_range=(0, 1)):
+def min_max_scale(array, feature_range=(0, 1)):
     bottom, top = feature_range
-    spect_min = spect.min()
-    spect_max = spect.max()
-    scale_factor = (top - bottom) / (spect_max - spect_min)
-    return scale_factor * (spect - spect_min) + bottom
+    array_min = array.min()
+    array_max = array.max()
+    scale_factor = (top - bottom) / (array_max - array_min)
+    return scale_factor * (array - array_min) + bottom
 
 def jitter(
             x,

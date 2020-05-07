@@ -51,7 +51,7 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("spectrogram", spectrogram)
 
     @classmethod
-    def from_audio(cls, audio, window_type="hann", window_samples=512, overlap_samples=0, decibels=True):
+    def from_audio(cls, audio, window_type="hann", window_samples=512, overlap_samples=256, decibel_limits = (-100,-20) ):
         """
         create a Spectrogram object from an Audio object
         
@@ -60,6 +60,7 @@ class Spectrogram:
             window_samples=512: number of audio samples per spectrogram window (pixel)
             overlap_samples=0: number of samples shared by consecutive windows
             decibels=True: convert the spectrogram values to decibelss (dB)
+            decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
             
         returns:
             opensoundscape.spectrogram.Spectrogram object
@@ -72,12 +73,18 @@ class Spectrogram:
             audio.sample_rate,
             window=window_type,
             nperseg=window_samples,
-            noverlap=int(window_samples * overlap_samples),
+            noverlap=overlap_samples,
             scaling="spectrum",
         )
         
-        if decibels:
-            spectrogram = 10 * np.log10(spectrogram)
+        #convert to decibels
+        spectrogram = 10 * np.log10(spectrogram)
+            
+        #limit the decibel range (-100 to -20 dB by default)
+        #values below lower limit set to lower limit, values above upper limit set to uper limit
+        min_db,max_db = decibel_limits
+        spectrogram[spectrogram > max_db] = max_db
+        spectrogram[spectrogram < min_db] = min_db
 
         return cls(spectrogram, frequencies, times)
     
@@ -86,19 +93,6 @@ class Spectrogram:
 
     def __repr__(self):
         return f"<Spectrogram(spectrogram={self.spectrogram.shape}, frequencies={self.frequencies.shape}, times={self.times.shape})>"
-
-#     def decibel_filter(self, decibel_threshold=-100.0):
-#         """ Apply a decibel based floor function
-                #spectrograms are now in decibels by default
-#         """
-
-#         remove_zeros = np.copy(self.spectrogram)
-#         remove_zeros[remove_zeros == 0.0] = np.nan
-#         in_decibel = 10.0 * np.log10(remove_zeros)
-#         in_decibel[in_decibel <= decibel_threshold] = decibel_threshold
-#         return Spectrogram(
-#             np.nan_to_num(10.0 ** (in_decibel / 10.0)), self.frequencies, self.times
-#         )
 
     def min_max_scale(self, feature_range=(0, 1)):
         """ Apply a min-max filter
@@ -120,28 +114,32 @@ class Spectrogram:
             self.times,
         )
 
-    def audacity_gain_range(self, spec_gain=20, spec_range=80):
-        """ Apply gain and range similar to Audacity
+    def limit_db_range(self, min_db=-100,max_db=-20):
+        """ Limit the decibel values of the spectrogram to range from min_db to max_db
+            
+            values less than min_db are set to min_db
+            values greater than max_db are set to max_db
+            
+            similar to Audacity's gain and range parameters
         """
-
         _spec = self.spectrogram
-        _spec[_spec > -spec_gain] = -spec_gain
-        _spec[_spec < -(spec_gain + spec_range)] = -(spec_gain + spec_range)
+
+        _spec[_spec > max_db] = max_db
+        _spec[_spec < min_db] = min_db
+        
         return Spectrogram(_spec, self.frequencies, self.times)
 
-    def bandpass(self, freq_range):
+    def bandpass(self, min_f, max_f):
         """ extract a frequency band from a spectrogram
 
         params:
-        freq_range: [low, high] frequencies in Hz for bandpass
-
+        min_f: low frequency in Hz for bandpass
+        high_f: high frequency in Hz for bandpass
+        
         returns:
-        bandpassed spectrogram 
+        bandpassed spectrogram object
 
         """
-
-        min_f = freq_range[0]
-        max_f = freq_range[1]
 
         #find indices of the frequencies in spec_freq closest to min_f and max_f
         lowest_index = np.abs(self.frequencies - min_f).argmin() 
@@ -154,22 +152,21 @@ class Spectrogram:
             self.times
         )
     
-    def trim(self, time_range):
+    def trim(self,start_time,end_time):
         """ extract a time segment from a spectrogram
 
         params:
-        freq_range: [start_time, end_time] in seconds
+        start_time: in seconds
+        end_time: in seconds
 
         returns:
-        trimmed spectrogram 
+        spectrogram object from extracted time segment
+        
         """
 
-        min_t = time_range[0]
-        max_t = time_range[1]
-
         #find indices of the times in self.times closest to min_t and max_t
-        lowest_index = np.abs(self.times - min_t).argmin() 
-        highest_index = np.abs(self.times - max_t).argmin()
+        lowest_index = np.abs(self.times - start_time).argmin() 
+        highest_index = np.abs(self.times - end_time).argmin()
 
         #take slices of the spectrogram and spec_freq that fall within desired range
         return Spectrogram(
@@ -212,7 +209,7 @@ class Spectrogram:
         if freq_range is None:
             return np.sum(self.spectrogram,0)
         else:
-            return np.sum(self.bandpass(freq_range).spectrogram,0)
+            return np.sum(self.bandpass(freq_range[0],freq_range[1]).spectrogram,0)
     
     def net_amplitude(self, signal_band, reject_bands = None): #used to be called "net_power_signal" which is misleading (not power)
         """make amplitude signal of file f in signal_band and subtract amplitude from reject_bands
@@ -264,15 +261,8 @@ class Spectrogram:
         from opensoundscape.helpers import min_max_scale
         from PIL import Image
         
-        #limit the high and low values
-        array = self.spectrogram.copy()
-        spec_gain = 20
-        spec_range = 80
-        array[array > -spec_gain] = -spec_gain
-        array[array < -(spec_gain + spec_range)] = -(spec_gain + spec_range)
-        
         #rescale to image scaling
-        array = 255 - min_max_scale(array, feature_range=(0, 200))
+        array = 255 - min_max_scale(self.spectrogram, feature_range=(0, 255))
         
         #create and save pillow Image 
         #we pass the array upside-down to create right-side-up image
