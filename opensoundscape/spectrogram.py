@@ -58,7 +58,7 @@ class Spectrogram:
         parameters:
             window_type="hann": see scipy.signal.spectrogram docs for description of window parameter
             window_samples=512: number of audio samples per spectrogram window (pixel)
-            overlap_samples=0: number of samples shared by consecutive windows
+            overlap_samples=256: number of samples shared by consecutive windows
             decibels=True: convert the spectrogram values to decibelss (dB)
             decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
             
@@ -248,21 +248,25 @@ class Spectrogram:
 #         with open(destination,'wb') as file:
 #             pickle.dump(self,file)
 
-    def to_image(self,shape=None,mode="RGB"):
+    def to_image(self,shape=None,mode="RGB",spec_range=[-100,-20]):
         """
         create a Pillow Image from spectrogram
+        linearly rescales values from db_range (default [-100, -20]) to [255,0]
+        (ie, -20 db is loudest -> black, -100 db is quietest -> white)
         
         destination: a file path (string)
         shape=None: tuple of image dimensions, eg (224,224)
         mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
-        
+        spec_range=[-100,-20]: the lowest and highest possible values in the spectrogram
+            
         returns: Pillow Image
         """
-        from opensoundscape.helpers import min_max_scale
         from PIL import Image
         
-        #rescale to image scaling
-        array = 255 - min_max_scale(self.spectrogram, feature_range=(0, 255))
+        #rescale values from db_range to [0,255]
+        shift = spec_range[0]
+        scale = 255.0/(spec_range[1]-spec_range[0])
+        array = 255.0 - (self.spectrogram - shift)*scale #reverse scale so that 0 is white
         
         #create and save pillow Image 
         #we pass the array upside-down to create right-side-up image
