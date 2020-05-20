@@ -8,11 +8,16 @@ from opensoundscape.audio import Audio
 import warnings
 import pickle
 
+
 class Spectrogram:
     """ Immutable spectrogram container
     """
 
-    __slots__ = ("frequencies", "times", "spectrogram")#, "overlap", "segment_length")
+    __slots__ = (
+        "frequencies",
+        "times",
+        "spectrogram",
+    )  # , "overlap", "segment_length")
 
     def __init__(self, spectrogram, frequencies, times):
         if not isinstance(spectrogram, np.ndarray):
@@ -51,7 +56,14 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("spectrogram", spectrogram)
 
     @classmethod
-    def from_audio(cls, audio, window_type="hann", window_samples=512, overlap_samples=256, decibel_limits = (-100,-20) ):
+    def from_audio(
+        cls,
+        audio,
+        window_type="hann",
+        window_samples=512,
+        overlap_samples=256,
+        decibel_limits=(-100, -20),
+    ):
         """
         create a Spectrogram object from an Audio object
         
@@ -76,18 +88,18 @@ class Spectrogram:
             noverlap=overlap_samples,
             scaling="spectrum",
         )
-        
-        #convert to decibels
+
+        # convert to decibels
         spectrogram = 10 * np.log10(spectrogram)
-            
-        #limit the decibel range (-100 to -20 dB by default)
-        #values below lower limit set to lower limit, values above upper limit set to uper limit
-        min_db,max_db = decibel_limits
+
+        # limit the decibel range (-100 to -20 dB by default)
+        # values below lower limit set to lower limit, values above upper limit set to uper limit
+        min_db, max_db = decibel_limits
         spectrogram[spectrogram > max_db] = max_db
         spectrogram[spectrogram < min_db] = min_db
 
         return cls(spectrogram, frequencies, times)
-    
+
     def __setattr__(self, name, value):
         raise AttributeError("Spectrogram's cannot be modified")
 
@@ -114,7 +126,7 @@ class Spectrogram:
             self.times,
         )
 
-    def limit_db_range(self, min_db=-100,max_db=-20):
+    def limit_db_range(self, min_db=-100, max_db=-20):
         """ Limit the decibel values of the spectrogram to range from min_db to max_db
             
             values less than min_db are set to min_db
@@ -126,7 +138,7 @@ class Spectrogram:
 
         _spec[_spec > max_db] = max_db
         _spec[_spec < min_db] = min_db
-        
+
         return Spectrogram(_spec, self.frequencies, self.times)
 
     def bandpass(self, min_f, max_f):
@@ -141,18 +153,18 @@ class Spectrogram:
 
         """
 
-        #find indices of the frequencies in spec_freq closest to min_f and max_f
-        lowest_index = np.abs(self.frequencies - min_f).argmin() 
+        # find indices of the frequencies in spec_freq closest to min_f and max_f
+        lowest_index = np.abs(self.frequencies - min_f).argmin()
         highest_index = np.abs(self.frequencies - max_f).argmin()
 
-        #take slices of the spectrogram and spec_freq that fall within desired range
+        # take slices of the spectrogram and spec_freq that fall within desired range
         return Spectrogram(
             self.spectrogram[lowest_index:highest_index, :],
             self.frequencies[lowest_index:highest_index],
-            self.times
+            self.times,
         )
-    
-    def trim(self,start_time,end_time):
+
+    def trim(self, start_time, end_time):
         """ extract a time segment from a spectrogram
 
         params:
@@ -164,18 +176,18 @@ class Spectrogram:
         
         """
 
-        #find indices of the times in self.times closest to min_t and max_t
-        lowest_index = np.abs(self.times - start_time).argmin() 
+        # find indices of the times in self.times closest to min_t and max_t
+        lowest_index = np.abs(self.times - start_time).argmin()
         highest_index = np.abs(self.times - end_time).argmin()
 
-        #take slices of the spectrogram and spec_freq that fall within desired range
+        # take slices of the spectrogram and spec_freq that fall within desired range
         return Spectrogram(
             self.spectrogram[:, lowest_index:highest_index],
             self.frequencies,
-            self.times[lowest_index:highest_index]
+            self.times[lowest_index:highest_index],
         )
-    
-    def plot(self,inline=True,fname=None,show_colorbar=False):
+
+    def plot(self, inline=True, fname=None, show_colorbar=False):
         """Plot the spectrogram with pyplot. 
         
         Parameters:
@@ -184,34 +196,38 @@ class Spectrogram:
             show_colorbar: include image legend colorbar from pyplot
         """
         from matplotlib import pyplot as plt
-        
-        plt.pcolormesh(self.times,self.frequencies,self.spectrogram)
-        plt.xlabel('time (sec)')
-        plt.ylabel('frequency (Hz)')
+
+        plt.pcolormesh(self.times, self.frequencies, self.spectrogram)
+        plt.xlabel("time (sec)")
+        plt.ylabel("frequency (Hz)")
         if show_colorbar:
             plt.colorbar()
 
-        #if fname is not None, save to file path fname
+        # if fname is not None, save to file path fname
         if fname:
             plt.savefig(fname)
-        
-        #if not saving to file, check if a matplotlib backend is available 
+
+        # if not saving to file, check if a matplotlib backend is available
         if inline:
             import os
-            if os.environ.get('MPLBACKEND') is None:
+
+            if os.environ.get("MPLBACKEND") is None:
                 warnings.warn("MPLBACKEND is 'None' in os.environ. Skipping plot.")
             else:
-                plt.show()       
+                plt.show()
 
-    
-    def amplitude(self, freq_range=None): #used to be called "power_signal" which is misleading (not power)
+    def amplitude(
+        self, freq_range=None
+    ):  # used to be called "power_signal" which is misleading (not power)
         """ return a time-arry of the sum of spectrogram over all frequencies or a range of frequencies"""
         if freq_range is None:
-            return np.sum(self.spectrogram,0)
+            return np.sum(self.spectrogram, 0)
         else:
-            return np.sum(self.bandpass(freq_range[0],freq_range[1]).spectrogram,0)
-    
-    def net_amplitude(self, signal_band, reject_bands = None): #used to be called "net_power_signal" which is misleading (not power)
+            return np.sum(self.bandpass(freq_range[0], freq_range[1]).spectrogram, 0)
+
+    def net_amplitude(
+        self, signal_band, reject_bands=None
+    ):  # used to be called "net_power_signal" which is misleading (not power)
         """make amplitude signal of file f in signal_band and subtract amplitude from reject_bands
 
         rescale the signal and reject bands by dividing by their bandwidths in Hz 
@@ -220,35 +236,37 @@ class Spectrogram:
         
         return: 1-d time series of net amplitude """
 
-        #find the amplitude signal for the desired frequency band
+        # find the amplitude signal for the desired frequency band
         signal_band_amplitude = self.amplitude(signal_band)
 
-        signal_band_bandwidth = signal_band[1]-signal_band[0]
+        signal_band_bandwidth = signal_band[1] - signal_band[0]
 
-        #rescale amplitude by 1 / size of frequency band in Hz ("amplitude per unit Hz" ~= color on a spectrogram)
-        net_amplitude = signal_band_amplitude / signal_band_bandwidth 
+        # rescale amplitude by 1 / size of frequency band in Hz ("amplitude per unit Hz" ~= color on a spectrogram)
+        net_amplitude = signal_band_amplitude / signal_band_bandwidth
 
-        #then subtract the energy in the the reject_bands from the signal_band_amplitude to get net_amplitude
-        if not (reject_bands is None): 
-            #we sum up the sizes of the rejection bands (to not overweight signal_band)
+        # then subtract the energy in the the reject_bands from the signal_band_amplitude to get net_amplitude
+        if not (reject_bands is None):
+            # we sum up the sizes of the rejection bands (to not overweight signal_band)
             reject_bands = np.array(reject_bands)
-            reject_bands_total_bandwidth = sum(reject_bands[:,1]-reject_bands[:,0])
+            reject_bands_total_bandwidth = sum(reject_bands[:, 1] - reject_bands[:, 0])
 
-            #subtract reject_band_amplitude
-            for reject_band in reject_bands: 
+            # subtract reject_band_amplitude
+            for reject_band in reject_bands:
                 reject_band_amplitude = self.amplitude(reject_band)
-                net_amplitude = net_amplitude - (reject_band_amplitude/reject_bands_total_bandwidth)
+                net_amplitude = net_amplitude - (
+                    reject_band_amplitude / reject_bands_total_bandwidth
+                )
 
-            #negative signal shouldn't be kept, because it means reject was stronger than signal. Zero it:
-            net_amplitude = [max(0,s) for s in net_amplitude]
+            # negative signal shouldn't be kept, because it means reject was stronger than signal. Zero it:
+            net_amplitude = [max(0, s) for s in net_amplitude]
 
         return net_amplitude
-    
-#     def save(self,destination):
-#         with open(destination,'wb') as file:
-#             pickle.dump(self,file)
 
-    def to_image(self,shape=None,mode="RGB",spec_range=[-100,-20]):
+    #     def save(self,destination):
+    #         with open(destination,'wb') as file:
+    #             pickle.dump(self,file)
+
+    def to_image(self, shape=None, mode="RGB", spec_range=[-100, -20]):
         """
         create a Pillow Image from spectrogram
         linearly rescales values from db_range (default [-100, -20]) to [255,0]
@@ -262,17 +280,19 @@ class Spectrogram:
         returns: Pillow Image
         """
         from PIL import Image
-        
-        #rescale values from db_range to [0,255]
+
+        # rescale values from db_range to [0,255]
         shift = spec_range[0]
-        scale = 255.0/(spec_range[1]-spec_range[0])
-        array = 255.0 - (self.spectrogram - shift)*scale #reverse scale so that 0 is white
-        
-        #create and save pillow Image 
-        #we pass the array upside-down to create right-side-up image
+        scale = 255.0 / (spec_range[1] - spec_range[0])
+        array = (
+            255.0 - (self.spectrogram - shift) * scale
+        )  # reverse scale so that 0 is white
+
+        # create and save pillow Image
+        # we pass the array upside-down to create right-side-up image
         image = Image.fromarray(array[::-1, :])
         image = image.convert(mode)
         if shape is not None:
             image = image.resize(shape)
-        
+
         return image
