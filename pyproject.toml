@@ -35,7 +35,7 @@ sphinx-rtd-theme = "^0.4.3"
 
 [tool.black]
 line-length = 88
-py36 = true
+target_version = ['py36', 'py37', 'py38']
 include = '\.pyi?$'
 exclude = '''
 /(

@@ -17,8 +17,8 @@ def test_spectrogram_raises_typeerror():
 
 
 def test_spectrogram_shape_of_veryshort(veryshort_wav_str):
-    audio = Audio(veryshort_wav_str)
-    spec = Spectrogram.from_audio(audio)
+    audio = Audio(veryshort_wav_str, sample_rate=22050)
+    spec = Spectrogram.from_audio(audio, overlap_samples=384)
     assert spec.spectrogram.shape == (257, 21)
     assert spec.frequencies.shape == (257,)
     assert spec.times.shape == (21,)
@@ -71,12 +71,12 @@ def test_construct_spectrogram():
 def test_bandpass_spectrogram():
     Spectrogram(
         np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)
-    ).bandpass([2, 4])
+    ).bandpass(2, 4)
 
 
 def test_trim_spectrogram():
     Spectrogram(np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)).trim(
-        [2, 4]
+        2, 4
     )
 
 
@@ -84,11 +84,11 @@ def test_plot_spectrogram():
     Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10))).plot()
 
 
-def test_power_signal_spectrogram():
-    Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10))).power_signal()
+def test_amplitude_spectrogram():
+    Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10))).amplitude()
 
 
-def test_net_power_signal_spectrogram():
+def test_net_amplitude_spectrogram():
     Spectrogram(
         np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)
-    ).net_power_signal([50, 100], [[0, 10], [20, 30]])
+    ).net_amplitude([50, 100], [[0, 10], [20, 30]])

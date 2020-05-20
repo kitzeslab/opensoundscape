@@ -46,7 +46,7 @@ def test_pulsefinder_species_set():
     df.at[1, :] = ["sp2", 10, 15, 1000, 2000, 0, 500, 1.0]
 
     audio = Audio(path, sample_rate=32000)
-    spec = Spectrogram.from_audio(audio, segment_length=256)
+    spec = Spectrogram.from_audio(audio, overlap_samples=256)
 
     df = pulse_finder_species_set(spec, df)
 
