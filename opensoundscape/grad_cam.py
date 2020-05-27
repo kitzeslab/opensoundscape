@@ -51,7 +51,7 @@ class GuidedBackPropagation(BackPropagation):
         def func_b(module, grad_in, grad_out):
             # Cut off negative gradients
             if isinstance(module, nn.ReLU):
-                return (torch.clamp(grad_in[0], min=0.0), )
+                return (torch.clamp(grad_in[0], min=0.0),)
 
         for module in self.model.named_modules():
             module[1].register_backward_hook(func_b)
@@ -64,7 +64,7 @@ class Deconvolution(BackPropagation):
         def func_b(module, grad_in, grad_out):
             # Cut off negative gradients
             if isinstance(module, nn.ReLU):
-                return (torch.clamp(grad_out[0], min=0.0), )
+                return (torch.clamp(grad_out[0], min=0.0),)
 
         for module in self.model.named_modules():
             module[1].register_backward_hook(func_b)
@@ -92,7 +92,7 @@ class GradCAM(_PropagationBase):
                 if id(module[1]) == key:
                     if module[0] == target_layer:
                         return value
-        raise ValueError('Invalid layer name: {}'.format(target_layer))
+        raise ValueError("Invalid layer name: {}".format(target_layer))
 
     def _normalize(self, grads):
         l2_norm = torch.sqrt(torch.mean(torch.pow(grads, 2))) + 1e-5
@@ -106,7 +106,7 @@ class GradCAM(_PropagationBase):
         fmaps = self._find(self.all_fmaps, target_layer)
         grads = self._find(self.all_grads, target_layer)
         weights = self._compute_grad_weights(grads)
-        
+
         if target_neuron:
             target_neuron_one_hot = torch.zeros(512)
             target_neuron_one_hot[target_neuron] = 1
@@ -114,7 +114,7 @@ class GradCAM(_PropagationBase):
             weights = target_neuron_one_hot.to(self.device)
 
         gcam = (fmaps[0] * weights[0]).sum(dim=0)
-        gcam = torch.clamp(gcam, min=0.)
+        gcam = torch.clamp(gcam, min=0.0)
 
         gcam -= gcam.min()
         gcam /= gcam.max()
