@@ -7,10 +7,12 @@ COMPLETIONS = """all_commands=(
   --version
   completions
   raven_annotation_check
+  raven_lowercase_annotations
 )
 
 commands_accepting_dir=(
   raven_annotation_check
+  raven_lowercase_annotations
 )
 
 _opensoundscape_complete() {

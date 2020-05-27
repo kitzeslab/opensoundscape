@@ -15,6 +15,7 @@ Usage:
     opensoundscape [-hv]
     opensoundscape completions
     opensoundscape raven_annotation_check <directory>
+    opensoundscape raven_lowercase_annotations <directory>
 
 Options:
     -h --help                   Print this screen and exit
