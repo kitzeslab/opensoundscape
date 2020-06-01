@@ -49,25 +49,18 @@ def lowercase_annotations(directory):
                 out.write(line.lower())
 
 
-def generate_class_corrections(directory, lower=False):
+def generate_class_corrections(directory):
     """ Generate a CSV to specify any class overrides
 
     Input:
-        directory: The path which contains Raven annotations file
-
-    Options:
-        lower: Generate class corrections for `**/*.selections.txt.lower`
-               files, otherwise `**/*.selections.txt`
+        directory: The path which contains Raven annotations files ending in *.selections.txt.lower
 
     Output:
         csv (string): A multiline string containing a CSV file with two columns
                       `raw` and `corrected`
     """
     input_p = Path(directory)
-    if lower:
-        selections = input_p.rglob("**/*.selections.txt.lower")
-    else:
-        selections = input_p.rglob("**/*.selections.txt")
+    selections = input_p.rglob("**/*.selections.txt.lower")
 
     class_s = set()
     for selection in selections:
@@ -80,4 +73,32 @@ def generate_class_corrections(directory, lower=False):
         f.write("raw,corrected\n")
         for cls in sorted(list(class_s)):
             f.write(f"{cls},{cls}\n")
+        return f.getvalue()
+
+
+def query_annotations(directory, cls):
+    """ Given a directory of Raven annotations, query for a specific class
+
+    Input:
+        directory:  The path which contains Raven annotations file
+        cls:        The class which you would like to query for
+
+    Output:
+        output (string): A multiline string containing annotation file and rows matching the query cls
+    """
+
+    input_p = Path(directory)
+    selections = input_p.rglob("**/*.selections.txt.lower")
+    pd.set_option("display.max_rows", None)
+    with StringIO() as f:
+        for selection in selections:
+            selection_df = pd.read_csv(selection, sep="\t")
+            num_delimeters = len(selection.name)
+            subset = selection_df[selection_df["class"] == cls]
+            if subset.shape[0] > 0:
+                f.write(f"{'=' * num_delimeters}\n")
+                f.write(f"{selection}\n")
+                f.write(f"{'=' * num_delimeters}\n")
+                f.write(f"{subset}\n")
+                f.write(f"{'=' * num_delimeters}\n")
         return f.getvalue()
