@@ -1,26 +1,24 @@
 Bootstrap: docker
-From: archlinux/base
-
-%setup
-    mkdir -p ${SINGULARITY_ROOTFS}/opt/opensoundscape
-    cp -rv . ${SINGULARITY_ROOTFS}/opt/opensoundscape
+From: ubuntu:bionic
 
 %labels
     AUTHOR moore0557@gmail.com
 
 %post
-    pacman -Syyu --noconfirm
-    pacman -S python python-pip libsamplerate git gcc python-pandas python-numpy \
-        python-matplotlib python-docopt python-scipy python-pymongo python-progressbar \
-        python-pytest tk mongodb mongodb-tools opencv hdf5 gtk3 python-scikit-learn \
-        --noconfirm
-    pip install -r /opt/opensoundscape/requirements.txt
+    apt-get update
+    apt-get upgrade -y --no-install-recommends
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        python3 python3-pip python3-setuptools python3-wheel tk \
+        python3-tk mongodb mongo-tools libglib2.0-0 --no-install-recommends
+    pip3 install opensoundscape==0.3.0.1
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
 
 %apprun opensoundscape
-    python /opt/opensoundscape/opensoundscape.py $*
-
-%appenv opensoundscape
-    export MPLBACKEND="TkAgg"
+    opensoundscape $*
 
 %apprun mongodb
     mongod $*
+
+%environment
+    export MPLBACKEND="TkAgg"

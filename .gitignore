@@ -4,3 +4,8 @@
 __pycache__/
 containers/
 testing/
+dist/
+opensoundscape.egg-info/
+.idea/
+.vscode/
+opso.sif
