@@ -8,11 +8,15 @@ COMPLETIONS = """all_commands=(
   completions
   raven_annotation_check
   raven_lowercase_annotations
+  raven_generate_class_corrections
+  raven_query_annotations
 )
 
 commands_accepting_dir=(
   raven_annotation_check
   raven_lowercase_annotations
+  raven_generate_class_corrections
+  raven_query_annotations
 )
 
 _opensoundscape_complete() {
