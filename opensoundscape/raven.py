@@ -5,6 +5,7 @@
 from warnings import warn
 import pandas as pd
 from pathlib import Path
+from io import StringIO
 
 
 def annotation_check(directory):
@@ -46,3 +47,37 @@ def lowercase_annotations(directory):
         with open(selection, "r") as inp, open(lower, "w") as out:
             for line in inp:
                 out.write(line.lower())
+
+
+def generate_class_corrections(directory, lower=False):
+    """ Generate a CSV to specify any class overrides
+
+    Input:
+        directory: The path which contains Raven annotations file
+
+    Options:
+        lower: Generate class corrections for `**/*.selections.txt.lower`
+               files, otherwise `**/*.selections.txt`
+
+    Output:
+        csv (string): A multiline string containing a CSV file with two columns
+                      `raw` and `corrected`
+    """
+    input_p = Path(directory)
+    if lower:
+        selections = input_p.rglob("**/*.selections.txt.lower")
+    else:
+        selections = input_p.rglob("**/*.selections.txt")
+
+    class_s = set()
+    for selection in selections:
+        selection_df = pd.read_csv(selection, sep="\t")
+        selection_df["class"] = selection_df["class"].fillna("unknown")
+        for cls in selection_df["class"]:
+            class_s.add(cls)
+
+    with StringIO() as f:
+        f.write("raw,corrected\n")
+        for cls in sorted(list(class_s)):
+            f.write(f"{cls},{cls}\n")
+        return f.getvalue()

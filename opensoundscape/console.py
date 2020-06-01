@@ -16,17 +16,21 @@ Usage:
     opensoundscape completions
     opensoundscape raven_annotation_check <directory>
     opensoundscape raven_lowercase_annotations <directory>
+    opensoundscape raven_generate_class_corrections [-l] <directory> <output.csv>
 
 Options:
-    -h --help                   Print this screen and exit
-    -v --version                Print the version of opensoundscape.py
+    -h --help                           Print this screen and exit
+    -v --version                        Print the version of opensoundscape.py
+    -l --lower                          Generate class corrections for `**/*.selections.txt.lower` instead of `**/*.selections.txt`
 
 Positional Arguments:
-    <directory>                 A path to a directory
+    <directory>                         A path to a directory
+    <output.csv>                        A CSV file containing the output of an analysis
 
 Descriptions:
-    completions                 Generate bash completions `opensoundscape completions > ~/.local/share/bash-completion/completions/opensoundscape`
-    raven_annotation_check      Given a directory of Raven annotation files check that a class is specified
+    completions                         Generate bash completions `opensoundscape completions > ~/.local/share/bash-completion/completions/opensoundscape`
+    raven_annotation_check              Given a directory of Raven annotation files check that a class is specified
+    raven_generate_class_corrections    Given a directory of Raven annotation files, generate a CSV file to check classes and correct any issues
 """
 
 
@@ -43,6 +47,11 @@ def entrypoint():
 
     elif args["raven_annotation_check"]:
         raven.annotation_check(args["<directory>"])
+
+    elif args["raven_generate_class_corrections"]:
+        csv = raven.generate_class_corrections(args["<directory>"], lower=args["--lower"])
+        with open(args["<output.csv>"], "w") as f:
+            f.write(csv)
 
     else:
         raise NotImplementedError(

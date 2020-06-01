@@ -13,6 +13,9 @@ Welcome to opensoundscape's documentation!
 .. automodule:: opensoundscape.audio
    :members:
 
+.. automodule:: opensoundscape.raven
+   :members:
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
