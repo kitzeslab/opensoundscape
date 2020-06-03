@@ -21,11 +21,13 @@ def veryshort_wav_str():
 def silence_10s_mp3_str():
     return f"tests/silence_10s.mp3"
 
-
 @pytest.fixture()
 def not_a_file_str():
     return f"tests/not_a_file.wav"
 
+@pytest.fixture()
+def out_path():
+    return f"tests/audio_tools_out"
 
 @pytest.fixture()
 def veryshort_wav_pathlib(veryshort_wav_str):
@@ -120,7 +122,9 @@ def test_spectrum(silence_10s_mp3_str):
     s = Audio(silence_10s_mp3_str)
     assert(len(s.spectrum())==2)
 
-def test_save(silence_10s_mp3_str,saved_wav):
+def test_save(silence_10s_mp3_str,saved_wav,out_path):
+    if not exists(out_path):
+        os.system(f'mkdir {outpath}')
     if exists(saved_wav):
         os.system(f'rm {saved_wav}')
     Audio(silence_10s_mp3_str).save(saved_wav)

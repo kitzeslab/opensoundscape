@@ -18,9 +18,9 @@ def silent_wav_str():
 def convolved_wav_str():
     return f"tests/audio_tools_out/convolved.wav"
 
-# @pytest.fixture()
-# def out_path():
-#     return f"tests/audio_tools_out"
+@pytest.fixture()
+def out_path():
+    return f"tests/audio_tools_out"
 
 audio = Audio(f"tests/veryshort.wav")
 
@@ -39,7 +39,9 @@ def test_clipping_detector():
 def test_silence_filter(veryshort_wav_str):
     assert(audio_tools.silence_filter(veryshort_wav_str)>-1)
     
-def test_convolve_file(veryshort_wav_str,silent_wav_str,convolved_wav_str):
+def test_convolve_file(veryshort_wav_str,silent_wav_str,convolved_wav_str,out_path):
+    if not exists(out_path):
+        os.system(f'mkdir {outpath}')
     if exists(convolved_wav_str):
         os.system(f'rm {convolved_wav_str}')
     audio_tools.convolve_file(silent_wav_str, convolved_wav_str, veryshort_wav_str)
