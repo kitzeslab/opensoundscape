@@ -125,9 +125,9 @@ class Audio:
     def spectrum(self):
         """create frequency spectrum from an Audio object using fft
         
-        args:
+        Args:
             self
-        returns: 
+        Returns: 
             fft, frequencies
         """
         from scipy.fftpack import fft

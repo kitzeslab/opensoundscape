@@ -1,6 +1,4 @@
-"""
-set of tools that work directly on audio files or samples
-
+"""audio_tools.py: set of tools that filter or modify audio files or sample arrays (not Audio objects)
 """
 from librosa import load
 from scipy import signal
@@ -10,19 +8,25 @@ import scipy
 import os
 from scipy.signal import butter, sosfiltfilt, sosfreqz
 
-
 def run_command(cmd):
+    """run os command with Popen"""
     from subprocess import Popen, PIPE
     from shlex import split
 
     return Popen(split(cmd), stdout=PIPE, stderr=PIPE).communicate()
 
-
-# move to Audio or Librosa scripts
 def audio_gate(source_path, destination_path, cutoff=-38):
     """perform audio gate with ffmpeg and save new audio file
     
-    audio gate refers to muting the file except when amplitude exceeds a threshold"""
+    audio gate refers to muting the file except when amplitude exceeds a threshold
+    
+    Args:
+        source_path: path to an audio file
+        destination_path: path to save output
+        cutoff=-38: gate threshold in dB Full Scale
+    Returns:
+        os response of ffmpeg command
+    """
     gatingCmd = (
         f'ffmpeg -i {source_path} "compand='
         + f'attacks=0.1:points=-115/-115|{float(cutoff) - 0.1}/-115|{cutoff}/{cutoff}|20/20" {destination_path} '
@@ -30,34 +34,52 @@ def audio_gate(source_path, destination_path, cutoff=-38):
 
     return run_command(cmd)
 
-
 def butter_bandpass(low_f, high_f, sample_rate, order=9):
-    """generate coefficients for bandpass filter"""
+    """generate coefficients for bandpass_filter()
+    
+    Args:
+        low_f: low frequency of butterworth bandpass filter
+        high_f: high frequency of butterworth bandpass filter
+        sample_rate: audio sample rate
+        order=9: order of butterworth filter
+        
+    Returns: 
+        set of coefficients used in sosfiltfilt()
+    """
     nyq = 0.5 * sample_rate
     low = low_f / nyq
     high = high_f / nyq
     sos = butter(order, [low, high], analog=False, btype="band", output="sos")
     return sos
 
-
 def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
     """perform a butterworth bandpass filter on a discrete time signal
     using scipy.signal's butter and solfiltfilt (phase-preserving version of sosfilt)
     
-    signal: discrete time signal (audio samples, list of float)
-    low_f: -3db point (?) for highpass filter (Hz)
-    high_f: -3db point (?) for highpass filter (Hz)
-    sample_rate: samples per second (Hz)
-    order=9: higher values -> steeper dropoff
+    Args:
+        signal: discrete time signal (audio samples, list of float)
+        low_f: -3db point (?) for highpass filter (Hz)
+        high_f: -3db point (?) for highpass filter (Hz)
+        sample_rate: samples per second (Hz)
+        order=9: higher values -> steeper dropoff
     
-    return: filtered time signal 
+    Returns: 
+        filtered time signal 
     """
     sos = butter_bandpass(low_f, high_f, sample_rate, order=order)
     return sosfiltfilt(sos, signal)
 
 
 def clipping_detector(samples, threshold=0.6):
-    """ count the number of samples above a threshold value"""
+    """ count the number of samples above a threshold value
+    
+    Args:
+        samples: a time series of float values
+        threshold=0.6: minimum value of sample to count as clipping
+        
+    Returns:
+        number of samples exceeding threshold
+    """
     return len(list(filter(lambda x: x > threshold, samples)))
 
 
@@ -151,51 +173,6 @@ def silence_filter(
     else:
         return int(np.max(net_energy) > threshold)
 
-
-def mixdown(
-    files_to_mix,
-    out_dir,
-    mix_name,
-    levels=None,
-    duration="longest",
-    verbose=0,
-    create_txt_file=True,
-):
-    """mix all files listed in file_to_mix into destination file as an mp3
-    
-    levels: optionally provide the ratios of each file's output amplitude in the mix as a list
-    duration='longest': duration of output mix, 'longest','shortest','first'
-    
-    we will generate a text file for each one listing the origin files """
-
-    levels_string = ""
-    if levels is not None:
-        if len(levels) != len(files_to_mix):
-            raise ValueError("Length of levels must match length of files_to_mix")
-        levels_string = f':weights="{" ".join([str(l) for l in levels])}"'
-
-    inputs = " -i ".join(files_to_mix)
-    n_in = len(files_to_mix)
-    overwrite = "-y"  # -n to not overwrite
-
-    out_file = f"{out_dir}/{mix_name}.mp3"
-
-    cmd = f"ffmpeg {overwrite} -i {inputs} -filter_complex amix=inputs={n_in}:duration={duration}{levels_string} {out_file}"
-
-    if verbose > 0:
-        print(cmd)
-
-    response = run_command(cmd)
-
-    if create_txt_file:
-        metadata_file = out_dir + mix_name + "_info.txt"
-        metadata = "this file is a mixdown of: \n" + "\n".join(files_to_mix)
-        with open(metadata_file, "w") as file:
-            file.write(metadata)
-
-    return response
-
-
 def mixdown_with_delays(
     files_to_mix,
     destination,
@@ -285,78 +262,26 @@ def mixdown_with_delays(
 
     return run_command(cmd)
 
-
-# #move to scripts
-# def create_mixdowns(in_files,out_dir,files_per_mix):
-#     """ take a set of audio files and layer them on top of eachother
-
-#     this method divides the set of files into files_per_mix sets
-#     and mixes (layers/sums) the audio: one file from each set
-
-#     """
-#     t = timer()
-#     print(f'saving mixdown files and logs to {out_dir}')
-#     print(f'logs contain list of origin files for each mix')
-
-#     if len(in_files)<1:
-#         print("didn't recieve any files!")
-
-#     random.shuffle(in_files)
-
-#     #split the files into n groups and overlap n files in each mixdown
-#     print(f'mixing {files_per_mix} files into each mixdown')
-
-#     n_files = len(in_files)
-#     print(f'total number of files: {n_files}')
-#     print(f'resulting mixdowns: {n_files//files_per_mix}')
-
-#     #split the file set into files_per_mix sets
-#     idx = np.arange(0,n_files+1,n_files//files_per_mix)
-#     file_sets = np.array([ in_files[idx[i]:idx[i+1]] for i in range(files_per_mix)])
-
-#     #now we have separated lists of files to combine with eachother
-#     for i in range(len(file_sets[0])):
-#         #take the ith file from each set and mix into one
-#         files_to_mix = file_sets[:,i]
-#         mix_name = f'mix-{files_per_mix}-files_{i}'
-#         mixdown(files_to_mix,out_dir,mix_name)
-#         if i%50==0:
-#             print(f'completed {i} mixdowns of {len(file_sets[0])} in {timer()-t} seconds')
-
-#     print(f'copmleted mixdown task in {timer()-t} seconds \n')
-
-
 def convolve_file(in_file, out_file, ir_file, input_gain=1.0):
     """apply an impulse_response to a file using ffmpeg's afir convolution
+    
+    ir_file is an audio file containing a short burst of noise 
+    recorded in a space whose acoustics are to be recreated 
     
     this makes the files 'sound as if' it were recorded
     in the location that the impulse response (ir_file) was recorded
     
-    input_gain is a ratio for input sound's amplitude in (0,1)
+    Args:
+        in_file: path to an audio file to process
+        out_file: path to save output to
+        ir_file: path to impulse response file
+        input_gain=1.0: ratio for in_file sound's amplitude in (0,1)
 
-    ir_file should be an audio file containing a short burst of noise
-    recorded in a space whose acoustics are to be recreated """
+    Returns:
+        os response of ffmpeg command
+    """
     overwrite = "-y"  # -n to not overwrite
     colvolve = f'-lavfi afir="{input_gain}:1:1:gn"'
     cmd = f"ffmpeg {overwrite} -i {in_file} -i {ir_file} {colvolve} {out_file}"
-    #     print(cmd)
+
     return run_command(cmd)
-
-
-# move to scripts
-# def convolve_files(in_files,out_dir,ir_menu):
-#     """apply ffmpeg convolution to a set of files,
-#     choosing the impulse response randomly from a list of paths (ir_menu)
-#     and saving modified files to out_dir/"""
-#     responses = []
-#     for i, in_file in enumerate(in_files):
-#         ir_file = random.choice(ir_menu)
-#         ir_applied = "".join(os.path.basename(ir_file)).split(".")[0:-1]
-#         out_file = f'{out_dir}{os.path.basename(in_file)}_{ir_applied}.mp3'
-
-#         response = convolve_file(in_file,out_file,ir_file)
-#         responses.append(response)
-
-#         if i%100 == 0:
-#             print(f'completed {i+1} convolutions of {len(split_files)}')
-#     print(f'completed {len(in_files)} convolutions')
