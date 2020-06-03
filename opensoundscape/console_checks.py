@@ -24,13 +24,13 @@ def positive_integer_with_default(args, parameter, default=1):
 
 
 def directory_exists(args, parameter):
-    p = Path(args["--parameter"])
+    p = Path(args[parameter])
     if not p.exists():
         raise FileNotFoundError(
-            f"The directory given to `{parameter}` does not exist, got `{args['--parameter']}`"
+            f"The directory given to `{parameter}` does not exist, got `{args[parameter]}`"
         )
     if not p.is_dir():
         raise NotADirectoryError(
-            f"The directory given to `{parameter}` should be a directory but I found a file, got `{args['--parameter']}`"
+            f"The directory given to `{parameter}` should be a directory but I found a file, got `{args[parameter]}`"
         )
     return p

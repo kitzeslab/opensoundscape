@@ -9,8 +9,10 @@ from opensoundscape import __version__ as opensoundscape_version
 import opensoundscape.raven as raven
 from opensoundscape.completions import COMPLETIONS
 import opensoundscape.console_checks as checks
-from opensoundscape.dataset import Splitter
+from opensoundscape.datasets import Splitter
 from torch.utils.data import DataLoader
+from pathlib import Path
+from itertools import chain
 
 
 OPSO_DOCOPT = """ opensoundscape.py -- Opensoundscape
@@ -21,14 +23,14 @@ Usage:
     opensoundscape raven_lowercase_annotations <directory>
     opensoundscape raven_generate_class_corrections <directory> <output.csv>
     opensoundscape raven_query_annotations <directory> <class>
-    opensoundscape split_audio (-i <directory>) (-o <directory>) (-d <duration>) (-p <overlap>) [-s <segments.csv>]
-        [-a -l <labels.csv>] [-n <cores>] [-b <batch_size>]
+    opensoundscape split_audio (-i <directory>) (-o <directory>) (-d <duration>) (-p <overlap>)
+        [-a -l <labels.csv>] [-n <cores>] [-b <batch_size>] [-s <segments.csv>]
 
 Options:
     -h --help                           Print this screen and exit
     -v --version                        Print the version of opensoundscape.py
-    -i --input_directory                The input directory for the analysis
-    -o --output_directory               The output directory for the analysis
+    -i --input_directory <directory>    The input directory for the analysis
+    -o --output_directory <directory>   The output directory for the analysis
     -d --duration <duration>            The segment duration in seconds
     -p --overlap <overlap>              The segment overlap in seconds
     -a --annotations                    Search for Raven annotation files
@@ -95,7 +97,7 @@ def entrypoint():
         if segments.exists():
             segments.rename(segments.with_suffix(".csv.bak"))
 
-        wavs = input_p.rglob("**/*.WAV") + input_p.rglob("**/*.wav")
+        wavs = chain(input_p.rglob("**/*.WAV"), input_p.rglob("**/*.wav"))
 
         dataset = Splitter(
             wavs,

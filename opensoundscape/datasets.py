@@ -7,7 +7,8 @@ from hashlib import md5
 from librosa.output import write_wav
 from librosa.core import load, get_duration
 from sys import stderr
-from Pathlib import Path
+from pathlib import Path
+from itertools import chain
 
 
 def get_segment(clip_begin, clip_end, samples, sr):
@@ -38,9 +39,9 @@ def get_md5_digest(input_string):
     Outputs:
         output: A string containing the md5 hash of input string
     """
-    with md5() as obj:
-        obj.update(input_string.encode("utf-8"))
-        return obj.hexdigest()
+    obj = md5()
+    obj.update(input_string.encode("utf-8"))
+    return obj.hexdigest()
 
 
 def annotations_with_overlaps_with_clip(df, begin, end):
@@ -116,7 +117,7 @@ class Splitter(torch.utils.data.Dataset):
                 f"{wav.parent}/{annotation_prefix}.Table.1.selections.txt.lower"
             )
             if not annotation_file.is_file():
-                sys.stderr.write(f"Warning: Found no Raven annotations for {wav}\n")
+                stderr.write(f"Warning: Found no Raven annotations for {wav}\n")
                 return {"data": []}
 
         wav_samples, wav_sample_rate = load(wav)
@@ -163,13 +164,13 @@ class Splitter(torch.utils.data.Dataset):
                         begin, end, wav_samples, wav_sample_rate
                     )
                     write_wav(
-                        f"{destination}.{suffix}", segment_samples, wav_sample_rate
+                        f"{destination}{suffix}", segment_samples, wav_sample_rate
                     )
 
                     if idx == num_segments - 1:
-                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.{suffix}"
+                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}{suffix}"
                     else:
-                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.{suffix}"
+                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}{suffix}"
                     to_append += f",{'|'.join(overlaps['class'].unique())}"
 
                     outputs.append(to_append)
@@ -177,17 +178,17 @@ class Splitter(torch.utils.data.Dataset):
                 segment_samples, segment_sample_begin, segment_sample_end = get_segment(
                     begin, end, wav_samples, wav_sample_rate
                 )
-                write_wav(f"{destination}.{suffix}", segment_samples, wav_sample_rate)
+                write_wav(f"{destination}{suffix}", segment_samples, wav_sample_rate)
 
                 if idx == num_segments - 1:
-                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.{suffix}"
+                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}{suffix}"
                 else:
-                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.{suffix}"
+                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}{suffix}"
 
                 outputs.append(to_append)
 
         return {"data": outputs}
 
     @classmethod
-    def collate_fn(batch):
-        return chain.from_iterable([x["data"] for x in batch])
+    def collate_fn(*batch):
+        return chain.from_iterable([x["data"] for x in batch[1]])
