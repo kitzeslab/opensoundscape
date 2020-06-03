@@ -24,20 +24,20 @@ Usage:
     opensoundscape raven_generate_class_corrections <directory> <output.csv>
     opensoundscape raven_query_annotations <directory> <class>
     opensoundscape split_audio (-i <directory>) (-o <directory>) (-d <duration>) (-p <overlap>)
-        [-a -l <labels.csv>] [-n <cores>] [-b <batch_size>] [-s <segments.csv>]
+        [-a -l <label_corrections.csv>] [-n <cores>] [-b <batch_size>] [-s <segments.csv>]
 
 Options:
-    -h --help                           Print this screen and exit
-    -v --version                        Print the version of opensoundscape.py
-    -i --input_directory <directory>    The input directory for the analysis
-    -o --output_directory <directory>   The output directory for the analysis
-    -d --duration <duration>            The segment duration in seconds
-    -p --overlap <overlap>              The segment overlap in seconds
-    -a --annotations                    Search for Raven annotation files
-    -l --labels <labels.csv>            A CSV file with corrections to labels in Raven annotations files
-    -n --num_cores <number>             The number of cores to use for the analysis [default: 1]
-    -b --batch_size <number>            The batch_size for the analysis [default: 1]
-    -s --segments <segments.csv>        Write segments to this file [default: segments.csv]
+    -h --help                                       Print this screen and exit
+    -v --version                                    Print the version of opensoundscape.py
+    -i --input_directory <directory>                The input directory for the analysis
+    -o --output_directory <directory>               The output directory for the analysis
+    -d --duration <duration>                        The segment duration in seconds
+    -p --overlap <overlap>                          The segment overlap in seconds
+    -a --annotations                                Search for Raven annotation files
+    -l --label_corrections <label_corrections.csv>  A CSV file with corrections to labels in Raven annotations files
+    -n --num_cores <number>                         The number of cores to use for the analysis [default: 1]
+    -b --batch_size <number>                        The batch_size for the analysis [default: 1]
+    -s --segments <segments.csv>                    Write segments to this file [default: segments.csv]
 
 Positional Arguments:
     <directory>                         A path to a directory
