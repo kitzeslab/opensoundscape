@@ -2,29 +2,24 @@ import pandas as pd
 import numpy as np
 import warnings
 from matplotlib import pyplot as plt
-from opensoundscape.helpers import jitter
 
 
-def calc_speed_of_sound(temperature=20, humidity=None):
+def calc_speed_of_sound(temperature=20):
     """
     Calculate speed of sound in meters per second
     
     Calculate speed of sound for a given temperature
-    in Celsius and humidity. (Humidity has a negligible
+    in Celsius (Humidity has a negligible
     effect on speed of sound and so this functionality
-    is not implemented yet; will raise a NotImplementedError.)
+    is not implemented)
     
-    Inputs: 
+    Args: 
         temperature: ambient temperature in Celsius
-        humidity: the relative humidity, between 0 and 1 
         
     Returns:
         the speed of sound in meters per second
     """
-    if humidity:
-        raise NotImplementedError("Humidity functionality is not implemented yet")
-    else:
-        return 331.3 * np.sqrt(1 + float(temperature) / 273.15)
+    return 331.3 * np.sqrt(1 + float(temperature) / 273.15)
 
 
 def lorentz_ip(u, v=None):
@@ -40,7 +35,7 @@ def lorentz_ip(u, v=None):
         
         u[0]*v[0] + u[1]*v[1] - u[2]*v[2]
     
-    Inputs
+    Args
         u: vector with shape either (3,) or (4,) 
         v: vector with same shape as x1; if None (default), sets v = u
 
@@ -63,7 +58,7 @@ def travel_time(source, reciever, speed_of_sound):
     """
     Calculate time required for sound to travel from a souce to a reciever
     
-    Inputs:
+    Args:
         source: cartesian position [x,y] or [x,y,z] of sound source
         reciever: cartesian position [x,y] or [x,y,z] of sound reciever
         speed_of_sound: speed of sound in m/s
@@ -94,7 +89,7 @@ def localize(
     system in meters (i.e., UTM), or relative to recorder positions
     in meters.
     
-    Inputs:
+    Args:
         reciever_positions: a list of [x,y,z] positions for each reciever
           Positions should be in meters, e.g., the UTM coordinate system.
           

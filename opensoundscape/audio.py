@@ -106,28 +106,51 @@ class Audio:
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
 
     def trim(self, start_time, end_time):
-        """return a new Audio object containing samples from start_time - end_time"""
+        """ trim Audio object in time
+        
+        Args:
+            start_time: time in seconds for start of extracted clip
+            end_time: time in seconds for end of extracted clip
+        Returns:
+            a new Audio object containing samples from start_time to end_time
+        """
         start_sample = int(start_time * self.sample_rate)
         end_sample = int(end_time * self.sample_rate)  # exclusive
         samples_trimmed = self.samples[start_sample:end_sample]
         return Audio(samples_trimmed, self.sample_rate)
 
     def bandpass(self, low_f, high_f, order=9):
-        """bandpass audio signal between low_f and high_f, preserve phase. order ~= steepness of cutoff"""
-        from audio_tools import bandpass_filter
+        """ bandpass audio signal frequencies
+        
+        uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
+        
+        Args:
+            low_f: low frequency cutoff (-3 dB)  in Hz of bandpass filter
+            high_f: high frequency cutoff (-3 dB)  in Hz of bandpass filter
+            order: butterworth filter order (integer) ~= steepness of cutoff
+            
+        """
+        from opensoundscape.audio_tools import bandpass_filter
+
+        if low_f <= 0:
+            raise ValueError("low_f must be greater than zero")
+
+        if high_f >= self.sample_rate / 2:
+            raise ValueError("high_f must be less than sample_rate/2")
 
         filtered_samples = bandpass_filter(
             self.samples, low_f, high_f, self.sample_rate, order=9
         )
-        return Audio(filtered_samples, at.sample_rate)
+        return Audio(filtered_samples, self.sample_rate)
 
     # can act on an audio file and be moved into Audio class
     def spectrum(self):
         """create frequency spectrum from an Audio object using fft
         
-        args:
+        Args:
             self
-        returns: 
+            
+        Returns: 
             fft, frequencies
         """
         from scipy.fftpack import fft
@@ -147,6 +170,15 @@ class Audio:
         return fft, frequencies
 
     def save(self, path):
+        """save Audio to .wav file using scipy.io.wavfile
+        
+        Args:
+            self
+            path: destination for wav file """
+
+        if path.split(".")[-1] != "wav":
+            raise ValueError("file extension must be .wav")
+
         from scipy.io.wavfile import write as write_wav
 
         write_wav(path, self.sample_rate, self.samples)

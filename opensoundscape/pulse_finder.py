@@ -13,22 +13,33 @@ from opensoundscape.spectrogram import Spectrogram
 
 
 def calculate_pulse_score(
-    amplitude, sample_frequency_of_spec, pulserate_range, plot=False, nfft=1024
-):  # 1024
-    """score an audio amplitude signal by finding the maximum value of the power spectral density inside a range of pulse rates"""
+    amplitude, amplitude_sample_rate, pulse_rate_range, plot=False, nfft=1024
+):
+    """Search for amplitude pulsing in an audio signal in a range of pulse repetition rates (PRR)
+    
+    scores an audio amplitude signal by highest value of power spectral density in the PRR range
+    
+    Args:
+        amlpitude: a time series of the audio signal's amplitude (for instance a smoothed raw audio signal) 
+        amplitude_sample_rate: sample rate in Hz of amplitude signal, normally ~20-200 Hz
+        pulse_rate_range: [min, max] values for amplitude modulation in Hz
+        plot=False: if True, creates a plot visualizing the power spectral density
+        nfft=1024: controls the resolution of the power spectral density (see scipy.signal.welch)
+        
+    Returns: pulse rate score for this audio segment (float) """
 
     # calculate amplitude modulation spectral density
-    f, pxx = signal.welch(amplitude, fs=sample_frequency_of_spec, nfft=nfft)
+    f, psd = signal.welch(amplitude, fs=amplitude_sample_rate, nfft=nfft)
 
-    # look for the highest peak of power spectral density within pulserate_range
-    min_rate = pulserate_range[0]
-    max_rate = pulserate_range[1]
-    pxx_bandpassed = [pxx[i] for i in range(len(pxx)) if min_rate < f[i] < max_rate]
+    # look for the highest peak of power spectral density within pulse_rate_range
+    min_rate = pulse_rate_range[0]
+    max_rate = pulse_rate_range[1]
+    psd_bandpassed = [psd[i] for i in range(len(psd)) if min_rate < f[i] < max_rate]
 
-    if len(pxx_bandpassed) < 1:
+    if len(psd_bandpassed) < 1:
         return 0
 
-    max_pxx = np.max(pxx_bandpassed)
+    max_psd = np.max(psd_bandpassed)
 
     if plot:  # show where on the plot we are looking for a peak with vetical lines
         # check if a matplotlib backend is available
@@ -42,39 +53,41 @@ def calculate_pulse_score(
             from matplotlib import pyplot as plt
             from time import time
 
-            print(f"peak freq: {f[np.argmax(pxx)]}")
-            plt.plot(f, pxx)
-            #             plt.xlim([0,100])
-            #             plt.ylim([0,.001])
-            plt.plot([pulserate_range[0], pulserate_range[0]], [0, max_pxx])
-            plt.plot([pulserate_range[1], pulserate_range[1]], [0, max_pxx])
+            print(f"peak freq: {f[np.argmax(psd)]}")
+            plt.plot(f, psd)
+            plt.plot([pulse_rate_range[0], pulse_rate_range[0]], [0, max_psd])
+            plt.plot([pulse_rate_range[1], pulse_rate_range[1]], [0, max_psd])
             plt.show()
 
-    return max_pxx
+    return max_psd
 
 
 def pulse_finder(
     spectrogram,
     freq_range,
-    pulserate_range,
+    pulse_rate_range,
     window_len,
     rejection_bands=None,
     plot=False,
 ):
-    """pulse rate method for repeated pulse calls
+    """Run pulse rate method to search for pulsing calls in audio
     
-    look in a box of frequency and pulse-rate, score on amplitude of fft of smooth signal amplitude
-    divides the audio into segments of length window_len
+    algorithm:
+    divide the audio into segments of length window_len
+    for each clip:
+        calculate time series of energy in signal band (freq_range) and subtract noise band energies (rejection_bands)
+        calculate power spectral density of the amplitude time series
+        score the file based on the maximum value of power-spectral-density in the PRR range
     
-    args:
-        spectrogram: opensoundscape.Spectrogram object 
+    Args:
+        spectrogram: opensoundscape.Spectrogram object of an audio file
         freq_range: range to bandpass the spectrogram, in Hz
-        pulserate_range: how many pulses per second? (where to look in the fft of the smoothed-amplitude), in Hz
+        pulse_rate_range: how many pulses per second? (where to look in the fft of the smoothed-amplitude), in Hz
         rejection_bands: list of frequency bands to subtract from the desired freq_range
         plot=False : if True, plot figures
     
-    returns:
-        array of pulse_score: max(fft) in the 2-d constraints
+    Returns:
+        array of pulse_score: pulse score (float) for each time window
         array of time: start time of each window
     """
 
@@ -103,9 +116,13 @@ def pulse_finder(
             final_start_sample = max(0, signal_len - n_samples_per_window)
             window = amplitude[final_start_sample:signal_len]
 
-        # Make Pxx (Power spectral density or power spectrum of x) and find max
+        if plot:
+            print(
+                f"window: {start_sample/sample_frequency_of_spec} sec to {end_sample/sample_frequency_of_spec} sec"
+            )
+        # Make psd (Power spectral density or power spectrum of x) and find max
         pulse_score = calculate_pulse_score(
-            window, sample_frequency_of_spec, pulserate_range, plot
+            window, sample_frequency_of_spec, pulse_rate_range, plot
         )
 
         # save results
@@ -122,47 +139,48 @@ def pulse_finder(
 
 # the following functions are wrappers/workflows/recipies that make it easy to run pulse_finder on multiple files for multiple species.
 def pulse_finder_file(
-    file, freq_range, pulserate_range, window_len, rejection_bands=None, plot=False
+    file, freq_range, pulse_rate_range, window_len, rejection_bands=None, plot=False
 ):
-    """pulse rate method, breaking file into "windows" (segments of audio file) of length window_len (seconds)
+    """a wrapper for pulse_finder with takes an audio file path as an argument
     
-    look in a range of frequencies and pulse-rates, score is the amplitude of fft of net amplitude = [the amplitude in frequency band] 
-    minus [the amplitude in rejection bands]
+    creates the audio object and spectrogram within the function
     
-    args:
-        file: path to an audio file to search for pulsing call 
+    Args:
+        file: path to an audio file
         freq_range: range to bandpass the spectrogram, in Hz
-        pulserate_range: how many pulses per second? (where to look in the fft of the smoothed-amplitude), in Hz
+        pulse_rate_range: how many pulses per second? (where to look in the fft of the smoothed-amplitude), in Hz
+        rejection_bands: list of frequency bands to subtract from the desired freq_range
         plot=False : if True, plot figures
-        
-    returns:
-        array of pulse_score: max(fft) in the 2-d constraints
+    
+    Returns:
+        array of pulse_score: pulse score (float) for each time window
         array of time: start time of each window
-        """
+    
+    """
     # make spectrogram from file path
     audio = Audio(file)
     spec = Spectrogram.from_audio(audio)
 
     pulse_scores, window_start_times = pulse_finder(
-        spec, freq_range, pulserate_range, window_len, rejection_bands, plot
+        spec, freq_range, pulse_rate_range, window_len, rejection_bands, plot
     )
 
-    return pulse_scores, atom_start_times
+    return pulse_scores, window_start_times
 
 
 def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False):
     """ perform windowed pulse finding on one file for each species in a set
 
-    parameters:
-    spec: opensoundscape.Spectrogram object
-    species_df: a dataframe describing species by their pulsed calls. 
-        columns: species | pulse_rate_low (Hz)| pulse_rate_high (Hz) | low_f (Hz)| high_f (Hz)| reject_low (Hz)| reject_high (Hz) | 
-                window_length (sec) (optional) | reject_low2 (opt) | reject_high2 |
-    window_len: length of analysis window, in seconds. 
-                Or 'from_df' (default): read from dataframe. 
-                or 'dynamic': adjust window size based on pulse_rate
+    Args:
+        spec: opensoundscape.Spectrogram object
+        species_df: a dataframe describing species by their pulsed calls. 
+            columns: species | pulse_rate_low (Hz)| pulse_rate_high (Hz) | low_f (Hz)| high_f (Hz)| reject_low (Hz)| reject_high (Hz) | 
+                    window_length (sec) (optional) | reject_low2 (opt) | reject_high2 |
+        window_len: length of analysis window, in seconds. 
+                    Or 'from_df' (default): read from dataframe. 
+                    or 'dynamic': adjust window size based on pulse_rate
     
-    returns: 
+    Returns: 
         the same dataframe with a "score" (max score) column and "time_of_score" column
     """
 
@@ -180,7 +198,7 @@ def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False)
             # cannot analyze
             continue
 
-        pulserate_range = [row.pulse_rate_low, row.pulse_rate_high]
+        pulse_rate_range = [row.pulse_rate_low, row.pulse_rate_high]
 
         if window_len == "from_df":
             window_len = row.window_length
@@ -190,7 +208,9 @@ def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False)
             min_len = 0.5  # sec
             max_len = 10  # sec
             target_n_pulses = 5
-            window_len = bound(target_n_pulses / pulserate_range[0], [min_len, max_len])
+            window_len = bound(
+                target_n_pulses / pulse_rate_range[0], [min_len, max_len]
+            )
         # otherwise, use the numerical value provided for window length
 
         freq_range = [row.low_f, row.high_f]  # changed from low_f, high_f
@@ -205,16 +225,20 @@ def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False)
         if plot:
             print(f"{row.name}")
         pulse_scores, window_start_times = pulse_finder(
-            spec, freq_range, pulserate_range, window_len, rejection_bands, plot
+            spec, freq_range, pulse_rate_range, window_len, rejection_bands, plot
         )
 
         # add the scores to the species df
         species_df.at[i, "score"] = pulse_scores
         species_df.at[i, "t"] = window_start_times
-        species_df.at[i, "max_score"] = max(pulse_scores)
-        species_df.at[i, "time_of_max_score"] = window_start_times[
-            np.argmax(pulse_scores)
-        ]
+        species_df.at[i, "max_score"] = (
+            max(pulse_scores) if len(pulse_scores) > 0 else np.nan
+        )
+        species_df.at[i, "time_of_max_score"] = (
+            window_start_times[np.argmax(pulse_scores)]
+            if len(pulse_scores) > 0
+            else np.nan
+        )
 
     return species_df
 
@@ -224,7 +248,15 @@ def summarize_top_scores(audio_files, list_of_result_dfs, scale_factor=1.0):
     
     Note: this function expects that the first column of the results_df contains species names 
     
-    use scale_factor to multiply all scores by a constant value """
+    Args:
+        audio_files: a list of file paths
+        list_of_result_dfs: a list of pandas DataFrames generated by pulse_finder_species_set()
+        scale_factor=1.0: optionally multiply all output values by a constant value
+        
+    Returns: 
+        a dataframe summarizing the highest score for each species in each file
+        
+    """
     if len(audio_files) != len(list_of_result_dfs):
         raise ValueError(
             "The length of audio_files must match the length of list_of_results_dfs"
