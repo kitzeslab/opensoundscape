@@ -9,6 +9,8 @@ from opensoundscape import __version__ as opensoundscape_version
 import opensoundscape.raven as raven
 from opensoundscape.completions import COMPLETIONS
 import opensoundscape.console_checks as checks
+from opensoundscape.dataset import Splitter
+from torch.utils.data import DataLoader
 
 
 OPSO_DOCOPT = """ opensoundscape.py -- Opensoundscape
@@ -19,7 +21,7 @@ Usage:
     opensoundscape raven_lowercase_annotations <directory>
     opensoundscape raven_generate_class_corrections <directory> <output.csv>
     opensoundscape raven_query_annotations <directory> <class>
-    opensoundscape split_audio (-i <directory>) (-o <directory>) (-d <duration>) (-p <overlap>)
+    opensoundscape split_audio (-i <directory>) (-o <directory>) (-d <duration>) (-p <overlap>) [-s <segments.csv>]
         [-a -l <labels.csv>] [-n <cores>] [-b <batch_size>]
 
 Options:
@@ -33,6 +35,7 @@ Options:
     -l --labels <labels.csv>            A CSV file with corrections to labels in Raven annotations files
     -n --num_cores <number>             The number of cores to use for the analysis [default: 1]
     -b --batch_size <number>            The batch_size for the analysis [default: 1]
+    -s --segments <segments.csv>        Write segments to this file [default: segments.csv]
 
 Positional Arguments:
     <directory>                         A path to a directory
@@ -78,13 +81,47 @@ def entrypoint():
     elif args["split_audio"]:
         args["--duration"] = checks.positive_integer(args, "--duration")
         args["--overlap"] = checks.positive_integer(args, "--overlap")
-        args["--batch_size"] = checks.positive_integer_with_default(args, "--batch_size")
+        args["--batch_size"] = checks.positive_integer_with_default(
+            args, "--batch_size"
+        )
         args["--num_cores"] = checks.positive_integer_with_default(args, "--num_cores")
 
         input_p = checks.directory_exists(args, "--input_directory")
         output_p = checks.directory_exists(args, "--output_directory")
 
-        # HERE
+        if not args["--segments"]:
+            args["--segments"] = "segments.csv"
+        segments = Path(args["--segments"])
+        if segments.exists():
+            segments.rename(segments.with_suffix(".csv.bak"))
+
+        wavs = input_p.rglob("**/*.WAV") + input_p.rglob("**/*.wav")
+
+        dataset = Splitter(
+            wavs,
+            annotations=args["--annotations"],
+            labels=args["--labels"],
+            overlap=args["--overlap"],
+            duration=args["--duration"],
+            output_directory=args["--output_directory"],
+        )
+
+        dataloader = DataLoader(
+            dataset,
+            batch_size=args["--batch_size"],
+            shuffle=False,
+            num_workers=args["--num_cores"],
+            collate_fn=Splitter.collate_fn,
+        )
+
+        with open(args["--segments"], "w") as f:
+            if args["--annotations"]:
+                f.write("Source,Annotations,Begin (s),End (s),Destination,Labels\n")
+            else:
+                f.write("Source,Begin (s),End (s),Destination\n")
+            for idx, data in enumerate(dataloader):
+                for output in data:
+                    f.write(f"{output}\n")
 
     else:
         raise NotImplementedError(

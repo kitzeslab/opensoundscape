@@ -11,7 +11,9 @@ def positive_integer(args, parameter):
             raise ValueError
         return r
     except ValueError:
-        exit(f"Error: `{parameter}` should be a positive whole number! Got `{args[parameter]}`")
+        exit(
+            f"Error: `{parameter}` should be a positive whole number! Got `{args[parameter]}`"
+        )
 
 
 def positive_integer_with_default(args, parameter, default=1):
@@ -20,10 +22,15 @@ def positive_integer_with_default(args, parameter, default=1):
     else:
         return default
 
+
 def directory_exists(args, parameter):
     p = Path(args["--parameter"])
     if not p.exists():
-        raise FileNotFoundError(f"The directory given to `{parameter}` does not exist, got `{args['--parameter']}`")
+        raise FileNotFoundError(
+            f"The directory given to `{parameter}` does not exist, got `{args['--parameter']}`"
+        )
     if not p.is_dir():
-        raise NotADirectoryError(f"The directory given to `{parameter}` should be a directory but I found a file, got `{args['--parameter']}`")
+        raise NotADirectoryError(
+            f"The directory given to `{parameter}` should be a directory but I found a file, got `{args['--parameter']}`"
+        )
     return p

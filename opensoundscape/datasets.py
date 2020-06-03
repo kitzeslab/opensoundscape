@@ -60,7 +60,6 @@ def annotations_with_overlaps_with_clip(df, begin, end):
     ]
 
 
-
 # TODO:
 # - Should be able to process WAV or MP3 files?
 # - Should use the opensoundscape.audio.Audio object, need to input and forward audio configuration
@@ -83,6 +82,7 @@ class Splitter(torch.utils.data.Dataset):
                 time (seconds), segment end time (seconds), segment audio, and present
                 classes separated by '|' if annotations were requested
     """
+
     def __init__(
         self,
         wavs,
@@ -108,6 +108,7 @@ class Splitter(torch.utils.data.Dataset):
 
     def __getitem__(self, item_idx):
         wav = self.wavs[item_idx]
+        suffix = wav.suffix
         annotation_prefix = self.wavs[item_idx].stem.split(".")[0]
 
         if self.annotations:
@@ -130,9 +131,9 @@ class Splitter(torch.utils.data.Dataset):
         if self.labels:
             annotation_df["class"] = annotation_df["class"].fillna("unknown")
             annotation_df["class"] = annotation_df["class"].apply(
-                lambda cls: self.labels_df[self.labels_df["raw"] == cls]["corrected"].values[
-                    0
-                ]
+                lambda cls: self.labels_df[self.labels_df["raw"] == cls][
+                    "corrected"
+                ].values[0]
             )
 
         num_segments = ceil(
@@ -161,12 +162,14 @@ class Splitter(torch.utils.data.Dataset):
                     segment_samples, segment_sample_begin, segment_sample_end = get_segment(
                         begin, end, wav_samples, wav_sample_rate
                     )
-                    write_wav(f"{destination}.WAV", segment_samples, wav_sample_rate)
+                    write_wav(
+                        f"{destination}.{suffix}", segment_samples, wav_sample_rate
+                    )
 
                     if idx == num_segments - 1:
-                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.WAV"
+                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.{suffix}"
                     else:
-                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.WAV"
+                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.{suffix}"
                     to_append += f",{'|'.join(overlaps['class'].unique())}"
 
                     outputs.append(to_append)
@@ -174,12 +177,12 @@ class Splitter(torch.utils.data.Dataset):
                 segment_samples, segment_sample_begin, segment_sample_end = get_segment(
                     begin, end, wav_samples, wav_sample_rate
                 )
-                write_wav(f"{destination}.WAV", segment_samples, wav_sample_rate)
+                write_wav(f"{destination}.{suffix}", segment_samples, wav_sample_rate)
 
                 if idx == num_segments - 1:
-                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.WAV"
+                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.{suffix}"
                 else:
-                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.WAV"
+                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.{suffix}"
 
                 outputs.append(to_append)
 
