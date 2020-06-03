@@ -19,7 +19,7 @@ def test_pulse_finder():
 
     scores, times = pulse_finder(
         spec,
-        pulserate_range=[5, 10],
+        pulse_rate_range=[5, 10],
         freq_range=[1000, 2000],
         window_len=5.0,
         rejection_bands=[[0, 200]],

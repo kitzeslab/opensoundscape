@@ -1,8 +1,10 @@
 def isNan(x):
+    """check for nan by equating x to itself"""
     return not x == x
 
 
 def sigmoid(x):
+    """sigmoid function"""
     return 1 / (1 + np.exp(-x))
 
 
@@ -40,12 +42,14 @@ def rescale_features(X, rescaling_vector=None):
 
 
 def file_name(path):
+    """get file name without extension from a path"""
     import os
 
     return os.path.splitext(os.path.basename(path))[0]
 
 
 def hex_to_time(s):
+    """convert a hexidecimal, Unix time string to a datetime timestamp"""
     from datetime import datetime
 
     sec = int(s, 16)
@@ -54,6 +58,7 @@ def hex_to_time(s):
 
 
 def min_max_scale(array, feature_range=(0, 1)):
+    """rescale vaues in an a array linearly to feature_range"""
     bottom, top = feature_range
     array_min = array.min()
     array_max = array.max()
@@ -61,12 +66,11 @@ def min_max_scale(array, feature_range=(0, 1)):
     return scale_factor * (array - array_min) + bottom
 
 
-def jitter(x, width, distribution="gaussian"):  # or 'uniform'
-
+def jitter(x, width, distribution="gaussian"):
     """
     Jitter (add random noise to) each value of x
     
-    Inputs:
+    Args:
         x: scalar, array, or nd-array of numeric type
         width: multiplier for random variable (stdev for 'gaussian' or r for 'uniform')
         distribution: 'gaussian' (default) or 'uniform'

@@ -6,6 +6,7 @@ species_table_path = "/lacie/projects1/Sam-Lapp/OPSO/resources/species_table.csv
 
 
 def get_species_list():
+    """list of scientific-names (lowercase-hyphenated) of species in the loaded species table"""
     species_table = pd.read_csv(species_table_path)
 
     # create a dictionary that maps from 6 letter bn codes to xc scientific name as lowercase-hyphenated

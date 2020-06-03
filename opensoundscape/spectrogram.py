@@ -67,14 +67,14 @@ class Spectrogram:
         """
         create a Spectrogram object from an Audio object
         
-        parameters:
+        Args:
             window_type="hann": see scipy.signal.spectrogram docs for description of window parameter
             window_samples=512: number of audio samples per spectrogram window (pixel)
             overlap_samples=256: number of samples shared by consecutive windows
             decibels=True: convert the spectrogram values to decibelss (dB)
             decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
             
-        returns:
+        Returns:
             opensoundscape.spectrogram.Spectrogram object
         """
         if not isinstance(audio, Audio):
@@ -107,7 +107,12 @@ class Spectrogram:
         return f"<Spectrogram(spectrogram={self.spectrogram.shape}, frequencies={self.frequencies.shape}, times={self.times.shape})>"
 
     def min_max_scale(self, feature_range=(0, 1)):
-        """ Apply a min-max filter
+        """ Linearly rescale spectrogram values to a range of values
+        
+        Args:
+            feature_range: tuple of (low,high) values for output
+        Returns:
+            Spectrogram object with values rescaled to feature_range
         """
 
         if len(feature_range) != 2:
@@ -133,6 +138,12 @@ class Spectrogram:
             values greater than max_db are set to max_db
             
             similar to Audacity's gain and range parameters
+            
+            Args:
+                min_db: values lower than this are set to this
+                max_db: values higher than this are set to this
+            Returns:
+                Spectrogram object with db range applied
         """
         _spec = self.spectrogram
 
@@ -143,13 +154,15 @@ class Spectrogram:
 
     def bandpass(self, min_f, max_f):
         """ extract a frequency band from a spectrogram
-
-        params:
-        min_f: low frequency in Hz for bandpass
-        high_f: high frequency in Hz for bandpass
         
-        returns:
-        bandpassed spectrogram object
+        crops the 2-d array of the spectrograms to the desired frequency range
+        
+        Args:
+            min_f: low frequency in Hz for bandpass
+            high_f: high frequency in Hz for bandpass
+        
+        Returns:
+            bandpassed spectrogram object
 
         """
 
@@ -167,12 +180,12 @@ class Spectrogram:
     def trim(self, start_time, end_time):
         """ extract a time segment from a spectrogram
 
-        params:
-        start_time: in seconds
-        end_time: in seconds
+        Args:
+            start_time: in seconds
+            end_time: in seconds
 
-        returns:
-        spectrogram object from extracted time segment
+        Returns:
+            spectrogram object from extracted time segment
         
         """
 
@@ -188,9 +201,9 @@ class Spectrogram:
         )
 
     def plot(self, inline=True, fname=None, show_colorbar=False):
-        """Plot the spectrogram with pyplot. 
+        """Plot the spectrogram with matplotlib.pyplot 
         
-        Parameters:
+        Args:
             inline=True: 
             fname=None: specify a string path to save the plot to (ending in .png/.pdf)
             show_colorbar: include image legend colorbar from pyplot
@@ -216,10 +229,19 @@ class Spectrogram:
             else:
                 plt.show()
 
-    def amplitude(
-        self, freq_range=None
-    ):  # used to be called "power_signal" which is misleading (not power)
-        """ return a time-arry of the sum of spectrogram over all frequencies or a range of frequencies"""
+    def amplitude(self, freq_range=None):
+        """create an amplitude vs time signal from spectrogram
+        
+        by summing pixels in the vertical dimension
+        
+        Args
+            freq_range=None: sum Spectrogrm only in this range of [low, high] frequencies in Hz
+            (if None, all frequencies are summed)
+
+        Returns:
+            a time-series array of the vertical sum of spectrogram value
+                
+        """
         if freq_range is None:
             return np.sum(self.spectrogram, 0)
         else:
@@ -228,13 +250,17 @@ class Spectrogram:
     def net_amplitude(
         self, signal_band, reject_bands=None
     ):  # used to be called "net_power_signal" which is misleading (not power)
-        """make amplitude signal of file f in signal_band and subtract amplitude from reject_bands
+        """create amplitude signal in signal_band and subtract amplitude from reject_bands
 
         rescale the signal and reject bands by dividing by their bandwidths in Hz 
         (amplitude of each reject_band is divided by the total bandwidth of all reject_bands.
         amplitude of signal_band is divided by badwidth of signal_band. ) 
         
-        return: 1-d time series of net amplitude """
+        Args:
+            signal_band: [low,high] frequency range in Hz (positive contribution)
+            reject band: list of [low,high] frequency ranges in Hz (negative contribution)
+            
+        return: time-series array of net amplitude """
 
         # find the amplitude signal for the desired frequency band
         signal_band_amplitude = self.amplitude(signal_band)
@@ -272,12 +298,14 @@ class Spectrogram:
         linearly rescales values from db_range (default [-100, -20]) to [255,0]
         (ie, -20 db is loudest -> black, -100 db is quietest -> white)
         
-        destination: a file path (string)
-        shape=None: tuple of image dimensions, eg (224,224)
-        mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
-        spec_range=[-100,-20]: the lowest and highest possible values in the spectrogram
+        Args:
+            destination: a file path (string)
+            shape=None: tuple of image dimensions, eg (224,224)
+            mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
+            spec_range=[-100,-20]: the lowest and highest possible values in the spectrogram
             
-        returns: Pillow Image
+        Returns: 
+            Pillow Image object
         """
         from PIL import Image
 
