@@ -115,6 +115,8 @@ def pulse_finder(
             final_start_sample = max(0, signal_len - n_samples_per_window)
             window = amplitude[final_start_sample:signal_len]
 
+        if plot:
+            print(f'window: {start_sample/sample_frequency_of_spec} sec to {end_sample/sample_frequency_of_spec} sec')            
         # Make psd (Power spectral density or power spectrum of x) and find max
         pulse_score = calculate_pulse_score(
             window, sample_frequency_of_spec, pulse_rate_range, plot
@@ -224,10 +226,10 @@ def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False)
         # add the scores to the species df
         species_df.at[i, "score"] = pulse_scores
         species_df.at[i, "t"] = window_start_times
-        species_df.at[i, "max_score"] = max(pulse_scores)
+        species_df.at[i, "max_score"] = max(pulse_scores) if len(pulse_scores)>0 else np.nan
         species_df.at[i, "time_of_max_score"] = window_start_times[
             np.argmax(pulse_scores)
-        ]
+        ] if len(pulse_scores)>0 else np.nan 
 
     return species_df
 
