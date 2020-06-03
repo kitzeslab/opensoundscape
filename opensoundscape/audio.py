@@ -131,12 +131,12 @@ class Audio:
             
         """
         from opensoundscape.audio_tools import bandpass_filter
-        
-        if low_f <=0:
-            raise ValueError('low_f must be greater than zero')
-            
-        if high_f >= self.sample_rate/2:
-            raise ValueError('high_f must be less than sample_rate/2')
+
+        if low_f <= 0:
+            raise ValueError("low_f must be greater than zero")
+
+        if high_f >= self.sample_rate / 2:
+            raise ValueError("high_f must be less than sample_rate/2")
 
         filtered_samples = bandpass_filter(
             self.samples, low_f, high_f, self.sample_rate, order=9
@@ -175,10 +175,10 @@ class Audio:
         Args:
             self
             path: destination for wav file """
-        
-        if path.split('.')[-1]!='wav':
-            raise ValueError('file extension must be .wav')
-            
+
+        if path.split(".")[-1] != "wav":
+            raise ValueError("file extension must be .wav")
+
         from scipy.io.wavfile import write as write_wav
 
         write_wav(path, self.sample_rate, self.samples)

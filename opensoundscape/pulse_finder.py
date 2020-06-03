@@ -14,7 +14,7 @@ from opensoundscape.spectrogram import Spectrogram
 
 def calculate_pulse_score(
     amplitude, amplitude_sample_rate, pulse_rate_range, plot=False, nfft=1024
-): 
+):
     """Search for amplitude pulsing in an audio signal in a range of pulse repetition rates (PRR)
     
     scores an audio amplitude signal by highest value of power spectral density in the PRR range
@@ -60,6 +60,7 @@ def calculate_pulse_score(
             plt.show()
 
     return max_psd
+
 
 def pulse_finder(
     spectrogram,
@@ -116,7 +117,9 @@ def pulse_finder(
             window = amplitude[final_start_sample:signal_len]
 
         if plot:
-            print(f'window: {start_sample/sample_frequency_of_spec} sec to {end_sample/sample_frequency_of_spec} sec')            
+            print(
+                f"window: {start_sample/sample_frequency_of_spec} sec to {end_sample/sample_frequency_of_spec} sec"
+            )
         # Make psd (Power spectral density or power spectrum of x) and find max
         pulse_score = calculate_pulse_score(
             window, sample_frequency_of_spec, pulse_rate_range, plot
@@ -205,7 +208,9 @@ def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False)
             min_len = 0.5  # sec
             max_len = 10  # sec
             target_n_pulses = 5
-            window_len = bound(target_n_pulses / pulse_rate_range[0], [min_len, max_len])
+            window_len = bound(
+                target_n_pulses / pulse_rate_range[0], [min_len, max_len]
+            )
         # otherwise, use the numerical value provided for window length
 
         freq_range = [row.low_f, row.high_f]  # changed from low_f, high_f
@@ -226,10 +231,14 @@ def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False)
         # add the scores to the species df
         species_df.at[i, "score"] = pulse_scores
         species_df.at[i, "t"] = window_start_times
-        species_df.at[i, "max_score"] = max(pulse_scores) if len(pulse_scores)>0 else np.nan
-        species_df.at[i, "time_of_max_score"] = window_start_times[
-            np.argmax(pulse_scores)
-        ] if len(pulse_scores)>0 else np.nan 
+        species_df.at[i, "max_score"] = (
+            max(pulse_scores) if len(pulse_scores) > 0 else np.nan
+        )
+        species_df.at[i, "time_of_max_score"] = (
+            window_start_times[np.argmax(pulse_scores)]
+            if len(pulse_scores) > 0
+            else np.nan
+        )
 
     return species_df
 

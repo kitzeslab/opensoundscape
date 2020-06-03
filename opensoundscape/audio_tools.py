@@ -8,6 +8,7 @@ import scipy
 import os
 from scipy.signal import butter, sosfiltfilt, sosfreqz
 
+
 def run_command(cmd):
     """run os command with Popen"""
     from subprocess import Popen, PIPE
@@ -15,11 +16,12 @@ def run_command(cmd):
 
     return Popen(split(cmd), stdout=PIPE, stderr=PIPE).communicate()
 
+
 # def audio_gate(source_path, destination_path, cutoff=-38):
 #     """perform audio gate with ffmpeg and save new audio file
-    
+
 #     audio gate refers to muting the file except when amplitude exceeds a threshold
-    
+
 #     Args:
 #         source_path: path to an audio file
 #         destination_path: path to save output
@@ -33,6 +35,7 @@ def run_command(cmd):
 #     )
 
 #     return run_command(gatingCmd)
+
 
 def butter_bandpass(low_f, high_f, sample_rate, order=9):
     """generate coefficients for bandpass_filter()
@@ -51,6 +54,7 @@ def butter_bandpass(low_f, high_f, sample_rate, order=9):
     high = high_f / nyq
     sos = butter(order, [low, high], analog=False, btype="band", output="sos")
     return sos
+
 
 def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
     """perform a butterworth bandpass filter on a discrete time signal
@@ -173,6 +177,7 @@ def silence_filter(
     else:
         return int(np.max(net_energy) > threshold)
 
+
 def mixdown_with_delays(
     files_to_mix,
     destination,
@@ -261,6 +266,7 @@ def mixdown_with_delays(
             file.write(metadata)
 
     return run_command(cmd)
+
 
 def convolve_file(in_file, out_file, ir_file, input_gain=1.0):
     """apply an impulse_response to a file using ffmpeg's afir convolution

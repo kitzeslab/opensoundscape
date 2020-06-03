@@ -229,9 +229,7 @@ class Spectrogram:
             else:
                 plt.show()
 
-    def amplitude(
-        self, freq_range=None
-    ):  
+    def amplitude(self, freq_range=None):
         """create an amplitude vs time signal from spectrogram
         
         by summing pixels in the vertical dimension

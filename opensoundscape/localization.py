@@ -3,6 +3,7 @@ import numpy as np
 import warnings
 from matplotlib import pyplot as plt
 
+
 def calc_speed_of_sound(temperature=20):
     """
     Calculate speed of sound in meters per second

@@ -4,6 +4,7 @@ import pandas as pd
 species_table_path = "/lacie/projects1/Sam-Lapp/OPSO/resources/species_table.csv"
 # print(f'reading species translations from table at {species_table_path}')
 
+
 def get_species_list():
     """list of scientific-names (lowercase-hyphenated) of species in the loaded species table"""
     species_table = pd.read_csv(species_table_path)
@@ -31,12 +32,15 @@ name_table_bn_com_idx = name_table.set_index("bn_common", drop=True)
 def sci_to_bn_common(scientific):
     return name_table_sci_idx.at[scientific, "bn_common"]
 
+
 def sci_to_xc_common(scientific):
     return name_table_sci_idx.at[scientific, "xc_common"]
+
 
 def common_to_sci(common):
     common = common.lower().replace(" ", "").replace("-", "")
     return name_table_com_idx.at[common, "scientific"]
+
 
 def bn_common_to_sci(common):
     common = common.lower().replace(" ", "").replace("-", "")

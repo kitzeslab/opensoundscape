@@ -108,6 +108,7 @@ def activation_region_limits(gcam, threshold=0.2):
 
     return box_lims
 
+
 def in_box(x, y, box_lims):
     """check if an x, y position falls within a set of limits
     
@@ -122,6 +123,7 @@ def in_box(x, y, box_lims):
         if x < box_lims[0, 1] and y < box_lims[1, 1]:
             return True
     return False
+
 
 def activation_region_to_box(activation_region, threshold=0.2):
     """draw a rectangle of the activation box as a boolean array
@@ -141,6 +143,7 @@ def activation_region_to_box(activation_region, threshold=0.2):
     ]
     return box_mask_arr
 
+
 # def save_gradcam(filename, gcam, raw_image):
 #     """save spectrogram + gradcam to image file. currently not used."""
 #     h, w, _ = raw_image.shape
@@ -149,6 +152,7 @@ def activation_region_to_box(activation_region, threshold=0.2):
 #     gcam = gcam.astype(np.float) + raw_image.astype(np.float)
 #     gcam = gcam / gcam.max() * 255.0
 #     cv2.imwrite(filename, np.uint8(gcam))
+
 
 def gradcam_region(
     model, img_paths, img_shape, predictions=None, save_gcams=True, box_threshold=0.2

@@ -2,17 +2,21 @@ def isNan(x):
     """check for nan by equating x to itself"""
     return not x == x
 
+
 def sigmoid(x):
     """sigmoid function"""
     return 1 / (1 + np.exp(-x))
+
 
 def bound(x, bounds):
     """ restrict x to a range of bounds = [min, max]"""
     return min(max(x, bounds[0]), bounds[1])
 
+
 def binarize(x, threshold):
     """ return a list of 0, 1 by thresholding vector x """
     return [1 if xi > threshold else 0 for xi in x]
+
 
 def run_command(cmd):
     """ run a bash command with Popen, return response"""
@@ -20,6 +24,7 @@ def run_command(cmd):
     from shlex import split
 
     return Popen(split(cmd), stdout=PIPE, stderr=PIPE).communicate()
+
 
 def rescale_features(X, rescaling_vector=None):
     """ rescale all features by dividing by the max value for each feature
@@ -35,11 +40,13 @@ def rescale_features(X, rescaling_vector=None):
     rescaledX = np.multiply(X, rescaling_vector).tolist()
     return rescaledX, rescaling_vector
 
+
 def file_name(path):
     """get file name without extension from a path"""
     import os
 
     return os.path.splitext(os.path.basename(path))[0]
+
 
 def hex_to_time(s):
     """convert a hexidecimal, Unix time string to a datetime timestamp"""
@@ -49,6 +56,7 @@ def hex_to_time(s):
     timestamp = datetime.utcfromtimestamp(sec)
     return timestamp
 
+
 def min_max_scale(array, feature_range=(0, 1)):
     """rescale vaues in an a array linearly to feature_range"""
     bottom, top = feature_range
@@ -56,6 +64,7 @@ def min_max_scale(array, feature_range=(0, 1)):
     array_max = array.max()
     scale_factor = (top - bottom) / (array_max - array_min)
     return scale_factor * (array - array_min) + bottom
+
 
 def jitter(x, width, distribution="gaussian"):
     """
