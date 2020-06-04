@@ -136,7 +136,6 @@ def pulse_finder(
 
     return pulse_scores, window_start_times
 
-
 # the following functions are wrappers/workflows/recipies that make it easy to run pulse_finder on multiple files for multiple species.
 def pulse_finder_file(
     file, freq_range, pulse_rate_range, window_len, rejection_bands=None, plot=False

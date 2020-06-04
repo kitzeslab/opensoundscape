@@ -66,7 +66,7 @@ def travel_time(source, reciever, speed_of_sound):
     Returns:
         time in seconds for sound to travel from source to reciever
     """
-    distance = np.linalg.norm(source - reciever)
+    distance = np.linalg.norm(np.array(source) - np.array(reciever))
     return distance / speed_of_sound
 
 
