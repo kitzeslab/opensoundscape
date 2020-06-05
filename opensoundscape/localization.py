@@ -54,24 +54,24 @@ def lorentz_ip(u, v=None):
     return ValueError(f"length of x should be 3 or 4, was{len(u)}")
 
 
-def travel_time(source, reciever, speed_of_sound):
+def travel_time(source, receiver, speed_of_sound):
     """
-    Calculate time required for sound to travel from a souce to a reciever
+    Calculate time required for sound to travel from a souce to a receiver
     
     Args:
         source: cartesian position [x,y] or [x,y,z] of sound source
-        reciever: cartesian position [x,y] or [x,y,z] of sound reciever
+        receiver: cartesian position [x,y] or [x,y,z] of sound receiver
         speed_of_sound: speed of sound in m/s
     
     Returns:
-        time in seconds for sound to travel from source to reciever
+        time in seconds for sound to travel from source to receiver
     """
-    distance = np.linalg.norm(np.array(source) - np.array(reciever))
+    distance = np.linalg.norm(np.array(source) - np.array(receiver))
     return distance / speed_of_sound
 
 
 def localize(
-    reciever_positions,
+    receiver_positions,
     arrival_times,
     temperature=20.0,  # celcius
     invert_alg="gps",  # options: 'lstsq', 'gps'
@@ -82,7 +82,7 @@ def localize(
     """
     Perform TDOA localization on a sound event
     
-    Localize a sound event given relative arrival times at multiple recievers.
+    Localize a sound event given relative arrival times at multiple receivers.
     This function implements a localization algorithm from the
     equations described in the class handout ("Global Positioning
     Systems"). Localization can be performed in a global coordinate
@@ -90,7 +90,7 @@ def localize(
     in meters.
     
     Args:
-        reciever_positions: a list of [x,y,z] positions for each reciever
+        receiver_positions: a list of [x,y,z] positions for each receiver
           Positions should be in meters, e.g., the UTM coordinate system.
           
         arrival_times: a list of TDOA times (onset times) for each recorder
@@ -115,33 +115,33 @@ def localize(
         b is the error in the pseudorange (distance to mics), b=c*delta_t (delta_t is time error)
     """
     # make sure our inputs follow consistent format
-    reciever_positions = np.array(reciever_positions).astype("float64")
+    receiver_positions = np.array(receiver_positions).astype("float64")
     arrival_times = np.array(arrival_times).astype("float64")
 
     # The number of dimensions in which to perform localization
-    dim = reciever_positions.shape[1]
+    dim = receiver_positions.shape[1]
 
     # Calculate speed of sound
     speed_of_sound = calc_speed_of_sound(temperature)
 
-    ##### Shift coordinate system to center recievers around origin #####
+    ##### Shift coordinate system to center receivers around origin #####
     if center:
         warnings.warn("centering")
-        p_mean = np.mean(reciever_positions, 0)
-        reciever_positions = np.array([p - p_mean for p in reciever_positions])
+        p_mean = np.mean(receiver_positions, 0)
+        receiver_positions = np.array([p - p_mean for p in receiver_positions])
     else:
         warnings.warn("not centering")
 
     ##### Compute B, a, and e #####
     # Find the pseudorange, rho, for each recorder
-    # pseudorange (minus a constant) ~= distances from source to each reciever
+    # pseudorange (minus a constant) ~= distances from source to each receiver
     rho = np.array([arrival_times * (-1 * speed_of_sound)]).T
 
     # Concatenate the pseudorange column to form matrix B
-    B = np.concatenate((reciever_positions, rho), axis=1)
+    B = np.concatenate((receiver_positions, rho), axis=1)
 
     # Vector of ones
-    e = np.ones(reciever_positions.shape[0])
+    e = np.ones(receiver_positions.shape[0])
 
     # The vector of squared Lorentz norms
     a = 0.5 * np.apply_along_axis(lorentz_ip, axis=1, arr=B)
