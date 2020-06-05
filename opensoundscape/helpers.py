@@ -1,4 +1,6 @@
 import numpy as np
+
+
 def isNan(x):
     """check for nan by equating x to itself"""
     return not x == x
@@ -16,12 +18,12 @@ def bound(x, bounds):
 
 def binarize(x, threshold):
     """ return a list of 0, 1 by thresholding vector x """
-    if len(np.shape(x))>2:
-        raise ValueError('shape must be 1 dimensional or 2 dimensional')
-        
-    if len(np.shape(x))==2:
-        return [ [1 if xi > threshold else 0 for xi in row] for row in x ]
-        
+    if len(np.shape(x)) > 2:
+        raise ValueError("shape must be 1 dimensional or 2 dimensional")
+
+    if len(np.shape(x)) == 2:
+        return [[1 if xi > threshold else 0 for xi in row] for row in x]
+
     return [1 if xi > threshold else 0 for xi in x]
 
 

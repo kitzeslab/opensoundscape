@@ -10,29 +10,36 @@ import pandas as pd
 
 @pytest.fixture()
 def gpt_path():
-     return "tests/great_plains_toad.wav"
+    return "tests/great_plains_toad.wav"
+
 
 def test_calculate_pulse_score():
     sr = 100
-    t = np.linspace(0,1,sr)
-    amplitude = np.sin(t*2*np.pi*20)
-    score = pulse_finder.calculate_pulse_score(amplitude, 
-                                  amplitude_sample_rate=sr,
-                                  pulse_rate_range=[0,30], 
-                                  plot=False, 
-                                  nfft=1024)
-    assert(score>0)
+    t = np.linspace(0, 1, sr)
+    amplitude = np.sin(t * 2 * np.pi * 20)
+    score = pulse_finder.calculate_pulse_score(
+        amplitude,
+        amplitude_sample_rate=sr,
+        pulse_rate_range=[0, 30],
+        plot=False,
+        nfft=1024,
+    )
+    assert score > 0
+
 
 def test_calculate_pulse_score_zero_len_input():
     sr = 100
-    t = np.linspace(0,1,sr)
+    t = np.linspace(0, 1, sr)
     amplitude = []
     with pytest.raises(ValueError):
-        score = pulse_finder.calculate_pulse_score(amplitude, 
-                                  amplitude_sample_rate=sr,
-                                  pulse_rate_range=[-10,30], 
-                                  plot=False, 
-                                  nfft=1024)
+        score = pulse_finder.calculate_pulse_score(
+            amplitude,
+            amplitude_sample_rate=sr,
+            pulse_rate_range=[-10, 30],
+            plot=False,
+            nfft=1024,
+        )
+
 
 def test_pulse_finder():
     path = "./tests/silence_10s.mp3"
@@ -92,6 +99,5 @@ def test_summarize_top_scores(gpt_path):
     audio = Audio(gpt_path, sample_rate=32000)
     spec = Spectrogram.from_audio(audio, overlap_samples=256)
     df = pulse_finder.pulse_finder_species_set(spec, df)
-    
-    pulse_finder.summarize_top_scores(['1','2'], [df,df], scale_factor=10.0)
-    
+
+    pulse_finder.summarize_top_scores(["1", "2"], [df, df], scale_factor=10.0)

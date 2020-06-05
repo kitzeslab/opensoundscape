@@ -1,5 +1,6 @@
 from io import StringIO
 import pandas as pd
+
 species_table_str = """scientific,xc_common,bn_code,bn_common,bn_mapping_in_xc_dataset,relationship
 dendrocygna-autumnalis,blackbelliedwhistlingduck,bbwduc,blackbelliedwhistlingduck,dendrocygna-autumnalis,
 anser-caerulescens,snowgoose,snogoo,snowgoose,anser-caerulescens,
