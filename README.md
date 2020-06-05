@@ -11,11 +11,9 @@ These utilities can be strung together to create data analysis pipelines.
 OpenSoundscape is designed to be run on any scale of computer:
 laptop, desktop, or computing cluster.
 
-OpenSoundscape is currently in active development. For examples of some of the
-utilities offered, please see the `notebooks/` directory. If you have
-a question about OpenSoundscape, please open an issue in this repository
-or email Sam Lapp (`sam.lapp` at `pitt.edu`)
-or Tessa Rhinehart (`tessa.rhinehart` at `pitt.edu`).
+OpenSoundscape is currently in active development. If you find a bug, please submit an issue. If you have another question about OpenSoundscape, please email Sam Lapp (`sam.lapp` at `pitt.edu`) or Tessa Rhinehart (`tessa.rhinehart` at `pitt.edu`).
+
+For examples of some of the utilities offered, please see the `notebooks/` directory. We plan to add more vignettes and documentation soon.
 
 # Installation
 
@@ -23,57 +21,46 @@ OpenSoundscape can be installed either via pip (for users) or poetry (for
 developers contributing to the code). Either way, Python 3.7 or higher is required.
 
 ## Installation via pip (most users)
-Most users should install via `pip` (see below). This installation represents the
-latest stable version of OpenSoundscape. However, OpenSoundscape is still in
-active development, so we do not promise it is bug-free; if you find a bug,
-please submit an issue.
+Python 3.7 is required to run OpenSoundscape. Download it from [this website](https://www.python.org/downloads/).
 
-We recommend installing OpenSoundscape in a virtual environment using
-[`virtualenvwrapper`](https://virtualenvwrapper.readthedocs.io/en/latest/install.html).
-Using virtual environments prevents conflicts between the packages needed to
-run OpenSoundscape (its *dependencies*) and packages used to run other programs
-on your computer.
+We recommend installing OpenSoundscape in a virtual environment to prevent dependency conflicts. Below are instructions for installation with Python's included virtual environment manager, `venv`, but feel free to use another virtual environment manager (e.g. `conda`, `virtualenvwrapper`) if desired.
 
-After downloading `virtualenvwrapper`, use the following commands to install
-OpenSoundscape in a virtual environment.
-
-```
-mkvirtualenv opensoundscape #make environment and work on it
-pip install opensoundscape==1.0.0.alpha0 #install opensoundscape in environment
-deactivate #deactivate environment when finished using it
-workon opensoundscape #activate environment to start using it again
-```
-
+Run the following commands in your bash terminal:
+* Check that you have installed Python 3.7.\_: `python3 --version`
+* Change directories to where you wish to store the environment: `cd [path for environments folder]`
+    * Tip:  You can use this folder to store virtual environments for other projects as well, so put it somewhere that makes sense for you, e.g. in your home directory.
+* Make a directory for virtual environments and `cd` into it: `mkdir .venv && cd .venv`
+* Create an environment called `opensoundscape` in the directory: `python3 -m venv opensoundscape`
+* **For Windows computers:** activate/use the environment: `opensoundscape\Scripts\activate.bat`
+* **For Mac computers:** activate/use the environment `source opensoundscape/bin/activate`
+* Install opensoundscape in the environment: `pip install opensoundscape==0.4`
+* Once you are done with OpenSoundscape, deactivate the environment: `deactivate`
+* To use the environment again, you will have to refer to absolute path of the virtual environments folder. For instance, if I were on a Mac and created `.venv` inside a directory `/Users/MyFiles/Code` I would activate the virtual environment using: `source /Users/MyFiles/Code/.venv/opensoundscape/bin/activate`
+      
 ## Installation via poetry (contributors and advanced users)
 Poetry installation allows direct use of the most recent version of the code.
 This workflow allows advanced users to use the newest features in OpenSoundscape,
 and allows developers/contributors to build and test their contributions.
 
 To install via poetry, do the following:
-- Get [poetry](https://poetry.eustace.io/docs/#installation)
-- Get
+* Download [poetry](https://poetry.eustace.io/docs/#installation)
+* Download
   [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/install.html)
-- Link `poetry` and `virtualenvwrapper`:
+* Link `poetry` and `virtualenvwrapper`:
   - Figure out where the virtualenvwrapper.sh file is: `which virtualenvwrapper.sh`
   - Add the following to your `~/.bashrc` and source it.
-
     ```
     # virtualenvwrapper + poetry
     export WORKON_HOME=~/.cache/pypoetry/virtualenvs
     source [insert path to virtualenvwrapper.sh, e.g. /usr/bin/virtualenvwrapper_lazy.sh]
     ```
-
-**Contributors**: fork the github repository and clone the fork to your machine.
-We use `black` pre-commit hooks for formatting.
-
-**Users**: clone this github repository to your machine:
+* **Users**: clone this github repository to your machine:
 `git clone https://github.com/kitzeslab/opensoundscape.git`
-
-**After the repository is on your machine:**
-- Ensure you are in the top-level directory of the clone
-- Switch to the development branch of OpenSoundscape: `git checkout develop`
-- Build the virtual environment for opensoundscape: `poetry install`
-  - If poetry install fails with the following error, make sure to install Python 3.7:
+* **Contributors**: fork this github repository and clone the fork to your machine
+* Ensure you are in the top-level directory of the clone
+* Switch to the development branch of OpenSoundscape: `git checkout develop`
+* Build the virtual environment for opensoundscape: `poetry install`
+  - If poetry install outputs the following error, make sure to download Python 3.7:
 
      ```
      Installing build dependencies: started
@@ -83,20 +70,20 @@ We use `black` pre-commit hooks for formatting.
      If you are using `conda`, install Python 3.7 using `conda install python==3.7`
   - If you are on a Mac and poetry install fails to install `numba`, contact one
     of the developers for help troubleshooting your issues.
-- Activate the virtual environment with the name provided at install e.g.: `workon opensoundscape-dxMTH98s-py3.6`
-- Check OpenSoundscape runs: `opensoundscape -h`
-- To go back to your system's Python: `deactivate`
-- Running the tests (from top-level directory): `poetry run pytest`
+* Activate the virtual environment with the name provided at install e.g.: `workon opensoundscape-dxMTH98s-py3.6`
+* Check that OpenSoundscape runs: `opensoundscape -h`
+* Run tests (from the top-level directory): `poetry run pytest`
+* Go back to your system's Python when you are done: `deactivate`
 
 ### Jupyter
 To use OpenSoundscape within JupyterLab, you will have to make an `ipykernel`
 for the OpenSoundscape virtual environment.
 
-- Activate poetry virtual environment, e.g.: `workon opensoundscape-dxMTH98s-py3.6`
+* Activate poetry virtual environment, e.g.: `workon opensoundscape-dxMTH98s-py3.6`
     - Use `poetry list` if you're not sure what the name of the environment is
-- Create ipython kernel: `python -m ipykernel install --user --name=[name of poetry environment] --display-name=OpenSoundscape`
-- Now when you make a new document on JupyterLab, you should see a Python kernel available called OpenSoundscape.
-- Contributors: if you include Jupyter's `autoreload`, any changes you make to the source code
+* Create ipython kernel: `python -m ipykernel install --user --name=[name of poetry environment] --display-name=OpenSoundscape`
+* Now when you make a new document on JupyterLab, you should see a Python kernel available called OpenSoundscape.
+* Contributors: if you include Jupyter's `autoreload`, any changes you make to the source code
   installed via poetry will be reflected whenever you run the `%autoreload` line magic in a cell:
 
   ```
@@ -104,7 +91,7 @@ for the OpenSoundscape virtual environment.
   %autoreload
   ```
 
-<! -- ### Conda notes
+<!-- ### Conda notes
 
 Error in installing numba during poetry install:
 ```
@@ -143,7 +130,6 @@ When contributions in your fork are complete, open a pull request using the
 GitHub web interface. Before opening a PR, do the following to
 ensure the code is consistent with the rest of the package:
 * Run tests: `poetry run pytest`
-  * Create any needed tests
 * Format the code with `black` style (from the top level of the repo): `black .`
 * Additional libraries to be installed should be installed with `poetry add`, but
   in most cases contributors should not add libraries.
