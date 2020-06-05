@@ -80,6 +80,13 @@ def test_trim_spectrogram():
     )
 
 
+def test_limit_db_range():
+    s = Spectrogram(
+        np.random.normal(0, 200, [5, 10]), np.zeros((5)), np.zeros((10))
+    ).limit_db_range(-100, -20)
+    assert np.max(s.spectrogram) <= -20 and np.min(s.spectrogram) >= -100
+
+
 def test_plot_spectrogram():
     Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10))).plot()
 
@@ -92,3 +99,21 @@ def test_net_amplitude_spectrogram():
     Spectrogram(
         np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)
     ).net_amplitude([50, 100], [[0, 10], [20, 30]])
+
+
+def test_to_image():
+    from PIL.Image import Image
+
+    print(
+        type(
+            Spectrogram(
+                np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)
+            ).to_image()
+        )
+    )
+    assert isinstance(
+        Spectrogram(
+            np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)
+        ).to_image(),
+        Image,
+    )

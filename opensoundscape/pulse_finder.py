@@ -28,6 +28,10 @@ def calculate_pulse_score(
         
     Returns: pulse rate score for this audio segment (float) """
 
+    # input validation
+    if len(amplitude) < 1:  # what is the minimum signal length?
+        raise ValueError("amplitude does not have length > 0")
+
     # calculate amplitude modulation spectral density
     f, psd = signal.welch(amplitude, fs=amplitude_sample_rate, nfft=nfft)
 
@@ -137,35 +141,35 @@ def pulse_finder(
     return pulse_scores, window_start_times
 
 
-# the following functions are wrappers/workflows/recipies that make it easy to run pulse_finder on multiple files for multiple species.
-def pulse_finder_file(
-    file, freq_range, pulse_rate_range, window_len, rejection_bands=None, plot=False
-):
-    """a wrapper for pulse_finder with takes an audio file path as an argument
-    
-    creates the audio object and spectrogram within the function
-    
-    Args:
-        file: path to an audio file
-        freq_range: range to bandpass the spectrogram, in Hz
-        pulse_rate_range: how many pulses per second? (where to look in the fft of the smoothed-amplitude), in Hz
-        rejection_bands: list of frequency bands to subtract from the desired freq_range
-        plot=False : if True, plot figures
-    
-    Returns:
-        array of pulse_score: pulse score (float) for each time window
-        array of time: start time of each window
-    
-    """
-    # make spectrogram from file path
-    audio = Audio(file)
-    spec = Spectrogram.from_audio(audio)
+# # the following functions are wrappers/workflows/recipies that make it easy to run pulse_finder on multiple files for multiple species.
+# def pulse_finder_file(
+#     file, freq_range, pulse_rate_range, window_len, rejection_bands=None, plot=False
+# ):
+#     """a wrapper for pulse_finder with takes an audio file path as an argument
 
-    pulse_scores, window_start_times = pulse_finder(
-        spec, freq_range, pulse_rate_range, window_len, rejection_bands, plot
-    )
+#     creates the audio object and spectrogram within the function
 
-    return pulse_scores, window_start_times
+#     Args:
+#         file: path to an audio file
+#         freq_range: range to bandpass the spectrogram, in Hz
+#         pulse_rate_range: how many pulses per second? (where to look in the fft of the smoothed-amplitude), in Hz
+#         rejection_bands: list of frequency bands to subtract from the desired freq_range
+#         plot=False : if True, plot figures
+
+#     Returns:
+#         array of pulse_score: pulse score (float) for each time window
+#         array of time: start time of each window
+
+#     """
+#     # make spectrogram from file path
+#     audio = Audio(file)
+#     spec = Spectrogram.from_audio(audio)
+
+#     pulse_scores, window_start_times = pulse_finder(
+#         spec, freq_range, pulse_rate_range, window_len, rejection_bands, plot
+#     )
+
+#     return pulse_scores, window_start_times
 
 
 def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False):
