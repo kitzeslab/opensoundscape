@@ -7,6 +7,7 @@ import io
 import librosa
 import soundfile
 import numpy as np
+from math import floor, ceil
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -29,7 +30,6 @@ class Audio:
 
     __slots__ = ("samples", "sample_rate")
 
-    # note: changing default sample rate from 22050 to 32000
     def __init__(
         self, audio, sample_rate=22050, max_duration=None, resample_type="kaiser_fast"
     ):
@@ -40,7 +40,7 @@ class Audio:
 
         Args:
             audio: string, pathlib, samples, or bytesio object
-            sample_rate: the target sample rate (default: 32000 Hz)
+            sample_rate: the target sample rate (default: 22050 Hz)
             max_duration: the maximum length of an input file,
                           None is no maximum (default: None)
             resample_type: method used to resample_type (default: kaiser_fast)
@@ -110,7 +110,7 @@ class Audio:
         start_sample = int(start_time * self.sample_rate)
         end_sample = int(end_time * self.sample_rate)  # exclusive
         samples_trimmed = self.samples[start_sample:end_sample]
-        return Audio(samples_trimmed, self.sample_rate)
+        return Audio(samples_trimmed, sample_rate=self.sample_rate)
 
     def bandpass(self, low_f, high_f, order=9):
         """bandpass audio signal between low_f and high_f, preserve phase. order ~= steepness of cutoff"""
@@ -119,7 +119,7 @@ class Audio:
         filtered_samples = bandpass_filter(
             self.samples, low_f, high_f, self.sample_rate, order=9
         )
-        return Audio(filtered_samples, at.sample_rate)
+        return Audio(filtered_samples, sample_rate=self.sample_rate)
 
     # can act on an audio file and be moved into Audio class
     def spectrum(self):
@@ -150,3 +150,22 @@ class Audio:
         from scipy.io.wavfile import write as write_wav
 
         write_wav(path, self.sample_rate, self.samples)
+
+    def get_duration(self):
+        return librosa.get_duration(self.samples, sr=self.sample_rate)
+
+    def get_segment(self, clip_begin, clip_end):
+        """ Extract a segment from the samples
+
+        Inputs:
+            clip_begin:         Beginning of the clip (units: seconds)
+            clip_end:           End of the clip (units: seconds)
+
+        Outputs:
+            segment_samples:    The segment extracted from the samples
+            begin:              The index for clip_begin from samples
+            end:                The index for clip_end from samples
+        """
+        begin = floor(clip_begin * self.sample_rate)
+        end = ceil(clip_end * self.sample_rate)
+        return Audio(self.samples[begin:end], sample_rate=self.sample_rate), begin, end
