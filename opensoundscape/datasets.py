@@ -70,7 +70,7 @@ class Splitter(torch.utils.data.Dataset):
     Inputs:
         wavs:               A list of WAV files to split
         annotations:        Should we search for corresponding annotations files? (default: False)
-        labels:             Specify a correction labels CSV file w/ column headers "raw" and "corrected" (default: None)
+        label_corrections:  Specify a correction labels CSV file w/ column headers "raw" and "corrected" (default: None)
         overlap:            How much overlap should there be between samples (units: seconds, default: 1)
         duration:           How long should each segment be? (units: seconds, default: 5)
         output_directory    Where should segments be written? (default: segments/)
@@ -88,21 +88,23 @@ class Splitter(torch.utils.data.Dataset):
         self,
         wavs,
         annotations=False,
-        labels=None,
+        label_corrections=None,
         overlap=1,
         duration=5,
         output_directory="segments",
+        audio_params={},
     ):
         self.wavs = list(wavs)
 
         self.annotations = annotations
-        self.labels = labels
-        if self.labels:
-            self.labels_df = pd.read_csv(labels)
+        self.label_corrections = label_corrections
+        if self.label_corrections:
+            self.labels_df = pd.read_csv(label_corrections)
 
         self.overlap = overlap
         self.duration = duration
         self.output_directory = output_directory
+        self.audio_params = audio_params
 
     def __len__(self):
         return len(self.wavs)
@@ -129,7 +131,7 @@ class Splitter(torch.utils.data.Dataset):
                 by=["begin time (s)"]
             )
 
-        if self.labels:
+        if self.label_corrections:
             annotation_df["class"] = annotation_df["class"].fillna("unknown")
             annotation_df["class"] = annotation_df["class"].apply(
                 lambda cls: self.labels_df[self.labels_df["raw"] == cls][
