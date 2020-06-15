@@ -162,7 +162,7 @@ def pulse_finder(
 
 #     """
 #     # make spectrogram from file path
-#     audio = Audio(file)
+#     audio = Audio.from_file(file)
 #     spec = Spectrogram.from_audio(audio)
 
 #     pulse_scores, window_start_times = pulse_finder(
