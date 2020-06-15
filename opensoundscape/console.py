@@ -8,12 +8,14 @@ import opensoundscape as opso
 from opensoundscape import __version__ as opensoundscape_version
 import opensoundscape.raven as raven
 from opensoundscape.completions import COMPLETIONS
+from opensoundscape.config import validate_file, get_default_config, DEFAULT_CONFIG
 
 
 OPSO_DOCOPT = """ opensoundscape.py -- Opensoundscape
 Usage:
     opensoundscape [-hv]
     opensoundscape completions
+    opensoundscape default_config
     opensoundscape raven_annotation_check <directory>
     opensoundscape raven_lowercase_annotations <directory>
     opensoundscape raven_generate_class_corrections <directory> <output.csv>
@@ -30,6 +32,7 @@ Positional Arguments:
 
 Descriptions:
     completions                         Generate bash completions `opensoundscape completions > ~/.local/share/bash-completion/completions/opensoundscape`
+    default_config                      Write the default opensoundscape.yaml configuration file to standard out
     raven_annotation_check              Given a directory of Raven annotation files, check that a class is specified
     raven_generate_class_corrections    Given a directory of Raven annotation files, generate a CSV file to check classes and correct any issues
     raven_query_annotations             Given a directory of Raven annotation files, search for rows matching a specific class
@@ -46,6 +49,9 @@ def entrypoint():
 
     if args["completions"]:
         print(COMPLETIONS)
+
+    elif args["default_config"]:
+        print(DEFAULT_CONFIG)
 
     elif args["raven_annotation_check"]:
         raven.annotation_check(args["<directory>"])
