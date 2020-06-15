@@ -10,6 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v2
     - name: Install libsndfile1
       run: sudo apt install libsndfile1
     - name: Install poetry
