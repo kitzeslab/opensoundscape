@@ -12,7 +12,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install libsndfile1
-      run: sudo apt install libsndfile1 ffmpeg
+      run: sudo apt install libsndfile1 ffmpeg libavfilter7
     - name: Install poetry
       run: curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python3
     - name: Poetry install
