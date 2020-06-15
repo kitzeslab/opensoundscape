@@ -43,7 +43,7 @@ def test_calculate_pulse_score_zero_len_input():
 
 def test_pulse_finder():
     path = "./tests/silence_10s.mp3"
-    audio = Audio(path)
+    audio = Audio.from_file(path, sample_rate=22050)
     spec = Spectrogram.from_audio(audio)
 
     scores, times = pulse_finder.pulse_finder(
@@ -73,7 +73,7 @@ def test_pulsefinder_species_set(gpt_path):
     df.at[0, :] = ["sp1", 5, 10, 1000, 2000, 0, 500, 1.0]
     df.at[1, :] = ["sp2", 10, 15, 1000, 2000, 0, 500, 1.0]
 
-    audio = Audio(gpt_path, sample_rate=32000)
+    audio = Audio.from_file(gpt_path, sample_rate=32000)
     spec = Spectrogram.from_audio(audio, overlap_samples=256)
 
     df = pulse_finder.pulse_finder_species_set(spec, df)
@@ -96,7 +96,7 @@ def test_summarize_top_scores(gpt_path):
     )
     df.at[0, :] = ["sp1", 5, 10, 1000, 2000, 0, 500, 1.0]
     df.at[1, :] = ["sp2", 10, 15, 1000, 2000, 0, 500, 1.0]
-    audio = Audio(gpt_path, sample_rate=32000)
+    audio = Audio.from_file(gpt_path, sample_rate=32000)
     spec = Spectrogram.from_audio(audio, overlap_samples=256)
     df = pulse_finder.pulse_finder_species_set(spec, df)
 

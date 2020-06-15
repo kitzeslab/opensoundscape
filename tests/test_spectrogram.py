@@ -17,7 +17,7 @@ def test_spectrogram_raises_typeerror():
 
 
 def test_spectrogram_shape_of_veryshort(veryshort_wav_str):
-    audio = Audio(veryshort_wav_str, sample_rate=22050)
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
     spec = Spectrogram.from_audio(audio, overlap_samples=384)
     assert spec.spectrogram.shape == (257, 21)
     assert spec.frequencies.shape == (257,)

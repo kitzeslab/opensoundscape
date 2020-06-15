@@ -7,6 +7,7 @@ import io
 import librosa
 import soundfile
 import numpy as np
+from math import floor, ceil
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -29,85 +30,58 @@ class Audio:
 
     __slots__ = ("samples", "sample_rate")
 
-    # note: changing default sample rate from 22050 to 32000
-    def __init__(
-        self, audio, sample_rate=22050, max_duration=None, resample_type="kaiser_fast"
+    def __init__(self, samples, sample_rate):
+        self.samples = samples
+        self.sample_rate = sample_rate
+
+    @classmethod
+    def from_file(
+        cls, path, sample_rate=None, max_duration=None, resample_type="kaiser_fast"
     ):
-        """ Load audio in various formats and generate a spectrogram
+        """ Load audio from files
 
         Deal with the various possible input types to load an audio
         file and generate a spectrogram
 
         Args:
-            audio: string, pathlib, samples, or bytesio object
-            sample_rate: the target sample rate (default: 32000 Hz)
-            max_duration: the maximum length of an input file,
-                          None is no maximum (default: None)
+            path (str, Path): path to an audio file
+            sample_rate (int, None): resample audio with value and resample_type,
+                if None use source sample_rate (default: None)
             resample_type: method used to resample_type (default: kaiser_fast)
+            max_duration: the maximum length of an input file,
+                None is no maximum (default: None)
 
         Returns:
-            Audio: class, attributes samples and sample_rate
+            Audio: attributes samples and sample_rate
         """
 
-        path = None
-        from_samples = False
-        if audio.__class__ == str or audio.__class__ == np.str_:
-            # Simply load the audio into a pathlib.Path object
-            path = pathlib.Path(audio)
-        elif issubclass(audio.__class__, pathlib.PurePath):
-            # We already have a pathlib object
-            path = audio
-        elif issubclass(audio.__class__, io.BufferedIOBase):
-            # We have a BytesIO object
-            print("BytesIO object")
-            path = None
-        elif audio.__class__ == np.ndarray:  # recieve samples, provide sample rate!
-            from_samples = True
-        else:
-            raise OpsoLoadAudioInputError(
-                f"Error: can't load files of class {audio.__class__}"
-            )
+        if max_duration:
+            if librosa.get_duration(filename=path) > max_duration:
+                raise OpsoLoadAudioInputTooLong()
 
-        if path:
-            if not path.is_file():
-                raise FileNotFoundError(f"Error: The file {path} doesn't exist?")
-            if (
-                max_duration != None
-                and librosa.get_duration(filename=path.as_posix()) > max_duration
-            ):
-                raise OpsoLoadAudioInputTooLong(
-                    f"Error: The file {path} is longer than {max_duration} seconds"
-                )
-
-            samples, _ = librosa.load(
-                str(path.resolve()), sr=sample_rate, res_type=resample_type, mono=True
-            )
-
-        elif from_samples:
-            samples = audio
-
-        else:
-            input_samples, input_sample_rate = soundfile.read(audio)
-            samples = librosa.resample(
-                input_samples, input_sample_rate, sample_rate, res_type=resample_type
-            )
-            if samples.ndim > 1:
-                samples = librosa.to_mono(samples)
-
-        super(Audio, self).__setattr__("samples", samples)
-        super(Audio, self).__setattr__("sample_rate", sample_rate)
-
-    def __setattr__(self, name, value):
-        raise AttributeError(
-            f"Audio is an immutable container. Tried to set {name} with {value}"
+        samples, sr = librosa.load(
+            path, sr=sample_rate, res_type=resample_type, mono=True
         )
+
+        return cls(samples, sr)
+
+    @classmethod
+    def from_bytesio(cls, bytesio, sample_rate=None, resample_type="kaiser_fast"):
+        """...
+        """
+        samples, sr = soundfile.read(bytesio)
+        if sample_rate:
+            samples = librosa.resample(samples, sr, sample_rate, res_type=resample_type)
+            sr = sample_rate
+
+        return cls(samples, sr)
 
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
 
-    def trim(self, start_time, end_time):
+    def trim_int(self, start_time, end_time):
         """ trim Audio object in time
-        
+
         Args:
             start_time: time in seconds for start of extracted clip
             end_time: time in seconds for end of extracted clip
@@ -116,6 +90,34 @@ class Audio:
         """
         start_sample = int(start_time * self.sample_rate)
         end_sample = int(end_time * self.sample_rate)  # exclusive
+        samples_trimmed = self.samples[start_sample:end_sample]
+        return Audio(samples_trimmed, self.sample_rate)
+
+    def trim_floor_ceil(self, start_time, end_time):
+        """ trim Audio object in time
+        
+        Args:
+            start_time: time in seconds for start of extracted clip
+            end_time: time in seconds for end of extracted clip
+        Returns:
+            a new Audio object containing samples from start_time to end_time
+        """
+        start_sample = floor(start_time * self.sample_rate)
+        end_sample = ceil(end_time * self.sample_rate)  # exclusive
+        samples_trimmed = self.samples[start_sample:end_sample]
+        return Audio(samples_trimmed, self.sample_rate)
+
+    def trim_round(self, start_time, end_time):
+        """ trim Audio object in time
+        
+        Args:
+            start_time: time in seconds for start of extracted clip
+            end_time: time in seconds for end of extracted clip
+        Returns:
+            a new Audio object containing samples from start_time to end_time
+        """
+        start_sample = round(start_time * self.sample_rate)
+        end_sample = round(end_time * self.sample_rate)  # exclusive
         samples_trimmed = self.samples[start_sample:end_sample]
         return Audio(samples_trimmed, self.sample_rate)
 
@@ -170,15 +172,11 @@ class Audio:
         return fft, frequencies
 
     def save(self, path):
-        """save Audio to .wav file using scipy.io.wavfile
+        """save Audio to file
         
         Args:
-            self
-            path: destination for wav file """
+            path: destination for output
+        """
+        from soundfile import write
 
-        if path.split(".")[-1] != "wav":
-            raise ValueError("file extension must be .wav")
-
-        from scipy.io.wavfile import write as write_wav
-
-        write_wav(path, self.sample_rate, self.samples)
+        write(path, self.samples, self.sample_rate)
