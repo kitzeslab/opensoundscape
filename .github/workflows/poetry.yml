@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Poetry install
+      uses: abatilo/actions-poetry@v1.5.0
+      with:
+        python_version: 3.7.5
+        poetry_version: 1.0.5
+        args: install
+    - name: Poetry run pytest
+      uses: abatilo/actions-poetry@v1.5.0
+      with:
+        python_version: 3.7.5
+        poetry_version: 1.0.5
+        args: run pytest
