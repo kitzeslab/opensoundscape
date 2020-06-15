@@ -15,23 +15,15 @@ def silent_wav_str():
 
 
 @pytest.fixture()
-def convolved_wav_str(out_path, request):
-    path = Path(f"{out_path}/convolved.wav")
+def convolved_wav_str(request):
+    d = Path("tests/audio_tools_out")
+    d.mkdir()
+
+    path = Path(f"{d}/convolved.wav")
 
     def fin():
         path.unlink()
-
-    request.addfinalizer(fin)
-    return path
-
-
-@pytest.fixture()
-def out_path(request):
-    path = Path("tests/audio_tools_out")
-    path.mkdir()
-
-    def fin():
-        path.rmdir()
+        d.rmdir()
 
     request.addfinalizer(fin)
     return path
@@ -57,6 +49,6 @@ def test_silence_filter(veryshort_wav_str):
     assert audio_tools.silence_filter(veryshort_wav_str) > -1
 
 
-def test_convolve_file(veryshort_wav_str, silent_wav_str, convolved_wav_str, out_path):
+def test_convolve_file(veryshort_wav_str, silent_wav_str, convolved_wav_str):
     audio_tools.convolve_file(silent_wav_str, convolved_wav_str, veryshort_wav_str)
     assert convolved_wav_str.exists()
