@@ -10,6 +10,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+    - name: Install libsndfile1
+      run: sudo apt install libsndfile1
     - uses: actions/checkout@v2
     - name: Poetry install
       uses: abatilo/actions-poetry@v1.5.0
