@@ -9,6 +9,7 @@ import pytest
 from pathlib import Path
 import io
 import numpy as np
+from random import uniform
 
 
 @pytest.fixture()
@@ -115,9 +116,14 @@ def test_load_not_a_file_asserts_not_a_file(not_a_file_str):
         Audio.from_file(not_a_file_str)
 
 
-# def test_trim(silence_10s_mp3_str):
-#     s = Audio.from_file(silence_10s_mp3_str)
-#     assert isinstance(s.trim(0, 1), Audio)
+def test_property_trim_length_is_correct(silence_10s_mp3_str):
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    duration = audio.duration()
+    for _ in range(100):
+        [first, second] = sorted([uniform(0, duration), uniform(0, duration)])
+        trim_dur_round = round(audio.trim(first, second).duration(), 1)
+        actual_dur_round = round(second - first, 1)
+        assert trim_dur_round == actual_dur_round
 
 
 def test_bandpass(silence_10s_mp3_str):

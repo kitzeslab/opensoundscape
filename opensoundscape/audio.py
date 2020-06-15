@@ -7,7 +7,6 @@ import io
 import librosa
 import soundfile
 import numpy as np
-from math import floor, ceil
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -79,35 +78,7 @@ class Audio:
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
 
-    def trim_int(self, start_time, end_time):
-        """ trim Audio object in time
-
-        Args:
-            start_time: time in seconds for start of extracted clip
-            end_time: time in seconds for end of extracted clip
-        Returns:
-            a new Audio object containing samples from start_time to end_time
-        """
-        start_sample = int(start_time * self.sample_rate)
-        end_sample = int(end_time * self.sample_rate)  # exclusive
-        samples_trimmed = self.samples[start_sample:end_sample]
-        return Audio(samples_trimmed, self.sample_rate)
-
-    def trim_floor_ceil(self, start_time, end_time):
-        """ trim Audio object in time
-        
-        Args:
-            start_time: time in seconds for start of extracted clip
-            end_time: time in seconds for end of extracted clip
-        Returns:
-            a new Audio object containing samples from start_time to end_time
-        """
-        start_sample = floor(start_time * self.sample_rate)
-        end_sample = ceil(end_time * self.sample_rate)  # exclusive
-        samples_trimmed = self.samples[start_sample:end_sample]
-        return Audio(samples_trimmed, self.sample_rate)
-
-    def trim_round(self, start_time, end_time):
+    def trim(self, start_time, end_time):
         """ trim Audio object in time
         
         Args:
@@ -117,7 +88,7 @@ class Audio:
             a new Audio object containing samples from start_time to end_time
         """
         start_sample = round(start_time * self.sample_rate)
-        end_sample = round(end_time * self.sample_rate)  # exclusive
+        end_sample = round(end_time * self.sample_rate)
         samples_trimmed = self.samples[start_sample:end_sample]
         return Audio(samples_trimmed, self.sample_rate)
 
@@ -180,3 +151,12 @@ class Audio:
         from soundfile import write
 
         write(path, self.samples, self.sample_rate)
+
+    def duration(self):
+        """ Return duration of Audio
+        
+        Output:
+            duration (float): The duration of the Audio
+        """
+
+        return len(self.samples) / self.sample_rate
