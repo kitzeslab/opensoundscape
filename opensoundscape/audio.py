@@ -87,10 +87,20 @@ class Audio:
         Returns:
             a new Audio object containing samples from start_time to end_time
         """
-        start_sample = round(start_time * self.sample_rate)
-        end_sample = round(end_time * self.sample_rate)
+        start_sample = self.time_to_sample(start_time)
+        end_sample = self.time_to_sample(end_time)
         samples_trimmed = self.samples[start_sample:end_sample]
         return Audio(samples_trimmed, self.sample_rate)
+
+    def time_to_sample(self, time):
+        """ Given a time, convert it to the corresponding sample
+
+        Args:
+            time: The time to multiply with the sample_rate
+        Returns:
+            sample: The rounded sample
+        """
+        return round(time * self.sample_rate)
 
     def bandpass(self, low_f, high_f, order=9):
         """ bandpass audio signal frequencies
