@@ -46,12 +46,13 @@ class Splitter(torch.utils.data.Dataset):
     """ A PyTorch Dataset for splitting a WAV files
 
     Inputs:
-        wavs:               A list of WAV files to split
-        annotations:        Should we search for corresponding annotations files? (default: False)
-        label_corrections:  Specify a correction labels CSV file w/ column headers "raw" and "corrected" (default: None)
-        overlap:            How much overlap should there be between samples (units: seconds, default: 1)
-        duration:           How long should each segment be? (units: seconds, default: 5)
-        output_directory    Where should segments be written? (default: segments/)
+        wavs:                   A list of WAV files to split
+        annotations:            Should we search for corresponding annotations files? (default: False)
+        label_corrections:      Specify a correction labels CSV file w/ column headers "raw" and "corrected" (default: None)
+        overlap:                How much overlap should there be between samples (units: seconds, default: 1)
+        duration:               How long should each segment be? (units: seconds, default: 5)
+        output_directory        Where should segments be written? (default: segments/)
+        include_last_segment:   Do you want to include the last segment? (default: False)
 
     Effects:
         - Segments will be written to the output_directory
@@ -70,6 +71,7 @@ class Splitter(torch.utils.data.Dataset):
         overlap=1,
         duration=5,
         output_directory="segments",
+        include_last_segment=False,
     ):
         self.wavs = list(wavs)
 
@@ -81,6 +83,7 @@ class Splitter(torch.utils.data.Dataset):
         self.overlap = overlap
         self.duration = duration
         self.output_directory = output_directory
+        self.include_last_segment = include_last_segment
 
     def __len__(self):
         return len(self.wavs)
@@ -122,8 +125,11 @@ class Splitter(torch.utils.data.Dataset):
         outputs = []
         for idx in range(num_segments):
             if idx == num_segments - 1:
-                end = wav_duration
-                begin = end - self.duration
+                if self.include_last_segment:
+                    end = wav_duration
+                    begin = end - self.duration
+                else:
+                    continue
             else:
                 begin = self.duration * idx - self.overlap * idx
                 end = begin + self.duration
