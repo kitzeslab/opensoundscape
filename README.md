@@ -1,6 +1,6 @@
 ![](https://github.com/kitzeslab/opensoundscape/workflows/CI/badge.svg?branch=develop)
 
-# OpenSounsdcape
+# OpenSoundscape
 ---
 
 OpenSoundscape is a utility library for analyzing bioacoustic data.
