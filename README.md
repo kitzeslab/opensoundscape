@@ -1,3 +1,5 @@
+![](https://github.com/kitzeslab/opensoundscape/workflows/CI/badge.svg?branch=develop)
+
 # OpenSounsdcape
 ---
 
