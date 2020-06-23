@@ -12,7 +12,6 @@ from PIL import Image
 
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
-from opensoundscape.metrics import Metrics
 
 
 def get_md5_digest(input_string):
