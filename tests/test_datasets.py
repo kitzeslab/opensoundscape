@@ -3,8 +3,9 @@ from opensoundscape.audio import Audio
 import pytest
 from pathlib import Path
 from shutil import rmtree
-from opensoundscape.datasets import Splitter
+from opensoundscape.datasets import Splitter, BinaryFromAudio
 from torch.utils.data import DataLoader
+import pandas as pd
 
 
 tmp_path = "tests/_tmp_split"
@@ -110,3 +111,17 @@ def test_basic_splitting_operation_with_include_last_segment(
     split0, split1 = splitter_results_last
     assert split0.exists()
     assert split1.exists()
+
+
+def test_binary_from_audio_default(binary_from_audio_df):
+    dataset = BinaryFromAudio(binary_from_audio_df, height=225, width=226)
+    assert dataset[0]["X"].shape == (3, 225, 226)
+    assert dataset[0]["y"].shape == (1,)
+
+
+def test_binary_from_audio_spec_augment(binary_from_audio_df):
+    dataset = BinaryFromAudio(
+        binary_from_audio_df, height=225, width=226, spec_augment=True
+    )
+    assert dataset[0]["X"].shape == (1, 225, 226)
+    assert dataset[0]["y"].shape == (1,)
