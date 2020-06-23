@@ -54,6 +54,11 @@ def one_min_audio_list():
     return [Path("tests/1min.wav")]
 
 
+@pytest.fixture()
+def binary_from_audio_df():
+    return pd.read_csv("tests/input.csv")
+
+
 def test_basic_splitting_operation_default(
     temporary_split_storage, splitter_results_default, one_min_audio_list
 ):
