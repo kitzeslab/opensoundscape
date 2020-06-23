@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import torch
 import pandas as pd
 import numpy as np
 from math import ceil, floor
@@ -7,8 +6,13 @@ from hashlib import md5
 from sys import stderr
 from pathlib import Path
 from itertools import chain
+import torch
+from torchvision import transforms
+from PIL import Image
 
 from opensoundscape.audio import Audio
+from opensoundscape.spectrogram import Spectrogram
+from opensoundscape.metrics import Metrics
 
 
 def get_md5_digest(input_string):
@@ -168,3 +172,88 @@ class Splitter(torch.utils.data.Dataset):
     @classmethod
     def collate_fn(*batch):
         return chain.from_iterable([x["data"] for x in batch[1]])
+
+
+class BinaryFromAudio(torch.utils.data.Dataset):
+    """ Binary Audio -> Image Dataset
+
+    Given a DataFrame with audio files in one of the columns, generate
+    a DataSet for basic machine learning tasks
+
+    Input:
+        df: A DataFrame with a column containing audio files
+        audio_column: The column in the DataFrame which contains audio files [default: Destination]
+        label_column: The column with numeric labels [default: NumericLabels]
+        height: Height for resulting Tensor [default: 224]
+        width: Width for resulting Tensor [default: 224]
+        add_noise: Apply RandomAffine and ColorJitter filters [default: False]
+        debug: Save images to a directory [default: None]
+        spec_augment: If True, prepare audio for spec_augment procedure [default: False]
+
+    Output:
+        Dictionary:
+            { "X": (1, H, W) if spec_augment else (3, H, W)
+            , "y": (1)
+            }
+    """
+
+    def __init__(
+        self,
+        df,
+        audio_column="Destination",
+        label_column="NumericLabels",
+        height=224,
+        width=224,
+        add_noise=False,
+        debug=None,
+        spec_augment=False,
+    ):
+        self.df = df
+        self.audio_column = audio_column
+        self.label_column = label_column
+        self.height = height
+        self.width = width
+        self.debug = debug
+        self.spec_augment = spec_augment
+
+        if add_noise:
+            self.transform = transforms.Compose(
+                [transforms.Resize((self.height, self.width)), transforms.ToTensor()]
+            )
+        else:
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize((self.height, self.width)),
+                    transforms.RandomAffine(
+                        degrees=0, translate=(0.2, 0.03), fillcolor=50
+                    ),
+                    transforms.ColorJitter(
+                        brightness=0.3, contrast=0.3, saturation=0.3, hue=0
+                    ),
+                    transforms.ToTensor(),
+                ]
+            )
+
+    def __len__(self):
+        return self.df.shape[0]
+
+    def __getitem__(self, item_idx):
+        row = self.df.iloc[item_idx]
+
+        audio_p = Path(row[self.audio_column])
+        audio = Audio.from_file(audio_p)
+        spectrogram = Spectrogram.from_audio(audio)
+
+        image = Image.fromarray(spectrogram.spectrogram)
+        image = image.convert("RGB")
+
+        if self.debug:
+            image.save(f"{self.debug}/{audio_p.stem}.png")
+
+        labels = np.array([row[self.label_column]])
+
+        X = self.transform(image)
+
+        if self.spec_augment:
+            X = X[0].unsqueeze(0)
+        return {"X": X, "y": torch.from_numpy(labels)}
