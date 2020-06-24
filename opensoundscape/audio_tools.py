@@ -8,13 +8,7 @@ import scipy
 import os
 from scipy.signal import butter, sosfiltfilt, sosfreqz
 
-
-def run_command(cmd):
-    """run os command with Popen"""
-    from subprocess import Popen, PIPE
-    from shlex import split
-
-    return Popen(split(cmd), stdout=PIPE, stderr=PIPE).communicate()
+from opensoundscape.commands import run_command
 
 
 # def audio_gate(source_path, destination_path, cutoff=-38):
