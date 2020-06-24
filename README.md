@@ -35,7 +35,7 @@ Run the following commands in your bash terminal:
 * Create an environment called `opensoundscape` in the directory: `python3 -m venv opensoundscape`
 * **For Windows computers:** activate/use the environment: `opensoundscape\Scripts\activate.bat`
 * **For Mac computers:** activate/use the environment `source opensoundscape/bin/activate`
-* Install opensoundscape in the environment: `pip install opensoundscape==0.4`
+* Install OpenSoundscape in the environment: `pip install opensoundscape==0.4.0`
 * Once you are done with OpenSoundscape, deactivate the environment: `deactivate`
 * To use the environment again, you will have to refer to absolute path of the virtual environments folder. For instance, if I were on a Mac and created `.venv` inside a directory `/Users/MyFiles/Code` I would activate the virtual environment using: `source /Users/MyFiles/Code/.venv/opensoundscape/bin/activate`
       
@@ -72,7 +72,7 @@ To install via poetry, do the following:
      If you are using `conda`, install Python 3.7 using `conda install python==3.7`
   - If you are on a Mac and poetry install fails to install `numba`, contact one
     of the developers for help troubleshooting your issues.
-* Activate the virtual environment with the name provided at install e.g.: `workon opensoundscape-dxMTH98s-py3.6`
+* Activate the virtual environment with the name provided at install e.g.: `workon opensoundscape-dxMTH98s-py3.7` or `poetry shell`
 * Check that OpenSoundscape runs: `opensoundscape -h`
 * Run tests (from the top-level directory): `poetry run pytest`
 * Go back to your system's Python when you are done: `deactivate`
@@ -81,7 +81,7 @@ To install via poetry, do the following:
 To use OpenSoundscape within JupyterLab, you will have to make an `ipykernel`
 for the OpenSoundscape virtual environment.
 
-* Activate poetry virtual environment, e.g.: `workon opensoundscape-dxMTH98s-py3.6`
+* Activate poetry virtual environment, e.g.: `workon opensoundscape-dxMTH98s-py3.7`
     - Use `poetry list` if you're not sure what the name of the environment is
 * Create ipython kernel: `python -m ipykernel install --user --name=[name of poetry environment] --display-name=OpenSoundscape`
 * Now when you make a new document on JupyterLab, you should see a Python kernel available called OpenSoundscape.
