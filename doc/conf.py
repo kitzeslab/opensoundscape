@@ -19,11 +19,11 @@ sys.path.insert(0, os.path.abspath("../"))
 # -- Project information -----------------------------------------------------
 
 project = "opensoundscape"
-copyright = "2019, Justin Kitzes, Barry Moore, Tessa Rhinehart, Trieste Devlin"
-author = "Justin Kitzes, Barry Moore, Tessa Rhinehart, Trieste Devlin"
+copyright = "2019, Justin Kitzes, Barry Moore, Tessa Rhinehart, Sam Lapp"
+author = "Justin Kitzes, Barry Moore, Tessa Rhinehart, Sam Lapp"
 
 # The full version, including alpha/beta/rc tags
-release = "1.0.0.alpha0"
+release = "0.4.0"
 
 
 # -- General configuration ---------------------------------------------------

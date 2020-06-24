@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "opensoundscape"
-version = "1.0.0.alpha0"
+version = "0.4.0"
 description = "Open source, scalable acoustic classification for ecology and conservation"
 authors = [
   "Justin Kitzes <justin.kitzes@pitt.edu>",
   "Barry Moore <moore0557@gmail.com>",
   "Tessa Rhinehart <tessa.rhinehart@gmail.com>",
-  "Trieste Devlin <trieste.devlin@pitt.edu>"
+  "Sam Lapp <sammlapp@gmail.com>"
 ]
 license = "MIT"
 readme = "README.md"
@@ -37,7 +37,7 @@ sphinx-rtd-theme = "^0.4.3"
 
 [tool.black]
 line-length = 88
-target_version = ['py36', 'py37', 'py38']
+target_version = ['py37', 'py38']
 include = '\.pyi?$'
 exclude = '''
 /(
