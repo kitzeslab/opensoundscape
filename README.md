@@ -59,8 +59,9 @@ To install via poetry, do the following:
 
     ```
     # virtualenvwrapper + poetry
-    export WORKON_HOME=~/.cache/pypoetry/virtualenvs
-    source [insert path to virtualenvwrapper.sh, e.g. /usr/bin/virtualenvwrapper_lazy.sh]
+    export PATH=~/.local/bin:$PATH
+    export WORKON_HOME=~/Library/Caches/pypoetry/virtualenvs
+    source [insert path to virtualenvwrapper.sh, e.g. ~/.local/bin/virtualenvwrapper_lazy.sh]
     ```
 
 **Contributors**: fork the github repository and clone the fork to your machine.
