@@ -105,7 +105,7 @@ for the OpenSoundscape virtual environment.
   %autoreload
   ```
 
-<! -- ### Conda notes
+<!-- ### Conda notes
 
 Error in installing numba during poetry install:
 ```
