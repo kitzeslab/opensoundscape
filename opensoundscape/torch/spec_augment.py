@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+"""
+These functions were implemented for PyTorch in the following repository https://github.com/zcaceres/spec_augment
+The original paper is available on https://arxiv.org/abs/1904.08779
+"""
+
 import random
 import torch
 
