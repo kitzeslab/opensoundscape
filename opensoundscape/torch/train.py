@@ -61,14 +61,14 @@ def train_binary(
     )
 
     valid_loader = torch.utils.data.DataLoader(
-        valid_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+        valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
 
     model.to(device)
 
     stats = []
     for epoch in range(epochs):
-        train_metrics = Metrics()
+        train_metrics = Metrics(2)
         model.train()
         for t in train_loader:
             X, y = t["X"], t["y"]
@@ -92,7 +92,7 @@ def train_binary(
             predictions = outputs.clone().detach().argmax(dim=1)
             train_metrics.update_metrics(targets, predictions)
 
-        valid_metrics = Metrics()
+        valid_metrics = Metrics(2)
         model.eval()
         with torch.no_grad():
             for t in valid_loader:
