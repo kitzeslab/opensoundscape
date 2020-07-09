@@ -90,7 +90,10 @@ class Spectrogram:
         )
 
         # convert to decibels
-        spectrogram = 10 * np.log10(spectrogram)
+        # -> avoid RuntimeWarning by setting negative values to -np.inf (mapped to min_db later)
+        spectrogram = 10 * np.log10(
+            spectrogram, where=spectrogram > 0, out=np.full(spectrogram.shape, -np.inf)
+        )
 
         # limit the decibel range (-100 to -20 dB by default)
         # values below lower limit set to lower limit, values above upper limit set to uper limit
