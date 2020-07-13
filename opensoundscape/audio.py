@@ -7,6 +7,7 @@ import io
 import librosa
 import soundfile
 import numpy as np
+from warnings import filterwarnings
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -58,6 +59,7 @@ class Audio:
             if librosa.get_duration(filename=path) > max_duration:
                 raise OpsoLoadAudioInputTooLong()
 
+        filterwarnings("ignore")
         samples, sr = librosa.load(
             path, sr=sample_rate, res_type=resample_type, mono=True
         )
