@@ -6,7 +6,7 @@ from opensoundscape.metrics import Metrics
 import opensoundscape.torch.spec_augment as augment
 
 
-def train_binary(
+def train(
     model,
     train_df,
     valid_df,
@@ -22,8 +22,8 @@ def train_binary(
     """ Train a model
 
     Input:
-        model:          A binary torch model, e.g. torchvision.models.resnet18(pretrained=True)
-                        - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
+        model:          A torch model, e.g. torchvision.models.resnet18(pretrained=True)
+                        - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
         train_df:       The training DataFrame with columns "Destination" and "NumericLabels"
         valid_df:       The validation DataFrame with columns "Destination" and "NumericLabels"
         optimize:       A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
@@ -68,7 +68,7 @@ def train_binary(
 
     stats = []
     for epoch in range(epochs):
-        train_metrics = Metrics(2)
+        train_metrics = Metrics(model.fc.in_features)
         model.train()
         for t in train_loader:
             X, y = t["X"], t["y"]
@@ -92,7 +92,7 @@ def train_binary(
             predictions = outputs.clone().detach().argmax(dim=1)
             train_metrics.update_metrics(targets, predictions)
 
-        valid_metrics = Metrics(2)
+        valid_metrics = Metrics(model.fc.in_features)
         model.eval()
         with torch.no_grad():
             for t in valid_loader:
