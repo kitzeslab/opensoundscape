@@ -14,7 +14,7 @@ def train_binary(
     loss_fn,
     epochs=25,
     batch_size=1,
-    num_workers=1,
+    num_workers=0,
     log_every=5,
     spec_augment=False,
     debug=False,
