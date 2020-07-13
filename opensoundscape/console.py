@@ -127,4 +127,6 @@ def entrypoint():
 def build_docs():
     """ Run sphinx-build for our project
     """
-    subprocess.run(["sphinx-build", "docs", "docs/_build"], cwd=f"{opso.__path__[0]}/..")
+    subprocess.run(
+        ["sphinx-build", "docs", "docs/_build"], cwd=f"{opso.__path__[0]}/.."
+    )
