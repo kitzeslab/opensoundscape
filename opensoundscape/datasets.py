@@ -194,6 +194,10 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         add_noise: Apply RandomAffine and ColorJitter filters [default: False]
         debug: Save images to a directory [default: None]
         spec_augment: If True, prepare audio for spec_augment procedure [default: False]
+        random_trim_length: Trim the clip to this many seconds of audio starting at a random time
+            If None, the clip will not be trimmed [default: None]
+        overlay_prob: Probability of an image from a different class being overlayed on the training image
+            [default: 0] typical values: 0, 0.66
 
     Output:
         Dictionary:
@@ -212,6 +216,8 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         add_noise=False,
         debug=None,
         spec_augment=False,
+        random_trim_length=None,
+        overlay_prob = 0
     ):
         self.df = df
         self.audio_column = audio_column
@@ -220,6 +226,8 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         self.width = width
         self.debug = debug
         self.spec_augment = spec_augment
+        self.random_trim_length = random_trim_length
+        self.overlay_prob = overlay_prob
 
         if add_noise:
             self.transform = transforms.Compose(
@@ -248,9 +256,42 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         audio_p = Path(row[self.audio_column])
         audio = Audio.from_file(audio_p)
         spectrogram = Spectrogram.from_audio(audio)
-
+        
+        #TODO: test this
+        if self.random_trim_length is not None:
+            audio_length = len(audio.samples)/audio.sample_rate
+            extra_time = audio_length - self.random_trim_length
+            start_time = np.random.uniform()*extra_time
+            spectrogram = spectrogram.trim(start_time,start_time+random_trim_length)
+        
+                
         image = Image.fromarray(spectrogram.spectrogram)
         image = image.convert("RGB")
+        
+        #TODO: test this
+        if overlay_prob > np.random.uniform():
+            # select a random training file from a different class
+            other_classes_df = self.df[self.df[self.label_column]!=row[self.label_column]]
+            file_path = np.random.choice(other_classes_df[self.audio_column].values())
+            overlay_audio = Audio.from_file(audio_p)
+            overlay_spectrogram = Spectrogram.from_audio(overlay_audio)
+            
+            # trim to desired length if needed
+            if self.random_trim_length is not None:
+                audio_length = len(overlay_audio.samples)/overlay_audio.sample_rate
+                extra_time = audio_length - self.random_trim_length
+                start_time = np.random.uniform()*extra_time
+                overlay_spectrogram = overlay_spectrogram.trim(start_time,start_time+random_trim_length)
+                
+            # create an image and add blur
+            overlay_image = Image.fromarray(overlay_spectrogram.spectrogram)
+            blur_r = np.random.randint(0, 8) / 10
+            overlay_image = overlay.filter(ImageFilter.GaussianBlur(radius=blur_r))
+
+            # use a weighted sum to overlay the images
+            overlap_weight = random.randint(5, 10) / 10
+            
+            image = image * (1-overlap_weight) + overlay_image * overlap_weight
 
         if self.debug:
             image.save(f"{self.debug}/{audio_p.stem}.png")
