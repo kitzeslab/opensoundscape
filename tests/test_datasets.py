@@ -119,14 +119,20 @@ def test_basic_splitting_operation_with_include_last_segment(
 
 
 def test_binary_from_audio_default(binary_from_audio_df):
-    dataset = BinaryFromAudio(binary_from_audio_df, height=225, width=226)
+    dataset = BinaryFromAudio(
+        binary_from_audio_df, label_column="NumericLabels", height=225, width=226
+    )
     assert dataset[0]["X"].shape == (3, 225, 226)
     assert dataset[0]["y"].shape == (1,)
 
 
 def test_binary_from_audio_spec_augment(binary_from_audio_df):
     dataset = BinaryFromAudio(
-        binary_from_audio_df, height=225, width=226, spec_augment=True
+        binary_from_audio_df,
+        label_column="NumericLabels",
+        height=225,
+        width=226,
+        spec_augment=True,
     )
     assert dataset[0]["X"].shape == (1, 225, 226)
     assert dataset[0]["y"].shape == (1,)
