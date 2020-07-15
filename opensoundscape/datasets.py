@@ -223,10 +223,6 @@ class BinaryFromAudio(torch.utils.data.Dataset):
 
         if add_noise:
             self.transform = transforms.Compose(
-                [transforms.Resize((self.height, self.width)), transforms.ToTensor()]
-            )
-        else:
-            self.transform = transforms.Compose(
                 [
                     transforms.Resize((self.height, self.width)),
                     transforms.RandomAffine(
@@ -237,6 +233,10 @@ class BinaryFromAudio(torch.utils.data.Dataset):
                     ),
                     transforms.ToTensor(),
                 ]
+            )
+        else:
+            self.transform = transforms.Compose(
+                [transforms.Resize((self.height, self.width)), transforms.ToTensor()]
             )
 
     def __len__(self):
