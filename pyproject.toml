@@ -34,6 +34,7 @@ pre-commit = "^1.18"
 sphinx = "^2.1"
 pytest = "^5.1"
 sphinx-rtd-theme = "^0.4.3"
+recommonmark = "^0.6.0"
 
 [tool.black]
 line-length = 88
