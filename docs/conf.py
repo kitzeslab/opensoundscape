@@ -59,3 +59,21 @@ html_theme = "sphinx_rtd_theme"
 # so a file named "default.css" will overwrite the builtin "default.css".
 # html_static_path = ["_static"]
 html_static_path = []
+
+
+# Mock libraries we don't want to install on RTD
+autodoc_mock_imports = [
+    "docopt",
+    "pandas",
+    "librosa",
+    "ray",
+    "torch",
+    "sklearn",
+    "numpy",
+    "schema",
+    "soundfile",
+    "scipy",
+    "yaml",
+    "torchvision",
+    "matplotlib",
+]
