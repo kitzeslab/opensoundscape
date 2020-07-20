@@ -6,7 +6,6 @@ from opensoundscape.metrics import Metrics
 import opensoundscape.torch.spec_augment as augment
 
 
-
 def train(
     model,
     train_df,
