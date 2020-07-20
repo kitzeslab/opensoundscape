@@ -75,6 +75,20 @@ def min_max_scale(array, feature_range=(0, 1)):
     return scale_factor * (array - array_min) + bottom
 
 
+def linear_scale(array, in_range=(0, 1), out_range=(0, 255)):
+    """ Translate from range in_range to out_range
+
+    Inputs:
+        in_range: The starting range [default: (0, 1)]
+        out_range: The output range [default: (0, 255)]
+
+    Outputs:
+        new_array: A translated array
+    """
+    scale_factor = (out_range[1] - out_range[0]) / (in_range[1] - in_range[0])
+    return scale_factor * (array - in_range[0]) + out_range[0]
+
+
 def jitter(x, width, distribution="gaussian"):
     """
     Jitter (add random noise to) each value of x
