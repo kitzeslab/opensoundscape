@@ -194,10 +194,10 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         add_noise: Apply RandomAffine and ColorJitter filters [default: False]
         debug: Save images to a directory [default: None]
         spec_augment: If True, prepare audio for spec_augment procedure [default: False]
-        random_trim_length: Trim the clip to this many seconds of audio starting at a random time
-            If None, the clip will not be trimmed [default: None]
-        overlay_prob: Probability of an image from a different class being overlayed on the training image
-            [default: 0] typical values: 0, 0.66
+        random_trim_length: Extract a clip of this many seconds of audio starting at a random time
+            If None, the original clip will be used [default: None]
+        overlay_prob: Probability of an image from a different class being overlayed (combined as a weighted sum)
+        on the training image. typical values: 0, 0.66 [default: 0] 
 
     Output:
         Dictionary:
@@ -260,6 +260,8 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         #TODO: test this
         if self.random_trim_length is not None:
             audio_length = len(audio.samples)/audio.sample_rate
+            if self.random_trim_length < audio_length:
+                raise ValueError('the length of the original file ({audio_length}) was less than the length to extract ({self.random_trim_length}) for the file {file_path}')
             extra_time = audio_length - self.random_trim_length
             start_time = np.random.uniform()*extra_time
             spectrogram = spectrogram.trim(start_time,start_time+random_trim_length)
@@ -269,7 +271,7 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         image = image.convert("RGB")
         
         #TODO: test this
-        if overlay_prob > np.random.uniform():
+        if self.overlay_prob > np.random.uniform():
             # select a random training file from a different class
             other_classes_df = self.df[self.df[self.label_column]!=row[self.label_column]]
             file_path = np.random.choice(other_classes_df[self.audio_column].values())
@@ -279,6 +281,8 @@ class BinaryFromAudio(torch.utils.data.Dataset):
             # trim to desired length if needed
             if self.random_trim_length is not None:
                 audio_length = len(overlay_audio.samples)/overlay_audio.sample_rate
+                if self.random_trim_length < audio_length:
+                    raise ValueError('the length of the original file ({audio_length}) was less than the length to extract ({self.random_trim_length}) for the file {file_path}')
                 extra_time = audio_length - self.random_trim_length
                 start_time = np.random.uniform()*extra_time
                 overlay_spectrogram = overlay_spectrogram.trim(start_time,start_time+random_trim_length)
