@@ -261,7 +261,7 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         if self.random_trim_length is not None:
             audio_length = len(audio.samples)/audio.sample_rate
             if self.random_trim_length < audio_length:
-                raise ValueError('the length of the original file ({audio_length}) was less than the length to extract ({self.random_trim_length}) for the file {file_path}')
+                raise ValueError('the length of the original file ({audio_length}) was less than the length to extract ({self.random_trim_length}) for the file {audio_p}')
             extra_time = audio_length - self.random_trim_length
             start_time = np.random.uniform()*extra_time
             spectrogram = spectrogram.trim(start_time,start_time+random_trim_length)
