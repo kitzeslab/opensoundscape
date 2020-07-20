@@ -10,6 +10,7 @@ from pathlib import Path
 import io
 import numpy as np
 from random import uniform
+from math import isclose
 
 
 @pytest.fixture()
@@ -121,9 +122,9 @@ def test_property_trim_length_is_correct(silence_10s_mp3_str):
     duration = audio.duration()
     for _ in range(100):
         [first, second] = sorted([uniform(0, duration), uniform(0, duration)])
-        trim_dur_round = round(audio.trim(first, second).duration(), 1)
-        actual_dur_round = round(second - first, 1)
-        assert trim_dur_round == actual_dur_round
+        assert isclose(
+            audio.trim(first, second).duration(), second - first, abs_tol=1e-4
+        )
 
 
 def test_bandpass(silence_10s_mp3_str):

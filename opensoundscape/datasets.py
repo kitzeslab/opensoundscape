@@ -188,7 +188,7 @@ class BinaryFromAudio(torch.utils.data.Dataset):
     Input:
         df: A DataFrame with a column containing audio files
         audio_column: The column in the DataFrame which contains audio files [default: Destination]
-        label_column: The column with numeric labels [default: NumericLabels]
+        label_column: The column with numeric labels if present [default: None]
         height: Height for resulting Tensor [default: 224]
         width: Width for resulting Tensor [default: 224]
         add_noise: Apply RandomAffine and ColorJitter filters [default: False]
@@ -198,7 +198,7 @@ class BinaryFromAudio(torch.utils.data.Dataset):
     Output:
         Dictionary:
             { "X": (1, H, W) if spec_augment else (3, H, W)
-            , "y": (1)
+            , "y": (1) if label_column != None
             }
     """
 
@@ -206,7 +206,7 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         self,
         df,
         audio_column="Destination",
-        label_column="NumericLabels",
+        label_column=None,
         height=224,
         width=224,
         add_noise=False,
@@ -223,10 +223,6 @@ class BinaryFromAudio(torch.utils.data.Dataset):
 
         if add_noise:
             self.transform = transforms.Compose(
-                [transforms.Resize((self.height, self.width)), transforms.ToTensor()]
-            )
-        else:
-            self.transform = transforms.Compose(
                 [
                     transforms.Resize((self.height, self.width)),
                     transforms.RandomAffine(
@@ -237,6 +233,10 @@ class BinaryFromAudio(torch.utils.data.Dataset):
                     ),
                     transforms.ToTensor(),
                 ]
+            )
+        else:
+            self.transform = transforms.Compose(
+                [transforms.Resize((self.height, self.width)), transforms.ToTensor()]
             )
 
     def __len__(self):
@@ -255,10 +255,12 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         if self.debug:
             image.save(f"{self.debug}/{audio_p.stem}.png")
 
-        labels = np.array([row[self.label_column]])
-
         X = self.transform(image)
 
         if self.spec_augment:
             X = X[0].unsqueeze(0)
-        return {"X": X, "y": torch.from_numpy(labels)}
+
+        if self.label_column:
+            labels = np.array([row[self.label_column]])
+            return {"X": X, "y": torch.from_numpy(labels)}
+        return {"X": X}

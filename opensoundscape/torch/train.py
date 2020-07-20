@@ -6,8 +6,8 @@ from opensoundscape.metrics import Metrics
 import opensoundscape.torch.spec_augment as augment
 
 
-def train_binary(
-    save_dir,
+
+def train(
     model,
     train_df,
     valid_df,
@@ -15,7 +15,7 @@ def train_binary(
     loss_fn,
     epochs=25,
     batch_size=1,
-    num_workers=1,
+    num_workers=0,
     log_every=5,
     spec_augment=False,
     debug=False,
@@ -70,7 +70,7 @@ def train_binary(
 
     stats = []
     for epoch in range(epochs):
-        train_metrics = Metrics(2)
+        train_metrics = Metrics(model.fc.in_features)
         model.train()
         for t in train_loader:
             X, y = t["X"], t["y"]
@@ -94,7 +94,7 @@ def train_binary(
             predictions = outputs.clone().detach().argmax(dim=1)
             train_metrics.update_metrics(targets, predictions)
 
-        valid_metrics = Metrics(2)
+        valid_metrics = Metrics(model.fc.in_features)
         model.eval()
         with torch.no_grad():
             for t in valid_loader:
