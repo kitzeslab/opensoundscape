@@ -77,3 +77,5 @@ autodoc_mock_imports = [
     "torchvision",
     "matplotlib",
 ]
+
+master_doc = "index"
