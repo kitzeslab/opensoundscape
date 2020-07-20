@@ -5,6 +5,7 @@
 from scipy import signal
 import numpy as np
 from opensoundscape.audio import Audio
+from opensoundscape.helpers import min_max_scale
 import warnings
 import pickle
 
@@ -71,7 +72,6 @@ class Spectrogram:
             window_type="hann": see scipy.signal.spectrogram docs for description of window parameter
             window_samples=512: number of audio samples per spectrogram window (pixel)
             overlap_samples=256: number of samples shared by consecutive windows
-            decibels=True: convert the spectrogram values to decibelss (dB)
             decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
             
         Returns:
@@ -125,11 +125,8 @@ class Spectrogram:
         if feature_range[1] < feature_range[0]:
             raise AttributeError("Error: `feature_range` isn't increasing?")
 
-        spect_min = self.spectrogram.min()
-        spect_max = self.spectrogram.min()
-        scale_factor = (feature_range[1] - feature_range[0]) / (spect_max - spect_min)
         return Spectrogram(
-            scale_factor * (self.spectrogram - spect_min) + feature_range[0],
+            min_max_scale(self.spectrogram, feature_range=feature_range),
             self.frequencies,
             self.times,
         )
