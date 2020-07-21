@@ -128,13 +128,13 @@ def test_binary_from_audio_default(binary_from_audio_df):
     assert dataset[0]["y"].shape == (1,)
 
 
-def test_binary_from_audio_spec_augment(binary_from_audio_df):
+def test_binary_from_audio_tensor_augment(binary_from_audio_df):
     dataset = SingleTargetAudioDataset(
         binary_from_audio_df,
         label_column="NumericLabels",
         height=225,
         width=226,
-        spec_augment=True,
+        tensor_augment=True,
     )
     assert dataset[0]["X"].shape == (1, 225, 226)
     assert dataset[0]["y"].shape == (1,)

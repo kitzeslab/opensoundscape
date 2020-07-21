@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from opensoundscape.datasets import SingleTargetAudioDataset
 from opensoundscape.metrics import Metrics
-import opensoundscape.torch.spec_augment as augment
+import opensoundscape.torch.tensor_augment as augment
 
 
 def train(
@@ -17,7 +17,7 @@ def train(
     batch_size=1,
     num_workers=0,
     log_every=5,
-    spec_augment=False,
+    tensor_augment=False,
     debug=False,
 ):
     """ Train a model
@@ -35,7 +35,7 @@ def train(
         batch_size:     The size of the batches [default: 1]
         num_workers:    The number of cores to use for batch preparation [default: 1]
         log_every:      Log statistics when epoch % log_every == 0 [default: 5]
-        spec_augment:   Whether or not to use the spec_augment procedure [default: False]
+        tensor_augment:   Whether or not to use the tensor_augment procedure [default: False]
         debug:          Whether or not to write intermediate images [default: False]
 
 
@@ -57,8 +57,8 @@ def train(
     else:
         device = torch.device("cpu")
 
-    # train_dataset = SingleTargetAudioDataset(train_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
-    # valid_dataset = SingleTargetAudioDataset(valid_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
+    # train_dataset = SingleTargetAudioDataset(train_df, tensor_augment=tensor_augment, debug=debug, label_column = "NumericLabels")
+    # valid_dataset = SingleTargetAudioDataset(valid_df, tensor_augment=tensor_augment, debug=debug, label_column = "NumericLabels")
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
@@ -74,13 +74,15 @@ def train(
     for epoch in range(epochs):
         train_metrics = Metrics(model.fc.in_features)
         model.train()
+
+        # Perform training
         for t in train_loader:
             X, y = t["X"], t["y"]
             X.to(device)
             y.to(device)
             targets = y.squeeze(1)
 
-            if spec_augment:
+            if tensor_augment:
                 X = augment.time_warp(X.clone(), W=10)
                 X = augment.time_mask(X, T=50, max_masks=5)
                 X = augment.freq_mask(X, F=50, max_masks=5)
@@ -96,6 +98,7 @@ def train(
             predictions = outputs.clone().detach().argmax(dim=1)
             train_metrics.update_metrics(targets, predictions)
 
+        # Perform evaluation on validation set
         valid_metrics = Metrics(model.fc.in_features)
         model.eval()
         with torch.no_grad():
@@ -105,7 +108,7 @@ def train(
                 y.to(device)
                 targets = y.squeeze(1)
 
-                if spec_augment:
+                if tensor_augment:
                     X = torch.cat([X.clone()] * 3, dim=1)
 
                 outputs = model(X)
