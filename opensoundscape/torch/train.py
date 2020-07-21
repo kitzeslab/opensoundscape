@@ -6,7 +6,7 @@ from opensoundscape.metrics import Metrics
 import opensoundscape.torch.spec_augment as augment
 
 
-def train_binary(
+def train(
     model,
     train_df,
     valid_df,
@@ -14,7 +14,7 @@ def train_binary(
     loss_fn,
     epochs=25,
     batch_size=1,
-    num_workers=1,
+    num_workers=0,
     log_every=5,
     spec_augment=False,
     debug=False,
@@ -22,6 +22,7 @@ def train_binary(
     """ Train a model
 
     Input:
+        save_dir:       A directory to save intermediate weights
         model:          A binary torch model, e.g. torchvision.models.resnet18(pretrained=True)
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
         train_df:       The training DataFrame with columns "Destination" and "NumericLabels"
@@ -68,7 +69,7 @@ def train_binary(
 
     stats = []
     for epoch in range(epochs):
-        train_metrics = Metrics(2)
+        train_metrics = Metrics(model.fc.in_features)
         model.train()
         for t in train_loader:
             X, y = t["X"], t["y"]
@@ -92,7 +93,7 @@ def train_binary(
             predictions = outputs.clone().detach().argmax(dim=1)
             train_metrics.update_metrics(targets, predictions)
 
-        valid_metrics = Metrics(2)
+        valid_metrics = Metrics(model.fc.in_features)
         model.eval()
         with torch.no_grad():
             for t in valid_loader:
@@ -116,9 +117,10 @@ def train_binary(
                 len(valid_loader)
             )
 
-            stats.append(
+            torch.save(
                 {
-                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
                     "train_loss": t_loss,
                     "train_accuracy": t_acc,
                     "train_precision": t_prec,
@@ -128,7 +130,8 @@ def train_binary(
                     "valid_precision": v_prec,
                     "valid_recall": v_rec,
                     "valid_f1": v_f1,
-                }
+                },
+                f"{save_dir}/epoch-{epoch}.tar",
             )
 
-    return stats
+    return

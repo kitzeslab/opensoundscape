@@ -5,6 +5,7 @@
 from scipy import signal
 import numpy as np
 from opensoundscape.audio import Audio
+from opensoundscape.helpers import min_max_scale, linear_scale
 import warnings
 import pickle
 
@@ -13,11 +14,7 @@ class Spectrogram:
     """ Immutable spectrogram container
     """
 
-    __slots__ = (
-        "frequencies",
-        "times",
-        "spectrogram",
-    )  # , "overlap", "segment_length")
+    __slots__ = ("frequencies", "times", "spectrogram", "decibel_limits")
 
     def __init__(self, spectrogram, frequencies, times):
         if not isinstance(spectrogram, np.ndarray):
@@ -54,6 +51,7 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("frequencies", frequencies)
         super(Spectrogram, self).__setattr__("times", times)
         super(Spectrogram, self).__setattr__("spectrogram", spectrogram)
+        super(Spectrogram, self).__setattr__("decibel_limits", (-100, -20))
 
     @classmethod
     def from_audio(
@@ -71,7 +69,6 @@ class Spectrogram:
             window_type="hann": see scipy.signal.spectrogram docs for description of window parameter
             window_samples=512: number of audio samples per spectrogram window (pixel)
             overlap_samples=256: number of samples shared by consecutive windows
-            decibels=True: convert the spectrogram values to decibelss (dB)
             decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
             
         Returns:
@@ -90,7 +87,10 @@ class Spectrogram:
         )
 
         # convert to decibels
-        spectrogram = 10 * np.log10(spectrogram)
+        # -> avoid RuntimeWarning by setting negative values to -np.inf (mapped to min_db later)
+        spectrogram = 10 * np.log10(
+            spectrogram, where=spectrogram > 0, out=np.full(spectrogram.shape, -np.inf)
+        )
 
         # limit the decibel range (-100 to -20 dB by default)
         # values below lower limit set to lower limit, values above upper limit set to uper limit
@@ -98,7 +98,9 @@ class Spectrogram:
         spectrogram[spectrogram > max_db] = max_db
         spectrogram[spectrogram < min_db] = min_db
 
-        return cls(spectrogram, frequencies, times)
+        new_obj = cls(spectrogram, frequencies, times)
+        super(Spectrogram, new_obj).__setattr__("decibel_limits", decibel_limits)
+        return new_obj
 
     def __setattr__(self, name, value):
         raise AttributeError("Spectrogram's cannot be modified")
@@ -107,10 +109,14 @@ class Spectrogram:
         return f"<Spectrogram(spectrogram={self.spectrogram.shape}, frequencies={self.frequencies.shape}, times={self.times.shape})>"
 
     def min_max_scale(self, feature_range=(0, 1)):
-        """ Linearly rescale spectrogram values to a range of values
+        """
+
+        Linearly rescale spectrogram values to a range of values using
+        in_range as minimum and maximum
         
         Args:
             feature_range: tuple of (low,high) values for output
+
         Returns:
             Spectrogram object with values rescaled to feature_range
         """
@@ -122,11 +128,36 @@ class Spectrogram:
         if feature_range[1] < feature_range[0]:
             raise AttributeError("Error: `feature_range` isn't increasing?")
 
-        spect_min = self.spectrogram.min()
-        spect_max = self.spectrogram.min()
-        scale_factor = (feature_range[1] - feature_range[0]) / (spect_max - spect_min)
         return Spectrogram(
-            scale_factor * (self.spectrogram - spect_min) + feature_range[0],
+            min_max_scale(self.spectrogram, feature_range=feature_range),
+            self.frequencies,
+            self.times,
+        )
+
+    def linear_scale(self, feature_range=(0, 1)):
+        """
+
+        Linearly rescale spectrogram values to a range of values
+        using in_range as decibel_limits
+        
+        Args:
+            feature_range: tuple of (low,high) values for output
+
+        Returns:
+            Spectrogram object with values rescaled to feature_range
+        """
+
+        if len(feature_range) != 2:
+            raise AttributeError(
+                "Error: `feature_range` doesn't look like a 2-element tuple?"
+            )
+        if feature_range[1] < feature_range[0]:
+            raise AttributeError("Error: `feature_range` isn't increasing?")
+
+        return Spectrogram(
+            linear_scale(
+                self.spectrogram, in_range=self.decibel_limits, out_range=feature_range
+            ),
             self.frequencies,
             self.times,
         )
