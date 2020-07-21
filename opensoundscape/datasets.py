@@ -248,6 +248,7 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         audio_p = Path(row[self.audio_column])
         audio = Audio.from_file(audio_p)
         spectrogram = Spectrogram.from_audio(audio)
+        spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
 
         image = Image.fromarray(spectrogram.spectrogram)
         image = image.convert("RGB")
