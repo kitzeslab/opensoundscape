@@ -7,6 +7,7 @@ import opensoundscape.torch.spec_augment as augment
 
 
 def train(
+    save_dir,
     model,
     train_df,
     valid_df,
@@ -23,6 +24,7 @@ def train(
 
     Input:
         save_dir:       A directory to save intermediate weights
+                        - if None, weights are not saved
         model:          A binary torch model, e.g. torchvision.models.resnet18(pretrained=True)
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
         train_df:       The training DataFrame with columns "Destination" and "NumericLabels"
@@ -35,6 +37,7 @@ def train(
         log_every:      Log statistics when epoch % log_every == 0 [default: 5]
         spec_augment:   Whether or not to use the spec_augment procedure [default: False]
         debug:          Whether or not to write intermediate images [default: False]
+
 
     Output:
         A list of dictionaries with keys:
@@ -54,8 +57,8 @@ def train(
     else:
         device = torch.device("cpu")
 
-    train_dataset = BinaryFromAudio(train_df, spec_augment=spec_augment, debug=debug)
-    valid_dataset = BinaryFromAudio(valid_df, spec_augment=spec_augment, debug=debug)
+    train_dataset = BinaryFromAudio(train_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
+    valid_dataset = BinaryFromAudio(valid_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
@@ -116,22 +119,23 @@ def train(
             _, v_acc, v_prec, v_rec, v_f1 = valid_metrics.compute_metrics(
                 len(valid_loader)
             )
-
-            torch.save(
-                {
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "train_loss": t_loss,
-                    "train_accuracy": t_acc,
-                    "train_precision": t_prec,
-                    "train_recall": t_rec,
-                    "train_f1": t_f1,
-                    "valid_accuracy": v_acc,
-                    "valid_precision": v_prec,
-                    "valid_recall": v_rec,
-                    "valid_f1": v_f1,
-                },
-                f"{save_dir}/epoch-{epoch}.tar",
-            )
+            
+            if save_dir is not None:
+                torch.save(
+                    {
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "train_loss": t_loss,
+                        "train_accuracy": t_acc,
+                        "train_precision": t_prec,
+                        "train_recall": t_rec,
+                        "train_f1": t_f1,
+                        "valid_accuracy": v_acc,
+                        "valid_precision": v_prec,
+                        "valid_recall": v_rec,
+                        "valid_f1": v_f1,
+                    },
+                    f"{save_dir}/epoch-{epoch}.tar",
+                )
 
     return
