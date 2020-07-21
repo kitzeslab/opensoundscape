@@ -45,7 +45,7 @@ def annotations_with_overlaps_with_clip(df, begin, end):
     ]
 
 
-class Splitter(torch.utils.data.Dataset):
+class SplitterDataset(torch.utils.data.Dataset):
     """ A PyTorch Dataset for splitting a WAV files
 
     Inputs:

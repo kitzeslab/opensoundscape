@@ -3,7 +3,7 @@ from opensoundscape.audio import Audio
 import pytest
 from pathlib import Path
 from shutil import rmtree
-from opensoundscape.datasets import Splitter, BinaryFromAudio
+from opensoundscape.datasets import SplitterDataset, BinaryFromAudio
 from torch.utils.data import DataLoader
 import pandas as pd
 import numpy as np
@@ -64,7 +64,7 @@ def binary_from_audio_df():
 def test_basic_splitting_operation_default(
     temporary_split_storage, splitter_results_default, one_min_audio_list
 ):
-    dataset = Splitter(
+    dataset = SplitterDataset(
         one_min_audio_list,
         duration=25,
         overlap=0,
@@ -76,7 +76,7 @@ def test_basic_splitting_operation_default(
         batch_size=1,
         shuffle=False,
         num_workers=1,
-        collate_fn=Splitter.collate_fn,
+        collate_fn=SplitterDataset.collate_fn,
     )
 
     results = []
@@ -93,7 +93,7 @@ def test_basic_splitting_operation_default(
 def test_basic_splitting_operation_with_include_last_segment(
     temporary_split_storage, splitter_results_last, one_min_audio_list
 ):
-    dataset = Splitter(
+    dataset = SplitterDataset(
         one_min_audio_list,
         duration=30,
         overlap=0,
@@ -106,7 +106,7 @@ def test_basic_splitting_operation_with_include_last_segment(
         batch_size=1,
         shuffle=False,
         num_workers=1,
-        collate_fn=Splitter.collate_fn,
+        collate_fn=SplitterDataset.collate_fn,
     )
 
     results = []
