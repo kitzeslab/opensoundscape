@@ -57,8 +57,12 @@ def train(
     else:
         device = torch.device("cpu")
 
-    train_dataset = BinaryFromAudio(train_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
-    valid_dataset = BinaryFromAudio(valid_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
+    train_dataset = BinaryFromAudio(
+        train_df, spec_augment=spec_augment, debug=debug, label_column="NumericLabels"
+    )
+    valid_dataset = BinaryFromAudio(
+        valid_df, spec_augment=spec_augment, debug=debug, label_column="NumericLabels"
+    )
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
@@ -119,7 +123,7 @@ def train(
             _, v_acc, v_prec, v_rec, v_f1 = valid_metrics.compute_metrics(
                 len(valid_loader)
             )
-            
+
             if save_dir is not None:
                 torch.save(
                     {
