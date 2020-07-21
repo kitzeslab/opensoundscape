@@ -178,7 +178,7 @@ class SplitterDataset(torch.utils.data.Dataset):
         return chain.from_iterable([x["data"] for x in batch[1]])
 
 
-class BinaryFromAudio(torch.utils.data.Dataset):
+class SingleTargetDataset(torch.utils.data.Dataset):
     """ Binary Audio -> Image Dataset
 
     Given a DataFrame with audio files in one of the columns, generate
@@ -186,7 +186,8 @@ class BinaryFromAudio(torch.utils.data.Dataset):
 
     Input:
         df: A DataFrame with a column containing audio files
-        audio_column: The column in the DataFrame which contains audio files [default: Destination]
+        filename_column: The column in the DataFrame which contains paths to data [default: Destination]
+        from_audio: Whether the raw dataset is audio [default: True]
         label_column: The column with numeric labels if present [default: None]
         height: Height for resulting Tensor [default: 224]
         width: Width for resulting Tensor [default: 224]
@@ -196,7 +197,7 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         random_trim_length: Extract a clip of this many seconds of audio starting at a random time
             If None, the original clip will be used [default: None]
         overlay_prob: Probability of an image from a different class being overlayed (combined as a weighted sum)
-        on the training image. typical values: 0, 0.66 [default: 0] 
+        on the training image. typical values: 0, 0.66 [default: 0]
 
     Output:
         Dictionary:
@@ -208,7 +209,8 @@ class BinaryFromAudio(torch.utils.data.Dataset):
     def __init__(
         self,
         df,
-        audio_column="Destination",
+        filename_column="Destination",
+        from_audio=True,
         label_column=None,
         height=224,
         width=224,
@@ -219,7 +221,8 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         overlay_prob = 0
     ):
         self.df = df
-        self.audio_column = audio_column
+        self.filename_column = filename_column
+        self.from_audio = from_audio
         self.label_column = label_column
         self.height = height
         self.width = width
@@ -227,24 +230,26 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         self.spec_augment = spec_augment
         self.random_trim_length = random_trim_length
         self.overlay_prob = overlay_prob
+        self.transform = self.set_transform(add_noise = add_noise)
 
+    def set_transform(self, add_noise):
+        transform_list = [transforms.Resize((self.height, self.width))]
         if add_noise:
-            self.transform = transforms.Compose(
-                [
-                    transforms.Resize((self.height, self.width)),
-                    transforms.RandomAffine(
-                        degrees=0, translate=(0.2, 0.03), fillcolor=50
-                    ),
-                    transforms.ColorJitter(
-                        brightness=0.3, contrast=0.3, saturation=0.3, hue=0
-                    ),
-                    transforms.ToTensor(),
-                ]
-            )
-        else:
-            self.transform = transforms.Compose(
-                [transforms.Resize((self.height, self.width)), transforms.ToTensor()]
-            )
+                transform_list.extend(
+                    [
+                        transforms.Resize(),
+                        transforms.RandomAffine(
+                            degrees=0, translate=(0.2, 0.03), fillcolor=50
+                        ),
+                        transforms.ColorJitter(
+                            brightness=0.3, contrast=0.3, saturation=0.3, hue=0
+                        ),
+                        transforms.ToTensor(),
+                    ]
+                )
+
+        transform_list.append(transforms.ToTensor())
+        return transforms.Compose(transform_list)
 
     def __len__(self):
         return self.df.shape[0]
@@ -252,10 +257,14 @@ class BinaryFromAudio(torch.utils.data.Dataset):
     def __getitem__(self, item_idx):
         row = self.df.iloc[item_idx]
 
-        audio_p = Path(row[self.audio_column])
-        audio = Audio.from_file(audio_p)
-        spectrogram = Spectrogram.from_audio(audio)
-        spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
+        file_p = Path(row[self.filename_column])
+        if self.from_audio:
+            audio = Audio.from_file(file_p)
+            spectrogram = Spectrogram.from_audio(audio)
+            spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
+        else:
+            #spectrogram = Spectrogram.from_file(file_p)
+            raise NotImplementedError("Training from spectrograms is not implemented yet")
 
         # trim to desired length if needed
         # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
@@ -268,18 +277,18 @@ class BinaryFromAudio(torch.utils.data.Dataset):
             spectrogram = spectrogram.trim(start_time,start_time+self.random_trim_length)
 
         image = Image.fromarray(spectrogram.spectrogram.astype(np.uint8),mode='L')
-        
+
         #add a blended/overlayed image from another class directly on top
         if self.overlay_prob > np.random.uniform():
-            
+
             # select a random training file from a different class and create spectrogram
             this_class = row[self.label_column]
             other_classes_df = self.df[self.df[self.label_column]!=this_class]
-            file_path = np.random.choice(other_classes_df[self.audio_column].values)
+            file_path = np.random.choice(other_classes_df[self.filename_column].values)
             overlay_audio = Audio.from_file(file_path)
             overlay_spectrogram = Spectrogram.from_audio(overlay_audio)
             overlay_spectrogram = overlay_spectrogram.linear_scale(feature_range=(0, 255))
-            
+
             # trim to same length as main clip
             overlay_audio_length = len(overlay_audio.samples)/overlay_audio.sample_rate
             if overlay_audio_length < audio_length:
@@ -288,7 +297,7 @@ class BinaryFromAudio(torch.utils.data.Dataset):
                 extra_time = audio_length - overlay_audio_length
                 start_time = np.random.uniform()*extra_time
                 overlay_spectrogram = overlay_spectrogram.trim(start_time,start_time+audio_length)
-                
+
             # create an image and add blur
             overlay_image = Image.fromarray(overlay_spectrogram.spectrogram.astype(np.uint8),mode='L')
             blur_r = np.random.randint(0, 8) / 10
@@ -300,10 +309,11 @@ class BinaryFromAudio(torch.utils.data.Dataset):
 
         image = image.convert("RGB")
 
-                
+
         if self.debug:
             image.save(f"{self.debug}/{audio_p.stem}.png")
 
+        # apply desired random transformations to image and convert to tensor
         X = self.transform(image)
 
         if self.spec_augment:

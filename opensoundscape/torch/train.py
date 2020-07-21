@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import torch
 import torch.nn as nn
-from opensoundscape.datasets import BinaryFromAudio
+from opensoundscape.datasets import SingleTargetDataset
 from opensoundscape.metrics import Metrics
 import opensoundscape.torch.spec_augment as augment
 
@@ -57,8 +57,8 @@ def train(
     else:
         device = torch.device("cpu")
 
-    train_dataset = BinaryFromAudio(train_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
-    valid_dataset = BinaryFromAudio(valid_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
+    train_dataset = SingleTargetDataset(train_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
+    valid_dataset = SingleTargetDataset(valid_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers

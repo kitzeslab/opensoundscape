@@ -169,7 +169,7 @@ def entrypoint():
                         f.write(f"{output}\n")
 
             input_df = pd.read_csv(segments_csv)
-            dataset = datasets.BinaryFromAudio(input_df)
+            dataset = datasets.SingleTargetDataset(input_df)
 
             dataloader = DataLoader(
                 dataset,
