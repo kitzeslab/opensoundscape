@@ -3,7 +3,7 @@ from opensoundscape.audio import Audio
 import pytest
 from pathlib import Path
 from shutil import rmtree
-from opensoundscape.datasets import SplitterDataset, SingleTargetDataset
+from opensoundscape.datasets import SplitterDataset, SingleTargetAudioDataset
 from torch.utils.data import DataLoader
 import pandas as pd
 import numpy as np
@@ -121,7 +121,7 @@ def test_basic_splitting_operation_with_include_last_segment(
 
 
 def test_binary_from_audio_default(binary_from_audio_df):
-    dataset = SingleTargetDataset(
+    dataset = SingleTargetAudioDataset(
         binary_from_audio_df, label_column="NumericLabels", height=225, width=226
     )
     assert dataset[0]["X"].shape == (3, 225, 226)
@@ -129,7 +129,7 @@ def test_binary_from_audio_default(binary_from_audio_df):
 
 
 def test_binary_from_audio_spec_augment(binary_from_audio_df):
-    dataset = SingleTargetDataset(
+    dataset = SingleTargetAudioDataset(
         binary_from_audio_df,
         label_column="NumericLabels",
         height=225,
@@ -141,7 +141,7 @@ def test_binary_from_audio_spec_augment(binary_from_audio_df):
 
 
 def test_binary_from_audio_to_image(binary_from_audio_df):
-    dataset = SingleTargetDataset(binary_from_audio_df)
+    dataset = SingleTargetAudioDataset(binary_from_audio_df)
 
     pixels = dataset[0]["X"].numpy()
 

@@ -187,7 +187,6 @@ class SingleTargetDataset(torch.utils.data.Dataset):
     Input:
         df: A DataFrame with a column containing audio files
         filename_column: The column in the DataFrame which contains paths to data [default: Destination]
-        from_audio: Whether the raw dataset is audio [default: True]
         label_column: The column with numeric labels if present [default: None]
         height: Height for resulting Tensor [default: 224]
         width: Width for resulting Tensor [default: 224]
@@ -210,7 +209,6 @@ class SingleTargetDataset(torch.utils.data.Dataset):
         self,
         df,
         filename_column="Destination",
-        from_audio=True,
         label_column=None,
         height=224,
         width=224,
@@ -222,7 +220,6 @@ class SingleTargetDataset(torch.utils.data.Dataset):
     ):
         self.df = df
         self.filename_column = filename_column
-        self.from_audio = from_audio
         self.label_column = label_column
         self.height = height
         self.width = width
@@ -258,13 +255,9 @@ class SingleTargetDataset(torch.utils.data.Dataset):
         row = self.df.iloc[item_idx]
 
         file_p = Path(row[self.filename_column])
-        if self.from_audio:
-            audio = Audio.from_file(file_p)
-            spectrogram = Spectrogram.from_audio(audio)
-            spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
-        else:
-            #spectrogram = Spectrogram.from_file(file_p)
-            raise NotImplementedError("Training from spectrograms is not implemented yet")
+        audio = Audio.from_file(file_p)
+        spectrogram = Spectrogram.from_audio(audio)
+        spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
 
         # trim to desired length if needed
         # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
