@@ -178,7 +178,7 @@ class SplitterDataset(torch.utils.data.Dataset):
         return chain.from_iterable([x["data"] for x in batch[1]])
 
 
-class SingleTargetDataset(torch.utils.data.Dataset):
+class SingleTargetAudioDataset(torch.utils.data.Dataset):
     """ Binary Audio -> Image Dataset
 
     Given a DataFrame with audio files in one of the columns, generate
@@ -256,10 +256,8 @@ class SingleTargetDataset(torch.utils.data.Dataset):
 
         file_p = Path(row[self.filename_column])
         audio = Audio.from_file(file_p)
-        spectrogram = Spectrogram.from_audio(audio)
-        spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
 
-        # trim to desired length if needed
+        # trim audio to desired length if needed
         # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
         audio_length = len(audio.samples)/audio.sample_rate
         if self.random_trim_length is not None:
@@ -267,7 +265,12 @@ class SingleTargetDataset(torch.utils.data.Dataset):
                 raise ValueError(f'the length of the original file ({audio_length} sec) was less than the length to extract ({self.random_trim_length} sec) for the file {audio_p}')
             extra_time = audio_length - self.random_trim_length
             start_time = np.random.uniform()*extra_time
-            spectrogram = spectrogram.trim(start_time,start_time+self.random_trim_length)
+            audio = audio.trim(start_time,start_time+self.random_trim_length)
+
+        spectrogram = Spectrogram.from_audio(audio)
+        spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
+
+
 
         image = Image.fromarray(spectrogram.spectrogram.astype(np.uint8),mode='L')
 
