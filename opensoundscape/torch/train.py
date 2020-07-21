@@ -9,8 +9,8 @@ import opensoundscape.torch.spec_augment as augment
 def train(
     save_dir,
     model,
-    train_df,
-    valid_df,
+    train_dataset,
+    valid_dataset,
     optimizer,
     loss_fn,
     epochs=25,
@@ -27,8 +27,8 @@ def train(
                         - if None, weights are not saved
         model:          A binary torch model, e.g. torchvision.models.resnet18(pretrained=True)
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
-        train_df:       The training DataFrame with columns "Destination" and "NumericLabels"
-        valid_df:       The validation DataFrame with columns "Destination" and "NumericLabels"
+        train_dataset:  The training dataset, e.g. created by opensoundscapes.datasets.SingleTargetDataset
+        valid_dataset:  The validation dataset, e.g. created by opensoundscapes.datasets.SingleTargetDataset
         optimize:       A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
         loss_fn:        A torch loss function, e.g. torch.nn.CrossEntropyLoss()
         epochs:         The number of epochs [default: 25]
@@ -57,8 +57,8 @@ def train(
     else:
         device = torch.device("cpu")
 
-    train_dataset = SingleTargetDataset(train_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
-    valid_dataset = SingleTargetDataset(valid_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
+    # train_dataset = SingleTargetDataset(train_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
+    # valid_dataset = SingleTargetDataset(valid_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
