@@ -28,7 +28,7 @@ def convolved_wav_str(out_path, request):
 @pytest.fixture()
 def out_path(request):
     path = Path("tests/audio_tools_out")
-    path.mkdir()
+    if not path.exists(): path.mkdir()
 
     def fin():
         path.rmdir()

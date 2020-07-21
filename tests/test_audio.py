@@ -47,7 +47,8 @@ def veryshort_wav_bytesio(veryshort_wav_str):
 @pytest.fixture()
 def tmp_dir(request):
     path = Path("tests/audio_out")
-    path.mkdir()
+    if not path.exists():
+        path.mkdir()
 
     def fin():
         path.rmdir()
