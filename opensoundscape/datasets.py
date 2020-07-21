@@ -216,7 +216,7 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         debug=None,
         spec_augment=False,
         random_trim_length=None,
-        overlay_prob = 0
+        overlay_prob = 0,
     ):
         self.df = df
         self.audio_column = audio_column
@@ -313,3 +313,57 @@ class BinaryFromAudio(torch.utils.data.Dataset):
             labels = np.array([row[self.label_column]])
             return {"X": X, "y": torch.from_numpy(labels)}
         return {"X": X}
+
+# class PredictionDataset(torch.utils.data.Dataset):
+#     """ Load a set of audio files in prepreation for prediction with torch.predict()
+
+#     Given a DataFrame with audio files in one of the columns, generate
+#     a DataSet for predicting on the files.
+
+#     Input:
+#         df: A DataFrame with a column containing audio files
+#         audio_column: The column in the DataFrame which contains audio files [default: Destination]
+#         height: Height for resulting Tensor (spectrogram) [default: 224]
+#         width: Width for resulting Tensor (spectrogram) [default: 224]
+
+#     Output:
+#         Dictionary:
+#             { 
+#                 "X": (3, H, W)
+#             }
+#     """
+
+#     def __init__(
+#         self,
+#         df,
+#         audio_column="Destination",
+#         height=224,
+#         width=224,
+#         add_noise=False,
+#         debug=None,
+#         spec_augment=False,
+#     ):
+#         self.df = df
+#         self.audio_column = audio_column
+
+#         self.transform = transforms.Compose(
+#             [transforms.Resize((self.height, self.width)), transforms.ToTensor()]
+#         )
+
+#     def __len__(self):
+#         return self.df.shape[0]
+
+#     def __getitem__(self, item_idx):
+#         row = self.df.iloc[item_idx]
+
+#         audio_p = Path(row[self.audio_column])
+#         audio = Audio.from_file(audio_p)
+#         spectrogram = Spectrogram.from_audio(audio)
+#         spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
+
+#         image = Image.fromarray(spectrogram.spectrogram)
+#         image = image.convert("RGB")
+
+#         X = self.transform(image)
+
+#         return {"X": X}
