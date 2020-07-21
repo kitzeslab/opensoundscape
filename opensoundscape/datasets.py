@@ -93,7 +93,6 @@ class Splitter(torch.utils.data.Dataset):
 
     def __getitem__(self, item_idx):
         wav = self.wavs[item_idx]
-        suffix = wav.suffix
         annotation_prefix = self.wavs[item_idx].stem.split(".")[0]
 
         if self.annotations:
@@ -150,12 +149,12 @@ class Splitter(torch.utils.data.Dataset):
                     segment_sample_begin = audio_obj.time_to_sample(begin)
                     segment_sample_end = audio_obj.time_to_sample(end)
                     audio_to_write = audio_obj.trim(begin, end)
-                    audio_to_write.save(f"{destination}{suffix}")
+                    audio_to_write.save(f"{destination}.wav")
 
                     if idx == num_segments - 1:
-                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}{suffix}"
+                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.wav"
                     else:
-                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}{suffix}"
+                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.wav"
                     to_append += f",{'|'.join(overlaps['class'].unique())}"
 
                     outputs.append(to_append)
@@ -163,12 +162,12 @@ class Splitter(torch.utils.data.Dataset):
                 segment_sample_begin = audio_obj.time_to_sample(begin)
                 segment_sample_end = audio_obj.time_to_sample(end)
                 audio_to_write = audio_obj.trim(begin, end)
-                audio_to_write.save(f"{destination}{suffix}")
+                audio_to_write.save(f"{destination}.wav")
 
                 if idx == num_segments - 1:
-                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}{suffix}"
+                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.wav"
                 else:
-                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}{suffix}"
+                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.wav"
 
                 outputs.append(to_append)
 
