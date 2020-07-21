@@ -4,6 +4,7 @@
 
 from docopt import docopt
 from pathlib import Path
+from itertools import chain
 import subprocess
 import torch
 import torch.nn as nn
