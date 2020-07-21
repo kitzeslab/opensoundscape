@@ -18,6 +18,7 @@ from opensoundscape.config import validate_file, get_default_config, DEFAULT_CON
 import opensoundscape.console_checks as checks
 import opensoundscape.datasets as datasets
 from tempfile import TemporaryDirectory
+from itertools import chain
 
 
 OPSO_DOCOPT = """ opensoundscape.py -- Opensoundscape
@@ -97,7 +98,12 @@ def entrypoint():
         if segments.exists():
             segments.rename(segments.with_suffix(".csv.bak"))
 
-        wavs = chain(input_p.rglob("**/*.WAV"), input_p.rglob("**/*.wav"))
+        wavs = chain(
+            input_p.rglob("**/*.WAV"),
+            input_p.rglob("**/*.wav"),
+            input_p.rglob("**/*.mp3"),
+            input_p.rglob("**/*.MP3"),
+        )
 
         dataset = datasets.Splitter(
             wavs,
@@ -106,11 +112,6 @@ def entrypoint():
             overlap=config["audio"]["overlap"],
             duration=config["audio"]["duration"],
             output_directory=args["--output_directory"],
-            audio_params={
-                k: v
-                for k, v in config["audio"].items()
-                if k in ["sample_rate", "max_duration", "resample_type"]
-            },
         )
 
         dataloader = DataLoader(
@@ -137,17 +138,19 @@ def entrypoint():
 
         input_p = checks.directory_exists(args, "--input_directory")
 
+        wavs = chain(
+            input_p.rglob("**/*.WAV"),
+            input_p.rglob("**/*.wav"),
+            input_p.rglob("**/*.mp3"),
+            input_p.rglob("**/*.MP3"),
+        )
+
         with TemporaryDirectory() as segments_dir:
             dataset = datasets.Splitter(
                 wavs,
                 overlap=config["audio"]["overlap"],
                 duration=config["audio"]["duration"],
                 output_directory=segments_dir,
-                audio_params={
-                    k: v
-                    for k, v in config["audio"].items()
-                    if k in ["sample_rate", "max_duration", "resample_type"]
-                },
             )
 
             dataloader = DataLoader(
