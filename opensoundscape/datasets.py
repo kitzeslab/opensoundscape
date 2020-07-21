@@ -8,7 +8,7 @@ from pathlib import Path
 from itertools import chain
 import torch
 from torchvision import transforms
-from PIL import Image
+from PIL import Image, ImageFilter
 
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
@@ -256,50 +256,52 @@ class BinaryFromAudio(torch.utils.data.Dataset):
         audio_p = Path(row[self.audio_column])
         audio = Audio.from_file(audio_p)
         spectrogram = Spectrogram.from_audio(audio)
-        
         spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
-        
-	#TODO: test this
+
+        # trim to desired length if needed
+        # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
+        audio_length = len(audio.samples)/audio.sample_rate
         if self.random_trim_length is not None:
-            audio_length = len(audio.samples)/audio.sample_rate
-            if self.random_trim_length < audio_length:
-                raise ValueError('the length of the original file ({audio_length}) was less than the length to extract ({self.random_trim_length}) for the file {audio_p}')
+            if self.random_trim_length > audio_length:
+                raise ValueError(f'the length of the original file ({audio_length} sec) was less than the length to extract ({self.random_trim_length} sec) for the file {audio_p}')
             extra_time = audio_length - self.random_trim_length
             start_time = np.random.uniform()*extra_time
-            spectrogram = spectrogram.trim(start_time,start_time+random_trim_length)
-        
-                
+            spectrogram = spectrogram.trim(start_time,start_time+self.random_trim_length)
 
-        image = Image.fromarray(spectrogram.spectrogram)
-        image = image.convert("RGB")
+        image = Image.fromarray(spectrogram.spectrogram.astype(np.uint8),mode='L')
         
-        #TODO: test this
+        #add a blended/overlayed image from another class directly on top
         if self.overlay_prob > np.random.uniform():
-            # select a random training file from a different class
-            other_classes_df = self.df[self.df[self.label_column]!=row[self.label_column]]
-            file_path = np.random.choice(other_classes_df[self.audio_column].values())
-            overlay_audio = Audio.from_file(audio_p)
-            overlay_spectrogram = Spectrogram.from_audio(overlay_audio)
             
-            # trim to desired length if needed
-            if self.random_trim_length is not None:
-                audio_length = len(overlay_audio.samples)/overlay_audio.sample_rate
-                if self.random_trim_length < audio_length:
-                    raise ValueError('the length of the original file ({audio_length}) was less than the length to extract ({self.random_trim_length}) for the file {file_path}')
-                extra_time = audio_length - self.random_trim_length
+            # select a random training file from a different class and create spectrogram
+            this_class = row[self.label_column]
+            other_classes_df = self.df[self.df[self.label_column]!=this_class]
+            file_path = np.random.choice(other_classes_df[self.audio_column].values)
+            overlay_audio = Audio.from_file(file_path)
+            overlay_spectrogram = Spectrogram.from_audio(overlay_audio)
+            overlay_spectrogram = overlay_spectrogram.linear_scale(feature_range=(0, 255))
+            
+            # trim to same length as main clip
+            overlay_audio_length = len(overlay_audio.samples)/overlay_audio.sample_rate
+            if overlay_audio_length < audio_length:
+                raise ValueError(f'the length of the overlay file ({overlay_audio_length} sec) was less than the length of the file {file_path} ({audio_length} sec)')
+            elif overlay_audio_length > audio_length:
+                extra_time = audio_length - overlay_audio_length
                 start_time = np.random.uniform()*extra_time
-                overlay_spectrogram = overlay_spectrogram.trim(start_time,start_time+random_trim_length)
+                overlay_spectrogram = overlay_spectrogram.trim(start_time,start_time+audio_length)
                 
             # create an image and add blur
-            overlay_image = Image.fromarray(overlay_spectrogram.spectrogram)
+            overlay_image = Image.fromarray(overlay_spectrogram.spectrogram.astype(np.uint8),mode='L')
             blur_r = np.random.randint(0, 8) / 10
-            overlay_image = overlay.filter(ImageFilter.GaussianBlur(radius=blur_r))
+            overlay_image = overlay_image.filter(ImageFilter.GaussianBlur(radius=blur_r))
 
-            # use a weighted sum to overlay the images
-            overlap_weight = random.randint(5, 10) / 10
-            
-            image = image * (1-overlap_weight) + overlay_image * overlap_weight
+            # use a weighted sum to overlay (blend) the images
+            overlay_weight = np.random.randint(2, 5) / 10 #<0.5 means more emphasis on original image
+            image = Image.blend(image,overlay_image,overlay_weight)
 
+        image = image.convert("RGB")
+
+                
         if self.debug:
             image.save(f"{self.debug}/{audio_p.stem}.png")
 
