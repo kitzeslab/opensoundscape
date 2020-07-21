@@ -94,7 +94,7 @@ To use OpenSoundscape within JupyterLab, you will have to make an `ipykernel`
 for the OpenSoundscape virtual environment.
 
 - Activate poetry virtual environment, e.g.: `workon opensoundscape-dxMTH98s-py3.6`
-    - Use `poetry list` if you're not sure what the name of the environment is
+    - Use `poetry env list` if you're not sure what the name of the environment is
 - Create ipython kernel: `python -m ipykernel install --user --name=[name of poetry environment] --display-name=OpenSoundscape`
 - Now when you make a new document on JupyterLab, you should see a Python kernel available called OpenSoundscape.
 - Contributors: if you include Jupyter's `autoreload`, any changes you make to the source code
