@@ -3,6 +3,7 @@
 """
 
 from docopt import docopt
+from pathlib import Path
 import subprocess
 import torch
 import torch.nn as nn
