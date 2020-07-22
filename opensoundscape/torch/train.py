@@ -82,12 +82,6 @@ def train(
             y.to(device)
             targets = y.squeeze(1)
 
-            if tensor_augment:
-                X = augment.time_warp(X.clone(), W=10)
-                X = augment.time_mask(X, T=50, max_masks=5)
-                X = augment.freq_mask(X, F=50, max_masks=5)
-                X = torch.cat([X] * 3, dim=1)
-
             outputs = model(X)
             loss = loss_fn(outputs, targets)
             optimizer.zero_grad()
@@ -107,9 +101,6 @@ def train(
                 X.to(device)
                 y.to(device)
                 targets = y.squeeze(1)
-
-                if tensor_augment:
-                    X = torch.cat([X.clone()] * 3, dim=1)
 
                 outputs = model(X)
                 predictions = outputs.clone().detach().argmax(dim=1)

@@ -12,6 +12,7 @@ from PIL import Image, ImageFilter
 
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
+import opensoundscape.torch.tensor_augment as augment
 
 
 def get_md5_digest(input_string):
@@ -192,7 +193,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         width: Width for resulting Tensor [default: 224]
         add_noise: Apply RandomAffine and ColorJitter filters [default: False]
         debug: Save images to a directory [default: None]
-        spec_augment: If True, prepare audio for spec_augment procedure [default: False]
+        tensor_augment: If True, prepare audio for tensor_augment procedure [default: False]
         random_trim_length: Extract a clip of this many seconds of audio starting at a random time
             If None, the original clip will be used [default: None]
         overlay_prob: Probability of an image from a different class being overlayed (combined as a weighted sum)
@@ -200,7 +201,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
     Output:
         Dictionary:
-            { "X": (1, H, W) if spec_augment else (3, H, W)
+            { "X": (1, H, W) if tensor_augment else (3, H, W)
             , "y": (1) if label_column != None
             }
     """
@@ -214,7 +215,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         width=224,
         add_noise=False,
         debug=None,
-        spec_augment=False,
+        tensor_augment=False,
         random_trim_length=None,
         overlay_prob = 0
     ):
@@ -224,24 +225,23 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         self.height = height
         self.width = width
         self.debug = debug
-        self.spec_augment = spec_augment
+        self.tensor_augment = tensor_augment
         self.random_trim_length = random_trim_length
         self.overlay_prob = overlay_prob
         self.transform = self.set_transform(add_noise = add_noise)
+
 
     def set_transform(self, add_noise):
         transform_list = [transforms.Resize((self.height, self.width))]
         if add_noise:
                 transform_list.extend(
                     [
-                        transforms.Resize(),
                         transforms.RandomAffine(
                             degrees=0, translate=(0.2, 0.03), fillcolor=50
                         ),
                         transforms.ColorJitter(
                             brightness=0.3, contrast=0.3, saturation=0.3, hue=0
                         ),
-                        transforms.ToTensor(),
                     ]
                 )
 
@@ -253,56 +253,56 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, item_idx):
         row = self.df.iloc[item_idx]
-
-        file_p = Path(row[self.filename_column])
-        audio = Audio.from_file(file_p)
+        audio_p = Path(row[self.filename_column])
+        audio = Audio.from_file(audio_p)
 
         # trim audio to desired length if needed
         # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
         audio_length = len(audio.samples)/audio.sample_rate
+
         if self.random_trim_length is not None:
             if self.random_trim_length > audio_length:
                 raise ValueError(f'the length of the original file ({audio_length} sec) was less than the length to extract ({self.random_trim_length} sec) for the file {audio_p}')
             extra_time = audio_length - self.random_trim_length
             start_time = np.random.uniform()*extra_time
             audio = audio.trim(start_time,start_time+self.random_trim_length)
+            audio_length = self.random_trim_length
 
         spectrogram = Spectrogram.from_audio(audio)
         spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
-
-
-
         image = Image.fromarray(spectrogram.spectrogram.astype(np.uint8),mode='L')
-
+        image = image.resize((self.height, self.width))
         #add a blended/overlayed image from another class directly on top
         if self.overlay_prob > np.random.uniform():
-
             # select a random training file from a different class and create spectrogram
             this_class = row[self.label_column]
             other_classes_df = self.df[self.df[self.label_column]!=this_class]
             file_path = np.random.choice(other_classes_df[self.filename_column].values)
             overlay_audio = Audio.from_file(file_path)
-            overlay_spectrogram = Spectrogram.from_audio(overlay_audio)
-            overlay_spectrogram = overlay_spectrogram.linear_scale(feature_range=(0, 255))
 
             # trim to same length as main clip
+
             overlay_audio_length = len(overlay_audio.samples)/overlay_audio.sample_rate
             if overlay_audio_length < audio_length:
                 raise ValueError(f'the length of the overlay file ({overlay_audio_length} sec) was less than the length of the file {file_path} ({audio_length} sec)')
             elif overlay_audio_length > audio_length:
-                extra_time = audio_length - overlay_audio_length
+                extra_time = overlay_audio_length - audio_length
                 start_time = np.random.uniform()*extra_time
-                overlay_spectrogram = overlay_spectrogram.trim(start_time,start_time+audio_length)
+                overlay_audio = overlay_audio.trim(start_time,start_time+self.random_trim_length)
+                #overlay_spectrogram = overlay_spectrogram.trim(start_time,start_time+audio_length)
+
+            overlay_spectrogram = Spectrogram.from_audio(overlay_audio)
+            overlay_spectrogram = overlay_spectrogram.linear_scale(feature_range=(0, 255))
 
             # create an image and add blur
             overlay_image = Image.fromarray(overlay_spectrogram.spectrogram.astype(np.uint8),mode='L')
+            overlay_image = overlay_image.resize((self.height, self.width))
             blur_r = np.random.randint(0, 8) / 10
             overlay_image = overlay_image.filter(ImageFilter.GaussianBlur(radius=blur_r))
 
             # use a weighted sum to overlay (blend) the images
             overlay_weight = np.random.randint(2, 5) / 10 #<0.5 means more emphasis on original image
             image = Image.blend(image,overlay_image,overlay_weight)
-
         image = image.convert("RGB")
 
 
@@ -312,8 +312,16 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # apply desired random transformations to image and convert to tensor
         X = self.transform(image)
 
-        if self.spec_augment:
+        # apply tensor-based augmentation
+        if self.tensor_augment:
             X = X[0].unsqueeze(0)
+            #X = torch.cat([X] * 3, dim=1)
+            X = augment.time_warp(X.clone(), W=10)
+            X = augment.time_mask(X, T=50, max_masks=5)
+            X = augment.freq_mask(X, F=50, max_masks=5)
+            X = torch.cat([X] * 3, dim=1)
+            #X = X[0].unsqueeze(0)
+
 
         if self.label_column:
             labels = np.array([row[self.label_column]])
