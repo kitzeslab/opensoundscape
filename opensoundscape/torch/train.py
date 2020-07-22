@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from opensoundscape.datasets import SingleTargetAudioDataset
 from opensoundscape.metrics import Metrics
-import opensoundscape.torch.spec_augment as augment
+import opensoundscape.torch.tensor_augment as tensaug
 
 
 def train(
@@ -17,7 +17,7 @@ def train(
     batch_size=1,
     num_workers=0,
     log_every=5,
-    spec_augment=False,
+    tensor_augment=False,
     debug=False,
     label_dict=None,
 ):
@@ -37,7 +37,7 @@ def train(
         batch_size:     The size of the batches [default: 1]
         num_workers:    The number of cores to use for batch preparation [default: 1]
         log_every:      Log statistics when epoch % log_every == 0 [default: 5]
-        spec_augment:   Whether or not to use the spec_augment procedure [default: False]
+        tensor_augment: Whether or not to use the tensor augment procedures [default: False]
         debug:          Whether or not to write intermediate images [default: False]
 
 
@@ -79,13 +79,13 @@ def train(
             y.to(device)
             targets = y.squeeze(1)
 
-            if spec_augment:
                 # X is currently shape [1, 3, width, height]
                 # Take to shape [1, 1, width, height] for use with `augment`
                 X = X[0][0].unsqueeze(0).unsqueeze(0)
-                X = augment.time_warp(X.clone(), W=10)
-                X = augment.time_mask(X, T=50, max_masks=5)
-                X = augment.freq_mask(X, F=50, max_masks=5)
+            if tensor_augment:
+                X = tensaug.time_warp(X.clone(), W=10)
+                X = tensaug.time_mask(X, T=50, max_masks=5)
+                X = tensaug.freq_mask(X, F=50, max_masks=5)
 
                 # Take from 1 dimension to 3 dimensions
                 X = torch.cat([X] * 3, dim=1)
