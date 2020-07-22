@@ -57,7 +57,7 @@ def one_min_audio_list():
 
 
 @pytest.fixture()
-def binary_from_audio_df():
+def single_target_audio_dataset_df():
     return pd.read_csv("tests/input.csv")
 
 
@@ -120,17 +120,17 @@ def test_basic_splitting_operation_with_include_last_segment(
     assert split1.exists()
 
 
-def test_binary_from_audio_default(binary_from_audio_df):
+def test_single_target_audio_dataset_default(single_target_audio_dataset_df):
     dataset = SingleTargetAudioDataset(
-        binary_from_audio_df, label_column="NumericLabels", height=225, width=226
+        single_target_audio_dataset_df, label_column="NumericLabels", height=225, width=226
     )
     assert dataset[0]["X"].shape == (3, 225, 226)
     assert dataset[0]["y"].shape == (1,)
 
 
-def test_binary_from_audio_tensor_augment(binary_from_audio_df):
+def test_single_target_audio_dataset_tensor_augment(single_target_audio_dataset_df):
     dataset = SingleTargetAudioDataset(
-        binary_from_audio_df,
+        single_target_audio_dataset_df,
         label_column="NumericLabels",
         height=225,
         width=226,
@@ -140,8 +140,8 @@ def test_binary_from_audio_tensor_augment(binary_from_audio_df):
     assert dataset[0]["y"].shape == (1,)
 
 
-def test_binary_from_audio_to_image(binary_from_audio_df):
-    dataset = SingleTargetAudioDataset(binary_from_audio_df)
+def test_single_target_audio_dataset_to_image(single_target_audio_dataset_df):
+    dataset = SingleTargetAudioDataset(single_target_audio_dataset_df)
 
     pixels = dataset[0]["X"].numpy()
 
