@@ -72,11 +72,12 @@ def train(
 
     stats = []
     for epoch in range(epochs):
+        print(f"Epoch: {epoch}")
         train_metrics = Metrics(model.fc.in_features)
         model.train()
 
         # Perform training
-        for t in train_loader:
+        for idx, t in enumerate(train_loader):
             X, y = t["X"], t["y"]
             X.to(device)
             y.to(device)
@@ -114,6 +115,20 @@ def train(
                 len(valid_loader)
             )
 
+            results_dict = {
+                "train_loss": t_loss,
+                "train_accuracy": t_acc,
+                "train_precision": t_prec,
+                "train_recall": t_rec,
+                "train_f1": t_f1,
+                "valid_accuracy": v_acc,
+                "valid_precision": v_prec,
+                "valid_recall": v_rec,
+                "valid_f1": v_f1,
+            }
+            for key, val in results_dict.items():
+                print(key, val)
+
             if save_dir is not None:
                 torch.save(
                     {
@@ -131,5 +146,6 @@ def train(
                     },
                     f"{save_dir}/epoch-{epoch}.tar",
                 )
+        print()
 
     return

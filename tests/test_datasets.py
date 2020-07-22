@@ -136,6 +136,7 @@ def test_single_target_audio_dataset_tensor_augment(single_target_audio_dataset_
         width=226,
         tensor_augment=True,
     )
+    print(dataset[0]['X'].shape)
     assert dataset[0]["X"].shape == (1, 225, 226)
     assert dataset[0]["y"].shape == (1,)
 
