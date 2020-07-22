@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from opensoundscape.datasets import SingleTargetAudioDataset
 from opensoundscape.metrics import Metrics
-import opensoundscape.torch.tensor_augment as augment
+import opensoundscape.torch.spec_augment as augment
 
 
 def train(
@@ -17,8 +17,9 @@ def train(
     batch_size=1,
     num_workers=0,
     log_every=5,
-    tensor_augment=False,
+    spec_augment=False,
     debug=False,
+    label_dict=None,
 ):
     """ Train a model
 
@@ -27,15 +28,16 @@ def train(
                         - if None, weights are not saved
         model:          A binary torch model, e.g. torchvision.models.resnet18(pretrained=True)
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
-        train_dataset:  The training dataset, e.g. created by opensoundscapes.datasets.SingleTargetAudioDataset
-        valid_dataset:  The validation dataset, e.g. created by opensoundscapes.datasets.SingleTargetAudioDataset
+        train_dataset:  The training Dataset, e.g. created by SingleTargetAudioDataset()
+        valid_dataset:  The validation Dataset, e.g. created by SingleTargetAudioDataset()
+        label_dict:     Dict for translating numeric labels to class labels
         optimize:       A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
         loss_fn:        A torch loss function, e.g. torch.nn.CrossEntropyLoss()
         epochs:         The number of epochs [default: 25]
         batch_size:     The size of the batches [default: 1]
         num_workers:    The number of cores to use for batch preparation [default: 1]
         log_every:      Log statistics when epoch % log_every == 0 [default: 5]
-        tensor_augment:   Whether or not to use the tensor_augment procedure [default: False]
+        spec_augment:   Whether or not to use the spec_augment procedure [default: False]
         debug:          Whether or not to write intermediate images [default: False]
 
 
@@ -57,8 +59,6 @@ def train(
     else:
         device = torch.device("cpu")
 
-    # train_dataset = SingleTargetAudioDataset(train_df, tensor_augment=tensor_augment, debug=debug, label_column = "NumericLabels")
-    # valid_dataset = SingleTargetAudioDataset(valid_df, tensor_augment=tensor_augment, debug=debug, label_column = "NumericLabels")
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
@@ -72,16 +72,24 @@ def train(
 
     stats = []
     for epoch in range(epochs):
-        print(f"Epoch: {epoch}")
-        train_metrics = Metrics(model.fc.in_features)
+        train_metrics = Metrics(model.fc.out_features)
         model.train()
-
-        # Perform training
-        for idx, t in enumerate(train_loader):
+        for t in train_loader:
             X, y = t["X"], t["y"]
             X.to(device)
             y.to(device)
             targets = y.squeeze(1)
+
+            if spec_augment:
+                # X is currently shape [1, 3, width, height]
+                # Take to shape [1, 1, width, height] for use with `augment`
+                X = X[0][0].unsqueeze(0).unsqueeze(0)
+                X = augment.time_warp(X.clone(), W=10)
+                X = augment.time_mask(X, T=50, max_masks=5)
+                X = augment.freq_mask(X, F=50, max_masks=5)
+
+                # Take from 1 dimension to 3 dimensions
+                X = torch.cat([X] * 3, dim=1)
 
             outputs = model(X)
             loss = loss_fn(outputs, targets)
@@ -93,8 +101,7 @@ def train(
             predictions = outputs.clone().detach().argmax(dim=1)
             train_metrics.update_metrics(targets, predictions)
 
-        # Perform evaluation on validation set
-        valid_metrics = Metrics(model.fc.in_features)
+        valid_metrics = Metrics(model.fc.out_features)
         model.eval()
         with torch.no_grad():
             for t in valid_loader:
@@ -115,25 +122,12 @@ def train(
                 len(valid_loader)
             )
 
-            results_dict = {
-                "train_loss": t_loss,
-                "train_accuracy": t_acc,
-                "train_precision": t_prec,
-                "train_recall": t_rec,
-                "train_f1": t_f1,
-                "valid_accuracy": v_acc,
-                "valid_precision": v_prec,
-                "valid_recall": v_rec,
-                "valid_f1": v_f1,
-            }
-            for key, val in results_dict.items():
-                print(key, val)
-
             if save_dir is not None:
                 torch.save(
                     {
                         "model_state_dict": model.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
+                        "label_dict":label_dict,
                         "train_loss": t_loss,
                         "train_accuracy": t_acc,
                         "train_precision": t_prec,
@@ -146,6 +140,5 @@ def train(
                     },
                     f"{save_dir}/epoch-{epoch}.tar",
                 )
-        print()
 
     return

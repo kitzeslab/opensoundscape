@@ -9,16 +9,11 @@ import torch
 
 
 def time_warp(spec, W=5):
+
     batch_size = spec.shape[0]
     num_channel = spec.shape[1]
     num_rows = spec.shape[2]
-    try:
-        spec_len = spec.shape[3]
-    except IndexError:
-        print(f"IndexError for spectrogram of shape {spec.shape}")
-        exit()
-    else:
-        print(f"This spec worked fine with shape {spec.shape}")
+    spec_len = spec.shape[3]
     device = spec.device
 
     if num_channel != 1:
