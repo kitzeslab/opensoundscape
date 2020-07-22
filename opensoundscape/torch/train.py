@@ -79,10 +79,10 @@ def train(
             y.to(device)
             targets = y.squeeze(1)
 
-                # X is currently shape [1, 3, width, height]
-                # Take to shape [1, 1, width, height] for use with `augment`
-                X = X[0][0].unsqueeze(0).unsqueeze(0)
             if tensor_augment:
+                # X is currently shape [batch_size, 3, width, height]
+                # Take to shape [batch_size, 1, width, height] for use with `augment`
+                X = X[:,0].unsqueeze(1)
                 X = tensaug.time_warp(X.clone(), W=10)
                 X = tensaug.time_mask(X, T=50, max_masks=5)
                 X = tensaug.freq_mask(X, F=50, max_masks=5)
