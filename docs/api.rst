@@ -118,7 +118,7 @@ Taxa
 Torch Spectrogram Augmentation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. automodule:: opensoundscape.torch.tensor_augment
+.. automodule:: opensoundscape.torch.spec_augment
    :members:
 
 Torch Training
