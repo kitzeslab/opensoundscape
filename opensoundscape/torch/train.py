@@ -59,7 +59,6 @@ def train(
     else:
         device = torch.device("cpu")
 
-
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
     )
@@ -127,7 +126,7 @@ def train(
                     {
                         "model_state_dict": model.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
-                        "label_dict":label_dict,
+                        "label_dict": label_dict,
                         "train_loss": t_loss,
                         "train_accuracy": t_acc,
                         "train_precision": t_prec,
