@@ -72,7 +72,7 @@ def train(
 
     stats = []
     for epoch in range(epochs):
-        train_metrics = Metrics(model.fc.in_features)
+        train_metrics = Metrics(model.fc.out_features)
         model.train()
         for t in train_loader:
             X, y = t["X"], t["y"]
@@ -96,7 +96,7 @@ def train(
             predictions = outputs.clone().detach().argmax(dim=1)
             train_metrics.update_metrics(targets, predictions)
 
-        valid_metrics = Metrics(model.fc.in_features)
+        valid_metrics = Metrics(model.fc.out_features)
         model.eval()
         with torch.no_grad():
             for t in valid_loader:
