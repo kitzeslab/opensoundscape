@@ -194,7 +194,6 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         width: Width for resulting Tensor [default: 224]
         add_noise: Apply RandomAffine and ColorJitter filters [default: False]
         debug: Save images to a directory [default: None]
-        spec_augment: If True, prepare audio for spec_augment procedure [default: False]
         random_trim_length: Extract a clip of this many seconds of audio starting at a random time
             If None, the original clip will be used [default: None]
         overlay_prob: Probability of an image from a different class being overlayed (combined as a weighted sum)
@@ -202,7 +201,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
     Output:
         Dictionary:
-            { "X": (1, H, W) if spec_augment else (3, H, W)
+            { "X": (3, H, W)
             , "y": (1) if label_column != None
             }
     """
@@ -217,7 +216,6 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         width=224,
         add_noise=False,
         debug=None,
-        spec_augment=False,
         random_trim_length=None,
         overlay_prob=0,
         overlay_weight="random",
@@ -229,7 +227,6 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         self.height = height
         self.width = width
         self.debug = debug
-        self.spec_augment = spec_augment
         self.random_trim_length = random_trim_length
         self.overlay_prob = overlay_prob
         if (overlay_weight != "random") and (not 0 < overlay_weight < 1):
