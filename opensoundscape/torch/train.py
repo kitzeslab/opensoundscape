@@ -57,8 +57,12 @@ def train(
     else:
         device = torch.device("cpu")
 
-    train_dataset = BinaryFromAudio(train_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
-    valid_dataset = BinaryFromAudio(valid_df, spec_augment=spec_augment, debug=debug, label_column = "NumericLabels")
+    train_dataset = BinaryFromAudio(
+        train_df, spec_augment=spec_augment, debug=debug, label_column="NumericLabels"
+    )
+    valid_dataset = BinaryFromAudio(
+        valid_df, spec_augment=spec_augment, debug=debug, label_column="NumericLabels"
+    )
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
@@ -72,7 +76,7 @@ def train(
 
     stats = []
     for epoch in range(epochs):
-        train_metrics = Metrics(model.fc.in_features)
+        train_metrics = Metrics(model.fc.out_features)
         model.train()
         for t in train_loader:
             X, y = t["X"], t["y"]
@@ -96,7 +100,7 @@ def train(
             predictions = outputs.clone().detach().argmax(dim=1)
             train_metrics.update_metrics(targets, predictions)
 
-        valid_metrics = Metrics(model.fc.in_features)
+        valid_metrics = Metrics(model.fc.out_features)
         model.eval()
         with torch.no_grad():
             for t in valid_loader:
@@ -119,7 +123,7 @@ def train(
             _, v_acc, v_prec, v_rec, v_f1 = valid_metrics.compute_metrics(
                 len(valid_loader)
             )
-            
+
             if save_dir is not None:
                 torch.save(
                     {
