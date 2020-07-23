@@ -20,6 +20,7 @@ def train(
     tensor_augment=False,
     debug=False,
     label_dict=None,
+    print_logging=True,
 ):
     """ Train a model
 
@@ -71,6 +72,9 @@ def train(
 
     stats = []
     for epoch in range(epochs):
+        if print_logging:
+            print(f"Epoch {epoch}")
+            print("  Training.")
         train_metrics = Metrics(model.fc.out_features)
         model.train()
         for t in train_loader:
@@ -100,6 +104,8 @@ def train(
             predictions = outputs.clone().detach().argmax(dim=1)
             train_metrics.update_metrics(targets, predictions)
 
+        if print_logging:
+            print("  Validating.")
         valid_metrics = Metrics(model.fc.out_features)
         model.eval()
         with torch.no_grad():
@@ -121,7 +127,24 @@ def train(
                 len(valid_loader)
             )
 
+            metrics_for_epoch = {
+                "train_loss": t_loss,
+                "train_accuracy": t_acc,
+                "train_precision": t_prec,
+                "train_recall": t_rec,
+                "train_f1": t_f1,
+                "valid_accuracy": v_acc,
+                "valid_precision": v_prec,
+                "valid_recall": v_rec,
+                "valid_f1": v_f1,
+            }
+            if print_logging:
+                print("  Validation results:")
+                for metric, result in metrics_for_epoch.items():
+                    print(f"    {metric}: {result}")
+
             if save_dir is not None:
+                epoch_filename = f"{save_dir}/epoch-{epoch}.tar"
                 torch.save(
                     {
                         "model_state_dict": model.state_dict(),
@@ -137,7 +160,10 @@ def train(
                         "valid_recall": v_rec,
                         "valid_f1": v_f1,
                     },
-                    f"{save_dir}/epoch-{epoch}.tar",
+                    epoch_filename,
                 )
 
+                if print_logging:
+                    print(f"  Saved results to {epoch_filename}.")
+    print("Training complete.")
     return
