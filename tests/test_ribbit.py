@@ -40,6 +40,7 @@ def test_calculate_pulse_score_zero_len_input():
             nfft=1024,
         )
 
+
 def test_ribbit():
     path = "./tests/silence_10s.mp3"
     audio = Audio.from_file(path, sample_rate=22050)
