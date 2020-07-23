@@ -105,7 +105,7 @@ def entrypoint():
             input_p.rglob("**/*.MP3"),
         )
 
-        dataset = datasets.Splitter(
+        dataset = datasets.SplitterDataset(
             wavs,
             annotations=config["raven"]["annotations"],
             label_corrections=config["raven"]["label_corrections"],
@@ -119,7 +119,7 @@ def entrypoint():
             batch_size=config["runtime"]["batch_size"],
             shuffle=False,
             num_workers=config["runtime"]["cores_per_node"],
-            collate_fn=datasets.Splitter.collate_fn,
+            collate_fn=datasets.SplitterDataset.collate_fn,
         )
 
         with open(args["--segments"], "w") as f:
@@ -146,7 +146,7 @@ def entrypoint():
         )
 
         with TemporaryDirectory() as segments_dir:
-            dataset = datasets.Splitter(
+            dataset = datasets.SplitterDataset(
                 wavs,
                 overlap=config["audio"]["overlap"],
                 duration=config["audio"]["duration"],
@@ -158,7 +158,7 @@ def entrypoint():
                 batch_size=config["runtime"]["batch_size"],
                 shuffle=False,
                 num_workers=config["runtime"]["cores_per_node"],
-                collate_fn=datasets.Splitter.collate_fn,
+                collate_fn=datasets.SplitterDataset.collate_fn,
             )
 
             segments_csv = f"{segments_dir}/segments.csv"
@@ -169,7 +169,7 @@ def entrypoint():
                         f.write(f"{output}\n")
 
             input_df = pd.read_csv(segments_csv)
-            dataset = datasets.BinaryFromAudio(input_df)
+            dataset = datasets.SingleTargetAudioDataset(input_df)
 
             dataloader = DataLoader(
                 dataset,
