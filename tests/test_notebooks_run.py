@@ -6,12 +6,12 @@ from pathlib import Path
 # This passes on OS but doesn't pass on CI
 # @pytest.fixture
 # def train_model_example_notebook(request):
-#     base = Path("notebooks/train_model_example.ipynb")
-#     nbconv = Path("notebooks/train_model_example.nbconvert.ipynb")
+#     base = Path("tests/notebooks/train_model_example.ipynb")
+#     nbconv = Path("tests/notebooks/train_model_example.nbconvert.ipynb")
 #
 #     def fin():
 #         # Delete downloaded wavs and directory
-#         wav_path = Path("notebooks/woodcock_labeled_data/")
+#         wav_path = Path("tests/notebooks/woodcock_labeled_data/")
 #         labels = wav_path.joinpath("woodcock_labels.csv")
 #         labels.unlink()
 #         wavs = wav_path.rglob("*.wav")
@@ -20,7 +20,7 @@ from pathlib import Path
 #         wav_path.rmdir()
 #
 #         # Delete saved results and directory
-#         result_path = Path("notebooks/model_train_results/")
+#         result_path = Path("tests/notebooks/model_train_results/")
 #         results = result_path.rglob("*")
 #         for result in results:
 #             result.unlink()
@@ -35,8 +35,8 @@ from pathlib import Path
 
 @pytest.fixture
 def ribbit_demo_notebook(request):
-    base = Path("notebooks/RIBBIT_pulse_rate_demo.ipynb")
-    nbconv = Path("notebooks/RIBBIT_pulse_rate_demo.nbconvert.ipynb")
+    base = Path("tests/notebooks/RIBBIT_pulse_rate_demo.ipynb")
+    nbconv = Path("tests/notebooks/RIBBIT_pulse_rate_demo.nbconvert.ipynb")
 
     def fin():
         nbconv.unlink()
@@ -47,10 +47,10 @@ def ribbit_demo_notebook(request):
 
 @pytest.fixture
 def spectrogram_example_notebook(request):
-    base = Path("notebooks/spectrogram_example.ipynb")
-    nbconv = Path("notebooks/spectrogram_example.nbconvert.ipynb")
-    picture_one = Path("notebooks/saved_spectrogram.png")
-    picture_two = Path("notebooks/saved_spectrogram_2.png")
+    base = Path("tests/notebooks/spectrogram_example.ipynb")
+    nbconv = Path("tests/notebooks/spectrogram_example.nbconvert.ipynb")
+    picture_one = Path("tests/notebooks/saved_spectrogram.png")
+    picture_two = Path("tests/notebooks/saved_spectrogram_2.png")
 
     def fin():
         nbconv.unlink()
