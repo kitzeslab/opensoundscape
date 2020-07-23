@@ -12,7 +12,10 @@ OpenSoundscape
    :maxdepth: 2
    :caption: Jupyter Notebooks
 
-   notebooks
+   notebooks/model_prediction_example.ipynb
+   notebooks/pulse_finder_demo.ipynb
+   notebooks/model_train_example.ipynb
+   notebooks/spectrogram_example.ipynb
 
 .. toctree::
    :maxdepth: 2
