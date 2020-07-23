@@ -64,7 +64,7 @@ def calculate_pulse_score(
             from matplotlib import pyplot as plt
             from time import time
 
-            #print(f"peak freq: {'{:.4f}'.format(f[np.argmax(psd)])}")
+            # print(f"peak freq: {'{:.4f}'.format(f[np.argmax(psd)])}")
             plt.plot(f, psd)
             plt.plot([pulse_rate_range[0], pulse_rate_range[0]], [0, max_psd])
             plt.plot([pulse_rate_range[1], pulse_rate_range[1]], [0, max_psd])
@@ -77,12 +77,7 @@ def calculate_pulse_score(
 
 
 def ribbit(
-    spectrogram,
-    signal_band,
-    pulse_rate_range,
-    window_len,
-    noise_bands=None,
-    plot=False,
+    spectrogram, signal_band, pulse_rate_range, window_len, noise_bands=None, plot=False
 ):
     """Run RIBBIT detector to search for periodic calls in audio
     
@@ -174,6 +169,7 @@ def ribbit(
         )  # end sample was excluded so use it as first sample in next window
 
     return pulse_scores, window_start_times
+
 
 def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False):
     """ perform windowed pulse finding (ribbit) on one file for each species in a set
