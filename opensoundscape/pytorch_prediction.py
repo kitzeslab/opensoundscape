@@ -1,3 +1,10 @@
+"""DEPRECATED: use opensoundscape.torch.predict instead
+
+these functions are currently used only to support `localization.py`
+the module contains a pytorch prediction function (deprecated) and some additional functionality for using gradcam
+"""
+
+
 import pandas as pd
 import numpy as np
 
