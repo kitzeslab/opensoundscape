@@ -66,6 +66,7 @@ def check_return_code_from_notebook(notebook):
         f"jupyter nbconvert --to notebook --execute {notebook}"
     )
 
+
 # # This passes on OS but doesn't pass on CI
 # def test_run_train_model_demo(train_model_example_notebook):
 #     assert check_return_code_from_notebook(train_model_example_notebook) == 0
