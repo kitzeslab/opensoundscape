@@ -103,9 +103,7 @@ class Spectrogram:
         return new_obj
 
     @classmethod
-    def from_file(
-        file,
-    ):
+    def from_file(file,):
         """
         create a Spectrogram object from a file
 
@@ -116,8 +114,9 @@ class Spectrogram:
             opensoundscape.spectrogram.Spectrogram object
         """
 
-        raise NotImplementedError("Loading Spectrograms from images is not implemented yet")
-
+        raise NotImplementedError(
+            "Loading Spectrograms from images is not implemented yet"
+        )
 
     def __setattr__(self, name, value):
         raise AttributeError("Spectrogram's cannot be modified")

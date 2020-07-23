@@ -26,7 +26,9 @@ def expand_multi_labeled(input_df):
     return df.explode("Labels").reset_index(drop=True)
 
 
-def binary_train_valid_split(input_df, label, label_column = "Labels", train_size=0.8, random_state=101):
+def binary_train_valid_split(
+    input_df, label, label_column="Labels", train_size=0.8, random_state=101
+):
     """ Split a dataset into train and validation dataframes
 
     Given a Dataframe and a label in column "Labels" (singly labeled) generate

@@ -292,7 +292,9 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         spectrogram = Spectrogram.from_audio(audio)
         return spectrogram.to_image(shape=(self.width, self.height), mode=mode)
 
-    def overlay_random_image(self, original_image, original_length, original_class, original_path):
+    def overlay_random_image(
+        self, original_image, original_length, original_class, original_path
+    ):
         """ Overlay an image from another class
 
         Select a random file from a different class. Trim if necessary to the
@@ -311,8 +313,10 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
                 f"the length of the overlay file ({overlay_audio_length} sec) was less than the length of the file {original_path} ({original_length} sec)"
             )
         elif overlay_audio_length > original_length:
-            overlay_audio = self.random_audio_trim(overlay_audio, original_length, overlay_path)
-        overlay_image = self.image_from_audio(overlay_audio, mode='L')
+            overlay_audio = self.random_audio_trim(
+                overlay_audio, original_length, overlay_path
+            )
+        overlay_image = self.image_from_audio(overlay_audio, mode="L")
 
         # create an image and add blur
         blur_r = np.random.randint(0, 8) / 10
@@ -345,7 +349,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         if self.random_trim_length is not None:
             audio = self.random_audio_trim(audio, audio_length, audio_path)
             audio_length = self.random_trim_length
-        image = self.image_from_audio(audio, mode='L')
+        image = self.image_from_audio(audio, mode="L")
 
         # add a blended/overlayed image from another class directly on top
         for _ in range(self.max_overlay_num):
@@ -363,7 +367,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             image.save(f"{self.debug}/{audio_path.stem}_{time()}.png")
 
         # apply desired random transformations to image and convert to tensor
-        image = image.convert('RGB')
+        image = image.convert("RGB")
         X = self.transform(image)
 
         # Return data : label pairs (training/validation)
