@@ -34,9 +34,9 @@ from pathlib import Path
 
 
 @pytest.fixture
-def pulse_finder_demo_notebook(request):
-    base = Path("notebooks/pulse_finder_demo.ipynb")
-    nbconv = Path("notebooks/pulse_finder_demo.nbconvert.ipynb")
+def ribbit_demo_notebook(request):
+    base = Path("notebooks/RIBBIT_pulse_rate_demo.ipynb")
+    nbconv = Path("notebooks/RIBBIT_pulse_rate_demo.nbconvert.ipynb")
 
     def fin():
         nbconv.unlink()
@@ -72,8 +72,8 @@ def check_return_code_from_notebook(notebook):
 #     assert check_return_code_from_notebook(train_model_example_notebook) == 0
 
 
-def test_run_pulse_finder_demo(pulse_finder_demo_notebook):
-    assert check_return_code_from_notebook(pulse_finder_demo_notebook) == 0
+# def test_run_ribbit_demo(ribbit_demo_notebook):
+#     assert check_return_code_from_notebook(ribbit_demo_notebook) == 0
 
 
 def test_run_spectrogram_example(spectrogram_example_notebook):
