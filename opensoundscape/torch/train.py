@@ -12,7 +12,6 @@ def train(
     model,
     train_dataset,
     valid_dataset,
-    labels_list,
     optimizer,
     loss_fn,
     epochs=25,
@@ -21,7 +20,6 @@ def train(
     log_every=5,
     tensor_augment=False,
     debug=False,
-    label_dict=None,
     print_logging=True,
 ):
     """ Train a model
@@ -33,10 +31,6 @@ def train(
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
         train_dataset:  The training Dataset, e.g. created by SingleTargetAudioDataset()
         valid_dataset:  The validation Dataset, e.g. created by SingleTargetAudioDataset()
-        labels_list:    A list of lists pairing human-interpretable labels with the numeric labels required by Pytorch
-                        - e.g. [['species0', 0], ['species1', 1]]
-                        - can be created from a dataframe by selecting relevant columns then using:
-                          my_labels.reset_index(drop=True).values.tolist()
         optimize:       A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
         loss_fn:        A torch loss function, e.g. torch.nn.CrossEntropyLoss()
         epochs:         The number of epochs [default: 25]
@@ -56,13 +50,17 @@ def train(
 
     Output:
         None
+        
+    Effects:
+        train_dataset.label_dict is saved with the model using yaml
+        
     """
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
 
-    labels_yaml = yaml.dump(labels_list)
+    labels_yaml = yaml.dump(train_dataset.label_dict)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers

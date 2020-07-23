@@ -5,16 +5,13 @@ import pandas as pd
 from torch.nn.functional import softmax
 import yaml
 
-from opensoundscape.datasets import BinaryFromAudio
-
-
 def predict(
     model,
     prediction_dataset,
     batch_size=1,
     num_workers=0,
     apply_softmax=False,
-    labels_yaml=None,
+    label_dict=None,
 ):
     """ Generate predictions on a dataset from a pytorch model object
 
@@ -22,7 +19,7 @@ def predict(
         model:          A binary torch model, e.g. torchvision.models.resnet18(pretrained=True)
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
         prediction_dataset: 
-                        a pytorch dataset object that returns tensors, such as datasets.PredictionDataset()                
+                        a pytorch dataset object that returns tensors, such as datasets.SingleTargetAudioDataset()                
         batch_size:     The size of the batches (# files) [default: 1]
         num_workers:    The number of cores to use for batch preparation [default: 0]
                         - if 0, it uses the current process rather than creating a new one
@@ -33,6 +30,9 @@ def predict(
 
     Output:
         A dataframe with the CNN prediction results for each class and each file
+        
+    Notes:
+        if label_dict is not None, the returned dataframe's columns will be class names instead of numeric labels
     """
 
     if torch.cuda.is_available():
@@ -61,10 +61,10 @@ def predict(
             for x in predictions.detach().numpy():
                 all_predictions.append(list(x))  # .astype('float64')
 
-    img_paths = prediction_dataset.df[prediction_dataset.audio_column].values
+    img_paths = prediction_dataset.df[prediction_dataset.filename_column].values
     pred_df = pd.DataFrame(index=img_paths, data=all_predictions)
 
-    if labels_yaml is not None:
-        pred_df.columns = yaml.load(labels_yaml)
+    if label_dict is not None:
+        pred_df = pred_df.rename(columns = label_dict)
 
     return pred_df

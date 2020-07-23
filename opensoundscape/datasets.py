@@ -214,6 +214,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         overlay_weight: the weight given to the overlaid image during augmentation.
             When 'random', will randomly select a different weight between 0.2 and 0.5 for each overlay
             When not 'random', should be a float between 0 and 1 [default: 'random']
+        label_dict: a dictionary mapping numeric labels to class names, ie {0:'American Robin',1:'Northern Cardinal'} [default: None]
 
     Output:
         Dictionary:
@@ -236,6 +237,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         max_overlay_num=0,
         overlay_prob=0.2,
         overlay_weight="random",
+        label_dict=None,
     ):
         self.df = df
         self.filename_column = filename_column
@@ -253,6 +255,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             )
         self.overlay_weight = overlay_weight
         self.transform = self.set_transform(add_noise=add_noise)
+        self.label_dict = label_dict
 
     def set_transform(self, add_noise):
         # Warning: some transforms only act on first channel
@@ -338,7 +341,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         return self.df.shape[0]
 
     def __getitem__(self, item_idx):
-
+        print(item_idx)
         row = self.df.iloc[item_idx]
         audio_path = Path(row[self.filename_column])
         audio = Audio.from_file(audio_path)
