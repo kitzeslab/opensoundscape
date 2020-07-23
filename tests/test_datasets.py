@@ -131,6 +131,7 @@ def test_basic_splitting_operation_with_include_last_segment(
 def test_single_target_audio_dataset_default(single_target_audio_dataset_df):
     dataset = SingleTargetAudioDataset(
         single_target_audio_dataset_df,
+        label_dict={0: "absent", 1: "present"},
         label_column="NumericLabels",
         height=225,
         width=226,
@@ -140,7 +141,7 @@ def test_single_target_audio_dataset_default(single_target_audio_dataset_df):
 
 
 def test_single_target_audio_dataset_to_image(single_target_audio_dataset_df):
-    dataset = SingleTargetAudioDataset(single_target_audio_dataset_df)
+    dataset = SingleTargetAudioDataset(single_target_audio_dataset_df, label_dict=None)
 
     pixels = dataset[0]["X"].numpy()
 
@@ -152,7 +153,9 @@ def test_single_target_audio_dataset_to_image(single_target_audio_dataset_df):
 def test_single_target_audio_dataset_no_noise(
     single_target_audio_dataset_long_audio_df
 ):
-    dataset = SingleTargetAudioDataset(single_target_audio_dataset_long_audio_df)
+    dataset = SingleTargetAudioDataset(
+        single_target_audio_dataset_long_audio_df, label_dict=None
+    )
     rgb_image = dataset[0]["X"]
     channel_0 = rgb_image[0]
     channel_1 = rgb_image[1]
@@ -165,7 +168,9 @@ def test_single_target_audio_dataset_no_noise(
 def test_single_target_audio_dataset_no_noise(
     single_target_audio_dataset_long_audio_df
 ):
-    dataset = SingleTargetAudioDataset(single_target_audio_dataset_long_audio_df)
+    dataset = SingleTargetAudioDataset(
+        single_target_audio_dataset_long_audio_df, label_dict=None
+    )
     rgb_image = dataset[0]["X"]
     channel_0 = rgb_image[0]
     channel_1 = rgb_image[1]
