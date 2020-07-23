@@ -26,16 +26,19 @@ def expand_multi_labeled(input_df):
     return df.explode("Labels").reset_index(drop=True)
 
 
-def binary_train_valid_split(input_df, label, train_size=0.8, random_state=101):
+def binary_train_valid_split(
+    input_df, label, label_column="Labels", train_size=0.8, random_state=101
+):
     """ Split a dataset into train and validation dataframes
 
     Given a Dataframe and a label in column "Labels" (singly labeled) generate
     a train dataset with ~80% of each label and a valid dataset with the rest.
 
     Args:
-        input_df:       A singly-labeled CSV file with a column "Labels"
-        label:          One of the labels in the column "Labels" to use as a positive
+        input_df:       A singly-labeled CSV file
+        label:          One of the labels in the column label_column to use as a positive
                             label (1), all others are negative (0)
+        label_column:   Name of the column that labels should come from [default: "Labels"]
         train_size:     The decimal fraction to use for the training set [default: 0.8]
         random_state:   The random state to use for train_test_split [default: 101]
 
@@ -44,16 +47,16 @@ def binary_train_valid_split(input_df, label, train_size=0.8, random_state=101):
         valid_df:       A Dataframe containing the validation set
     """
 
-    assert "Labels" in input_df.columns
+    assert label_column in input_df.columns
     df = copy(input_df)
 
-    all_labels = df["Labels"].unique()
-    df["NumericLabels"] = df["Labels"].apply(lambda x: 1 if x == label else 0)
+    all_labels = df[label_column].unique()
+    df["NumericLabels"] = df[label_column].apply(lambda x: 1 if x == label else 0)
 
     train_dfs = [None] * len(all_labels)
     valid_dfs = [None] * len(all_labels)
     for idx, label in enumerate(all_labels):
-        selection = df[df["Labels"] == label]
+        selection = df[df[label_column] == label]
         train, valid = train_test_split(
             selection, train_size=train_size, random_state=random_state
         )
