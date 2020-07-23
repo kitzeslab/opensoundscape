@@ -65,6 +65,6 @@ def predict(
     pred_df = pd.DataFrame(index=img_paths, data=all_predictions)
 
     if labels_yaml is not None:
-        pred_df.rename(columns=yaml.load(labels_yaml))
+        pred_df.columns = yaml.load(labels_yaml)
 
     return pred_df
