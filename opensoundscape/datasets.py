@@ -378,6 +378,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # Return data only (prediction)
         return {"X": X}
 
+
 # class PredictionDataset(torch.utils.data.Dataset):
 #     """ Load a set of audio files in prepreation for prediction with torch.predict()
 
@@ -392,7 +393,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
 #     Output:
 #         Dictionary:
-#             { 
+#             {
 #                 "X": (3, H, W)
 #             }
 #     """

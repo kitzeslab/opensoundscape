@@ -27,9 +27,9 @@ def predict(
         num_workers:    The number of cores to use for batch preparation [default: 0]
                         - if 0, it uses the current process rather than creating a new one
         apply_softmax:  Apply a softmax activation layer to the raw outputs of the model
-        label_names:    Dictionary of numeric labels to names of each class [default: None]
+        label_names:    List of names of each class, with indices corresponding to NumericLabels [default: None]
                         - if None, the dataframe returned will have numeric column names
-                        - if dictionary is valid (1 class name per numeric label), the returned dataframe will have class names as column names
+                        - if list of class names, returned dataframe will have class names as column names
 
     Output:
         A dataframe with the CNN prediction results for each class and each file
