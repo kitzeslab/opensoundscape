@@ -25,14 +25,31 @@ class OpsoLoadAudioInputTooLong(Exception):
 
 
 class Audio:
-    """ Immutable container for audio samples
+    """ Container for audio samples
     """
 
     __slots__ = ("samples", "sample_rate")
 
     def __init__(self, samples, sample_rate):
+        samples_error = None
+        if not isinstance(samples, np.ndarray):
+            samples_error = (
+                "Initializing an Audio object requires samples to be a numpy array"
+            )
         self.samples = samples
-        self.sample_rate = sample_rate
+
+        try:
+            self.sample_rate = int(sample_rate)
+        except ValueError:
+            sample_rate_error = f"Initializing an Audio object requires an integer sample_rate, got `{sample_rate}`"
+            if samples_error:
+                raise ValueError(
+                    f"Audio initialization failed with:\n{samples_error}\n{sample_rate_error}"
+                )
+            raise ValueError(f"Audio initialization failed with:\n{sample_rate_error}")
+
+        if samples_error:
+            raise ValueError(f"Audio initialization failed with:\n{samples_error}")
 
     @classmethod
     def from_file(

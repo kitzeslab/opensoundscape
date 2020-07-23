@@ -163,3 +163,13 @@ def test_save(silence_10s_mp3_str, saved_wav):
 def test_save_extension_error(silence_10s_mp3_str, saved_mp3):
     with pytest.raises(TypeError):
         Audio.from_file(silence_10s_mp3_str).save(saved_mp3)
+
+
+def test_audio_constructor_should_fail_on_file(veryshort_wav_str):
+    with pytest.raises(ValueError):
+        Audio(veryshort_wav_str, 22050)
+
+
+def test_audio_constructor_should_fail_on_non_integer_sample_rate():
+    with pytest.raises(ValueError):
+        Audio(np.zeros(10), "fail...")
