@@ -272,7 +272,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         transform_list.append(transforms.ToTensor())
         return transforms.Compose(transform_list)
 
-    def random_audio_trim(self, audio, audio_length):
+    def random_audio_trim(self, audio, audio_length, audio_path):
         audio_length = len(audio.samples) / audio.sample_rate
         if self.random_trim_length > audio_length:
             raise ValueError(
@@ -311,9 +311,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
                 f"the length of the overlay file ({overlay_audio_length} sec) was less than the length of the file {original_path} ({original_length} sec)"
             )
         elif overlay_audio_length > original_length:
-            extra_time = overlay_audio_length - original_length
-            start_time = np.random.uniform() * extra_time
-            overlay_audio = overlay_audio.trim(start_time, start_time + original_length)
+            overlay_audio = self.random_audio_trim(overlay_audio, original_length, overlay_path)
         overlay_image = self.image_from_audio(overlay_audio, mode='L')
 
         # create an image and add blur
@@ -345,7 +343,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
         audio_length = len(audio.samples) / audio.sample_rate
         if self.random_trim_length is not None:
-            audio = self.random_audio_trim(audio, audio_length)
+            audio = self.random_audio_trim(audio, audio_length, audio_path)
             audio_length = self.random_trim_length
         image = self.image_from_audio(audio, mode='L')
 
