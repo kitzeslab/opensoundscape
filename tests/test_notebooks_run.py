@@ -18,8 +18,8 @@ def augmentations_notebook(request):
 
 @pytest.fixture
 def pulse_finder_demo_notebook(request):
-    base = Path("notebooks/pulse_finder_demo.ipynb")
-    nbconv = Path("notebooks/pulse_finder_demo.nbconvert.ipynb")
+    base = Path("notebooks/RIBBIT_pulse_rate_demo.ipynb")
+    nbconv = Path("notebooks/RIBBIT_pulse_rate_demo.nbconvert.ipynb")
 
     def fin():
         nbconv.unlink()

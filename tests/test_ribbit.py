@@ -2,7 +2,7 @@
 import opensoundscape as opso
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
-from opensoundscape import pulse_finder
+from opensoundscape import ribbit
 import pytest
 import numpy as np
 import pandas as pd
@@ -17,7 +17,7 @@ def test_calculate_pulse_score():
     sr = 100
     t = np.linspace(0, 1, sr)
     amplitude = np.sin(t * 2 * np.pi * 20)
-    score = pulse_finder.calculate_pulse_score(
+    score = ribbit.calculate_pulse_score(
         amplitude,
         amplitude_sample_rate=sr,
         pulse_rate_range=[0, 30],
@@ -32,7 +32,7 @@ def test_calculate_pulse_score_zero_len_input():
     t = np.linspace(0, 1, sr)
     amplitude = []
     with pytest.raises(ValueError):
-        score = pulse_finder.calculate_pulse_score(
+        score = ribbit.calculate_pulse_score(
             amplitude,
             amplitude_sample_rate=sr,
             pulse_rate_range=[-10, 30],
@@ -40,18 +40,17 @@ def test_calculate_pulse_score_zero_len_input():
             nfft=1024,
         )
 
-
-def test_pulse_finder():
+def test_ribbit():
     path = "./tests/silence_10s.mp3"
     audio = Audio.from_file(path, sample_rate=22050)
     spec = Spectrogram.from_audio(audio)
 
-    scores, times = pulse_finder.pulse_finder(
+    scores, times = ribbit.ribbit(
         spec,
         pulse_rate_range=[5, 10],
-        freq_range=[1000, 2000],
+        signal_band=[1000, 2000],
         window_len=5.0,
-        rejection_bands=[[0, 200]],
+        noise_bands=[[0, 200]],
         plot=True,
     )
     assert len(scores) > 0
@@ -76,7 +75,7 @@ def test_pulsefinder_species_set(gpt_path):
     audio = Audio.from_file(gpt_path, sample_rate=32000)
     spec = Spectrogram.from_audio(audio, overlap_samples=256)
 
-    df = pulse_finder.pulse_finder_species_set(spec, df)
+    df = ribbit.pulse_finder_species_set(spec, df)
 
     assert type(df) == pd.DataFrame
 
@@ -98,6 +97,6 @@ def test_summarize_top_scores(gpt_path):
     df.at[1, :] = ["sp2", 10, 15, 1000, 2000, 0, 500, 1.0]
     audio = Audio.from_file(gpt_path, sample_rate=32000)
     spec = Spectrogram.from_audio(audio, overlap_samples=256)
-    df = pulse_finder.pulse_finder_species_set(spec, df)
+    df = ribbit.pulse_finder_species_set(spec, df)
 
-    pulse_finder.summarize_top_scores(["1", "2"], [df, df], scale_factor=10.0)
+    ribbit.summarize_top_scores(["1", "2"], [df, df], scale_factor=10.0)
