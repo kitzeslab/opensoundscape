@@ -5,6 +5,8 @@ from opensoundscape.datasets import SingleTargetAudioDataset
 from opensoundscape.metrics import Metrics
 import opensoundscape.torch.tensor_augment as tensaug
 import yaml
+from os import path
+import time
 
 
 def train(
@@ -31,7 +33,7 @@ def train(
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
         train_dataset:  The training Dataset, e.g. created by SingleTargetAudioDataset()
         valid_dataset:  The validation Dataset, e.g. created by SingleTargetAudioDataset()
-        optimize:       A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
+        optimizer:       A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
         loss_fn:        A torch loss function, e.g. torch.nn.CrossEntropyLoss()
         epochs:         The number of epochs [default: 25]
         batch_size:     The size of the batches [default: 1]
@@ -47,14 +49,35 @@ def train(
         - Labels in YAML format
         - Train: loss, accuracy, precision, recall, and f1 score
         - Validation: accuracy, precision, recall, and f1 score
-
+        - train_dataset.label_dict
+        Write a metadata file with parameter values to save_dir/metadata.txt
     Output:
         None
         
     Effects:
-        train_dataset.label_dict is saved with the model using yaml
+        model parameters are saved to 
         
     """
+    if save_dir is not None:
+        # save model parameters to metadata file
+        metadata = {
+            "training_start_time": time.strftime("%X %x %Z"),
+            "train_data_len": len(train_dataset),
+            "valid_data_len": len(valid_dataset),
+            "optimizer": str(optimizer),
+            "loss_fn": str(loss_fn),
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "num_workers": num_workers,
+            "log_every": log_every,
+            "tensor_augment": tensor_augment,
+            "debug": debug,
+            "cuda_is_available:": torch.cuda.is_available(),
+        }
+
+        with open(path.join(save_dir, "metadata.txt"), "w") as f:
+            f.writelines(yaml.dump(metadata))
+
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
     else:
