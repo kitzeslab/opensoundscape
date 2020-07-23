@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 import torch
 import torch.nn as nn
-from opensoundscape.datasets import BinaryFromAudio
+from opensoundscape.datasets import SingleTargetAudioDataset
 from opensoundscape.metrics import Metrics
-import opensoundscape.torch.spec_augment as augment
-import yaml
+import opensoundscape.torch.tensor_augment as tensaug
+
 
 
 def train(
     save_dir,
     model,
-    train_df,
-    valid_df,
+    train_dataset,
+    valid_dataset,
+    labels_list,
     optimizer,
     loss_fn,
     epochs=25,
     batch_size=1,
     num_workers=0,
     log_every=5,
-    spec_augment=False,
+    tensor_augment=False,
     debug=False,
+    label_dict=None,
+    print_logging=True,
 ):
     """ Train a model
 
@@ -28,17 +31,19 @@ def train(
         model:          A binary torch model,
                         - e.g. torchvision.models.resnet18(pretrained=True)
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
-        train_df:       The training DataFrame with columns:
-                        - "Destination", "Labels", and "NumericLabels"
-        valid_df:       The validation DataFrame with columns:
-                        - "Destination", "Labels", and "NumericLabels"
+        train_dataset:  The training Dataset, e.g. created by SingleTargetAudioDataset()
+        valid_dataset:  The validation Dataset, e.g. created by SingleTargetAudioDataset()
+        labels_list:    A list of lists pairing human-interpretable labels with numeric labels
+                        - e.g. [['species0', 0], ['species1', 1]]
+                        - can be created from a dataframe by selecting relevant columns then using:
+                          my_labels.reset_index(drop=True).values.tolist()
         optimize:       A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
         loss_fn:        A torch loss function, e.g. torch.nn.CrossEntropyLoss()
         epochs:         The number of epochs [default: 25]
         batch_size:     The size of the batches [default: 1]
         num_workers:    The number of cores to use for batch preparation [default: 1]
         log_every:      Log statistics when epoch % log_every == 0 [default: 5]
-        spec_augment:   Whether or not to use the spec_augment procedure [default: False]
+        tensor_augment: Whether or not to use the tensor augment procedures [default: False]
         debug:          Whether or not to write intermediate images [default: False]
 
     Side Effects:
@@ -57,20 +62,7 @@ def train(
     else:
         device = torch.device("cpu")
 
-    labels_list = (
-        train_df[["Labels", "NumericLabels"]]
-        .drop_duplicates()
-        .reset_index(drop=True)
-        .values.tolist()
-    )
     labels_yaml = yaml.dump(labels_list)
-
-    train_dataset = BinaryFromAudio(
-        train_df, spec_augment=spec_augment, debug=debug, label_column="NumericLabels"
-    )
-    valid_dataset = BinaryFromAudio(
-        valid_df, spec_augment=spec_augment, debug=debug, label_column="NumericLabels"
-    )
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
@@ -84,6 +76,9 @@ def train(
 
     stats = []
     for epoch in range(epochs):
+        if print_logging:
+            print(f"Epoch {epoch}")
+            print("  Training.")
         train_metrics = Metrics(model.fc.out_features)
         model.train()
         for t in train_loader:
@@ -92,10 +87,15 @@ def train(
             y.to(device)
             targets = y.squeeze(1)
 
-            if spec_augment:
-                X = augment.time_warp(X.clone(), W=10)
-                X = augment.time_mask(X, T=50, max_masks=5)
-                X = augment.freq_mask(X, F=50, max_masks=5)
+            if tensor_augment:
+                # X is currently shape [batch_size, 3, width, height]
+                # Take to shape [batch_size, 1, width, height] for use with `augment`
+                X = X[:, 0].unsqueeze(1)
+                X = tensaug.time_warp(X.clone(), W=10)
+                X = tensaug.time_mask(X, T=50, max_masks=5)
+                X = tensaug.freq_mask(X, F=50, max_masks=5)
+
+                # Take from 1 dimension to 3 dimensions
                 X = torch.cat([X] * 3, dim=1)
 
             outputs = model(X)
@@ -108,6 +108,8 @@ def train(
             predictions = outputs.clone().detach().argmax(dim=1)
             train_metrics.update_metrics(targets, predictions)
 
+        if print_logging:
+            print("  Validating.")
         valid_metrics = Metrics(model.fc.out_features)
         model.eval()
         with torch.no_grad():
@@ -116,9 +118,6 @@ def train(
                 X.to(device)
                 y.to(device)
                 targets = y.squeeze(1)
-
-                if spec_augment:
-                    X = torch.cat([X.clone()] * 3, dim=1)
 
                 outputs = model(X)
                 predictions = outputs.clone().detach().argmax(dim=1)
@@ -132,11 +131,7 @@ def train(
                 len(valid_loader)
             )
 
-            torch.save(
-                {
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "labels_yaml": labels_yaml,
+            epoch_results = {
                     "train_loss": t_loss,
                     "train_accuracy": t_acc,
                     "train_precision": t_prec,
@@ -146,8 +141,27 @@ def train(
                     "valid_precision": v_prec,
                     "valid_recall": v_rec,
                     "valid_f1": v_f1,
-                },
-                f"{save_dir}/epoch-{epoch}.tar",
+                }
+
+            if print_logging:
+              print("  Validation results:")
+              for metric, result in epoch_results.items():
+                  print(f"    {metric}: {result}")
+
+            epoch_results.update(
+                {
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "labels_yaml": labels_yaml
+                }
             )
 
+
+            if save_dir is not None:
+                epoch_filename = f"{save_dir}/epoch-{epoch}.tar"
+                torch.save(epoch_results, epoch_filename)
+                if print_logging:
+                    print(f"  Saved results to {epoch_filename}.")
+                    
+    print("Training complete.")
     return
