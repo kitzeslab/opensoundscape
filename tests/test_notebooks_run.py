@@ -5,9 +5,9 @@ from pathlib import Path
 
 
 @pytest.fixture
-def train_model_notebook(request):
-    base = Path("notebooks/train_model.ipynb")
-    nbconv = Path("notebooks/train_model.nbconvert.ipynb")
+def train_model_example_notebook(request):
+    base = Path("notebooks/train_model_example.ipynb")
+    nbconv = Path("notebooks/train_model_example.nbconvert.ipynb")
 
     def fin():
         # Delete downloaded wavs and directory
@@ -67,8 +67,8 @@ def check_return_code_from_notebook(notebook):
     )
 
 
-def test_run_train_model_demo(train_model_notebook):
-    assert check_return_code_from_notebook(train_model_notebook) == 0
+def test_run_train_model_demo(train_model_example_notebook):
+    assert check_return_code_from_notebook(train_model_example_notebook) == 0
 
 
 def test_run_pulse_finder_demo(pulse_finder_demo_notebook):
