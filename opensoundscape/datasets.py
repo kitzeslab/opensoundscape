@@ -199,6 +199,9 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
     Input:
         df: A DataFrame with a column containing audio files
+        label_dict: a dictionary mapping numeric labels to class names, 
+            - for example: {0:'American Robin',1:'Northern Cardinal'}
+            - pass `None` if you wish to retain numeric labels
         filename_column: The column in the DataFrame which contains paths to data [default: Destination]
         from_audio: Whether the raw dataset is audio [default: True]
         label_column: The column with numeric labels if present [default: None]
@@ -225,6 +228,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         df,
+        label_dict,
         filename_column="Destination",
         from_audio=True,
         label_column=None,
@@ -253,6 +257,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             )
         self.overlay_weight = overlay_weight
         self.transform = self.set_transform(add_noise=add_noise)
+        self.label_dict = label_dict
 
     def set_transform(self, add_noise):
         # Warning: some transforms only act on first channel
