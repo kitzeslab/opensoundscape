@@ -6,15 +6,14 @@ from opensoundscape.metrics import Metrics
 import opensoundscape.torch.tensor_augment as tensaug
 import yaml
 
-
 def train(
     save_dir,
     model,
     train_dataset,
     valid_dataset,
-    labels_list,
     optimizer,
     loss_fn,
+    labels_list=None,
     epochs=25,
     batch_size=1,
     num_workers=0,
@@ -33,12 +32,12 @@ def train(
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
         train_dataset:  The training Dataset, e.g. created by SingleTargetAudioDataset()
         valid_dataset:  The validation Dataset, e.g. created by SingleTargetAudioDataset()
+        optimize:       A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
+        loss_fn:        A torch loss function, e.g. torch.nn.CrossEntropyLoss()
         labels_list:    A list of lists pairing human-interpretable labels with the numeric labels required by Pytorch
                         - e.g. [['species0', 0], ['species1', 1]]
                         - can be created from a dataframe by selecting relevant columns then using:
                           my_labels.reset_index(drop=True).values.tolist()
-        optimize:       A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
-        loss_fn:        A torch loss function, e.g. torch.nn.CrossEntropyLoss()
         epochs:         The number of epochs [default: 25]
         batch_size:     The size of the batches [default: 1]
         num_workers:    The number of cores to use for batch preparation [default: 1]
@@ -62,7 +61,8 @@ def train(
     else:
         device = torch.device("cpu")
 
-    labels_yaml = yaml.dump(labels_list)
+    if labels_list:
+        labels_yaml = yaml.dump(labels_list)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
