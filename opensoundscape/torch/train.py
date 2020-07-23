@@ -4,7 +4,7 @@ import torch.nn as nn
 from opensoundscape.datasets import SingleTargetAudioDataset
 from opensoundscape.metrics import Metrics
 import opensoundscape.torch.tensor_augment as tensaug
-
+import yaml
 
 
 def train(
@@ -33,7 +33,7 @@ def train(
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
         train_dataset:  The training Dataset, e.g. created by SingleTargetAudioDataset()
         valid_dataset:  The validation Dataset, e.g. created by SingleTargetAudioDataset()
-        labels_list:    A list of lists pairing human-interpretable labels with numeric labels
+        labels_list:    A list of lists pairing human-interpretable labels with the numeric labels required by Pytorch
                         - e.g. [['species0', 0], ['species1', 1]]
                         - can be created from a dataframe by selecting relevant columns then using:
                           my_labels.reset_index(drop=True).values.tolist()
@@ -74,6 +74,7 @@ def train(
 
     model.to(device)
 
+    # Model training
     stats = []
     for epoch in range(epochs):
         if print_logging:
@@ -123,7 +124,8 @@ def train(
                 predictions = outputs.clone().detach().argmax(dim=1)
                 valid_metrics.update_metrics(targets, predictions)
 
-        if epoch % log_every == 0:
+        # Save weights at every logging interval and at the last epoch
+        if (epoch % log_every == 0) or (epoch == epochs - 1):
             t_loss, t_acc, t_prec, t_rec, t_f1 = train_metrics.compute_metrics(
                 len(train_loader)
             )
@@ -132,36 +134,35 @@ def train(
             )
 
             epoch_results = {
-                    "train_loss": t_loss,
-                    "train_accuracy": t_acc,
-                    "train_precision": t_prec,
-                    "train_recall": t_rec,
-                    "train_f1": t_f1,
-                    "valid_accuracy": v_acc,
-                    "valid_precision": v_prec,
-                    "valid_recall": v_rec,
-                    "valid_f1": v_f1,
-                }
+                "train_loss": t_loss,
+                "train_accuracy": t_acc,
+                "train_precision": t_prec,
+                "train_recall": t_rec,
+                "train_f1": t_f1,
+                "valid_accuracy": v_acc,
+                "valid_precision": v_prec,
+                "valid_recall": v_rec,
+                "valid_f1": v_f1,
+            }
 
             if print_logging:
-              print("  Validation results:")
-              for metric, result in epoch_results.items():
-                  print(f"    {metric}: {result}")
+                print("  Validation results:")
+                for metric, result in epoch_results.items():
+                    print(f"    {metric}: {result}")
 
             epoch_results.update(
                 {
-                        "model_state_dict": model.state_dict(),
-                        "optimizer_state_dict": optimizer.state_dict(),
-                        "labels_yaml": labels_yaml
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "labels_yaml": labels_yaml,
                 }
             )
-
 
             if save_dir is not None:
                 epoch_filename = f"{save_dir}/epoch-{epoch}.tar"
                 torch.save(epoch_results, epoch_filename)
                 if print_logging:
                     print(f"  Saved results to {epoch_filename}.")
-                    
+
     print("Training complete.")
     return
