@@ -31,15 +31,19 @@ class Audio:
     __slots__ = ("samples", "sample_rate")
 
     def __init__(self, samples, sample_rate):
+
+        # Do not move these lines; it will break Pytorch training
+        self.samples = samples
+        self.sample_rate = sample_rate
+
         samples_error = None
-        if not isinstance(samples, np.ndarray):
+        if not isinstance(self.samples, np.ndarray):
             samples_error = (
                 "Initializing an Audio object requires samples to be a numpy array"
             )
-        self.samples = samples
 
         try:
-            self.sample_rate = int(sample_rate)
+            self.sample_rate = int(self.sample_rate)
         except ValueError:
             sample_rate_error = f"Initializing an Audio object requires an integer sample_rate, got `{sample_rate}`"
             if samples_error:
@@ -81,7 +85,7 @@ class Audio:
             path, sr=sample_rate, res_type=resample_type, mono=True
         )
 
-        return cls(samples, sr)
+        return cls(samples=samples, sample_rate=sr)
 
     @classmethod
     def from_bytesio(cls, bytesio, sample_rate=None, resample_type="kaiser_fast"):
@@ -99,7 +103,7 @@ class Audio:
 
     def trim(self, start_time, end_time):
         """ trim Audio object in time
-        
+
         Args:
             start_time: time in seconds for start of extracted clip
             end_time: time in seconds for end of extracted clip
@@ -123,14 +127,14 @@ class Audio:
 
     def bandpass(self, low_f, high_f, order=9):
         """ bandpass audio signal frequencies
-        
+
         uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
-        
+
         Args:
             low_f: low frequency cutoff (-3 dB)  in Hz of bandpass filter
             high_f: high frequency cutoff (-3 dB)  in Hz of bandpass filter
             order: butterworth filter order (integer) ~= steepness of cutoff
-            
+
         """
         from opensoundscape.audio_tools import bandpass_filter
 
@@ -148,11 +152,11 @@ class Audio:
     # can act on an audio file and be moved into Audio class
     def spectrum(self):
         """create frequency spectrum from an Audio object using fft
-        
+
         Args:
             self
-            
-        Returns: 
+
+        Returns:
             fft, frequencies
         """
         from scipy.fftpack import fft
@@ -173,7 +177,7 @@ class Audio:
 
     def save(self, path):
         """save Audio to file
-        
+
         Args:
             path: destination for output
         """
@@ -183,7 +187,7 @@ class Audio:
 
     def duration(self):
         """ Return duration of Audio
-        
+
         Output:
             duration (float): The duration of the Audio
         """
