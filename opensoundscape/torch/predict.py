@@ -5,6 +5,7 @@ import pandas as pd
 from torch.nn.functional import softmax
 import yaml
 
+
 def predict(
     model,
     prediction_dataset,
@@ -65,6 +66,6 @@ def predict(
     pred_df = pd.DataFrame(index=img_paths, data=all_predictions)
 
     if label_dict is not None:
-        pred_df = pred_df.rename(columns = label_dict)
+        pred_df = pred_df.rename(columns=label_dict)
 
     return pred_df

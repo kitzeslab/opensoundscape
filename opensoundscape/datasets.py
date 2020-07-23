@@ -199,6 +199,9 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
     Input:
         df: A DataFrame with a column containing audio files
+        label_dict: a dictionary mapping numeric labels to class names, 
+            - for example: {0:'American Robin',1:'Northern Cardinal'}
+            - pass `None` if you wish to retain numeric labels
         filename_column: The column in the DataFrame which contains paths to data [default: Destination]
         from_audio: Whether the raw dataset is audio [default: True]
         label_column: The column with numeric labels if present [default: None]
@@ -214,7 +217,6 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         overlay_weight: the weight given to the overlaid image during augmentation.
             When 'random', will randomly select a different weight between 0.2 and 0.5 for each overlay
             When not 'random', should be a float between 0 and 1 [default: 'random']
-        label_dict: a dictionary mapping numeric labels to class names, ie {0:'American Robin',1:'Northern Cardinal'} [default: None]
 
     Output:
         Dictionary:
@@ -226,6 +228,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         df,
+        label_dict,
         filename_column="Destination",
         from_audio=True,
         label_column=None,
@@ -237,7 +240,6 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         max_overlay_num=0,
         overlay_prob=0.2,
         overlay_weight="random",
-        label_dict=None,
     ):
         self.df = df
         self.filename_column = filename_column
@@ -341,7 +343,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         return self.df.shape[0]
 
     def __getitem__(self, item_idx):
-        print(item_idx)
+
         row = self.df.iloc[item_idx]
         audio_path = Path(row[self.filename_column])
         audio = Audio.from_file(audio_path)
@@ -380,58 +382,3 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
         # Return data only (prediction)
         return {"X": X}
-
-
-# class PredictionDataset(torch.utils.data.Dataset):
-#     """ Load a set of audio files in prepreation for prediction with torch.predict()
-
-#     Given a DataFrame with audio files in one of the columns, generate
-#     a DataSet for predicting on the files.
-
-#     Input:
-#         df: A DataFrame with a column containing audio files
-#         audio_column: The column in the DataFrame which contains audio files [default: Destination]
-#         height: Height for resulting Tensor (spectrogram) [default: 224]
-#         width: Width for resulting Tensor (spectrogram) [default: 224]
-
-#     Output:
-#         Dictionary:
-#             {
-#                 "X": (3, H, W)
-#             }
-#     """
-
-#     def __init__(
-#         self,
-#         df,
-#         audio_column="Destination",
-#         height=224,
-#         width=224,
-#         add_noise=False,
-#         debug=None,
-#         spec_augment=False,
-#     ):
-#         self.df = df
-#         self.audio_column = audio_column
-
-#         self.transform = transforms.Compose(
-#             [transforms.Resize((self.height, self.width)), transforms.ToTensor()]
-#         )
-
-#     def __len__(self):
-#         return self.df.shape[0]
-
-#     def __getitem__(self, item_idx):
-#         row = self.df.iloc[item_idx]
-
-#         audio_p = Path(row[self.audio_column])
-#         audio = Audio.from_file(audio_p)
-#         spectrogram = Spectrogram.from_audio(audio)
-#         spectrogram = spectrogram.linear_scale(feature_range=(0, 255))
-
-#         image = Image.fromarray(spectrogram.spectrogram)
-#         image = image.convert("RGB")
-
-#         X = self.transform(image)
-
-#         return {"X": X}
