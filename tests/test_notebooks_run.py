@@ -3,19 +3,6 @@ import pytest
 from opensoundscape.commands import run_command_return_code
 from pathlib import Path
 
-
-@pytest.fixture
-def augmentations_notebook(request):
-    base = Path("notebooks/augmentations.ipynb")
-    nbconv = Path("notebooks/augmentations.nbconvert.ipynb")
-
-    def fin():
-        nbconv.unlink()
-
-    request.addfinalizer(fin)
-    return base
-
-
 @pytest.fixture
 def pulse_finder_demo_notebook(request):
     base = Path("notebooks/pulse_finder_demo.ipynb")
@@ -48,11 +35,6 @@ def check_return_code_from_notebook(notebook):
     return run_command_return_code(
         f"jupyter nbconvert --to notebook --execute {notebook}"
     )
-
-
-def test_run_augmentations(augmentations_notebook):
-    assert check_return_code_from_notebook(augmentations_notebook) == 0
-
 
 def test_run_pulse_finder_demo(pulse_finder_demo_notebook):
     assert check_return_code_from_notebook(pulse_finder_demo_notebook) == 0
