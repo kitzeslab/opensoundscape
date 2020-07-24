@@ -54,8 +54,9 @@ To install via poetry, do the following:
   - Add the following to your `~/.bashrc` and source it.
     ```
     # virtualenvwrapper + poetry
-    export WORKON_HOME=~/.cache/pypoetry/virtualenvs
-    source [insert path to virtualenvwrapper.sh, e.g. /usr/bin/virtualenvwrapper_lazy.sh]
+    export PATH=~/.local/bin:$PATH
+    export WORKON_HOME=~/Library/Caches/pypoetry/virtualenvs
+    source [insert path to virtualenvwrapper.sh, e.g. ~/.local/bin/virtualenvwrapper_lazy.sh]
     ```
 * **Users**: clone this github repository to your machine:
 `git clone https://github.com/kitzeslab/opensoundscape.git`
@@ -82,11 +83,19 @@ To install via poetry, do the following:
 To use OpenSoundscape within JupyterLab, you will have to make an `ipykernel`
 for the OpenSoundscape virtual environment.
 
+<<<<<<< HEAD
+- Activate poetry virtual environment, e.g.: `workon opensoundscape-dxMTH98s-py3.6`
+    - Use `poetry env list` if you're not sure what the name of the environment is
+- Create ipython kernel: `python -m ipykernel install --user --name=[name of poetry environment] --display-name=OpenSoundscape`
+- Now when you make a new document on JupyterLab, you should see a Python kernel available called OpenSoundscape.
+- Contributors: if you include Jupyter's `autoreload`, any changes you make to the source code
+=======
 * Activate poetry virtual environment, e.g.: `workon opensoundscape-dxMTH98s-py3.7`
     - Use `poetry list` if you're not sure what the name of the environment is
 * Create ipython kernel: `python -m ipykernel install --user --name=[name of poetry environment] --display-name=OpenSoundscape`
 * Now when you make a new document on JupyterLab, you should see a Python kernel available called OpenSoundscape.
 * Contributors: if you include Jupyter's `autoreload`, any changes you make to the source code
+>>>>>>> develop
   installed via poetry will be reflected whenever you run the `%autoreload` line magic in a cell:
 
   ```

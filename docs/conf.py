@@ -48,21 +48,23 @@ extensions = [
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
+
 def setup(app):
     config = {
         # 'url_resolver': lambda url: github_doc_root + url,
-        'auto_toc_tree_section': 'Contents',
-        'enable_eval_rst': True,
+        "auto_toc_tree_section": "Contents",
+        "enable_eval_rst": True,
     }
-    app.add_config_value('recommonmark_config', config, True)
+    app.add_config_value("recommonmark_config", config, True)
     app.add_transform(AutoStructify)
 
     # from m2r to make `mdinclude` work
-    app.add_config_value('no_underscore_emphasis', False, 'env')
-    app.add_config_value('m2r_parse_relative_links', False, 'env')
-    app.add_config_value('m2r_anonymous_references', False, 'env')
-    app.add_config_value('m2r_disable_inline_math', False, 'env')
-    app.add_directive('mdinclude', MdInclude)
+    app.add_config_value("no_underscore_emphasis", False, "env")
+    app.add_config_value("m2r_parse_relative_links", False, "env")
+    app.add_config_value("m2r_anonymous_references", False, "env")
+    app.add_config_value("m2r_disable_inline_math", False, "env")
+    app.add_directive("mdinclude", MdInclude)
+
 
 # -- Options for HTML output -------------------------------------------------
 
