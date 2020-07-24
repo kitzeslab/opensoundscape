@@ -16,7 +16,7 @@ laptop, desktop, or computing cluster.
 
 OpenSoundscape is currently in active development. If you find a bug, please submit an issue. If you have another question about OpenSoundscape, please email Sam Lapp (`sam.lapp` at `pitt.edu`) or Tessa Rhinehart (`tessa.rhinehart` at `pitt.edu`).
 
-For examples of some of the utilities offered, please see the `notebooks/` directory. We plan to add more vignettes and documentation soon.
+For examples of some of the utilities offered, please see the "Tutorials" section of the [documentation](https://opensoundscape.org). Included are instructions on how to download and use a pretrained machine learning model from our publicly available set of models. We plan to add additional tutorials soon.
 
 # Installation
 
@@ -24,6 +24,16 @@ OpenSoundscape can be installed either via pip (for users) or poetry (for
 developers contributing to the code). Either way, Python 3.7 or higher is required.
 
 ## Installation via pip (most users)
+
+### Just give me the pip command!
+
+Already familiar with installing python packages via pip? The pip command to install OpenSoundscape is
+```
+pip install opensoundscape==0.4.1
+```
+
+### Detailed instructions
+
 Python 3.7 is required to run OpenSoundscape. Download it from [this website](https://www.python.org/downloads/).
 
 We recommend installing OpenSoundscape in a virtual environment to prevent dependency conflicts. Below are instructions for installation with Python's included virtual environment manager, `venv`, but feel free to use another virtual environment manager (e.g. `conda`, `virtualenvwrapper`) if desired.
@@ -39,6 +49,8 @@ Run the following commands in your bash terminal:
 * Install OpenSoundscape in the environment: `pip install opensoundscape==0.4.1`
 * Once you are done with OpenSoundscape, deactivate the environment: `deactivate`
 * To use the environment again, you will have to refer to absolute path of the virtual environments folder. For instance, if I were on a Mac and created `.venv` inside a directory `/Users/MyFiles/Code` I would activate the virtual environment using: `source /Users/MyFiles/Code/.venv/opensoundscape/bin/activate`
+
+For some of our functions, you will need a version of `ffmpeg >= 0.4.1`. On Mac machines, `ffmpeg` can be installed via `brew`.
 
 ## Installation via poetry (contributors and advanced users)
 Poetry installation allows direct use of the most recent version of the code.
