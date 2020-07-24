@@ -10,6 +10,7 @@ import numpy as np
 from warnings import filterwarnings
 import pandas as pd
 
+
 class OpsoLoadAudioInputError(Exception):
     """ Custom exception indicating we can't load input
     """
@@ -193,8 +194,16 @@ class Audio:
         """
 
         return len(self.samples) / self.sample_rate
-    
-    def split_and_save(self,clip_length,destination,name,create_log=True,final_clip=None,dry=False):
+
+    def split_and_save(
+        self,
+        clip_length,
+        destination,
+        name,
+        create_log=True,
+        final_clip=None,
+        dry=False,
+    ):
         """ Split audio into clips and save to disk
         
         Splits the current audio object into constant-length clips and saves each one to a .wav file.
@@ -216,36 +225,36 @@ class Audio:
             writes a .wav file for each clip
             writes a log file (.csv) with clip start and end times if create_log is True
         """
-        clip_df = pd.DataFrame(columns=['start_time','end_time'])
-        clip_df.index.name = 'file'
+        clip_df = pd.DataFrame(columns=["start_time", "end_time"])
+        clip_df.index.name = "file"
         total_length = self.duration()
         destination = Path(destination)
-        
+
         # number of full clips can we make without re-using audio
-        nsplits = int(total_length/clip_length)
+        nsplits = int(total_length / clip_length)
         for i in range(nsplits):
-            start_t = i*clip_length
-            end_t = (i+1)*clip_length
+            start_t = i * clip_length
+            end_t = (i + 1) * clip_length
             clip_name = f"{name}_{start_t}s-{end_t}s.wav"
             if not dry:
-                self.trim(start_t,end_t).save(destination.joinpath(clip_name))
-            clip_df.at[clip_name] = [start_t,end_t]
-        
-        #possibly extract one more clip at the end of the file
-        last_full_clip_end_t = (nsplits+1)*clip_length
-        if last_full_clip_end_t < total_length and final_clip is not None: 
-            #there was extra audio left?
+                self.trim(start_t, end_t).save(destination.joinpath(clip_name))
+            clip_df.at[clip_name] = [start_t, end_t]
+
+        # possibly extract one more clip at the end of the file
+        last_full_clip_end_t = (nsplits + 1) * clip_length
+        if last_full_clip_end_t < total_length and final_clip is not None:
+            # there was extra audio left?
             end_t = total_length
-            if final_clip=="short":
+            if final_clip == "short":
                 start_t = last_full_clip_end_t
-            elif final_clip=="full":
+            elif final_clip == "full":
                 start_t = end_t - clip_length
-                
+
             clip_name = f"{name}_{start_t}s-{end_t}s.wav"
             if not dry:
-                self.trim(start_t,end_t).save(destination.joinpath(clip_name))
-            clip_df.at[clip_name] = [start_t,end_t]
-        
+                self.trim(start_t, end_t).save(destination.joinpath(clip_name))
+            clip_df.at[clip_name] = [start_t, end_t]
+
         if create_log:
             clip_df.to_csv(destination.joinpath(f"{name}_clip_log.csv"))
 
