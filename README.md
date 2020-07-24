@@ -36,10 +36,10 @@ Run the following commands in your bash terminal:
 * Create an environment called `opensoundscape` in the directory: `python3 -m venv opensoundscape`
 * **For Windows computers:** activate/use the environment: `opensoundscape\Scripts\activate.bat`
 * **For Mac computers:** activate/use the environment `source opensoundscape/bin/activate`
-* Install OpenSoundscape in the environment: `pip install opensoundscape==0.4.0`
+* Install OpenSoundscape in the environment: `pip install opensoundscape==0.4.1`
 * Once you are done with OpenSoundscape, deactivate the environment: `deactivate`
 * To use the environment again, you will have to refer to absolute path of the virtual environments folder. For instance, if I were on a Mac and created `.venv` inside a directory `/Users/MyFiles/Code` I would activate the virtual environment using: `source /Users/MyFiles/Code/.venv/opensoundscape/bin/activate`
-      
+
 ## Installation via poetry (contributors and advanced users)
 Poetry installation allows direct use of the most recent version of the code.
 This workflow allows advanced users to use the newest features in OpenSoundscape,
