@@ -1,5 +1,5 @@
-![CI](https://github.com/kitzeslab/opensoundscape/workflows/CI/badge.svg)
-![http://opensoundscape.org/en/latest/](https://readthedocs.org/projects/opensoundscape/badge/?version=latest)
+[![CI Status](https://github.com/kitzeslab/opensoundscape/workflows/CI/badge.svg)](https://github.com/kitzeslab/opensoundscape/actions?query=workflow%3ACI)
+[![Documentation Status](https://readthedocs.org/projects/opensoundscape/badge/?version=latest)](http://opensoundscape.org/en/latest/?badge=latest)
 
 # OpenSoundscape
 ---
