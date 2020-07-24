@@ -26,10 +26,7 @@ developers contributing to the code). Either way, Python 3.7 or higher is requir
 
 ### Just give me the pip command!
 
-Already familiar with installing python packages via pip? The pip command to install OpenSoundscape is
-    ```
-    pip install opensoundscape==0.4.1
-    ```
+Already familiar with installing python packages via pip? The pip command to install OpenSoundscape is `pip install opensoundscape==0.4.1`.
 
 ### Detailed instructions
 
