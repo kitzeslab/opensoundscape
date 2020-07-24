@@ -27,6 +27,7 @@ matplotlib = "^3.2.1"
 schema = "^0.7.2"
 jupyterlab = "^2.1.4"
 scikit-image = "^0.17.2"
+numba = "0.48.0"
 
 [tool.poetry.dev-dependencies]
 black = "=19.3b0"
