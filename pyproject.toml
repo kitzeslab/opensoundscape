@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "opensoundscape"
-version = "1.0.0.alpha0"
+version = "0.4.0"
 description = "Open source, scalable acoustic classification for ecology and conservation"
 authors = [
   "Justin Kitzes <justin.kitzes@pitt.edu>",
   "Barry Moore <moore0557@gmail.com>",
   "Tessa Rhinehart <tessa.rhinehart@gmail.com>",
-  "Trieste Devlin <trieste.devlin@pitt.edu>"
+  "Sam Lapp <sammlapp@gmail.com>"
 ]
 license = "MIT"
 readme = "README.md"
@@ -22,9 +22,12 @@ ray = "^0.8.5"
 torch = "1.5.0"
 torchvision = "0.6.0"
 ipykernel = "^5.2.0"
-opencv-python = "^4.2.0"
 pandas = "^1.0.3"
 matplotlib = "^3.2.1"
+schema = "^0.7.2"
+jupyterlab = "^2.1.4"
+scikit-image = "^0.17.2"
+nbsphinx = "^0.7.1"
 
 [tool.poetry.dev-dependencies]
 black = "=19.3b0"
@@ -32,10 +35,11 @@ pre-commit = "^1.18"
 sphinx = "^2.1"
 pytest = "^5.1"
 sphinx-rtd-theme = "^0.4.3"
+recommonmark = "^0.6.0"
 
 [tool.black]
 line-length = 88
-target_version = ['py36', 'py37', 'py38']
+target_version = ['py37', 'py38']
 include = '\.pyi?$'
 exclude = '''
 /(

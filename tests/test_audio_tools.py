@@ -1,10 +1,7 @@
 import pytest
-from os.path import exists
-import os
-from opensoundscape import audio_tools
 from opensoundscape.audio import Audio
-
-# audio_tools.run_command('rm ./audio_tools_out/*')
+from opensoundscape import audio_tools
+from pathlib import Path
 
 
 @pytest.fixture()
@@ -18,32 +15,43 @@ def silent_wav_str():
 
 
 @pytest.fixture()
-def convolved_wav_str():
-    return f"tests/audio_tools_out/convolved.wav"
+def convolved_wav_str(out_path, request):
+    path = Path(f"{out_path}/convolved.wav")
+
+    def fin():
+        path.unlink()
+
+    request.addfinalizer(fin)
+    return path
 
 
 @pytest.fixture()
-def out_path():
-    return f"tests/audio_tools_out"
+def out_path(request):
+    path = Path("tests/audio_tools_out")
+    if not path.exists():
+        path.mkdir()
+
+    def fin():
+        path.rmdir()
+
+    request.addfinalizer(fin)
+    return path
 
 
-audio = Audio(f"tests/veryshort.wav")
-
-# def test_audio_gate(veryshort_wav_str):
-#     os.system('pwd')
-#     print(audio_tools.audio_gate(veryshort_wav_str,'./tests/audio_tools_out/gated.wav'))
-#     assert(exists('./tests/audio_tools_out/gated.wav'))
+@pytest.fixture()
+def veryshort_audio(veryshort_wav_str):
+    return Audio.from_file(veryshort_wav_str)
 
 
-def test_bandpass_filter():
+def test_bandpass_filter(veryshort_audio):
     bandpassed = audio_tools.bandpass_filter(
-        audio.samples, 1000, 2000, audio.sample_rate
+        veryshort_audio.samples, 1000, 2000, veryshort_audio.sample_rate
     )
-    assert len(bandpassed) == len(audio.samples)
+    assert len(bandpassed) == len(veryshort_audio.samples)
 
 
-def test_clipping_detector():
-    assert audio_tools.clipping_detector(audio.samples) > -1
+def test_clipping_detector(veryshort_audio):
+    assert audio_tools.clipping_detector(veryshort_audio.samples) > -1
 
 
 def test_silence_filter(veryshort_wav_str):
@@ -51,9 +59,5 @@ def test_silence_filter(veryshort_wav_str):
 
 
 def test_convolve_file(veryshort_wav_str, silent_wav_str, convolved_wav_str, out_path):
-    if not exists(out_path):
-        os.system(f"mkdir {out_path}")
-    if exists(convolved_wav_str):
-        os.system(f"rm {convolved_wav_str}")
     audio_tools.convolve_file(silent_wav_str, convolved_wav_str, veryshort_wav_str)
-    assert exists(convolved_wav_str)
+    assert convolved_wav_str.exists()

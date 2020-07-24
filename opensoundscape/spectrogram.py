@@ -5,6 +5,7 @@
 from scipy import signal
 import numpy as np
 from opensoundscape.audio import Audio
+from opensoundscape.helpers import min_max_scale, linear_scale
 import warnings
 import pickle
 
@@ -13,11 +14,7 @@ class Spectrogram:
     """ Immutable spectrogram container
     """
 
-    __slots__ = (
-        "frequencies",
-        "times",
-        "spectrogram",
-    )  # , "overlap", "segment_length")
+    __slots__ = ("frequencies", "times", "spectrogram", "decibel_limits")
 
     def __init__(self, spectrogram, frequencies, times):
         if not isinstance(spectrogram, np.ndarray):
@@ -54,6 +51,7 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("frequencies", frequencies)
         super(Spectrogram, self).__setattr__("times", times)
         super(Spectrogram, self).__setattr__("spectrogram", spectrogram)
+        super(Spectrogram, self).__setattr__("decibel_limits", (-100, -20))
 
     @classmethod
     def from_audio(
@@ -66,14 +64,13 @@ class Spectrogram:
     ):
         """
         create a Spectrogram object from an Audio object
-        
+
         Args:
             window_type="hann": see scipy.signal.spectrogram docs for description of window parameter
             window_samples=512: number of audio samples per spectrogram window (pixel)
             overlap_samples=256: number of samples shared by consecutive windows
-            decibels=True: convert the spectrogram values to decibelss (dB)
             decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
-            
+
         Returns:
             opensoundscape.spectrogram.Spectrogram object
         """
@@ -90,7 +87,10 @@ class Spectrogram:
         )
 
         # convert to decibels
-        spectrogram = 10 * np.log10(spectrogram)
+        # -> avoid RuntimeWarning by setting negative values to -np.inf (mapped to min_db later)
+        spectrogram = 10 * np.log10(
+            spectrogram, where=spectrogram > 0, out=np.full(spectrogram.shape, -np.inf)
+        )
 
         # limit the decibel range (-100 to -20 dB by default)
         # values below lower limit set to lower limit, values above upper limit set to uper limit
@@ -98,7 +98,25 @@ class Spectrogram:
         spectrogram[spectrogram > max_db] = max_db
         spectrogram[spectrogram < min_db] = min_db
 
-        return cls(spectrogram, frequencies, times)
+        new_obj = cls(spectrogram, frequencies, times)
+        super(Spectrogram, new_obj).__setattr__("decibel_limits", decibel_limits)
+        return new_obj
+
+    @classmethod
+    def from_file(file,):
+        """
+        create a Spectrogram object from a file
+
+        Args:
+            file: path of image to load
+
+        Returns:
+            opensoundscape.spectrogram.Spectrogram object
+        """
+
+        raise NotImplementedError(
+            "Loading Spectrograms from images is not implemented yet"
+        )
 
     def __setattr__(self, name, value):
         raise AttributeError("Spectrogram's cannot be modified")
@@ -107,10 +125,14 @@ class Spectrogram:
         return f"<Spectrogram(spectrogram={self.spectrogram.shape}, frequencies={self.frequencies.shape}, times={self.times.shape})>"
 
     def min_max_scale(self, feature_range=(0, 1)):
-        """ Linearly rescale spectrogram values to a range of values
-        
+        """
+
+        Linearly rescale spectrogram values to a range of values using
+        in_range as minimum and maximum
+
         Args:
             feature_range: tuple of (low,high) values for output
+
         Returns:
             Spectrogram object with values rescaled to feature_range
         """
@@ -122,23 +144,48 @@ class Spectrogram:
         if feature_range[1] < feature_range[0]:
             raise AttributeError("Error: `feature_range` isn't increasing?")
 
-        spect_min = self.spectrogram.min()
-        spect_max = self.spectrogram.min()
-        scale_factor = (feature_range[1] - feature_range[0]) / (spect_max - spect_min)
         return Spectrogram(
-            scale_factor * (self.spectrogram - spect_min) + feature_range[0],
+            min_max_scale(self.spectrogram, feature_range=feature_range),
+            self.frequencies,
+            self.times,
+        )
+
+    def linear_scale(self, feature_range=(0, 1)):
+        """
+
+        Linearly rescale spectrogram values to a range of values
+        using in_range as decibel_limits
+
+        Args:
+            feature_range: tuple of (low,high) values for output
+
+        Returns:
+            Spectrogram object with values rescaled to feature_range
+        """
+
+        if len(feature_range) != 2:
+            raise AttributeError(
+                "Error: `feature_range` doesn't look like a 2-element tuple?"
+            )
+        if feature_range[1] < feature_range[0]:
+            raise AttributeError("Error: `feature_range` isn't increasing?")
+
+        return Spectrogram(
+            linear_scale(
+                self.spectrogram, in_range=self.decibel_limits, out_range=feature_range
+            ),
             self.frequencies,
             self.times,
         )
 
     def limit_db_range(self, min_db=-100, max_db=-20):
         """ Limit the decibel values of the spectrogram to range from min_db to max_db
-            
+
             values less than min_db are set to min_db
             values greater than max_db are set to max_db
-            
+
             similar to Audacity's gain and range parameters
-            
+
             Args:
                 min_db: values lower than this are set to this
                 max_db: values higher than this are set to this
@@ -154,13 +201,13 @@ class Spectrogram:
 
     def bandpass(self, min_f, max_f):
         """ extract a frequency band from a spectrogram
-        
+
         crops the 2-d array of the spectrograms to the desired frequency range
-        
+
         Args:
             min_f: low frequency in Hz for bandpass
             high_f: high frequency in Hz for bandpass
-        
+
         Returns:
             bandpassed spectrogram object
 
@@ -186,7 +233,7 @@ class Spectrogram:
 
         Returns:
             spectrogram object from extracted time segment
-        
+
         """
 
         # find indices of the times in self.times closest to min_t and max_t
@@ -201,10 +248,10 @@ class Spectrogram:
         )
 
     def plot(self, inline=True, fname=None, show_colorbar=False):
-        """Plot the spectrogram with matplotlib.pyplot 
-        
+        """Plot the spectrogram with matplotlib.pyplot
+
         Args:
-            inline=True: 
+            inline=True:
             fname=None: specify a string path to save the plot to (ending in .png/.pdf)
             show_colorbar: include image legend colorbar from pyplot
         """
@@ -231,16 +278,16 @@ class Spectrogram:
 
     def amplitude(self, freq_range=None):
         """create an amplitude vs time signal from spectrogram
-        
+
         by summing pixels in the vertical dimension
-        
+
         Args
             freq_range=None: sum Spectrogrm only in this range of [low, high] frequencies in Hz
             (if None, all frequencies are summed)
 
         Returns:
             a time-series array of the vertical sum of spectrogram value
-                
+
         """
         if freq_range is None:
             return np.sum(self.spectrogram, 0)
@@ -252,14 +299,14 @@ class Spectrogram:
     ):  # used to be called "net_power_signal" which is misleading (not power)
         """create amplitude signal in signal_band and subtract amplitude from reject_bands
 
-        rescale the signal and reject bands by dividing by their bandwidths in Hz 
+        rescale the signal and reject bands by dividing by their bandwidths in Hz
         (amplitude of each reject_band is divided by the total bandwidth of all reject_bands.
-        amplitude of signal_band is divided by badwidth of signal_band. ) 
-        
+        amplitude of signal_band is divided by badwidth of signal_band. )
+
         Args:
             signal_band: [low,high] frequency range in Hz (positive contribution)
             reject band: list of [low,high] frequency ranges in Hz (negative contribution)
-            
+
         return: time-series array of net amplitude """
 
         # find the amplitude signal for the desired frequency band
@@ -297,14 +344,14 @@ class Spectrogram:
         create a Pillow Image from spectrogram
         linearly rescales values from db_range (default [-100, -20]) to [255,0]
         (ie, -20 db is loudest -> black, -100 db is quietest -> white)
-        
+
         Args:
             destination: a file path (string)
             shape=None: tuple of image dimensions, eg (224,224)
             mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
             spec_range=[-100,-20]: the lowest and highest possible values in the spectrogram
-            
-        Returns: 
+
+        Returns:
             Pillow Image object
         """
         from PIL import Image

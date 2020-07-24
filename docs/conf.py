@@ -13,17 +13,20 @@
 import os
 import sys
 
+from m2r import MdInclude
+from recommonmark.transform import AutoStructify
+
 sys.path.insert(0, os.path.abspath("../"))
 
 
 # -- Project information -----------------------------------------------------
 
 project = "opensoundscape"
-copyright = "2019, Justin Kitzes, Barry Moore, Tessa Rhinehart, Trieste Devlin"
-author = "Justin Kitzes, Barry Moore, Tessa Rhinehart, Trieste Devlin"
+copyright = "2020, Justin Kitzes, Barry Moore, Tessa Rhinehart, Sam Lapp"
+author = "Justin Kitzes, Barry Moore, Tessa Rhinehart, Sam Lapp"
 
 # The full version, including alpha/beta/rc tags
-release = "1.0.0.alpha0"
+release = "0.4.0"
 
 
 # -- General configuration ---------------------------------------------------
@@ -36,16 +39,30 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.githubpages",
     "sphinx_rtd_theme",
+    "nbsphinx",
+    "recommonmark",
 ]
-
-# Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
+def setup(app):
+    config = {
+        # 'url_resolver': lambda url: github_doc_root + url,
+        'auto_toc_tree_section': 'Contents',
+        'enable_eval_rst': True,
+    }
+    app.add_config_value('recommonmark_config', config, True)
+    app.add_transform(AutoStructify)
+
+    # from m2r to make `mdinclude` work
+    app.add_config_value('no_underscore_emphasis', False, 'env')
+    app.add_config_value('m2r_parse_relative_links', False, 'env')
+    app.add_config_value('m2r_anonymous_references', False, 'env')
+    app.add_config_value('m2r_disable_inline_math', False, 'env')
+    app.add_directive('mdinclude', MdInclude)
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -57,4 +74,25 @@ html_theme = "sphinx_rtd_theme"
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["_static"]
+# html_static_path = ["_static"]
+html_static_path = []
+
+
+# Mock libraries we don't want to install on RTD
+autodoc_mock_imports = [
+    "docopt",
+    "pandas",
+    "librosa",
+    "ray",
+    "torch",
+    "sklearn",
+    "numpy",
+    "schema",
+    "soundfile",
+    "scipy",
+    "yaml",
+    "torchvision",
+    "matplotlib",
+]
+
+master_doc = "index"
