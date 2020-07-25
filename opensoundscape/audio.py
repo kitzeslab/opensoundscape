@@ -128,7 +128,6 @@ class Audio:
         samples_extended = np.resize(self.samples, total_samples_needed)
         return Audio(samples_extended, self.sample_rate)
 
-
     def time_to_sample(self, time):
         """ Given a time, convert it to the corresponding sample
 
