@@ -199,7 +199,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
     Input:
         df: A DataFrame with a column containing audio files
-        label_dict: a dictionary mapping numeric labels to class names, 
+        label_dict: a dictionary mapping numeric labels to class names,
             - for example: {0:'American Robin',1:'Northern Cardinal'}
             - pass `None` if you wish to retain numeric labels
         filename_column: The column in the DataFrame which contains paths to data [default: Destination]
@@ -211,10 +211,12 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         debug: Save images to a directory [default: None]
         random_trim_length: Extract a clip of this many seconds of audio starting at a random time
             If None, the original clip will be used [default: None]
-        max_overlay_num: the maximum number of additional images to overlay, each with probability overlay_prob [default: 0]
+        extend_short_clips: If a file to be overlaid or trimmed from is too short,
+            extend it to the desired length by repeating it. [default: False]
+        max_overlay_num: The maximum number of additional images to overlay, each with probability overlay_prob [default: 0]
         overlay_prob: Probability of an image from a different class being overlayed (combined as a weighted sum)
             on the training image. typical values: 0, 0.66 [default: 0.2]
-        overlay_weight: the weight given to the overlaid image during augmentation.
+        overlay_weight: The weight given to the overlaid image during augmentation.
             When 'random', will randomly select a different weight between 0.2 and 0.5 for each overlay
             When not 'random', should be a float between 0 and 1 [default: 'random']
 
@@ -237,6 +239,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         add_noise=False,
         debug=None,
         random_trim_length=None,
+        extend_short_clips=False,
         max_overlay_num=0,
         overlay_prob=0.2,
         overlay_weight="random",
@@ -249,6 +252,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         self.width = width
         self.debug = debug
         self.random_trim_length = random_trim_length
+        self.extend_short_clips = extend_short_clips
         self.max_overlay_num = max_overlay_num
         self.overlay_prob = overlay_prob
         if (overlay_weight != "random") and (not 0 < overlay_weight < 1):
@@ -280,9 +284,12 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
     def random_audio_trim(self, audio, audio_length, audio_path):
         audio_length = len(audio.samples) / audio.sample_rate
         if self.random_trim_length > audio_length:
-            raise ValueError(
-                f"the length of the original file ({audio_length} sec) was less than the length to extract ({self.random_trim_length} sec) for the file {audio_path}"
-            )
+            if not self.extend_short_clips:
+                raise ValueError(
+                    f"the length of the original file ({audio_length} sec) was less than the length to extract ({self.random_trim_length} sec) for the file {audio_path}. . To extend short clips, use extend_short_clips=True"
+                )
+            else:
+                return audio.extend(self.random_trim_length)
         extra_time = audio_length - self.random_trim_length
         start_time = np.random.uniform() * extra_time
         return audio.trim(start_time, start_time + self.random_trim_length)
@@ -313,11 +320,11 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
         # trim to same length as main clip
         overlay_audio_length = len(overlay_audio.samples) / overlay_audio.sample_rate
-        if overlay_audio_length < original_length:
+        if overlay_audio_length < original_length and not self.extend_short_clips:
             raise ValueError(
-                f"the length of the overlay file ({overlay_audio_length} sec) was less than the length of the file {original_path} ({original_length} sec)"
+                f"the length of the overlay file ({overlay_audio_length} sec) was less than the length of the file {original_path} ({original_length} sec). To extend short clips, use extend_short_clips=True"
             )
-        elif overlay_audio_length > original_length:
+        elif overlay_audio_length != original_length:
             overlay_audio = self.random_audio_trim(
                 overlay_audio, original_length, overlay_path
             )
