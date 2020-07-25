@@ -127,6 +127,16 @@ def test_property_trim_length_is_correct(silence_10s_mp3_str):
             audio.trim(first, second).duration(), second - first, abs_tol=1e-4
         )
 
+def test_extend_length_is_correct(silence_10s_mp3_str):
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    duration = audio.duration()
+    for _ in range(100):
+        extend_length = uniform(duration, duration*10)
+        print(audio.extend(extend_length).duration())
+        print(extend_length)
+        assert isclose(
+            audio.extend(extend_length).duration(), extend_length, abs_tol=1e-4
+        )
 
 def test_bandpass(silence_10s_mp3_str):
     s = Audio.from_file(silence_10s_mp3_str)
