@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "opensoundscape"
-version = "0.4.0"
+version = "0.4.1"
 description = "Open source, scalable acoustic classification for ecology and conservation"
 authors = [
   "Justin Kitzes <justin.kitzes@pitt.edu>",
@@ -27,7 +27,7 @@ matplotlib = "^3.2.1"
 schema = "^0.7.2"
 jupyterlab = "^2.1.4"
 scikit-image = "^0.17.2"
-nbsphinx = "^0.7.1"
+numba = "0.48.0"
 
 [tool.poetry.dev-dependencies]
 black = "=19.3b0"
@@ -36,6 +36,7 @@ sphinx = "^2.1"
 pytest = "^5.1"
 sphinx-rtd-theme = "^0.4.3"
 recommonmark = "^0.6.0"
+nbsphinx = "^0.7.1"
 
 [tool.black]
 line-length = 88
