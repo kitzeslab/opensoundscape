@@ -183,15 +183,15 @@ def test_single_target_audio_dataset_no_noise(
 def test_single_target_audio_dataset_with_noise(
     single_target_audio_dataset_long_audio_df
 ):
-    # # TODO: this test fails on all versions of code. Why?
-    # dataset = SingleTargetAudioDataset(
-    #     single_target_audio_dataset_long_audio_df,
-    #     add_noise = True)
-    # rgb_image = dataset[0]['X']
-    # channel_0 = rgb_image[0]
-    # channel_1 = rgb_image[1]
-    # channel_2 = rgb_image[2]
-    # assert_raises(AssertionError, assert_array_equal, channel_0, channel_1)
-    # assert_raises(AssertionError, assert_array_equal, channel_0, channel_2)
-    # assert_raises(AssertionError, assert_array_equal, channel_1, channel_2)
-    return
+    dataset = SingleTargetAudioDataset(
+        single_target_audio_dataset_long_audio_df,
+        label_dict={0: "hello"},
+        add_noise=True,
+    )
+    rgb_image = dataset[0]["X"]
+    channel_0 = rgb_image[0]
+    channel_1 = rgb_image[1]
+    channel_2 = rgb_image[2]
+    assert_array_equal(channel_0, channel_1)
+    assert_array_equal(channel_0, channel_2)
+    assert_array_equal(channel_1, channel_2)
