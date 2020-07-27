@@ -208,7 +208,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         height: Height for resulting Tensor [default: 224]
         width: Width for resulting Tensor [default: 224]
         add_noise: Apply RandomAffine and ColorJitter filters [default: False]
-        debug: Save images to a directory [default: None]
+        save_dir: Save images to a directory [default: None]
         random_trim_length: Extract a clip of this many seconds of audio starting at a random time
             If None, the original clip will be used [default: None]
         max_overlay_num: the maximum number of additional images to overlay, each with probability overlay_prob [default: 0]
@@ -235,7 +235,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         height=224,
         width=224,
         add_noise=False,
-        debug=None,
+        save_dir=None,
         random_trim_length=None,
         max_overlay_num=0,
         overlay_prob=0.2,
@@ -247,7 +247,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         self.label_column = label_column
         self.height = height
         self.width = width
-        self.debug = debug
+        self.save_dir = save_dir
         self.random_trim_length = random_trim_length
         self.max_overlay_num = max_overlay_num
         self.overlay_prob = overlay_prob
@@ -368,8 +368,8 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             else:
                 break
 
-        if self.debug:
-            image.save(f"{self.debug}/{audio_path.stem}_{time()}.png")
+        if self.save_dir:
+            image.save(f"{self.save_dir}/{audio_path.stem}_{time()}.png")
 
         # apply desired random transformations to image and convert to tensor
         image = image.convert("RGB")
