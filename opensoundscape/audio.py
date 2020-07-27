@@ -115,6 +115,19 @@ class Audio:
         samples_trimmed = self.samples[start_sample:end_sample]
         return Audio(samples_trimmed, self.sample_rate)
 
+    def extend(self, length):
+        """ Extend audio file by looping it
+
+        Args:
+            length: the final length in seconds of the extended file
+        Returns:
+            a new Audio object of the desired length
+        """
+
+        total_samples_needed = round(length * self.sample_rate)
+        samples_extended = np.resize(self.samples, total_samples_needed)
+        return Audio(samples_extended, self.sample_rate)
+
     def time_to_sample(self, time):
         """ Given a time, convert it to the corresponding sample
 
