@@ -37,7 +37,7 @@ def predict(
     """
 
     if torch.cuda.is_available():
-        device = torch.device("cuda:0")
+        device = torch.device("cuda")
     else:
         device = torch.device("cpu")
     model.eval()
@@ -53,13 +53,13 @@ def predict(
     # run prediction
     all_predictions = []
     for i, inputs in enumerate(dataloader):
-        predictions = model(inputs["X"])
+        predictions = model(inputs["X"].to(device))
         if apply_softmax:
             softmax_val = softmax(predictions, 1).detach().cpu().numpy()
             for x in softmax_val:
                 all_predictions.append(x)
         else:
-            for x in predictions.detach().numpy():
+            for x in predictions.detach().cpu().numpy():
                 all_predictions.append(list(x))  # .astype('float64')
 
     img_paths = prediction_dataset.df[prediction_dataset.filename_column].values
