@@ -270,7 +270,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             transform_list.extend(
                 [
                     transforms.RandomAffine(
-                        degrees=0, translate=(0.2, 0.03), fillcolor=50
+                        degrees=0, translate=(0.2, 0.03), fillcolor=(50, 50, 50)
                     ),
                     transforms.ColorJitter(
                         brightness=0.3, contrast=0.3, saturation=0.3, hue=0
