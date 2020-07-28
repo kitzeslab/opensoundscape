@@ -111,12 +111,14 @@ def jitter(x, width, distribution="gaussian"):
     )
 
 
-def parallel_torch(
+def parallel_cpu(
     function_to_run, arguments_dictionary, dynamic_arguments, num_workers, batch_size=1
 ):
     """
-    parallelize an operation using a torch DataGenerator
-    design your process so that you don't need a response from the function
+    parallelize a function across cpu's
+    
+    parallelize an operation across CPU's (cores) using a torch DataGenerator
+    design your process so that you don't need any return from the function
     you will get 0 for each succeeded iteration and 1 for each failed iteration
     
     Args:
@@ -128,6 +130,9 @@ def parallel_torch(
          num_workers: number of CPU's to use in parallel (see Torch docs)
          - use 0 to not create any additional processes (but why are you using this function then?)
          batch_size: how many pieces to pass one worker at a time (see Torch docs) [default: 1]
+         
+    Returns:
+        a list of 0 and 1: 0 for each succeeded element and 1 for each failed function call
 
     """
     from opensoundscape.datasets import GenericDataset

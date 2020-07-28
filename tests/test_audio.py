@@ -173,3 +173,69 @@ def test_audio_constructor_should_fail_on_file(veryshort_wav_str):
 def test_audio_constructor_should_fail_on_non_integer_sample_rate():
     with pytest.raises(ValueError):
         Audio(np.zeros(10), "fail...")
+
+# def test_split_and_save_dry(silence_10s_mp3_str, saved_wav):
+#     Audio.from_file(silence_10s_mp3_str).split_and_save(
+#         clip_length=5,
+#         destination=saved_wav.parent,
+#         name=saved_wav.name,
+#         create_log=False,
+#         final_clip=None,
+#         dry=True,
+#     )
+    
+# def test_split_and_save(silence_10s_mp3_str, saved_wav,tmp_dir):
+#     df = Audio.from_file(silence_10s_mp3_str).split_and_save(
+#         clip_length=5,
+#         destination=saved_wav.parent,
+#         name=saved_wav.name,
+#         create_log=False,
+#         final_clip=None,
+#         dry=False,
+#     )
+#     for p in df.index:
+#         path = tmp_dir.joinpath(Path(p))
+#         path.unlink()
+#     path = tmp_dir.joinpath(Path(saved_wav.name+'_clip_log.csv'))
+#     path.unlink()
+
+# def test_split_and_save_full(silence_10s_mp3_str, saved_wav):
+#     Audio.from_file(silence_10s_mp3_str).split_and_save(
+#         clip_length=4,
+#         destination=saved_wav.parent,
+#         name=saved_wav.name,
+#         create_log=False,
+#         final_clip="full",
+#         dry=True,
+#     )
+    
+# def test_split_and_save_short(silence_10s_mp3_str, saved_wav):
+#     Audio.from_file(silence_10s_mp3_str).split_and_save(
+#         clip_length=4,
+#         destination=saved_wav.parent,
+#         name=saved_wav.name,
+#         create_log=False,
+#         final_clip="short",
+#         dry=True,
+#     )
+
+# def test_split_and_save_log(silence_10s_mp3_str, saved_wav):
+#     Audio.from_file(silence_10s_mp3_str).split_and_save(
+#         clip_length=5,
+#         destination=saved_wav.parent,
+#         name=saved_wav.name,
+#         create_log=False,
+#         final_clip=None,
+#         dry=True,
+#     )
+    
+# def test_split_and_save_short(veryshort_wav_pathlib, saved_wav):
+#     with pytest.warns(UserWarning):
+#         Audio.from_file(veryshort_wav_pathlib).split_and_save(
+#             clip_length=5,
+#             destination=saved_wav.parent,
+#             name=saved_wav.name,
+#             create_log=False,
+#             final_clip=None,
+#             dry=True,
+#         )

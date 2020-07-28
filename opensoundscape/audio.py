@@ -7,9 +7,8 @@ import io
 import librosa
 import soundfile
 import numpy as np
-from warnings import filterwarnings
 import pandas as pd
-
+import warnings
 
 class OpsoLoadAudioInputError(Exception):
     """ Custom exception indicating we can't load input
@@ -81,10 +80,11 @@ class Audio:
             if librosa.get_duration(filename=path) > max_duration:
                 raise OpsoLoadAudioInputTooLong()
 
-        filterwarnings("ignore")
+        warnings.filterwarnings("ignore")
         samples, sr = librosa.load(
             path, sr=sample_rate, res_type=resample_type, mono=True
         )
+        warnings.resetwarnings()
 
         return cls(samples=samples, sample_rate=sr)
 
@@ -201,7 +201,7 @@ class Audio:
         destination,
         name,
         create_log=True,
-        final_clip=None,
+        final_clip=None, #None, "short", "full"
         dry=False,
     ):
         """ Split audio into clips and save to disk
@@ -232,6 +232,9 @@ class Audio:
 
         # number of full clips can we make without re-using audio
         nsplits = int(total_length / clip_length)
+        if nsplits<1:
+            warnings.warn(f'clip_length {clip_length} was longer than total length {total_length}')
+        
         for i in range(nsplits):
             start_t = i * clip_length
             end_t = (i + 1) * clip_length
