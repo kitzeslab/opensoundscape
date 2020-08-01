@@ -179,50 +179,6 @@ class SplitterDataset(torch.utils.data.Dataset):
         return chain.from_iterable([x["data"] for x in batch[1]])
 
 
-class GenericDataset(torch.utils.data.Dataset):
-    """ Use pytorch paralellization by passing a function and arguments"""
-
-    def __init__(
-        self,
-        function_to_run,
-        args_dict,  # {param1:constant, param2:[val1,val2,val3....]}
-        dynamic_args=[],  # which args change values for each iteration?
-    ):
-        self.function_to_run = function_to_run
-        self.args_dict = args_dict
-        self.dynamic_args = dynamic_args
-        self.length = (
-            len(self.args_dict[self.dynamic_args[0]])
-            if len(self.dynamic_args) > 0
-            else 1
-        )
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, item_idx):
-
-        args_dict_i = {}
-        for key in self.args_dict:
-            if key in self.dynamic_args:  # select index from list
-                args_dict_i[key] = self.args_dict[key][item_idx]
-            else:  # copy static value
-                args_dict_i[key] = self.args_dict[key]
-
-        # pass the dictionary as a list of arguments to the function
-        # returning things is complicated so just return 0 for success, for now
-        try:
-            self.function_to_run(**args_dict_i)
-            return {0: 0}
-        except Exception:
-            return {0: 1}
-
-
-#     @classmethod
-#     def collate_fn(*batch):
-#         return chain.from_iterable([x["data"] for x in batch[1]])
-
-
 class SingleTargetAudioDataset(torch.utils.data.Dataset):
     """ Single Target Audio -> Image Dataset
 
@@ -243,7 +199,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
     Input:
         df: A DataFrame with a column containing audio files
-        label_dict: a dictionary mapping numeric labels to class names, 
+        label_dict: a dictionary mapping numeric labels to class names,
             - for example: {0:'American Robin',1:'Northern Cardinal'}
             - pass `None` if you wish to retain numeric labels
         filename_column: The column in the DataFrame which contains paths to data [default: Destination]
