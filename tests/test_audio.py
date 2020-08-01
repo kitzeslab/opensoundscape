@@ -11,6 +11,7 @@ import io
 import numpy as np
 from random import uniform
 from math import isclose
+from numpy.testing import assert_array_equal
 
 
 @pytest.fixture()
@@ -42,6 +43,11 @@ def veryshort_wav_pathlib(veryshort_wav_str):
 def veryshort_wav_bytesio(veryshort_wav_str):
     with open(veryshort_wav_str, "rb") as f:
         return io.BytesIO(f.read())
+
+
+@pytest.fixture()
+def silence_10s_mp3_pathlib(silence_10s_mp3_str):
+    return Path(silence_10s_mp3_str)
 
 
 @pytest.fixture()
@@ -174,68 +180,104 @@ def test_audio_constructor_should_fail_on_non_integer_sample_rate():
     with pytest.raises(ValueError):
         Audio(np.zeros(10), "fail...")
 
-# def test_split_and_save_dry(silence_10s_mp3_str, saved_wav):
-#     Audio.from_file(silence_10s_mp3_str).split_and_save(
-#         clip_length=5,
-#         destination=saved_wav.parent,
-#         name=saved_wav.name,
-#         create_log=False,
-#         final_clip=None,
-#         dry=True,
-#     )
-    
-# def test_split_and_save(silence_10s_mp3_str, saved_wav,tmp_dir):
-#     df = Audio.from_file(silence_10s_mp3_str).split_and_save(
-#         clip_length=5,
-#         destination=saved_wav.parent,
-#         name=saved_wav.name,
-#         create_log=False,
-#         final_clip=None,
-#         dry=False,
-#     )
-#     for p in df.index:
-#         path = tmp_dir.joinpath(Path(p))
-#         path.unlink()
-#     path = tmp_dir.joinpath(Path(saved_wav.name+'_clip_log.csv'))
-#     path.unlink()
 
-# def test_split_and_save_full(silence_10s_mp3_str, saved_wav):
-#     Audio.from_file(silence_10s_mp3_str).split_and_save(
-#         clip_length=4,
-#         destination=saved_wav.parent,
-#         name=saved_wav.name,
-#         create_log=False,
-#         final_clip="full",
-#         dry=True,
-#     )
-    
-# def test_split_and_save_short(silence_10s_mp3_str, saved_wav):
-#     Audio.from_file(silence_10s_mp3_str).split_and_save(
-#         clip_length=4,
-#         destination=saved_wav.parent,
-#         name=saved_wav.name,
-#         create_log=False,
-#         final_clip="short",
-#         dry=True,
-#     )
+def test_split_and_save_dry(silence_10s_mp3_pathlib, tmp_dir):
+    Audio.from_file(silence_10s_mp3_pathlib).split_and_save(
+        clip_length=5,
+        destination=tmp_dir,
+        name=silence_10s_mp3_pathlib.stem,
+        create_log=False,
+        final_clip=None,
+        dry=True,
+    )
 
-# def test_split_and_save_log(silence_10s_mp3_str, saved_wav):
-#     Audio.from_file(silence_10s_mp3_str).split_and_save(
-#         clip_length=5,
-#         destination=saved_wav.parent,
-#         name=saved_wav.name,
-#         create_log=False,
-#         final_clip=None,
-#         dry=True,
-#     )
-    
-# def test_split_and_save_short(veryshort_wav_pathlib, saved_wav):
-#     with pytest.warns(UserWarning):
-#         Audio.from_file(veryshort_wav_pathlib).split_and_save(
-#             clip_length=5,
-#             destination=saved_wav.parent,
-#             name=saved_wav.name,
-#             create_log=False,
-#             final_clip=None,
-#             dry=True,
-#         )
+
+def test_split_and_save(silence_10s_mp3_pathlib, tmp_dir):
+    clip_length = 5
+    og = Audio.from_file(silence_10s_mp3_pathlib)
+    df = og.split_and_save(
+        clip_length=clip_length,
+        destination=tmp_dir,
+        name=silence_10s_mp3_pathlib.stem,
+        create_log=False,
+        final_clip=None,
+        dry=False,
+    )
+    assert df.shape[0] == 2
+    for idx, p in enumerate(df.index):
+        path = tmp_dir.joinpath(Path(p))
+        assert_array_equal(
+            og.trim(idx * clip_length, (idx + 1) * clip_length).samples,
+            Audio.from_file(path).samples,
+        )
+        path.unlink()
+
+
+def test_split_and_save_full(silence_10s_mp3_pathlib, tmp_dir):
+    clip_length = 4
+    og = Audio.from_file(silence_10s_mp3_pathlib)
+    df = og.split_and_save(
+        clip_length=clip_length,
+        destination=tmp_dir,
+        name=silence_10s_mp3_pathlib.stem,
+        create_log=False,
+        final_clip="full",
+        dry=False,
+    )
+    assert df.shape[0] == 3
+    assert_array_equal(
+        og.trim(10 - clip_length, 10).samples,
+        Audio.from_file(tmp_dir.joinpath(df.index[2])).samples,
+    )
+    for p in df.index:
+        path = tmp_dir.joinpath(Path(p))
+        path.unlink()
+
+
+def test_split_and_save_short(silence_10s_mp3_pathlib, tmp_dir):
+    clip_length = 4
+    og = Audio.from_file(silence_10s_mp3_pathlib)
+    df = og.split_and_save(
+        clip_length=clip_length,
+        destination=tmp_dir,
+        name=silence_10s_mp3_pathlib.stem,
+        create_log=False,
+        final_clip="short",
+        dry=False,
+    )
+    print(list(tmp_dir.glob("*")))
+    assert df.shape[0] == 3
+    assert_array_equal(
+        og.trim(clip_length * (df.shape[0] - 1), 10).samples,
+        Audio.from_file(tmp_dir.joinpath(df.index[2])).samples,
+    )
+    for p in df.index:
+        path = tmp_dir.joinpath(Path(p))
+        print(path)
+        path.unlink()
+
+
+def test_split_and_save_log(silence_10s_mp3_pathlib, tmp_dir):
+    Audio.from_file(silence_10s_mp3_pathlib).split_and_save(
+        clip_length=5,
+        destination=tmp_dir,
+        name=silence_10s_mp3_pathlib.stem,
+        create_log=True,
+        final_clip=None,
+        dry=True,
+    )
+
+    path = tmp_dir.joinpath(Path(silence_10s_mp3_pathlib.stem + "_clip_log.csv"))
+    path.unlink()
+
+
+def test_split_and_save_too_short(veryshort_wav_pathlib, tmp_dir):
+    with pytest.warns(UserWarning):
+        Audio.from_file(veryshort_wav_pathlib).split_and_save(
+            clip_length=5,
+            destination=tmp_dir,
+            name=veryshort_wav_pathlib.stem,
+            create_log=False,
+            final_clip=None,
+            dry=True,
+        )
