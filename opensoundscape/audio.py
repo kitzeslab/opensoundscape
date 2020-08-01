@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import warnings
 
+
 class OpsoLoadAudioInputError(Exception):
     """ Custom exception indicating we can't load input
     """
@@ -201,13 +202,13 @@ class Audio:
         destination,
         name,
         create_log=True,
-        final_clip=None, #None, "short", "full"
+        final_clip=None,  # None, "short", "full"
         dry=False,
     ):
         """ Split audio into clips and save to disk
-        
+
         Splits the current audio object into constant-length clips and saves each one to a .wav file.
-        
+
         Args:
             clip_length: length of resulting clips, in seconds
             destination: a path to a directory where .wav clips will be saved
@@ -216,11 +217,11 @@ class Audio:
             final_clip: how to treat the end of the file when less than clip_length remains
                     - None (default): discard audio
                     - "short": save whatever audio is left as a clip
-                    - "full": save a clip of length clip_length that ends at the end of the file
+                    - "full": save a clip of length clip_length that ends at the end of the file (duplicating some data)
             dry: if True, do not save .wav files, but do create a log file (default: False)
         Returns:
             clip_df: dataframe containing clip names, start times, and end times
-        
+
         Effects:
             writes a .wav file for each clip
             writes a log file (.csv) with clip start and end times if create_log is True
@@ -232,9 +233,12 @@ class Audio:
 
         # number of full clips can we make without re-using audio
         nsplits = int(total_length / clip_length)
-        if nsplits<1:
-            warnings.warn(f'clip_length {clip_length} was longer than total length {total_length}')
-        
+        if nsplits < 1:
+            warnings.warn(
+                f"clip_length {clip_length} was longer than total length {total_length}"
+            )
+
+        # extract and save full clips
         for i in range(nsplits):
             start_t = i * clip_length
             end_t = (i + 1) * clip_length
@@ -244,7 +248,7 @@ class Audio:
             clip_df.at[clip_name] = [start_t, end_t]
 
         # possibly extract one more clip at the end of the file
-        last_full_clip_end_t = (nsplits + 1) * clip_length
+        last_full_clip_end_t = nsplits * clip_length
         if last_full_clip_end_t < total_length and final_clip is not None:
             # there was extra audio left?
             end_t = total_length
