@@ -113,8 +113,7 @@ When contributions in your fork are complete, open a pull request using the
 GitHub web interface. Before opening a PR, do the following to
 ensure the code is consistent with the rest of the package:
 * Run tests: `poetry run pytest`
-* Format the code with `black` style (from the top level of the repo): `poetry run black .`
-  * To automatically handle this, `poetry run pre-commit install`
+* Format the code with `black` style (from the top level of the repo): `black .`
 * Additional libraries to be installed should be installed with `poetry add`, but
   in most cases contributors should not add libraries.
 

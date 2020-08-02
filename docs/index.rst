@@ -17,9 +17,9 @@ The Getting Started section below provide guidance on installing OpSo. The Tutor
    :maxdepth: 2
    :caption: Tutorials
 
-   audio_and_spectrogram
-   train
-   predict
+   spectrogram_example
+   model_train_example
+   model_prediction_example
    RIBBIT_pulse_rate_demo
 
 .. toctree::
