@@ -79,7 +79,7 @@ def train(
             f.writelines(yaml.dump(metadata))
 
     if torch.cuda.is_available():
-        device = torch.device("cuda:0")
+        device = torch.device("cuda")
     else:
         device = torch.device("cpu")
 
@@ -105,8 +105,8 @@ def train(
         model.train()
         for t in train_loader:
             X, y = t["X"], t["y"]
-            X.to(device)
-            y.to(device)
+            X = X.to(device)
+            y = y.to(device)
             targets = y.squeeze(1)
 
             if tensor_augment:
@@ -128,7 +128,7 @@ def train(
 
             train_metrics.update_loss(loss.clone().detach().item())
             predictions = outputs.clone().detach().argmax(dim=1)
-            train_metrics.update_metrics(targets, predictions)
+            train_metrics.update_metrics(targets.cpu(), predictions.cpu())
 
         if print_logging:
             print("  Validating.")
@@ -137,13 +137,13 @@ def train(
         with torch.no_grad():
             for t in valid_loader:
                 X, y = t["X"], t["y"]
-                X.to(device)
-                y.to(device)
+                X = X.to(device)
+                y = y.to(device)
                 targets = y.squeeze(1)
 
                 outputs = model(X)
                 predictions = outputs.clone().detach().argmax(dim=1)
-                valid_metrics.update_metrics(targets, predictions)
+                valid_metrics.update_metrics(targets.cpu(), predictions.cpu())
 
         # Save weights at every logging interval and at the last epoch
         if (epoch % log_every == 0) or (epoch == epochs - 1):

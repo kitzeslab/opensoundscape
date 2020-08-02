@@ -37,10 +37,10 @@ def run_command(cmd):
 
 def rescale_features(X, rescaling_vector=None):
     """ rescale all features by dividing by the max value for each feature
-    
-    optionally provide the rescaling vector (1xlen(X) np.array), 
+
+    optionally provide the rescaling vector (1xlen(X) np.array),
     so that you can rescale a new dataset consistently with an old one
-    
+
     returns rescaled feature set and rescaling vector"""
     import numpy as np
 
@@ -92,14 +92,14 @@ def linear_scale(array, in_range=(0, 1), out_range=(0, 255)):
 def jitter(x, width, distribution="gaussian"):
     """
     Jitter (add random noise to) each value of x
-    
+
     Args:
         x: scalar, array, or nd-array of numeric type
         width: multiplier for random variable (stdev for 'gaussian' or r for 'uniform')
         distribution: 'gaussian' (default) or 'uniform'
             if 'gaussian': draw jitter from gaussian with mu = 0, std = width
-            if 'uniform': draw jitter from uniform on [-width, width]    
-    Returns: 
+            if 'uniform': draw jitter from uniform on [-width, width]
+    Returns:
         jittered_x: x + random jitter
     """
     if distribution == "gaussian":
