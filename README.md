@@ -26,7 +26,7 @@ developers contributing to the code). Either way, Python 3.7 or higher is requir
 
 ### Just give me the pip command!
 
-Already familiar with installing python packages via pip? The pip command to install OpenSoundscape is `pip install opensoundscape==0.4.1`.
+Already familiar with installing python packages via pip? The pip command to install OpenSoundscape is `pip install opensoundscape==0.4.2`.
 
 ### Detailed instructions
 
@@ -42,11 +42,11 @@ Run the following commands in your bash terminal:
 * Create an environment called `opensoundscape` in the directory: `python3 -m venv opensoundscape`
 * **For Windows computers:** activate/use the environment: `opensoundscape\Scripts\activate.bat`
 * **For Mac computers:** activate/use the environment `source opensoundscape/bin/activate`
-* Install OpenSoundscape in the environment: `pip install opensoundscape==0.4.1`
+* Install OpenSoundscape in the environment: `pip install opensoundscape==0.4.2`
 * Once you are done with OpenSoundscape, deactivate the environment: `deactivate`
 * To use the environment again, you will have to refer to absolute path of the virtual environments folder. For instance, if I were on a Mac and created `.venv` inside a directory `/Users/MyFiles/Code` I would activate the virtual environment using: `source /Users/MyFiles/Code/.venv/opensoundscape/bin/activate`
 
-For some of our functions, you will need a version of `ffmpeg >= 0.4.1`. On Mac machines, `ffmpeg` can be installed via `brew`.
+For some of our functions, you will need a version of `ffmpeg >= 0.4.2`. On Mac machines, `ffmpeg` can be installed via `brew`.
 
 ## Installation via poetry (contributors and advanced users)
 Poetry installation allows direct use of the most recent version of the code.

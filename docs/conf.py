@@ -26,7 +26,7 @@ copyright = "2020, Justin Kitzes, Barry Moore, Tessa Rhinehart, Sam Lapp"
 author = "Justin Kitzes, Barry Moore, Tessa Rhinehart, Sam Lapp"
 
 # The full version, including alpha/beta/rc tags
-release = "0.4.1"
+release = "0.4.2"
 
 
 # -- General configuration ---------------------------------------------------
