@@ -25,7 +25,7 @@ def predict(
         num_workers:    The number of cores to use for batch preparation [default: 0]
                         - if 0, it uses the current process rather than creating a new one
         apply_softmax:  Apply a softmax activation layer to the raw outputs of the model
-        label_names:    List of names of each class, with indices corresponding to NumericLabels [default: None]
+        label_dict:     List of names of each class, with indices corresponding to NumericLabels [default: None]
                         - if None, the dataframe returned will have numeric column names
                         - if list of class names, returned dataframe will have class names as column names
 
@@ -37,7 +37,7 @@ def predict(
     """
 
     if torch.cuda.is_available():
-        device = torch.device("cuda:0")
+        device = torch.device("cuda")
     else:
         device = torch.device("cpu")
     model.eval()
@@ -53,13 +53,13 @@ def predict(
     # run prediction
     all_predictions = []
     for i, inputs in enumerate(dataloader):
-        predictions = model(inputs["X"])
+        predictions = model(inputs["X"].to(device))
         if apply_softmax:
             softmax_val = softmax(predictions, 1).detach().cpu().numpy()
             for x in softmax_val:
                 all_predictions.append(x)
         else:
-            for x in predictions.detach().numpy():
+            for x in predictions.detach().cpu().numpy():
                 all_predictions.append(list(x))  # .astype('float64')
 
     img_paths = prediction_dataset.df[prediction_dataset.filename_column].values
