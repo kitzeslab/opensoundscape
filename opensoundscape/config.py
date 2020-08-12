@@ -12,11 +12,9 @@ raven:
   annotations: false                # Look for Raven annotations (boolean)
   label_corrections: null           # Use this file to correct classes in Raven annotations (null or string)
 audio:
-  sample_rate: null                 # Sample rate for audio resampling (null or positive integer)
+  sample_rate: 22050                # Sample rate for audio resampling (null or positive integer)
   max_duration: null                # Maximum duration of audio file during read (null or positive integer)
   resample_type: "kaiser_best"      # Resample type for librosa ("kaiser_best" or "kaiser_fast")
-  duration: 5                       # Duration in seconds for split audio
-  overlap: 1                        # Overlap of audio for split audio
 """.strip()
 
 greater_than_zero = lambda n: n > 0
@@ -44,8 +42,6 @@ AUDIO_SCHEMA = Schema(
             lambda s: s in ["kaiser_best", "kaiser_fast"],
             error="Resample type can be one of kaiser_fast or kaiser_best",
         ),
-        "duration": And(Use(int), greater_than_zero),
-        "overlap": And(Use(int), greater_than_zero),
     }
 )
 

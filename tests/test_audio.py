@@ -4,6 +4,7 @@ from opensoundscape.audio import (
     Audio,
     OpsoLoadAudioInputError,
     OpsoLoadAudioInputTooLong,
+    split_and_save,
 )
 import pytest
 from pathlib import Path
@@ -139,8 +140,6 @@ def test_extend_length_is_correct(silence_10s_mp3_str):
     duration = audio.duration()
     for _ in range(100):
         extend_length = uniform(duration, duration * 10)
-        print(audio.extend(extend_length).duration())
-        print(extend_length)
         assert isclose(
             audio.extend(extend_length).duration(), extend_length, abs_tol=1e-4
         )
@@ -148,24 +147,24 @@ def test_extend_length_is_correct(silence_10s_mp3_str):
 
 def test_bandpass(silence_10s_mp3_str):
     s = Audio.from_file(silence_10s_mp3_str)
-    assert isinstance(s.bandpass(1, 100), Audio)
+    assert isinstance(s.bandpass(1, 100, 9), Audio)
 
 
 def test_bandpass(silence_10s_mp3_str):
     s = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
-    assert isinstance(s.bandpass(0.001, 4999), Audio)
+    assert isinstance(s.bandpass(0.001, 4999, 9), Audio)
 
 
 def test_bandpass_low_error(silence_10s_mp3_str):
     s = Audio.from_file(silence_10s_mp3_str)
     with pytest.raises(ValueError):
-        s.bandpass(0, 100)
+        s.bandpass(0, 100, 9)
 
 
 def test_bandpass_high_error(silence_10s_mp3_str):
     s = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     with pytest.raises(ValueError):
-        s.bandpass(100, 5000)
+        s.bandpass(100, 5000, 9)
 
 
 def test_spectrum(silence_10s_mp3_str):
@@ -193,103 +192,22 @@ def test_audio_constructor_should_fail_on_non_integer_sample_rate():
         Audio(np.zeros(10), "fail...")
 
 
-def test_split_and_save_dry(silence_10s_mp3_pathlib, tmp_dir):
-    Audio.from_file(silence_10s_mp3_pathlib).split_and_save(
-        clip_length=5,
-        destination=tmp_dir,
-        name=silence_10s_mp3_pathlib.stem,
-        create_log=False,
-        final_clip=None,
-        dry=True,
+def test_split_and_save_default(silence_10s_mp3_pathlib):
+    clip_df = split_and_save(
+        Audio.from_file(silence_10s_mp3_pathlib),
+        "unnecessary",
+        "unnecessary",
+        dry_run=True,
     )
+    assert clip_df.shape[0] == 2
 
 
-def test_split_and_save(silence_10s_mp3_pathlib, tmp_dir):
-    clip_length = 5
-    og = Audio.from_file(silence_10s_mp3_pathlib)
-    df = og.split_and_save(
-        clip_length=clip_length,
-        destination=tmp_dir,
-        name=silence_10s_mp3_pathlib.stem,
-        create_log=False,
-        final_clip=None,
-        dry=False,
+def test_split_and_save_default_extend(silence_10s_mp3_pathlib):
+    clip_df = split_and_save(
+        Audio.from_file(silence_10s_mp3_pathlib),
+        "unnecessary",
+        "unnecessary",
+        final_clip="extend",
+        dry_run=True,
     )
-    assert df.shape[0] == 2
-    for idx, p in enumerate(df.index):
-        path = tmp_dir.joinpath(Path(p))
-        assert_array_equal(
-            og.trim(idx * clip_length, (idx + 1) * clip_length).samples,
-            Audio.from_file(path).samples,
-        )
-        path.unlink()
-
-
-def test_split_and_save_full(silence_10s_mp3_pathlib, tmp_dir):
-    clip_length = 4
-    og = Audio.from_file(silence_10s_mp3_pathlib)
-    df = og.split_and_save(
-        clip_length=clip_length,
-        destination=tmp_dir,
-        name=silence_10s_mp3_pathlib.stem,
-        create_log=False,
-        final_clip="full",
-        dry=False,
-    )
-    assert df.shape[0] == 3
-    assert_array_equal(
-        og.trim(10 - clip_length, 10).samples,
-        Audio.from_file(tmp_dir.joinpath(df.index[2])).samples,
-    )
-    for p in df.index:
-        path = tmp_dir.joinpath(Path(p))
-        path.unlink()
-
-
-def test_split_and_save_short(silence_10s_mp3_pathlib, tmp_dir):
-    clip_length = 4
-    og = Audio.from_file(silence_10s_mp3_pathlib)
-    df = og.split_and_save(
-        clip_length=clip_length,
-        destination=tmp_dir,
-        name=silence_10s_mp3_pathlib.stem,
-        create_log=False,
-        final_clip="short",
-        dry=False,
-    )
-    print(list(tmp_dir.glob("*")))
-    assert df.shape[0] == 3
-    assert_array_equal(
-        og.trim(clip_length * (df.shape[0] - 1), 10).samples,
-        Audio.from_file(tmp_dir.joinpath(df.index[2])).samples,
-    )
-    for p in df.index:
-        path = tmp_dir.joinpath(Path(p))
-        print(path)
-        path.unlink()
-
-
-def test_split_and_save_log(silence_10s_mp3_pathlib, tmp_dir):
-    Audio.from_file(silence_10s_mp3_pathlib).split_and_save(
-        clip_length=5,
-        destination=tmp_dir,
-        name=silence_10s_mp3_pathlib.stem,
-        create_log=True,
-        final_clip=None,
-        dry=True,
-    )
-
-    path = tmp_dir.joinpath(Path(silence_10s_mp3_pathlib.stem + "_clip_log.csv"))
-    path.unlink()
-
-
-def test_split_and_save_too_short(veryshort_wav_pathlib, tmp_dir):
-    with pytest.warns(UserWarning):
-        Audio.from_file(veryshort_wav_pathlib).split_and_save(
-            clip_length=5,
-            destination=tmp_dir,
-            name=veryshort_wav_pathlib.stem,
-            create_log=False,
-            final_clip=None,
-            dry=True,
-        )
+    assert clip_df.shape[0] == 3
