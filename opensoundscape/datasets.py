@@ -219,6 +219,8 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         overlay_weight: The weight given to the overlaid image during augmentation.
             When 'random', will randomly select a different weight between 0.2 and 0.5 for each overlay
             When not 'random', should be a float between 0 and 1 [default: 'random']
+        audio_sample_rate: resample audio to this sample rate; specify None to use original audio sample rate
+            default: 22050
 
     Output:
         Dictionary:
@@ -243,6 +245,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         max_overlay_num=0,
         overlay_prob=0.2,
         overlay_weight="random",
+        audio_sample_rate=22050,
     ):
         self.df = df
         self.filename_column = filename_column
@@ -262,6 +265,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         self.overlay_weight = overlay_weight
         self.transform = self.set_transform(add_noise=add_noise)
         self.label_dict = label_dict
+        self.audio_sample_rate = audio_sample_rate
 
     def set_transform(self, add_noise):
         # Warning: some transforms only act on first channel
@@ -316,7 +320,9 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # select a random file from a different class
         other_classes_df = self.df[self.df[self.label_column] != original_class]
         overlay_path = np.random.choice(other_classes_df[self.filename_column].values)
-        overlay_audio = Audio.from_file(overlay_path)
+        overlay_audio = Audio.from_file(
+            overlay_path, sample_rate=self.audio_sample_rate
+        )
 
         # trim to same length as main clip
         overlay_audio_length = len(overlay_audio.samples) / overlay_audio.sample_rate
@@ -353,7 +359,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
         row = self.df.iloc[item_idx]
         audio_path = Path(row[self.filename_column])
-        audio = Audio.from_file(audio_path)
+        audio = Audio.from_file(audio_path, sample_rate=self.audio_sample_rate)
 
         # trim to desired length if needed
         # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
