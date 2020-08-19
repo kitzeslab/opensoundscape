@@ -360,12 +360,12 @@ def split_and_save(
         prefix:         A name to prepend to the written clips
         clip_duration:  The duration of each clip in seconds [default: 5]
         clip_overlap:   The overlap of each clip in seconds [default: 1]
-        final_clip:     Possible options (any other input will ignore the final clip entirely),
+        final_clip:     Possible options (any other input will ignore the final clip entirely) [default: None]
                             - "remainder":          Include the remainder of the Audio
                                                         (clip will not have clip_duration length)
                             - "full":               Increase the overlap to yield a clip with clip_duration
                             - "extend":             Similar to remainder but extend the clip to clip_duration
-        dry_run:        If True, skip writing audio and just return clip DataFrame
+        dry_run:        If True, skip writing audio and just return clip DataFrame [default: False]
     
     Returns:
         pandas.DataFrame containing begin and end times for each clip from the source audio
