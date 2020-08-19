@@ -219,6 +219,14 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         overlay_weight: The weight given to the overlaid image during augmentation.
             When 'random', will randomly select a different weight between 0.2 and 0.5 for each overlay
             When not 'random', should be a float between 0 and 1 [default: 'random']
+        audio_sample_rate: resample audio to this sample rate; specify None to use original audio sample rate
+            default: 22050
+        white_black_pct: tuple (white_pct,black_pct) increase contrast to make this percentage of pixels of spectrogram black/white
+            result: whitest (quietest) white_percentile pixels become white, blackest (loudest) black_pct pixels become black; linear scale for intermediate values
+            default: (50,0)
+            pass `None` to skip this transformation
+        debug: path to save img files, images are created from the tensor immediately before it is returned
+            default: None (do not save)
 
     Output:
         Dictionary:
@@ -243,6 +251,9 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         max_overlay_num=0,
         overlay_prob=0.2,
         overlay_weight="random",
+        audio_sample_rate=22050,
+        white_black_pct=(50,0),
+        debug=None,
     ):
         self.df = df
         self.filename_column = filename_column
@@ -262,6 +273,9 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         self.overlay_weight = overlay_weight
         self.transform = self.set_transform(add_noise=add_noise)
         self.label_dict = label_dict
+        self.audio_sample_rate = audio_sample_rate
+        self.white_black_pct = white_black_pct
+        self.debug = debug
 
     def set_transform(self, add_noise):
         # Warning: some transforms only act on first channel
@@ -316,7 +330,9 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # select a random file from a different class
         other_classes_df = self.df[self.df[self.label_column] != original_class]
         overlay_path = np.random.choice(other_classes_df[self.filename_column].values)
-        overlay_audio = Audio.from_file(overlay_path)
+        overlay_audio = Audio.from_file(
+            overlay_path, sample_rate=self.audio_sample_rate
+        )
 
         # trim to same length as main clip
         overlay_audio_length = len(overlay_audio.samples) / overlay_audio.sample_rate
@@ -345,6 +361,36 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
     def upsample(self):
         raise NotImplementedError("Upsampling is not implemented yet")
+    
+    def increase_contrast(self, rgb_tensor, white_pct, black_pct):
+        """makes quietest white_pct white and loudest black_pct pixels black
+        
+        takes rgb_tensor size (3, width, height) 
+        
+        for instance, if white_pct = 40 and black_pct = 1
+        the quietest 50% of pixels become 1 (white)
+        the loudest 1% of pixels become black (0)
+        intermediate values are scaled linearly from 0 to 1
+        
+        returns rgb tensor with rescaled values
+        
+        """
+        from opensoundscape.helpers import linear_scale
+        
+        #convert torch tensor to numpy array of shape (3,width,height)
+        rgb_array = rgb_tensor.numpy()
+        
+        #find values of pixels: the quietest to become black (0) and the loudest to become white (1)
+        max_value_to_0black = np.percentile(rgb_array,black_pct)
+        min_value_to_1white = np.percentile(rgb_array,100-white_pct)
+
+        # linearly re-scale pixel values such that the desired black percentiles are <=0 and desired white percentiles are >=1
+        rgb_array = linear_scale(rgb_array,(max_value_to_0black,min_value_to_1white),(0,1))
+        
+        # limit values to the range [0,1]
+        rgb_array = np.clip(rgb_array,0,1) 
+        
+        return torch.from_numpy(rgb_array)
 
     def __len__(self):
         return self.df.shape[0]
@@ -353,7 +399,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
         row = self.df.iloc[item_idx]
         audio_path = Path(row[self.filename_column])
-        audio = Audio.from_file(audio_path)
+        audio = Audio.from_file(audio_path, sample_rate=self.audio_sample_rate)
 
         # trim to desired length if needed
         # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
@@ -381,6 +427,14 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # apply desired random transformations to image and convert to tensor
         image = image.convert("RGB")
         X = self.transform(image)
+        
+        #re-scale pixel values to use entire range, increasing image contrast
+        if self.white_black_pct is not None:
+            X = self.increase_contrast(X, self.white_black_pct[0], self.white_black_pct[1])
+        
+        if self.debug:
+            from torchvision.utils import save_image
+            save_image(X,f"{self.debug}/{audio_path.stem}_{time()}.png")
 
         # Return data : label pairs (training/validation)
         if self.label_column:
