@@ -252,7 +252,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         overlay_prob=0.2,
         overlay_weight="random",
         audio_sample_rate=22050,
-        white_black_pct=(50,0),
+        white_black_pct=(50, 0),
         debug=None,
     ):
         self.df = df
@@ -361,7 +361,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
     def upsample(self):
         raise NotImplementedError("Upsampling is not implemented yet")
-    
+
     def increase_contrast(self, rgb_tensor, white_pct, black_pct):
         """makes quietest white_pct white and loudest black_pct pixels black
         
@@ -376,20 +376,22 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         
         """
         from opensoundscape.helpers import linear_scale
-        
-        #convert torch tensor to numpy array of shape (3,width,height)
+
+        # convert torch tensor to numpy array of shape (3,width,height)
         rgb_array = rgb_tensor.numpy()
-        
-        #find values of pixels: the quietest to become black (0) and the loudest to become white (1)
-        max_value_to_0black = np.percentile(rgb_array,black_pct)
-        min_value_to_1white = np.percentile(rgb_array,100-white_pct)
+
+        # find values of pixels: the quietest to become black (0) and the loudest to become white (1)
+        max_value_to_0black = np.percentile(rgb_array, black_pct)
+        min_value_to_1white = np.percentile(rgb_array, 100 - white_pct)
 
         # linearly re-scale pixel values such that the desired black percentiles are <=0 and desired white percentiles are >=1
-        rgb_array = linear_scale(rgb_array,(max_value_to_0black,min_value_to_1white),(0,1))
-        
+        rgb_array = linear_scale(
+            rgb_array, (max_value_to_0black, min_value_to_1white), (0, 1)
+        )
+
         # limit values to the range [0,1]
-        rgb_array = np.clip(rgb_array,0,1) 
-        
+        rgb_array = np.clip(rgb_array, 0, 1)
+
         return torch.from_numpy(rgb_array)
 
     def __len__(self):
@@ -427,14 +429,17 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # apply desired random transformations to image and convert to tensor
         image = image.convert("RGB")
         X = self.transform(image)
-        
-        #re-scale pixel values to use entire range, increasing image contrast
+
+        # re-scale pixel values to use entire range, increasing image contrast
         if self.white_black_pct is not None:
-            X = self.increase_contrast(X, self.white_black_pct[0], self.white_black_pct[1])
-        
+            X = self.increase_contrast(
+                X, self.white_black_pct[0], self.white_black_pct[1]
+            )
+
         if self.debug:
             from torchvision.utils import save_image
-            save_image(X,f"{self.debug}/{audio_path.stem}_{time()}.png")
+
+            save_image(X, f"{self.debug}/{audio_path.stem}_{time()}.png")
 
         # Return data : label pairs (training/validation)
         if self.label_column:
