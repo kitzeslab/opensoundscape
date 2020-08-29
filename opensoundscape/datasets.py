@@ -249,7 +249,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         overlay_weight="random",
         audio_sample_rate=22050,
         debug=None,
-#        white_black_pct=(50, 0),
+        #        white_black_pct=(50, 0),
     ):
         self.df = df
         self.filename_column = filename_column
@@ -267,12 +267,12 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
                 f"overlay_weight not in 0<overlay_weight<1 (given overlay_weight: {overlay_weight})"
             )
         self.overlay_weight = overlay_weight
-#        self.white_black_pct = white_black_pct
-        
-        self.mean = torch.tensor([.5 for _ in range(3)]) #[0.8013 for _ in range(3)]) 
-        self.std_dev = ([.5 for _ in range(3)]) #0.1576 for _ in range(3)])
+        #        self.white_black_pct = white_black_pct
+
+        self.mean = torch.tensor([0.5 for _ in range(3)])  # [0.8013 for _ in range(3)])
+        self.std_dev = [0.5 for _ in range(3)]  # 0.1576 for _ in range(3)])
         self.transform = self.set_transform(add_noise=add_noise)
-        
+
         self.label_dict = label_dict
         self.audio_sample_rate = audio_sample_rate
         self.debug = debug
@@ -364,36 +364,35 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
     def upsample(self):
         raise NotImplementedError("Upsampling is not implemented yet")
 
-#     def increase_contrast(self, rgb_tensor, white_pct, black_pct):
-#         """makes quietest white_pct white and loudest black_pct pixels black   
-#
-#         takes rgb_tensor size (3, width, height) 
-# 
-#         for instance, if white_pct = 40 and black_pct = 1
-#         the quietest 50% of pixels become 1 (white)
-#         the loudest 1% of pixels become black (0)
-#         intermediate values are scaled linearly from 0 to 1
-#        
-#         returns rgb tensor with rescaled values
-#        
-#         """
-#         from opensoundscape.helpers import linear_scale
-#        
-#         #convert torch tensor to numpy array of shape (3,width,height)
-#         rgb_array = rgb_tensor.numpy()
-#        
-#         #find values of pixels: the quietest to become black (0) and the loudest to become white (1)
-#         max_value_to_0black = np.percentile(rgb_array,black_pct)
-#         min_value_to_1white = np.percentile(rgb_array,100-white_pct)
-#
-#         # linearly re-scale pixel values such that the desired black percentiles are <=0 and desired white percentiles are >=1
-#         rgb_array = linear_scale(rgb_array,(max_value_to_0black,min_value_to_1white),(0,1))
-#        
-#         # limit values to the range [0,1]
-#         rgb_array = np.clip(rgb_array,0,1) 
-#        
-#         return torch.from_numpy(rgb_array)
-
+    #     def increase_contrast(self, rgb_tensor, white_pct, black_pct):
+    #         """makes quietest white_pct white and loudest black_pct pixels black
+    #
+    #         takes rgb_tensor size (3, width, height)
+    #
+    #         for instance, if white_pct = 40 and black_pct = 1
+    #         the quietest 50% of pixels become 1 (white)
+    #         the loudest 1% of pixels become black (0)
+    #         intermediate values are scaled linearly from 0 to 1
+    #
+    #         returns rgb tensor with rescaled values
+    #
+    #         """
+    #         from opensoundscape.helpers import linear_scale
+    #
+    #         #convert torch tensor to numpy array of shape (3,width,height)
+    #         rgb_array = rgb_tensor.numpy()
+    #
+    #         #find values of pixels: the quietest to become black (0) and the loudest to become white (1)
+    #         max_value_to_0black = np.percentile(rgb_array,black_pct)
+    #         min_value_to_1white = np.percentile(rgb_array,100-white_pct)
+    #
+    #         # linearly re-scale pixel values such that the desired black percentiles are <=0 and desired white percentiles are >=1
+    #         rgb_array = linear_scale(rgb_array,(max_value_to_0black,min_value_to_1white),(0,1))
+    #
+    #         # limit values to the range [0,1]
+    #         rgb_array = np.clip(rgb_array,0,1)
+    #
+    #         return torch.from_numpy(rgb_array)
 
     def __len__(self):
         return self.df.shape[0]
@@ -430,10 +429,10 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # apply desired random transformations to image and convert to tensor
         image = image.convert("RGB")
         X = self.transform(image)
-        
-#        #re-scale pixel values to use entire range, increasing image contrast
-#        if self.white_black_pct is not None:
-#             X = self.increase_contrast(X, self.white_black_pct[0], self.white_black_pct[1])
+
+        #        #re-scale pixel values to use entire range, increasing image contrast
+        #        if self.white_black_pct is not None:
+        #             X = self.increase_contrast(X, self.white_black_pct[0], self.white_black_pct[1])
 
         if self.debug:
             from torchvision.utils import save_image

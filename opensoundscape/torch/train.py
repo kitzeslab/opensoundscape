@@ -108,7 +108,7 @@ def train(
             print("  Training.")
         train_metrics = Metrics(model.fc.out_features)
         model.train()
-        
+
         epoch_train_scores = []
         epoch_train_targets = []
         for t in train_loader:
@@ -130,7 +130,7 @@ def train(
 
             # Run model
             outputs = model(X)
-            
+
             # Learn from batch
             loss = loss_fn(outputs, targets)
             optimizer.zero_grad()
@@ -146,9 +146,10 @@ def train(
             # Save copy of scores and true vals
             if save_scores:
                 epoch_train_scores.extend([sample.numpy() for sample in batch_scores])
-                epoch_train_targets.extend(*y.clone().detach().reshape([1, len(y)]).numpy().tolist())
-            
-            
+                epoch_train_targets.extend(
+                    *y.clone().detach().reshape([1, len(y)]).numpy().tolist()
+                )
+
         # Validate model
         if print_logging:
             print("  Validating.")
@@ -165,18 +166,19 @@ def train(
 
                 # Run model
                 outputs = model(X)
-               
+
                 # Update metrics with class predictions for batch
                 batch_scores = outputs.clone().detach()
-                batch_predictions = batch_scores.argmax(dim=1) 
+                batch_predictions = batch_scores.argmax(dim=1)
                 valid_metrics.update_metrics(targets.cpu(), batch_predictions.cpu())
-                
-                 
+
                 # Save copy of scores and true targets
                 if save_scores:
                     epoch_val_scores.extend([sample.numpy() for sample in batch_scores])
-                    epoch_val_targets.extend(*y.clone().detach().reshape([1, len(y)]).numpy().tolist())
-        
+                    epoch_val_targets.extend(
+                        *y.clone().detach().reshape([1, len(y)]).numpy().tolist()
+                    )
+
         # Save weights at every logging interval and at the last epoch
         if (epoch % log_every == 0) or (epoch == epochs - 1):
             t_loss, t_acc, t_prec, t_rec, t_f1 = train_metrics.compute_metrics(
@@ -210,7 +212,7 @@ def train(
                     "labels_yaml": labels_yaml,
                 }
             )
-            
+
             if save_scores:
                 epoch_results.update(
                     {
@@ -220,7 +222,7 @@ def train(
                         "valid_targets": epoch_val_targets,
                     }
                 )
-            
+
             if save_dir is not None:
                 epoch_filename = f"{save_dir}/epoch-{epoch}.tar"
                 torch.save(epoch_results, epoch_filename)
@@ -229,4 +231,3 @@ def train(
 
     print("Training complete.")
     return
-
