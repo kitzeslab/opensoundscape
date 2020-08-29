@@ -10,7 +10,7 @@ def predict(
     model,
     prediction_dataset,
     batch_size=1,
-    num_workers=0,
+    num_workers=1,
     apply_softmax=False,
     label_dict=None,
 ):
@@ -22,8 +22,8 @@ def predict(
         prediction_dataset: 
                         a pytorch dataset object that returns tensors, such as datasets.SingleTargetAudioDataset()                
         batch_size:     The size of the batches (# files) [default: 1]
-        num_workers:    The number of cores to use for batch preparation [default: 0]
-                        - if 0, it uses the current process rather than creating a new one
+        num_workers:    The number of cores to use for batch preparation [default: 1]
+                        - if you want to use all the cores on your machine, set it to 0 (this could freeze your computer)
         apply_softmax:  Apply a softmax activation layer to the raw outputs of the model
         label_dict:     List of names of each class, with indices corresponding to NumericLabels [default: None]
                         - if None, the dataframe returned will have numeric column names
