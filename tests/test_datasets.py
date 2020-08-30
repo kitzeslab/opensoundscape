@@ -145,9 +145,6 @@ def test_single_target_audio_dataset_to_image(single_target_audio_dataset_df):
 
     pixels = dataset[0]["X"].numpy()
 
-    for pixel in pixels.flatten():
-        if pixel < 0:
-            print(pixel)
     assert (pixels >= -1).all()
     assert (pixels <= 1).all()
     assert pixels.max() > 0.9
