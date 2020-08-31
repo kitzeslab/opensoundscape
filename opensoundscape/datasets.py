@@ -57,14 +57,17 @@ class SplitterDataset(torch.utils.data.Dataset):
         duration:               How long should each segment be? (units: seconds, default: 5)
         output_directory        Where should segments be written? (default: segments/)
         include_last_segment:   Do you want to include the last segment? (default: False)
+        column_separator:       What character should we use to separate columns (default: "\t")
+        species_separator:      What character should we use to separate species (default: "|")
 
     Effects:
-        - Segments will be written to the output_directory
+        - Segments will be written to the `output_directory`
 
     Outputs:
-        output: A list of CSV rows containing the source audio, segment begin
-                time (seconds), segment end time (seconds), segment audio, and present
-                classes separated by '|' if annotations were requested
+        output: A list of CSV rows (separated by `column_separator`) containing
+            the source audio, segment begin time (seconds), segment end time
+            (seconds), segment audio, and present classes separated by
+            `species_separator` if annotations were requested
     """
 
     def __init__(
@@ -76,6 +79,8 @@ class SplitterDataset(torch.utils.data.Dataset):
         duration=5,
         output_directory="segments",
         include_last_segment=False,
+        column_separator="\t",
+        species_separator="|",
     ):
         self.wavs = list(wavs)
 
@@ -88,6 +93,8 @@ class SplitterDataset(torch.utils.data.Dataset):
         self.duration = duration
         self.output_directory = output_directory
         self.include_last_segment = include_last_segment
+        self.column_separator = column_separator
+        self.species_separator = species_separator
 
     def __len__(self):
         return len(self.wavs)
@@ -153,12 +160,28 @@ class SplitterDataset(torch.utils.data.Dataset):
                     audio_to_write.save(f"{destination}.wav")
 
                     if idx == num_segments - 1:
-                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.wav"
+                        to_append = [
+                            wav,
+                            annotation_file,
+                            wav_times[segment_sample_begin],
+                            wav_times[-1],
+                            f"{destination}.wav",
+                        ]
                     else:
-                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.wav"
-                    to_append += f",{'|'.join(overlaps['class'].unique())}"
+                        to_append = [
+                            wav,
+                            annotation_file,
+                            wav_times[segment_sample_begin],
+                            wav_times[segment_sample_end],
+                            f"{destination}.wav",
+                        ]
+                    to_append.append(
+                        self.species_separator.join(overlaps["class"].unique())
+                    )
 
-                    outputs.append(to_append)
+                    outputs.append(
+                        self.column_separator.join([str(x) for x in to_append])
+                    )
             else:
                 segment_sample_begin = audio_obj.time_to_sample(begin)
                 segment_sample_end = audio_obj.time_to_sample(end)
@@ -166,11 +189,21 @@ class SplitterDataset(torch.utils.data.Dataset):
                 audio_to_write.save(f"{destination}.wav")
 
                 if idx == num_segments - 1:
-                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.wav"
+                    to_append = [
+                        wav,
+                        wav_times[segment_sample_begin],
+                        wav_times[-1],
+                        f"{destination}.wav",
+                    ]
                 else:
-                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.wav"
+                    to_append = [
+                        wav,
+                        wav_times[segment_sample_begin],
+                        wav_times[segment_sample_end],
+                        f"{destination}.wav",
+                    ]
 
-                outputs.append(to_append)
+                outputs.append(self.column_separator.join([str(x) for x in to_append]))
 
         return {"data": outputs}
 
