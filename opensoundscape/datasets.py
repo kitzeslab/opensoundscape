@@ -202,31 +202,40 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         label_dict: a dictionary mapping numeric labels to class names,
             - for example: {0:'American Robin',1:'Northern Cardinal'}
             - pass `None` if you wish to retain numeric labels
-        filename_column: The column in the DataFrame which contains paths to data [default: Destination]
+        filename_column: The column in the DataFrame which contains paths to
+            data [default: Destination]
         from_audio: Whether the raw dataset is audio [default: True]
         label_column: The column with numeric labels if present [default: None]
         height: Height for resulting Tensor [default: 224]
         width: Width for resulting Tensor [default: 224]
         add_noise: Apply RandomAffine and ColorJitter filters [default: False]
         save_dir: Save images to a directory [default: None]
-        random_trim_length: Extract a clip of this many seconds of audio starting at a random time
-            If None, the original clip will be used [default: None]
-        extend_short_clips: If a file to be overlaid or trimmed from is too short,
-            extend it to the desired length by repeating it. [default: False]
-        max_overlay_num: The maximum number of additional images to overlay, each with probability overlay_prob [default: 0]
-        overlay_prob: Probability of an image from a different class being overlayed (combined as a weighted sum)
+        random_trim_length: Extract a clip of this many seconds of audio
+            starting at a random time. If None, the original clip will be used
+            [default: None]
+        extend_short_clips: If a file to be overlaid or trimmed from is too
+            short, extend it to the desired length by repeating it.
+            [default: False]
+        max_overlay_num: The maximum number of additional images to overlay,
+            each with probability overlay_prob [default: 0]
+        overlay_prob: Probability of an image from a different class being
+            overlayed (combined as a weighted sum)
             on the training image. typical values: 0, 0.66 [default: 0.2]
-        overlay_weight: The weight given to the overlaid image during augmentation.
-            When 'random', will randomly select a different weight between 0.2 and 0.5 for each overlay
-            When not 'random', should be a float between 0 and 1 [default: 'random']
+        overlay_weight: The weight given to the overlaid image during
+            augmentation. When 'random', will randomly select a different weight
+            between 0.2 and 0.5 for each overlay. When not 'random', should be a
+            float between 0 and 1 [default: 'random']
         overlay_class: The label of the class that overlays should be drawn from.
-            If None, draws from any class that is not the same class as the audio.
-            If creating a presence/absence classifier, set overlay_class
-            equal to the absence class label [default: None]
-        audio_sample_rate: resample audio to this sample rate; specify None to use original audio sample rate
-            default: 22050
-        debug: path to save img files, images are created from the tensor immediately before it is returned
-            default: None (do not save)
+            Must be specified if max_overlay_num > 0. If 'different', draws
+            overlays from any class that is not the same class as the audio. If
+            set to a class label, draws overlays from that class. When creating
+            a presence/absence classifier, set overlay_class equal to the
+            absence class label [default: None]
+        audio_sample_rate: resample audio to this sample rate; specify None to
+            use original audio sample rate [default: 22050]
+        debug: path to save img files, images are created from the tensor
+            immediately before it is returned. When None, does not save images.
+            [default: None]
 
     Output:
         Dictionary:
