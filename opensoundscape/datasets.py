@@ -282,8 +282,10 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             raise ValueError(
                 "label_column must be specified to use max_overlay_num != 0"
             )
-        if (self.overlay_class != "different") and (
-            self.overlay_class not in df[self.label_column]
+        if (
+            (self.max_overlay_num > 0)
+            and (self.overlay_class != "different")
+            and (self.overlay_class not in df[self.label_column])
         ):
             raise ValueError(
                 f"overlay_class must either be 'different' or a value in the label_column (got overlay_class {self.overlay_class} but labels {df[self.label_column].unique()})"
