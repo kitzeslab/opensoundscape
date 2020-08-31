@@ -27,19 +27,20 @@ def expand_multi_labeled(input_df):
 
 
 def train_valid_split(
-    input_df, label_column="Labels", train_size=0.8, random_state=101
+    input_df, stratify_from_column="Labels", train_size=0.8, random_state=101
 ):
     """ Split a dataframe into train and validation dataframes
 
     Given an input dataframe with a labels column split each unique label into
     a train size and 1 - train_size for training and validation sets. If
-    label_column is `None` don't stratify.
+    stratify_from_column is `None` don't stratify.
 
     Args:
-        input_df:       A dataframe
-        label_column:   Name of the column that labels should come from [default: "Labels"]
-        train_size:     The decimal fraction to use for the training set [default: 0.8]
-        random_state:   The random state to use for train_test_split [default: 101]
+        input_df:               A dataframe
+        stratify_from_column:   Name of the column that labels should come from [default: "Labels"]
+                                - given `None` will not attempt stratified sampling
+        train_size:             The decimal fraction to use for the training set [default: 0.8]
+        random_state:           The random state to use for train_test_split [default: 101]
 
     Output:
         train_df:       A Dataframe containing the training set
@@ -48,14 +49,14 @@ def train_valid_split(
 
     df = copy(input_df)
 
-    if label_column:
-        assert label_column in df.columns
-        all_labels = df[label_column].unique()
+    if stratify_from_column:
+        assert stratify_from_column in df.columns
+        all_labels = df[stratify_from_column].unique()
 
         train_dfs = [None] * len(all_labels)
         valid_dfs = [None] * len(all_labels)
         for idx, label in enumerate(all_labels):
-            selection = df[df[label_column] == label]
+            selection = df[df[stratify_from_column] == label]
             train, valid = train_test_split(
                 selection, train_size=train_size, random_state=random_state
             )
