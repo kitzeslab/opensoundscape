@@ -282,12 +282,11 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             raise ValueError(
                 "label_column must be specified to use max_overlay_num != 0"
             )
-        if (
-            self.overlay_class is not None
-            and self.overlay_class not in df[self.label_column]
+        if (self.overlay_class != "different") and (
+            self.overlay_class not in df[self.label_column]
         ):
             raise ValueError(
-                f"overlay_class must be a value in the label_column (got overlay_class {self.overlay_class} but labels {df[self.label_column].unique()})"
+                f"overlay_class must either be 'different' or a value in the label_column (got overlay_class {self.overlay_class} but labels {df[self.label_column].unique()})"
             )
 
         # Set up transform, including needed normalization variables
@@ -347,7 +346,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         with a weight
         """
         # Select a random file from a class of choice
-        if self.overlay_class:
+        if self.overlay_class == "different":
             choose_from = self.df[self.df[self.label_column] == self.overlay_class]
         # Select a random file from a different class
         else:
