@@ -345,12 +345,12 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         same length as the given image. Overlay the images on top of each other
         with a weight
         """
-        # Select a random file from a class of choice
-        if self.overlay_class == "different":
-            choose_from = self.df[self.df[self.label_column] == self.overlay_class]
         # Select a random file from a different class
-        else:
+        if self.overlay_class == "different":
             choose_from = self.df[self.df[self.label_column] != original_class]
+        # Select a random file from a class of choice
+        else:
+            choose_from = self.df[self.df[self.label_column] == self.overlay_class]
         overlay_path = np.random.choice(choose_from[self.filename_column].values)
         overlay_audio = Audio.from_file(
             overlay_path, sample_rate=self.audio_sample_rate
