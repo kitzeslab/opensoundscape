@@ -356,12 +356,8 @@ class Spectrogram:
         """
         from PIL import Image
 
-        # rescale values from db_range to [0,255]
-        shift = spec_range[0]
-        scale = 255.0 / (spec_range[1] - spec_range[0])
-        array = (
-            255.0 - (self.spectrogram - shift) * scale
-        )  # reverse scale so that 0 is white
+        # rescale spec_range to [255, 0]
+        array = linear_scale(self.spectrogram, in_range=spec_range, out_range=(255, 0))
 
         # create and save pillow Image
         # we pass the array upside-down to create right-side-up image
