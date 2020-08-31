@@ -47,29 +47,19 @@ def train_valid_split(
         valid_df:       A Dataframe containing the validation set
     """
 
-    df = copy(input_df)
-
     if stratify_from_column:
-        assert stratify_from_column in df.columns
-        all_labels = df[stratify_from_column].unique()
-
-        train_dfs = [None] * len(all_labels)
-        valid_dfs = [None] * len(all_labels)
-        for idx, label in enumerate(all_labels):
-            selection = df[df[stratify_from_column] == label]
-            train, valid = train_test_split(
-                selection, train_size=train_size, random_state=random_state
-            )
-            train_dfs[idx] = train
-            valid_dfs[idx] = valid
-    else:
-        train, valid = train_test_split(
-            df, train_size=train_size, random_state=random_state
+        train_df, valid_df = train_test_split(
+            input_df,
+            train_size=train_size,
+            random_state=random_state,
+            stratify=input_df[stratify_from_column],
         )
-        train_dfs = [train]
-        valid_dfs = [valid]
+    else:
+        train_df, valid_df = train_test_split(
+            input_df, train_size=train_size, random_state=random_state
+        )
 
-    return pd.concat(train_dfs), pd.concat(valid_dfs)
+    return train_df, valid_df
 
 
 def add_binary_numeric_labels(
