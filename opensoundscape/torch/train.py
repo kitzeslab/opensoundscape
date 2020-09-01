@@ -106,7 +106,7 @@ def train(
         if print_logging:
             print(f"Epoch {epoch}")
             print("  Training.")
-        train_metrics = Metrics(model.fc.out_features)
+        train_metrics = Metrics(train_dataset.label_dict.keys(), len(train_dataset))
         model.train()
 
         epoch_train_scores = []
@@ -138,10 +138,11 @@ def train(
             optimizer.step()
 
             # Update metrics with loss & class predictions for batch
-            train_metrics.update_loss(loss.clone().detach().item())
             batch_scores = outputs.clone().detach()
             batch_predictions = batch_scores.argmax(dim=1)
-            train_metrics.update_metrics(targets.cpu(), batch_predictions.cpu())
+            train_metrics.accumulate_batch_metrics(
+                loss.clone().detach().item(), targets.cpu(), batch_predictions.cpu()
+            )
 
             # Save copy of scores and true vals
             if save_scores:
@@ -153,7 +154,7 @@ def train(
         # Validate model
         if print_logging:
             print("  Validating.")
-        valid_metrics = Metrics(model.fc.out_features)
+        valid_metrics = Metrics(valid_dataset.label_dict.keys(), len(valid_dataset))
         model.eval()
         epoch_val_scores = []
         epoch_val_targets = []
@@ -170,7 +171,10 @@ def train(
                 # Update metrics with class predictions for batch
                 batch_scores = outputs.clone().detach()
                 batch_predictions = batch_scores.argmax(dim=1)
-                valid_metrics.update_metrics(targets.cpu(), batch_predictions.cpu())
+                # Loss isn't important here
+                valid_metrics.accumulate_batch_metrics(
+                    0.0, targets.cpu(), batch_predictions.cpu()
+                )
 
                 # Save copy of scores and true targets
                 if save_scores:
@@ -181,23 +185,19 @@ def train(
 
         # Save weights at every logging interval and at the last epoch
         if (epoch % log_every == 0) or (epoch == epochs - 1):
-            t_loss, t_acc, t_prec, t_rec, t_f1 = train_metrics.compute_metrics(
-                len(train_loader)
-            )
-            _, v_acc, v_prec, v_rec, v_f1 = valid_metrics.compute_metrics(
-                len(valid_loader)
-            )
+            train_metrics_d = train_metrics.compute_epoch_metrics()
+            valid_metrics_d = valid_metrics.compute_epoch_metrics()
 
             epoch_results = {
-                "train_loss": t_loss,
-                "train_accuracy": t_acc,
-                "train_precision": t_prec,
-                "train_recall": t_rec,
-                "train_f1": t_f1,
-                "valid_accuracy": v_acc,
-                "valid_precision": v_prec,
-                "valid_recall": v_rec,
-                "valid_f1": v_f1,
+                "train_loss": train_metrics_d["loss"],
+                "train_accuracy": train_metrics_d["accuracy"],
+                "train_precision": train_metrics_d["precision"],
+                "train_recall": train_metrics_d["recall"],
+                "train_f1": train_metrics_d["f1"],
+                "valid_accuracy": valid_metrics_d["accuracy"],
+                "valid_precision": valid_metrics_d["precision"],
+                "valid_recall": valid_metrics_d["recall"],
+                "valid_f1": valid_metrics_d["f1"],
             }
 
             if print_logging:
