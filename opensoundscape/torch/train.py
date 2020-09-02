@@ -100,13 +100,14 @@ def train(
 
     # Model training
     stats = []
+    classes = list(train_dataset.label_dict.keys())
     for epoch in range(epochs):
 
         # Train model
         if print_logging:
             print(f"Epoch {epoch}")
             print("  Training.")
-        train_metrics = Metrics(train_dataset.label_dict.keys(), len(train_dataset))
+        train_metrics = Metrics(classes, len(train_dataset))
         model.train()
 
         epoch_train_scores = []
@@ -141,7 +142,9 @@ def train(
             batch_scores = outputs.clone().detach()
             batch_predictions = batch_scores.argmax(dim=1)
             train_metrics.accumulate_batch_metrics(
-                loss.clone().detach().item(), targets.cpu(), batch_predictions.cpu()
+                loss.clone().detach().item(),
+                targets.cpu().clone().detach().numpy(),
+                batch_predictions.cpu().clone().detach().numpy(),
             )
 
             # Save copy of scores and true vals
@@ -154,7 +157,7 @@ def train(
         # Validate model
         if print_logging:
             print("  Validating.")
-        valid_metrics = Metrics(valid_dataset.label_dict.keys(), len(valid_dataset))
+        valid_metrics = Metrics(classes, len(valid_dataset))
         model.eval()
         epoch_val_scores = []
         epoch_val_targets = []
@@ -194,10 +197,12 @@ def train(
                 "train_precision": train_metrics_d["precision"],
                 "train_recall": train_metrics_d["recall"],
                 "train_f1": train_metrics_d["f1"],
+                "train_confusion_matrix": train_metrics_d["confusion_matrix"],
                 "valid_accuracy": valid_metrics_d["accuracy"],
                 "valid_precision": valid_metrics_d["precision"],
                 "valid_recall": valid_metrics_d["recall"],
                 "valid_f1": valid_metrics_d["f1"],
+                "valid_confusion_matrix": valid_metrics_d["confusion_matrix"],
             }
 
             if print_logging:
