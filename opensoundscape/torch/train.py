@@ -23,6 +23,7 @@ def train(
     tensor_augment=False,
     debug=False,
     print_logging=True,
+    save_scores=False,
 ):
     """ Train a model
 
@@ -41,6 +42,8 @@ def train(
         log_every:      Log statistics when epoch % log_every == 0 [default: 5]
         tensor_augment: Whether or not to use the tensor augment procedures [default: False]
         debug:          Whether or not to write intermediate images [default: False]
+        print_logging:  Whether to print training progress to stdout [default: True]
+        save_scores:    Whether to save the scores on the train/val set each epoch [default: False]
 
     Side Effects:
         Write a file `epoch-{epoch}.tar` containing (rate of `log_every`):
@@ -97,12 +100,18 @@ def train(
 
     # Model training
     stats = []
+    classes = list(train_dataset.label_dict.keys())
     for epoch in range(epochs):
+
+        # Train model
         if print_logging:
             print(f"Epoch {epoch}")
             print("  Training.")
-        train_metrics = Metrics(model.fc.out_features)
+        train_metrics = Metrics(classes, len(train_dataset))
         model.train()
+
+        epoch_train_scores = []
+        epoch_train_targets = []
         for t in train_loader:
             X, y = t["X"], t["y"]
             X = X.to(device)
@@ -120,20 +129,38 @@ def train(
                 # Take from 1 dimension to 3 dimensions
                 X = torch.cat([X] * 3, dim=1)
 
+            # Run model
             outputs = model(X)
+
+            # Learn from batch
             loss = loss_fn(outputs, targets)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            train_metrics.update_loss(loss.clone().detach().item())
-            predictions = outputs.clone().detach().argmax(dim=1)
-            train_metrics.update_metrics(targets.cpu(), predictions.cpu())
+            # Update metrics with loss & class predictions for batch
+            batch_scores = outputs.clone().detach()
+            batch_predictions = batch_scores.argmax(dim=1)
+            train_metrics.accumulate_batch_metrics(
+                loss.clone().detach().item(),
+                targets.cpu().clone().detach().numpy(),
+                batch_predictions.cpu().clone().detach().numpy(),
+            )
 
+            # Save copy of scores and true vals
+            if save_scores:
+                epoch_train_scores.extend([sample.numpy() for sample in batch_scores])
+                epoch_train_targets.extend(
+                    *y.clone().detach().reshape([1, len(y)]).numpy().tolist()
+                )
+
+        # Validate model
         if print_logging:
             print("  Validating.")
-        valid_metrics = Metrics(model.fc.out_features)
+        valid_metrics = Metrics(classes, len(valid_dataset))
         model.eval()
+        epoch_val_scores = []
+        epoch_val_targets = []
         with torch.no_grad():
             for t in valid_loader:
                 X, y = t["X"], t["y"]
@@ -141,29 +168,41 @@ def train(
                 y = y.to(device)
                 targets = y.squeeze(1)
 
+                # Run model
                 outputs = model(X)
-                predictions = outputs.clone().detach().argmax(dim=1)
-                valid_metrics.update_metrics(targets.cpu(), predictions.cpu())
+
+                # Update metrics with class predictions for batch
+                batch_scores = outputs.clone().detach()
+                batch_predictions = batch_scores.argmax(dim=1)
+                # Loss isn't important here
+                valid_metrics.accumulate_batch_metrics(
+                    0.0, targets.cpu(), batch_predictions.cpu()
+                )
+
+                # Save copy of scores and true targets
+                if save_scores:
+                    epoch_val_scores.extend([sample.numpy() for sample in batch_scores])
+                    epoch_val_targets.extend(
+                        *y.clone().detach().reshape([1, len(y)]).numpy().tolist()
+                    )
 
         # Save weights at every logging interval and at the last epoch
         if (epoch % log_every == 0) or (epoch == epochs - 1):
-            t_loss, t_acc, t_prec, t_rec, t_f1 = train_metrics.compute_metrics(
-                len(train_loader)
-            )
-            _, v_acc, v_prec, v_rec, v_f1 = valid_metrics.compute_metrics(
-                len(valid_loader)
-            )
+            train_metrics_d = train_metrics.compute_epoch_metrics()
+            valid_metrics_d = valid_metrics.compute_epoch_metrics()
 
             epoch_results = {
-                "train_loss": t_loss,
-                "train_accuracy": t_acc,
-                "train_precision": t_prec,
-                "train_recall": t_rec,
-                "train_f1": t_f1,
-                "valid_accuracy": v_acc,
-                "valid_precision": v_prec,
-                "valid_recall": v_rec,
-                "valid_f1": v_f1,
+                "train_loss": train_metrics_d["loss"],
+                "train_accuracy": train_metrics_d["accuracy"],
+                "train_precision": train_metrics_d["precision"],
+                "train_recall": train_metrics_d["recall"],
+                "train_f1": train_metrics_d["f1"],
+                "train_confusion_matrix": train_metrics_d["confusion_matrix"],
+                "valid_accuracy": valid_metrics_d["accuracy"],
+                "valid_precision": valid_metrics_d["precision"],
+                "valid_recall": valid_metrics_d["recall"],
+                "valid_f1": valid_metrics_d["f1"],
+                "valid_confusion_matrix": valid_metrics_d["confusion_matrix"],
             }
 
             if print_logging:
@@ -178,6 +217,16 @@ def train(
                     "labels_yaml": labels_yaml,
                 }
             )
+
+            if save_scores:
+                epoch_results.update(
+                    {
+                        "train_scores": epoch_train_scores,
+                        "train_targets": epoch_train_targets,
+                        "valid_scores": epoch_val_scores,
+                        "valid_targets": epoch_val_targets,
+                    }
+                )
 
             if save_dir is not None:
                 epoch_filename = f"{save_dir}/epoch-{epoch}.tar"
