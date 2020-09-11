@@ -57,14 +57,17 @@ class SplitterDataset(torch.utils.data.Dataset):
         duration:               How long should each segment be? (units: seconds, default: 5)
         output_directory        Where should segments be written? (default: segments/)
         include_last_segment:   Do you want to include the last segment? (default: False)
+        column_separator:       What character should we use to separate columns (default: "\t")
+        species_separator:      What character should we use to separate species (default: "|")
 
     Effects:
-        - Segments will be written to the output_directory
+        - Segments will be written to the `output_directory`
 
     Outputs:
-        output: A list of CSV rows containing the source audio, segment begin
-                time (seconds), segment end time (seconds), segment audio, and present
-                classes separated by '|' if annotations were requested
+        output: A list of CSV rows (separated by `column_separator`) containing
+            the source audio, segment begin time (seconds), segment end time
+            (seconds), segment audio, and present classes separated by
+            `species_separator` if annotations were requested
     """
 
     def __init__(
@@ -76,6 +79,8 @@ class SplitterDataset(torch.utils.data.Dataset):
         duration=5,
         output_directory="segments",
         include_last_segment=False,
+        column_separator="\t",
+        species_separator="|",
     ):
         self.wavs = list(wavs)
 
@@ -88,6 +93,8 @@ class SplitterDataset(torch.utils.data.Dataset):
         self.duration = duration
         self.output_directory = output_directory
         self.include_last_segment = include_last_segment
+        self.column_separator = column_separator
+        self.species_separator = species_separator
 
     def __len__(self):
         return len(self.wavs)
@@ -153,12 +160,28 @@ class SplitterDataset(torch.utils.data.Dataset):
                     audio_to_write.save(f"{destination}.wav")
 
                     if idx == num_segments - 1:
-                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.wav"
+                        to_append = [
+                            wav,
+                            annotation_file,
+                            wav_times[segment_sample_begin],
+                            wav_times[-1],
+                            f"{destination}.wav",
+                        ]
                     else:
-                        to_append = f"{wav},{annotation_file},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.wav"
-                    to_append += f",{'|'.join(overlaps['class'].unique())}"
+                        to_append = [
+                            wav,
+                            annotation_file,
+                            wav_times[segment_sample_begin],
+                            wav_times[segment_sample_end],
+                            f"{destination}.wav",
+                        ]
+                    to_append.append(
+                        self.species_separator.join(overlaps["class"].unique())
+                    )
 
-                    outputs.append(to_append)
+                    outputs.append(
+                        self.column_separator.join([str(x) for x in to_append])
+                    )
             else:
                 segment_sample_begin = audio_obj.time_to_sample(begin)
                 segment_sample_end = audio_obj.time_to_sample(end)
@@ -166,11 +189,21 @@ class SplitterDataset(torch.utils.data.Dataset):
                 audio_to_write.save(f"{destination}.wav")
 
                 if idx == num_segments - 1:
-                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[-1]},{destination}.wav"
+                    to_append = [
+                        wav,
+                        wav_times[segment_sample_begin],
+                        wav_times[-1],
+                        f"{destination}.wav",
+                    ]
                 else:
-                    to_append = f"{wav},{wav_times[segment_sample_begin]},{wav_times[segment_sample_end]},{destination}.wav"
+                    to_append = [
+                        wav,
+                        wav_times[segment_sample_begin],
+                        wav_times[segment_sample_end],
+                        f"{destination}.wav",
+                    ]
 
-                outputs.append(to_append)
+                outputs.append(self.column_separator.join([str(x) for x in to_append]))
 
         return {"data": outputs}
 
@@ -202,31 +235,40 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         label_dict: a dictionary mapping numeric labels to class names,
             - for example: {0:'American Robin',1:'Northern Cardinal'}
             - pass `None` if you wish to retain numeric labels
-        filename_column: The column in the DataFrame which contains paths to data [default: Destination]
+        filename_column: The column in the DataFrame which contains paths to
+            data [default: Destination]
         from_audio: Whether the raw dataset is audio [default: True]
         label_column: The column with numeric labels if present [default: None]
         height: Height for resulting Tensor [default: 224]
         width: Width for resulting Tensor [default: 224]
         add_noise: Apply RandomAffine and ColorJitter filters [default: False]
         save_dir: Save images to a directory [default: None]
-        random_trim_length: Extract a clip of this many seconds of audio starting at a random time
-            If None, the original clip will be used [default: None]
-        extend_short_clips: If a file to be overlaid or trimmed from is too short,
-            extend it to the desired length by repeating it. [default: False]
-        max_overlay_num: The maximum number of additional images to overlay, each with probability overlay_prob [default: 0]
-        overlay_prob: Probability of an image from a different class being overlayed (combined as a weighted sum)
+        random_trim_length: Extract a clip of this many seconds of audio
+            starting at a random time. If None, the original clip will be used
+            [default: None]
+        extend_short_clips: If a file to be overlaid or trimmed from is too
+            short, extend it to the desired length by repeating it.
+            [default: False]
+        max_overlay_num: The maximum number of additional images to overlay,
+            each with probability overlay_prob [default: 0]
+        overlay_prob: Probability of an image from a different class being
+            overlayed (combined as a weighted sum)
             on the training image. typical values: 0, 0.66 [default: 0.2]
-        overlay_weight: The weight given to the overlaid image during augmentation.
-            When 'random', will randomly select a different weight between 0.2 and 0.5 for each overlay
-            When not 'random', should be a float between 0 and 1 [default: 'random']
-        audio_sample_rate: resample audio to this sample rate; specify None to use original audio sample rate
-            default: 22050
-        white_black_pct: tuple (white_pct,black_pct) increase contrast to make this percentage of pixels of spectrogram black/white
-            result: whitest (quietest) white_percentile pixels become white, blackest (loudest) black_pct pixels become black; linear scale for intermediate values
-            default: (50,0)
-            pass `None` to skip this transformation
-        debug: path to save img files, images are created from the tensor immediately before it is returned
-            default: None (do not save)
+        overlay_weight: The weight given to the overlaid image during
+            augmentation. When 'random', will randomly select a different weight
+            between 0.2 and 0.5 for each overlay. When not 'random', should be a
+            float between 0 and 1 [default: 'random']
+        overlay_class: The label of the class that overlays should be drawn from.
+            Must be specified if max_overlay_num > 0. If 'different', draws
+            overlays from any class that is not the same class as the audio. If
+            set to a class label, draws overlays from that class. When creating
+            a presence/absence classifier, set overlay_class equal to the
+            absence class label [default: None]
+        audio_sample_rate: resample audio to this sample rate; specify None to
+            use original audio sample rate [default: 22050]
+        debug: path to save img files, images are created from the tensor
+            immediately before it is returned. When None, does not save images.
+            [default: None]
 
     Output:
         Dictionary:
@@ -251,36 +293,54 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         max_overlay_num=0,
         overlay_prob=0.2,
         overlay_weight="random",
+        overlay_class=None,
         audio_sample_rate=22050,
-        white_black_pct=(50,0),
         debug=None,
     ):
         self.df = df
+        self.label_dict = label_dict
         self.filename_column = filename_column
         self.from_audio = from_audio
         self.label_column = label_column
         self.height = height
         self.width = width
+        self.add_noise = add_noise
         self.save_dir = save_dir
         self.random_trim_length = random_trim_length
         self.extend_short_clips = extend_short_clips
         self.max_overlay_num = max_overlay_num
         self.overlay_prob = overlay_prob
+        self.overlay_weight = overlay_weight
+        self.overlay_class = overlay_class
+        self.audio_sample_rate = audio_sample_rate
+        self.debug = debug
+
+        # Check inputs
         if (overlay_weight != "random") and (not 0 < overlay_weight < 1):
             raise ValueError(
                 f"overlay_weight not in 0<overlay_weight<1 (given overlay_weight: {overlay_weight})"
             )
-        self.overlay_weight = overlay_weight
-        self.transform = self.set_transform(add_noise=add_noise)
-        self.label_dict = label_dict
-        self.audio_sample_rate = audio_sample_rate
-        self.white_black_pct = white_black_pct
-        self.debug = debug
+        if (not self.label_column) and (max_overlay_num != 0):
+            raise ValueError(
+                "label_column must be specified to use max_overlay_num != 0"
+            )
+        if (
+            (self.max_overlay_num > 0)
+            and (self.overlay_class != "different")
+            and (self.overlay_class not in df[self.label_column].unique())
+        ):
+            raise ValueError(
+                f"overlay_class must either be 'different' or a value in the label_column (got overlay_class {self.overlay_class} but labels {df[self.label_column].unique()})"
+            )
 
-    def set_transform(self, add_noise):
-        # Warning: some transforms only act on first channel
+        # Set up transform, including needed normalization variables
+        self.mean = torch.tensor([0.5 for _ in range(3)])  # [0.8013 for _ in range(3)])
+        self.std_dev = [0.5 for _ in range(3)]  # 0.1576 for _ in range(3)])
+        self.transform = self.set_transform()
+
+    def set_transform(self):
         transform_list = [transforms.Resize((self.height, self.width))]
-        if add_noise:
+        if self.add_noise:
             transform_list.extend(
                 [
                     transforms.RandomAffine(
@@ -293,6 +353,8 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             )
 
         transform_list.append(transforms.ToTensor())
+        transform_list.append(transforms.Normalize(self.mean, self.std_dev))
+
         return transforms.Compose(transform_list)
 
     def random_audio_trim(self, audio, audio_length, audio_path):
@@ -327,9 +389,13 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         same length as the given image. Overlay the images on top of each other
         with a weight
         """
-        # select a random file from a different class
-        other_classes_df = self.df[self.df[self.label_column] != original_class]
-        overlay_path = np.random.choice(other_classes_df[self.filename_column].values)
+        # Select a random file from a different class
+        if self.overlay_class == "different":
+            choose_from = self.df[self.df[self.label_column] != original_class]
+        # Select a random file from a class of choice
+        else:
+            choose_from = self.df[self.df[self.label_column] == self.overlay_class]
+        overlay_path = np.random.choice(choose_from[self.filename_column].values)
         overlay_audio = Audio.from_file(
             overlay_path, sample_rate=self.audio_sample_rate
         )
@@ -361,36 +427,6 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
     def upsample(self):
         raise NotImplementedError("Upsampling is not implemented yet")
-    
-    def increase_contrast(self, rgb_tensor, white_pct, black_pct):
-        """makes quietest white_pct white and loudest black_pct pixels black
-        
-        takes rgb_tensor size (3, width, height) 
-        
-        for instance, if white_pct = 40 and black_pct = 1
-        the quietest 50% of pixels become 1 (white)
-        the loudest 1% of pixels become black (0)
-        intermediate values are scaled linearly from 0 to 1
-        
-        returns rgb tensor with rescaled values
-        
-        """
-        from opensoundscape.helpers import linear_scale
-        
-        #convert torch tensor to numpy array of shape (3,width,height)
-        rgb_array = rgb_tensor.numpy()
-        
-        #find values of pixels: the quietest to become black (0) and the loudest to become white (1)
-        max_value_to_0black = np.percentile(rgb_array,black_pct)
-        min_value_to_1white = np.percentile(rgb_array,100-white_pct)
-
-        # linearly re-scale pixel values such that the desired black percentiles are <=0 and desired white percentiles are >=1
-        rgb_array = linear_scale(rgb_array,(max_value_to_0black,min_value_to_1white),(0,1))
-        
-        # limit values to the range [0,1]
-        rgb_array = np.clip(rgb_array,0,1) 
-        
-        return torch.from_numpy(rgb_array)
 
     def __len__(self):
         return self.df.shape[0]
@@ -427,14 +463,11 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # apply desired random transformations to image and convert to tensor
         image = image.convert("RGB")
         X = self.transform(image)
-        
-        #re-scale pixel values to use entire range, increasing image contrast
-        if self.white_black_pct is not None:
-            X = self.increase_contrast(X, self.white_black_pct[0], self.white_black_pct[1])
-        
+
         if self.debug:
             from torchvision.utils import save_image
-            save_image(X,f"{self.debug}/{audio_path.stem}_{time()}.png")
+
+            save_image(X, f"{self.debug}/{audio_path.stem}_{time()}.png")
 
         # Return data : label pairs (training/validation)
         if self.label_column:
