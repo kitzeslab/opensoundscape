@@ -279,3 +279,76 @@ class Audio:
             clip_df.to_csv(destination.joinpath(f"{name}_clip_log.csv"))
 
         return clip_df
+
+
+def mixdown(
+    audio_objects, weights=None, offsets=None, length="shortest", sample_rate=None
+):
+    """takes a list of audio objects and mixes them into one audio file
+    
+    performs a weighted sum of the samples, where weights are normalized to
+    sum to 1. 
+    
+    Args:
+        audio_objects: list of opensoundscape.audio.Audio objects
+        weights: list of float values for weighted sum
+            - if None, all clips are weighted equally
+            - if not None, must be same length as audio_objects
+            - values are normalized to sum to 1
+            - Default: None
+        length: length of returned audio object ('shortest','longest', or float)
+            - if 'shortest', returned object is same length as shortest input
+            - if 'longest', returned object is same length as longest input
+            - if a float, returned object has that length in seconds. 
+            - Default: 'shortest'
+        offsets: time offset in seconds for the start of each input audio
+            - if None, all clips start at 0 seconds
+            - if not None, must be same length as audio_objects
+            - Default: None
+        sample_rate: sample rate of final audio object
+            - if None, uses the sample rate of the first audio object
+    """
+    if length == "shortest":
+        length = min([a.duration() for a in audio_objects])
+    elif length == "longest":
+        length = max([a.duration() for a in audio_objects])
+    elif not isinstance(length, float):
+        raise ValueError('length must have type float or be "shortest" or "longest"')
+
+    if sample_rate is None:
+        sample_rate = audio_objects[0].sample_rate
+
+    if offsets is None:
+        offsets = np.ones(len(audio_objects))
+
+    if weights is None:
+        weights = np.ones(len(audio_objects))
+    elif isinstance(weights, list):
+        weights = np.array(weights)
+    elif not isinstance(weights, np.array):
+        raise ValueError("weights must be a list, np.array, or None")
+
+    # exponentiate weights, since our perception is ~logarithmic
+    min_weight = min(weights)
+    weights = [np.exp(w / min_weight) for w in weights]
+    weights = weights / sum(weights)
+
+    mixed_samples = np.zeros(int(sample_rate * length))
+    for i, audio in enumerate(audio_objects):
+        samples = audio.samples
+
+        if audio.sample_rate != sample_rate:
+            samples = librosa.resample(
+                samples, audio.sample_rate, sample_rate, res_type=resample_type
+            )
+
+        # trim or pad with zeros to appropriate length:
+        delta_len = len(samples) - len(mixed_samples)
+        if delta_len > 0:
+            samples = samples[0 : len(mixed_samples)]
+        elif delta_len < 0:
+            samples = np.pad(samples, (0, delta_len), mode="constant")
+
+        mixed_samples += samples * weights[i]
+
+    return Audio(mixed_samples, sample_rate=sample_rate)
