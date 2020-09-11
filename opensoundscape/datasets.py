@@ -11,7 +11,7 @@ from torchvision import transforms
 from PIL import Image, ImageFilter
 from time import time
 
-from opensoundscape.audio import Audio
+from opensoundscape.audio import Audio, mixdown
 from opensoundscape.spectrogram import Spectrogram
 
 
@@ -242,7 +242,6 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         height: Height for resulting Tensor [default: 224]
         width: Width for resulting Tensor [default: 224]
         add_noise: Apply RandomAffine and ColorJitter filters [default: False]
-        save_dir: Save images to a directory [default: None]
         random_trim_length: Extract a clip of this many seconds of audio
             starting at a random time. If None, the original clip will be used
             [default: None]
@@ -287,7 +286,6 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         height=224,
         width=224,
         add_noise=False,
-        save_dir=None,
         random_trim_length=None,
         extend_short_clips=False,
         max_overlay_num=0,
@@ -305,7 +303,6 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         self.height = height
         self.width = width
         self.add_noise = add_noise
-        self.save_dir = save_dir
         self.random_trim_length = random_trim_length
         self.extend_short_clips = extend_short_clips
         self.max_overlay_num = max_overlay_num
@@ -425,6 +422,45 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # use a weighted sum to overlay (blend) the images
         return Image.blend(original_image, overlay_image, weight)
 
+    def overlay_random_audio(self, original_audio, original_class, original_path):
+        """ mix original audio with an additional audio file
+
+        Select a random file from a different class. Trim if necessary to the
+        same length as the given image. Overlay the images on top of each other
+        with a weight
+        """
+        # Select a random file from a different class
+        if self.overlay_class == "different":
+            choose_from = self.df[self.df[self.label_column] != original_class]
+        # Select a random file from a class of choice
+        else:
+            choose_from = self.df[self.df[self.label_column] == self.overlay_class]
+        overlay_path = np.random.choice(choose_from[self.filename_column].values)
+        overlay_audio = Audio.from_file(
+            overlay_path, sample_rate=self.audio_sample_rate
+        )
+
+        # trim to same length as main clip
+        overlay_audio_length = overlay_audio.duration()
+        original_audio_length = original_audio.duration()
+        if overlay_audio_length < original_audio_length and not self.extend_short_clips:
+            raise ValueError(
+                f"the length of the overlay file ({overlay_audio_length} sec) was less than the length of the file {original_path} ({original_length} sec). To extend short clips, use extend_short_clips=True"
+            )
+        elif overlay_audio_length > original_audio_length:
+            overlay_audio = self.random_audio_trim(
+                overlay_audio, original_audio_length, overlay_path
+            )
+
+        # Select weight in (0,1); <0.5 means more emphasis on original image
+        if self.overlay_weight == "random":
+            weight = np.random.randint(2, 8) / 10
+        else:
+            weight = self.overlay_weight
+
+        # mixdown the overlay audio and original audio to a new Audio object
+        return mixdown([original_audio, overlay_audio], [1 - weight, weight])
+
     def upsample(self):
         raise NotImplementedError("Upsampling is not implemented yet")
 
@@ -443,22 +479,32 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         if self.random_trim_length is not None:
             audio = self.random_audio_trim(audio, audio_length, audio_path)
             audio_length = self.random_trim_length
-        image = self.image_from_audio(audio, mode="L")
 
-        # add a blended/overlayed image from another class directly on top
+        # mixdown the audio with a clip from a different class (based on overlay_class)
         for _ in range(self.max_overlay_num):
             if self.overlay_prob > np.random.uniform():
-                image = self.overlay_random_image(
-                    original_image=image,
-                    original_length=audio_length,
+                audio = self.overlay_random_audio(
+                    original_audio=audio,
                     original_class=row[self.label_column],
                     original_path=audio_path,
                 )
             else:
                 break
 
-        if self.save_dir:
-            image.save(f"{self.save_dir}/{audio_path.stem}_{time()}.png")
+        # create a spectrogram image from audio
+        image = self.image_from_audio(audio, mode="L")
+
+        #         # add a blended/overlayed image from another class directly on top
+        #         for _ in range(self.max_overlay_num):
+        #             if self.overlay_prob > np.random.uniform():
+        #                 image = self.overlay_random_image(
+        #                     original_image=image,
+        #                     original_length=audio_length,
+        #                     original_class=row[self.label_column],
+        #                     original_path=audio_path,
+        #                 )
+        #             else:
+        #                 break
 
         # apply desired random transformations to image and convert to tensor
         image = image.convert("RGB")
