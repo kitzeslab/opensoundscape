@@ -9,6 +9,7 @@ import soundfile
 import numpy as np
 import pandas as pd
 import warnings
+from math import ceil
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -27,15 +28,31 @@ class OpsoLoadAudioInputTooLong(Exception):
 
 class Audio:
     """ Container for audio samples
+
+    Initializing an `Audio` object directly requires the specification of the
+    sample rate. Use `Audio.from_file` or `Audio.from_bytesio` with
+    `sample_rate=None` to use a native sampling rate.
+
+    Arguments:
+        samples (np.array):     The audio samples
+        sample_rate (integer):  The sampling rate for the audio samples
+        resample_type (str):    The resampling method to use [default: "kaiser_fast"]
+        max_duration (None or integer): The maximum duration allowed for the audio file [default: None]
+
+    Returns:
+        An initialized `Audio` object
     """
 
-    __slots__ = ("samples", "sample_rate")
+    __slots__ = ("samples", "sample_rate", "resample_type", "max_duration")
 
-    def __init__(self, samples, sample_rate):
-
+    def __init__(
+        self, samples, sample_rate, resample_type="kaiser_fast", max_duration=None
+    ):
         # Do not move these lines; it will break Pytorch training
         self.samples = samples
         self.sample_rate = sample_rate
+        self.resample_type = resample_type
+        self.max_duration = max_duration
 
         samples_error = None
         if not isinstance(self.samples, np.ndarray):
@@ -46,7 +63,9 @@ class Audio:
         try:
             self.sample_rate = int(self.sample_rate)
         except ValueError:
-            sample_rate_error = f"Initializing an Audio object requires an integer sample_rate, got `{sample_rate}`"
+            sample_rate_error = (
+                "Initializing an Audio object requires the audio samples' sampling rate"
+            )
             if samples_error:
                 raise ValueError(
                     f"Audio initialization failed with:\n{samples_error}\n{sample_rate_error}"
@@ -58,7 +77,7 @@ class Audio:
 
     @classmethod
     def from_file(
-        cls, path, sample_rate=None, max_duration=None, resample_type="kaiser_fast"
+        cls, path, sample_rate=None, resample_type="kaiser_fast", max_duration=None
     ):
         """ Load audio from files
 
@@ -87,18 +106,35 @@ class Audio:
         )
         warnings.resetwarnings()
 
-        return cls(samples=samples, sample_rate=sr)
+        return cls(samples, sr, resample_type=resample_type, max_duration=max_duration)
 
     @classmethod
-    def from_bytesio(cls, bytesio, sample_rate=None, resample_type="kaiser_fast"):
-        """...
+    def from_bytesio(
+        cls, bytesio, sample_rate=None, max_duration=None, resample_type="kaiser_fast"
+    ):
+        """ Read from bytesio object
+
+        Read an Audio object from a BytesIO object. This is primarily used for
+        passing Audio over HTTP.
+
+        TODO:
+            Describe how to initialize an Audio file as a BytesIO object
+
+        Arguments:
+            bytesio: Contents of WAV file as BytesIO
+            sample_rate: The final sampling rate of Audio object [default: None]
+            max_duration: The maximum duration of the audio file [default: None]
+            resample_type: The librosa method to do resampling [default: "kaiser_fast"]
+
+        Returns:
+            An initialized Audio object
         """
         samples, sr = soundfile.read(bytesio)
         if sample_rate:
             samples = librosa.resample(samples, sr, sample_rate, res_type=resample_type)
             sr = sample_rate
 
-        return cls(samples, sr)
+        return cls(samples, sr, resample_type=resample_type, max_duration=max_duration)
 
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
@@ -115,7 +151,12 @@ class Audio:
         start_sample = self.time_to_sample(start_time)
         end_sample = self.time_to_sample(end_time)
         samples_trimmed = self.samples[start_sample:end_sample]
-        return Audio(samples_trimmed, self.sample_rate)
+        return Audio(
+            samples_trimmed,
+            self.sample_rate,
+            resample_type=self.resample_type,
+            max_duration=self.max_duration,
+        )
 
     def extend(self, length):
         """ Extend audio file by looping it
@@ -128,7 +169,12 @@ class Audio:
 
         total_samples_needed = round(length * self.sample_rate)
         samples_extended = np.resize(self.samples, total_samples_needed)
-        return Audio(samples_extended, self.sample_rate)
+        return Audio(
+            samples_extended,
+            self.sample_rate,
+            resample_type=self.resample_type,
+            max_duration=self.max_duration,
+        )
 
     def time_to_sample(self, time):
         """ Given a time, convert it to the corresponding sample
@@ -140,7 +186,7 @@ class Audio:
         """
         return round(time * self.sample_rate)
 
-    def bandpass(self, low_f, high_f, order=9):
+    def bandpass(self, low_f, high_f, order):
         """ bandpass audio signal frequencies
 
         uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
@@ -160,9 +206,14 @@ class Audio:
             raise ValueError("high_f must be less than sample_rate/2")
 
         filtered_samples = bandpass_filter(
-            self.samples, low_f, high_f, self.sample_rate, order=9
+            self.samples, low_f, high_f, self.sample_rate, order=order
         )
-        return Audio(filtered_samples, self.sample_rate)
+        return Audio(
+            filtered_samples,
+            self.sample_rate,
+            resample_type=self.resample_type,
+            max_duration=self.max_duration,
+        )
 
     # can act on an audio file and be moved into Audio class
     def spectrum(self):
@@ -209,73 +260,128 @@ class Audio:
 
         return len(self.samples) / self.sample_rate
 
-    def split_and_save(
-        self,
-        clip_length,
-        destination,
-        name,
-        create_log=True,
-        final_clip=None,  # None, "short", "full"
-        dry=False,
-    ):
-        """ Split audio into clips and save to disk
+    def split(self, clip_duration=5, clip_overlap=1, final_clip=None):
+        """ Split Audio into clips
 
-        Splits the current audio object into constant-length clips and saves each one to a .wav file.
+        The Audio object is split into clips of a specified duration and overlap
 
-        Args:
-            clip_length: length of resulting clips, in seconds
-            destination: a path to a directory where .wav clips will be saved
-            name: the name of the audio file (start and end times will be appended)
-            create_log: if True, a .csv file with the name, start time, and end time of each clip is created in destination
-            final_clip: how to treat the end of the file when less than clip_length remains
-                    - None (default): discard audio
-                    - "short": save whatever audio is left as a clip
-                    - "full": save a clip of length clip_length that ends at the end of the file (duplicating some data)
-            dry: if True, do not save .wav files, but do create a log file (default: False)
-        Returns:
-            clip_df: dataframe containing clip names, start times, and end times
-
-        Effects:
-            writes a .wav file for each clip
-            writes a log file (.csv) with clip start and end times if create_log is True
+        Arguments:
+            clip_duration:  The duration in seconds of the clips
+            clip_overlap:   The overlap of the clips in seconds
+            final_clip:     Possible options (any other input will ignore the final clip entirely),
+                                - "remainder":          Include the remainder of the Audio
+                                                            (clip will not have clip_duration length)
+                                - "full":               Increase the overlap to yield a clip with clip_duration
+                                - "extend":             Similar to remainder but extend the clip to clip_duration
+        Results:
+            A list of dictionaries with keys: ["audio", "begin_time", "end_time"]
         """
-        clip_df = pd.DataFrame(columns=["start_time", "end_time"])
-        clip_df.index.name = "file"
-        total_length = self.duration()
-        destination = Path(destination)
 
-        # number of full clips can we make without re-using audio
-        nsplits = int(total_length / clip_length)
-        if nsplits < 1:
-            warnings.warn(
-                f"clip_length {clip_length} was longer than total length {total_length}"
-            )
+        duration = self.duration()
+        if clip_duration > duration:
+            if final_clip == "remainder":
+                return_clip = Audio(
+                    self.samples,
+                    self.sample_rate,
+                    resample_type=self.resample_type,
+                    max_duration=self.max_duration,
+                )
+                return [
+                    {
+                        "clip": return_clip,
+                        "clip_duration": return_clip.duration(),
+                        "begin_time": 0,
+                        "end_time": duration,
+                    }
+                ]
+            elif final_clip in ["full", "extend"]:
+                return_clip = self.extend(clip_duration)
+                return [
+                    {
+                        "clip": return_clip,
+                        "clip_duration": return_clip.duration(),
+                        "begin_time": 0,
+                        "end_time": duration,
+                    }
+                ]
+            else:
+                warnings.warn(
+                    f"Given Audio object with duration of `{duration}` seconds and `clip_duration={clip_duration}` but `final_clip={final_clip}` produces no clips. Returning empty list."
+                )
+                return []
 
-        # extract and save full clips
-        for i in range(nsplits):
-            start_t = i * clip_length
-            end_t = (i + 1) * clip_length
-            clip_name = f"{name}_{start_t}s-{end_t}s.wav"
-            if not dry:
-                self.trim(start_t, end_t).save(destination.joinpath(clip_name))
-            clip_df.at[clip_name] = [start_t, end_t]
+        clip_times = np.arange(0.0, duration, duration / len(self.samples))
+        num_clips = ceil((duration - clip_overlap) / (clip_duration - clip_overlap))
+        to_return = [None] * num_clips
+        for idx in range(num_clips):
+            if idx == num_clips - 1:
+                if final_clip in ["remainder", "extend"]:
+                    begin_time = clip_duration * idx - clip_overlap * idx
+                    end_time = duration
+                elif final_clip == "full":
+                    begin_time = int(duration - clip_duration)
+                    end_time = duration
+                else:
+                    begin_time = clip_duration * idx - clip_overlap * idx
+                    end_time = begin_time + clip_duration
+                    if end_time > duration:
+                        return to_return[:-1]
+            else:
+                begin_time = clip_duration * idx - clip_overlap * idx
+                end_time = begin_time + clip_duration
 
-        # possibly extract one more clip at the end of the file
-        last_full_clip_end_t = nsplits * clip_length
-        if last_full_clip_end_t < total_length and final_clip is not None:
-            # there was extra audio left?
-            end_t = total_length
-            if final_clip == "short":
-                start_t = last_full_clip_end_t
-            elif final_clip == "full":
-                start_t = end_t - clip_length
+            audio_clip = self.trim(begin_time, end_time)
+            if final_clip == "extend":
+                audio_clip = audio_clip.extend(clip_duration)
+            to_return[idx] = {
+                "clip": audio_clip,
+                "clip_duration": audio_clip.duration(),
+                "begin_time": begin_time,
+                "end_time": end_time,
+            }
 
-            clip_name = f"{name}_{start_t}s-{end_t}s.wav"
-            if not dry:
-                self.trim(start_t, end_t).save(destination.joinpath(clip_name))
-            clip_df.at[clip_name] = [start_t, end_t]
+        return to_return
 
-        if create_log:
-            clip_df.to_csv(destination.joinpath(f"{name}_clip_log.csv"))
 
-        return clip_df
+def split_and_save(
+    audio,
+    destination,
+    prefix,
+    clip_duration=5,
+    clip_overlap=1,
+    final_clip=None,
+    dry_run=False,
+):
+    """ Split audio into clips and save them to a folder
+
+    Arguments:
+        audio:          The input Audio to split
+        destination:    A folder to write clips to
+        prefix:         A name to prepend to the written clips
+        clip_duration:  The duration of each clip in seconds [default: 5]
+        clip_overlap:   The overlap of each clip in seconds [default: 1]
+        final_clip:     Possible options (any other input will ignore the final clip entirely) [default: None]
+                            - "remainder":          Include the remainder of the Audio
+                                                        (clip will not have clip_duration length)
+                            - "full":               Increase the overlap to yield a clip with clip_duration
+                            - "extend":             Similar to remainder but extend the clip to clip_duration
+        dry_run:        If True, skip writing audio and just return clip DataFrame [default: False]
+    
+    Returns:
+        pandas.DataFrame containing begin and end times for each clip from the source audio
+    """
+
+    clips = audio.split(
+        clip_duration=clip_duration, clip_overlap=clip_overlap, final_clip=final_clip
+    )
+    for clip in clips:
+        clip_name = (
+            f"{destination}/{prefix}_{clip['begin_time']}s_{clip['end_time']}s.wav"
+        )
+        if not dry_run:
+            clip["clip"].save(clip_name)
+
+    # Convert [{k: v}] -> {k: [v]}
+    return pd.DataFrame(
+        {key: [clip[key] for clip in clips] for key in clips[0].keys() if key != "clip"}
+    )
