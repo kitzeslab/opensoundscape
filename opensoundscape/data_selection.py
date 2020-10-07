@@ -2,7 +2,7 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from copy import copy
-from itertools import repeat
+from itertools import repeat, count
 
 
 def expand_multi_labeled(input_df):
@@ -26,44 +26,88 @@ def expand_multi_labeled(input_df):
     return df.explode("Labels").reset_index(drop=True)
 
 
-def binary_train_valid_split(
-    input_df, label, label_column="Labels", train_size=0.8, random_state=101
+def train_valid_split(
+    input_df, stratify_from_column="Labels", train_size=0.8, random_state=101
 ):
-    """ Split a dataset into train and validation dataframes
+    """ Split a dataframe into train and validation dataframes
 
-    Given a Dataframe and a label in column "Labels" (singly labeled) generate
-    a train dataset with ~80% of each label and a valid dataset with the rest.
+    Given an input dataframe with a labels column split each unique label into
+    a train size and 1 - train_size for training and validation sets. If
+    stratify_from_column is `None` don't stratify.
 
     Args:
-        input_df:       A singly-labeled CSV file
-        label:          One of the labels in the column label_column to use as a positive
-                            label (1), all others are negative (0)
-        label_column:   Name of the column that labels should come from [default: "Labels"]
-        train_size:     The decimal fraction to use for the training set [default: 0.8]
-        random_state:   The random state to use for train_test_split [default: 101]
+        input_df:               A dataframe
+        stratify_from_column:   Name of the column that labels should come from [default: "Labels"]
+                                - given `None` will not attempt stratified sampling
+        train_size:             The decimal fraction to use for the training set [default: 0.8]
+        random_state:           The random state to use for train_test_split [default: 101]
 
     Output:
         train_df:       A Dataframe containing the training set
         valid_df:       A Dataframe containing the validation set
     """
 
-    assert label_column in input_df.columns
-    df = copy(input_df)
-
-    all_labels = df[label_column].unique()
-    df["NumericLabels"] = df[label_column].apply(lambda x: 1 if x == label else 0)
-
-    train_dfs = [None] * len(all_labels)
-    valid_dfs = [None] * len(all_labels)
-    for idx, label in enumerate(all_labels):
-        selection = df[df[label_column] == label]
-        train, valid = train_test_split(
-            selection, train_size=train_size, random_state=random_state
+    if stratify_from_column:
+        train_df, valid_df = train_test_split(
+            input_df,
+            train_size=train_size,
+            random_state=random_state,
+            stratify=input_df[stratify_from_column],
         )
-        train_dfs[idx] = train
-        valid_dfs[idx] = valid
+    else:
+        train_df, valid_df = train_test_split(
+            input_df, train_size=train_size, random_state=random_state
+        )
 
-    return pd.concat(train_dfs), pd.concat(valid_dfs)
+    return train_df, valid_df
+
+
+def add_binary_numeric_labels(
+    input_df, label, input_column="Labels", output_column="NumericLabels"
+):
+    """ Add binary numeric labels to dataframe based on label
+
+    Given a dataframe and a label from input_column produce a new
+    dataframe with an output_column and a label map
+
+    Args:
+        input_df:       A dataframe
+        label:          The label to set to 1
+        input_column:   The column to read labels from
+        output_column:  The column to write numeric labels to
+
+    Output:
+        output_df:      A dataframe with an additional output_column
+        label_map:      A dictionary, keys are f"not_{label}" and f"{label}", values are 0 and 1
+    """
+
+    df = copy(input_df)
+    df[output_column] = df[input_column].apply(lambda x: 1 if x == label else 0)
+    label_map = {f"not_{label}": 0, f"{label}": 1}
+    return df, label_map
+
+
+def add_numeric_labels(input_df, input_column="Labels", output_column="NumericLabels"):
+    """ Add numeric labels to dataframe
+
+    Given a dataframe with input_column produce a new dataframe with an
+    output_column and a label map
+
+    Args:
+        input_df:       A dataframe
+        input_column:   The column to read labels from
+        output_column:  The column to write numeric labels to
+
+    Output:
+        output_df:      A dataframe with an additional output_column
+        label_map:      A dictionary, keys are the unique labels and monotonically increasing values starting at 0
+    """
+
+    df = copy(input_df)
+    unique_labels = df[input_column].unique()
+    label_map = {k: v for k, v in zip(unique_labels, count(0))}
+    df[output_column] = df[input_column].apply(lambda x: label_map[x])
+    return df, label_map
 
 
 def upsample(input_df, label_column="Labels", random_state=None):
