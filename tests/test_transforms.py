@@ -9,7 +9,7 @@ def test_basic_split():
         [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4], dtype=np.uint8
     ).reshape(shape)
     img = Image.fromarray(arr)
-    img = time_split(img, seed=0)
+    img = time_split(img, seed=1)
     new_arr = np.array(img)
     assert arr.shape == shape
     assert new_arr.shape == shape
