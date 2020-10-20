@@ -12,14 +12,18 @@ raven:
   annotations: false                # Look for Raven annotations (boolean)
   label_corrections: null           # Use this file to correct classes in Raven annotations (null or string)
 audio:
-  sample_rate: null                 # Sample rate for audio resampling (null or positive integer)
+  sample_rate: 22050                # Sample rate for audio resampling (null or positive integer)
   max_duration: null                # Maximum duration of audio file during read (null or positive integer)
   resample_type: "kaiser_best"      # Resample type for librosa ("kaiser_best" or "kaiser_fast")
-  duration: 5                       # Duration in seconds for split audio
-  overlap: 1                        # Overlap of audio for split audio
+split_and_save:
+  clip_duration: 5                  # The duration of the output segments
+  clip_overlap: 1                   # The overlap of adjacent segments
+  final_clip: null                  # How to treat the final clip (null, "remainder", "full", "extend")
+  dry_run: false                    # Write the segments CSV but don't write the audio segments (boolean)
 """.strip()
 
 greater_than_zero = lambda n: n > 0
+greater_than_or_equal_zero = lambda n: n >= 0
 
 AUDIO_SCHEMA = Schema(
     {
@@ -44,8 +48,6 @@ AUDIO_SCHEMA = Schema(
             lambda s: s in ["kaiser_best", "kaiser_fast"],
             error="Resample type can be one of kaiser_fast or kaiser_best",
         ),
-        "duration": And(Use(int), greater_than_zero),
-        "overlap": And(Use(int), greater_than_zero),
     }
 )
 
@@ -72,8 +74,31 @@ RAVEN_SCHEMA = Schema(
     }
 )
 
+SPLIT_AND_SAVE_SCHEMA = Schema(
+    {
+        "clip_duration": And(Use(int), greater_than_zero),
+        "clip_overlap": And(Use(int), greater_than_or_equal_zero),
+        "final_clip": Or(
+            None,
+            And(
+                Use(str),
+                lambda s: s in ["remainder", "full", "extend"],
+                error="Final clip can be one of `remainder`, `full`, `extend`",
+            ),
+        ),
+        "dry_run": Use(
+            bool, error="dry_run should be a boolean value, e.g. `true` or `false`"
+        ),
+    }
+)
+
 SCHEMA = Schema(
-    {"audio": AUDIO_SCHEMA, "runtime": RUNTIME_SCHEMA, "raven": RAVEN_SCHEMA}
+    {
+        "audio": AUDIO_SCHEMA,
+        "runtime": RUNTIME_SCHEMA,
+        "raven": RAVEN_SCHEMA,
+        "split_and_save": SPLIT_AND_SAVE_SCHEMA,
+    }
 )
 
 

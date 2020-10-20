@@ -17,6 +17,7 @@ from opensoundscape.completions import COMPLETIONS
 from opensoundscape.config import validate_file, get_default_config, DEFAULT_CONFIG
 import opensoundscape.console_checks as checks
 import opensoundscape.datasets as datasets
+from opensoundscape.audio import split_and_save, Audio
 from tempfile import TemporaryDirectory
 from itertools import chain
 
@@ -32,6 +33,7 @@ Usage:
     opensoundscape raven_query_annotations <directory> <class>
     opensoundscape split_audio (-i <directory>) (-o <directory>) (-s <segments.csv>) [-c <opensoundscape.yaml>]
     opensoundscape predict_from_directory (-i <directory>) (-d <state_dict.pth>) [-c <opensoundscape.yaml>]
+    opensoundscape split_and_save (-a <audio.wav>) (-o <directory>) (-s <segments.csv) [-c <opensoundscape.yaml>]
 
 Options:
     -h --help                           Print this screen and exit
@@ -42,6 +44,7 @@ Options:
     -c --config <opensoundscape.yaml>   The opensoundscape.yaml config file
     -d --state_dict <state_dict.pth>    A PyTorch state dictionary for ResNet18
                                             e.g. `torch.save(model.state_dict(), "state_dict.pth")`
+    -a --audio_file <audio.wav>         An audio file
 
 Positional Arguments:
     <directory>                         A path to a directory
@@ -198,6 +201,21 @@ def entrypoint():
                         input_df["Destination"][start:end], predictions
                     ):
                         print(f"{fname},{pred}")
+
+    elif args["split_and_save"]:
+        config = get_default_config()
+        if args["--config"]:
+            config = validate_file(args["--config"])
+
+        output_p = checks.directory_exists(args, "--output_directory")
+
+        audio = Audio.from_file(args["--audio_file"], **config["audio"])
+
+        clip_df = split_and_save(
+            audio, args["--output_directory"], "segment", **config["split_and_save"]
+        )
+
+        clip_df.to_csv(args["--segments"], index=None)
 
     else:
         raise NotImplementedError(
