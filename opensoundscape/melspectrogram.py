@@ -5,9 +5,6 @@
 from opensoundscape.audio import Audio
 from librosa.feature import melspectrogram
 from librosa import pcen
-from librosa.display import specshow
-import matplotlib.pyplot as plt
-from io import BytesIO
 from PIL import Image
 from opensoundscape.helpers import linear_scale
 
@@ -67,24 +64,23 @@ class MelSpectrogram:
         process_fmin = fmin if fmin else 0
         process_fmax = fmax if fmax else audio.sample_rate / 2
 
-        return cls(
-            melspectrogram(
-                y=audio.samples,
-                sr=audio.sample_rate,
-                n_fft=n_fft,
-                win_length=win_length,
-                hop_length=hop_length,
-                window=window,
-                n_mels=n_mels,
-                htk=htk,
-                fmin=process_fmin,
-                fmax=process_fmax,
-            ),
-            audio.sample_rate,
-            hop_length,
-            process_fmin,
-            process_fmax,
+        S = melspectrogram(
+            y=audio.samples,
+            sr=audio.sample_rate,
+            n_fft=n_fft,
+            win_length=win_length,
+            hop_length=hop_length,
+            window=window,
+            n_mels=n_mels,
+            htk=htk,
+            fmin=process_fmin,
+            fmax=process_fmax,
         )
+
+        # Make spectrogram "right-side up"
+        S = S[::-1]
+
+        return cls(S, audio.sample_rate, hop_length, process_fmin, process_fmax)
 
     def to_pcen(self, gain=0.8, bias=10.0, power=0.25, time_constant=0.06):
         """ Create PCEN from MelSpectrogram
