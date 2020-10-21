@@ -119,6 +119,10 @@ class MelSpectrogram:
     def to_image(self, shape=None, mode="RGB", s_range=(0, 20)):
         """ Generate PIL Image from MelSpectrogram
 
+        Given a range of values for S (e.g. default is minimum 0, maximum 20)
+        generate a PIL image in 3-channel (RGB) or single channel (L) mode.
+        A user can optionally resize the image.
+
         Args:
             shape: Resize to shape (h, w) [default: None]
             mode: Mode to write out "RGB" or "L" [default: "RGB"]
