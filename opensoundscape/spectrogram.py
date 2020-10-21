@@ -7,7 +7,6 @@ import numpy as np
 from opensoundscape.audio import Audio
 from opensoundscape.helpers import min_max_scale, linear_scale
 import warnings
-import pickle
 
 
 class Spectrogram:

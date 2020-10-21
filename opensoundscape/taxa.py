@@ -1,17 +1,10 @@
 """a set of utilites for converting between scientific and common names of bird species in different naming systems (xeno canto and bird net)"""
 import numpy as np
-import pandas as pd
-from os.path import join, dirname
 from opensoundscape.species_table import species_table
-
-# package_dir = dirname(dirname(__file__))
-# species_table_path = join(package_dir,"resources/species_table.csv")
-# print(f'reading species translations from table at {species_table_path}')
 
 
 def get_species_list():
     """list of scientific-names (lowercase-hyphenated) of species in the loaded species table"""
-    #     species_table = pd.read_csv(species_table_path)
 
     # create a dictionary that maps from 6 letter bn codes to xc scientific name as lowercase-hyphenated
     bn_to_xc = {}
@@ -23,7 +16,6 @@ def get_species_list():
             bn_to_xc[bn_code] = xc_sci_name
     xc_species_list = list(np.sort(list(bn_to_xc.values())))
 
-    #     print(f'loaded species table with {len(xc_species_list)} species')
     return xc_species_list
 
 

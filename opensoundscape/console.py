@@ -19,7 +19,7 @@ import opensoundscape.console_checks as checks
 import opensoundscape.datasets as datasets
 from opensoundscape.audio import split_and_save, Audio
 from tempfile import TemporaryDirectory
-from itertools import chain
+import pandas as pd
 
 
 OPSO_DOCOPT = """ opensoundscape.py -- Opensoundscape
@@ -194,6 +194,7 @@ def entrypoint():
             with torch.no_grad():
                 for idx, data in enumerate(dataloader):
                     X = data["X"]
+                    outputs = model(X)
                     predictions = outputs.clone().detach().argmax(dim=1)
                     start = config["runtime"]["batch_size"] * idx
                     end = start + config["runtime"]["batch_size"]
@@ -211,9 +212,7 @@ def entrypoint():
 
         audio = Audio.from_file(args["--audio_file"], **config["audio"])
 
-        clip_df = split_and_save(
-            audio, args["--output_directory"], "segment", **config["split_and_save"]
-        )
+        clip_df = split_and_save(audio, output_p, "segment", **config["split_and_save"])
 
         clip_df.to_csv(args["--segments"], index=None)
 

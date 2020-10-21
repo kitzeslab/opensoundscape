@@ -2,8 +2,6 @@
 """ audio.py: Utilities for dealing with audio files
 """
 
-from pathlib import Path
-import io
 import librosa
 import soundfile
 import numpy as np
@@ -310,7 +308,6 @@ class Audio:
                 )
                 return []
 
-        clip_times = np.arange(0.0, duration, duration / len(self.samples))
         num_clips = ceil((duration - clip_overlap) / (clip_duration - clip_overlap))
         to_return = [None] * num_clips
         for idx in range(num_clips):
