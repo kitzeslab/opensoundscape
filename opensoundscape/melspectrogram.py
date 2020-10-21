@@ -116,22 +116,20 @@ class MelSpectrogram:
             self.fmax,
         )
 
-    def to_image(self, shape=None, mode="RGB", s_range=(0, 100)):
+    def to_image(self, shape=None, mode="RGB", s_range=(0, 20)):
         """ Generate PIL Image from MelSpectrogram
 
         Args:
             shape: Resize to shape (h, w) [default: None]
             mode: Mode to write out "RGB" or "L" [default: "RGB"]
-            s_range: The input range of S [default: (0, 100)]
+            s_range: The input range of S [default: (0, 20)]
 
         Returns:
             PIL.Image
         """
 
-        # TODO
-        # - Above, the `s_range` is likely wrong. Using `(S.min(), S.max())` temporarily
         arr = linear_scale(
-            self.S, in_range=(self.S.min(), self.S.max()), out_range=(255, 0)
+            self.S, in_range=(s_range[0], s_range[1]), out_range=(255, 0)
         )
         img = Image.fromarray(arr[::-1, :])
         img = img.convert(mode)
