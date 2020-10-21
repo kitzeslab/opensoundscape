@@ -3,18 +3,11 @@
 This module provides functionality to search audio for periodically fluctuating vocalizations.
 """
 
-import librosa
 from scipy import signal
-from librosa import load
-from sklearn.preprocessing import MinMaxScaler
 import numpy as np
-from time import time as timer
-import os
 
 # local imports
 from opensoundscape.helpers import isNan, bound
-from opensoundscape.audio import Audio
-from opensoundscape.spectrogram import Spectrogram
 
 
 def calculate_pulse_score(
@@ -62,7 +55,6 @@ def calculate_pulse_score(
             warnings.warn("MPLBACKEND is 'None' in os.environ. Skipping plot.")
         else:
             from matplotlib import pyplot as plt
-            from time import time
 
             # print(f"peak freq: {'{:.4f}'.format(f[np.argmax(psd)])}")
             plt.plot(f, psd)
@@ -141,8 +133,6 @@ def ribbit(
 
     # step through the file, analyzing in pieces that are window_len long, saving scores and start times for each window
     while start_sample + n_samples_per_window < signal_len - 1:
-        ta = timer()
-
         end_sample = start_sample + n_samples_per_window
         if end_sample < signal_len:
             window = amplitude[start_sample:end_sample]
@@ -272,7 +262,6 @@ def summarize_top_scores(audio_files, list_of_result_dfs, scale_factor=1.0):
     )
     top_species_scores_df.index.name = "file"
 
-    all_results_dfs = []
     for i, f in enumerate(audio_files):
         results_df = list_of_result_dfs[i]
         results_df = results_df.set_index(results_df.columns[0])

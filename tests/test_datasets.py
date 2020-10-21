@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
-from opensoundscape.audio import Audio
 import pytest
 from pathlib import Path
-from shutil import rmtree
 from opensoundscape.datasets import SplitterDataset, SingleTargetAudioDataset
 from torch.utils.data import DataLoader
 import pandas as pd
-import numpy as np
-from PIL import Image
-from numpy.testing import assert_array_equal, assert_raises
+from numpy.testing import assert_array_almost_equal, assert_array_equal
 
 
 tmp_path = "tests/_tmp_split"
@@ -163,21 +159,6 @@ def test_single_target_audio_dataset_no_noise(
     assert_array_almost_equal(channel_0, channel_1)
     assert_array_almost_equal(channel_0, channel_2)
     assert_array_almost_equal(channel_1, channel_2)
-
-
-def test_single_target_audio_dataset_no_noise(
-    single_target_audio_dataset_long_audio_df
-):
-    dataset = SingleTargetAudioDataset(
-        single_target_audio_dataset_long_audio_df, label_dict=None
-    )
-    rgb_image = dataset[0]["X"]
-    channel_0 = rgb_image[0]
-    channel_1 = rgb_image[1]
-    channel_2 = rgb_image[2]
-    assert_array_equal(channel_0, channel_1)
-    assert_array_equal(channel_0, channel_2)
-    assert_array_equal(channel_1, channel_2)
 
 
 def test_single_target_audio_dataset_with_noise(

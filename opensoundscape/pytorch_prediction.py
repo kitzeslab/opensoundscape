@@ -9,10 +9,8 @@ import pandas as pd
 import numpy as np
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
 from torch.nn.functional import softmax
-from torchvision import transforms, models
+from torchvision import transforms
 
 from PIL import Image
 
@@ -177,7 +175,7 @@ def gradcam_region(
         boxes: limits of the box surrounding the gcam activation region, as indices: [ [min row, max row], [min col, max col] ] 
         gcams: (only returned if save_gcams == True) arrays with gcam activation values, shape = shape of image
     """
-    from grad_cam import BackPropagation, Deconvolution, GradCAM, GuidedBackPropagation
+    from grad_cam import GradCAM, GuidedBackPropagation
     import cv2
 
     gcams = [None] * len(img_paths)
@@ -197,14 +195,6 @@ def gradcam_region(
         raw_image = Image.open(img)
         raw_image = raw_image.resize(size=img_shape)
         image = transform(raw_image).unsqueeze(0)
-
-        # generate model predictions, if they weren't provided
-        if predictions is None:
-            with torch.set_grad_enabled(False):
-                logits = model(image)  # .cuda())
-                softmax_num = softmax(logits, 1).detach().cpu().numpy()[0]
-        else:
-            logits = predictions[i]
 
         # gradcam and guided back propogation
         gcam = GradCAM(model=model)

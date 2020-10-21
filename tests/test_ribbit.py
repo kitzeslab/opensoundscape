@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import opensoundscape as opso
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 from opensoundscape import ribbit
@@ -29,10 +28,9 @@ def test_calculate_pulse_score():
 
 def test_calculate_pulse_score_zero_len_input():
     sr = 100
-    t = np.linspace(0, 1, sr)
     amplitude = []
     with pytest.raises(ValueError):
-        score = ribbit.calculate_pulse_score(
+        _ = ribbit.calculate_pulse_score(
             amplitude,
             amplitude_sample_rate=sr,
             pulse_rate_range=[-10, 30],
