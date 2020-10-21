@@ -24,13 +24,49 @@ developers contributing to the code). Either way, Python 3.7 or higher is requir
 
 ## Installation via pip (most users)
 
+Python 3.7+ is required to run OpenSoundscape. On some operating systems `pip`
+and `python` may be Python 2! If `python --version` return 2.7.x you need to
+use `pip3` and `python3`.
+
 ### Just give me the pip command!
 
 Already familiar with installing python packages via pip? The pip command to install OpenSoundscape is `pip install opensoundscape==0.4.4`.
 
-### Detailed instructions
+### On Windows 10
 
-Python 3.7 is required to run OpenSoundscape. Download it from [this website](https://www.python.org/downloads/).
+We recommend installing OpenSoundscape in Windows Subsystem for Linux (WSL).
+
+* If you don't already use WSL (or don't know what it is),
+  * Open Powershell as administrator
+    * Enter "Powershell" into search bar in bottom right
+    * Right click Powershell app
+    * Select "Run as administrator"
+  * Copy and paste first command from
+    https://docs.microsoft.com/en-us/windows/wsl/install-win10 into Powershell
+  * Press enter or return
+  * After it finishes, restart your computer
+* If you already installed WSL,
+  * Open the "Windows Store", search for "Ubuntu"
+  * Click "Ubuntu 20.04 LTS"
+  * Click "Get"
+  * Click "Install"
+  * Click "Launch"
+  * Set username and password to something you will remember
+  * Enter the following commands (hit return at end)
+    * `sudo apt update`
+    * `sudo apt install python3-pip`
+    * `pip3 install opensoundscape==<version>`
+    * `echo 'PATH=~/.local/bin:$PATH' >> ~/.bashrc`
+  * Close the Ubuntu window
+  * Open "Ubuntu" App
+* To use `opensoundscape` from Jupyter
+  * Enter `jupyter lab`, hit return
+  * Copy and paste Jupyter link into Chrome/Firefox/Edge browser
+    * Explorer will **NOT** work
+* To use `opensoundscape` from command line
+  * Enter `opensoundscape -h`, hit return
+
+### Detailed instructions
 
 We recommend installing OpenSoundscape in a virtual environment to prevent dependency conflicts. Below are instructions for installation with Python's included virtual environment manager, `venv`, but feel free to use another virtual environment manager (e.g. `conda`, `virtualenvwrapper`) if desired.
 
