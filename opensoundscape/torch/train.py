@@ -99,10 +99,15 @@ def train(
     model.to(device)
 
     # Model training
-    stats = []
-    classes = list(train_dataset.label_dict.keys())
-    for epoch in range(epochs):
+    # Clases should be integer values
+    try:
+        classes = [int(x) for x in train_dataset.label_dict.keys()]
+    except:
+        raise ValueError(
+            f"The classes should be integers! Got {train_dataset.label_dict.keys()}"
+        )
 
+    for epoch in range(epochs):
         # Train model
         if print_logging:
             print(f"Epoch {epoch}")
