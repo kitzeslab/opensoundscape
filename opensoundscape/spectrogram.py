@@ -256,7 +256,7 @@ class Spectrogram:
         """
         from matplotlib import pyplot as plt
 
-        plt.pcolormesh(self.times, self.frequencies, self.spectrogram, shading="auto")
+        plt.pcolormesh(self.times, self.frequencies, self.spectrogram, shading="auto",cmap='Greys')
         plt.xlabel("time (sec)")
         plt.ylabel("frequency (Hz)")
         if show_colorbar:
