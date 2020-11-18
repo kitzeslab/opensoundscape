@@ -190,6 +190,7 @@ def test_split_and_save_default(silence_10s_mp3_pathlib):
         Audio.from_file(silence_10s_mp3_pathlib),
         "unnecessary",
         "unnecessary",
+        5,
         dry_run=True,
     )
     assert clip_df.shape[0] == 2
@@ -205,6 +206,7 @@ def test_split_and_save_default_extend(silence_10s_mp3_pathlib):
         Audio.from_file(silence_10s_mp3_pathlib),
         "unnecessary",
         "unnecessary",
+        5,
         final_clip="extend",
         dry_run=True,
     )
@@ -220,7 +222,7 @@ def test_split_and_save_default_extend(silence_10s_mp3_pathlib):
 
 def test_non_integer_split_and_save_default(silence_10s_mp3_pathlib):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
-    clip_df = split_and_save(audio, "unnecessary", "unnecessary", dry_run=True)
+    clip_df = split_and_save(audio, "unnecessary", "unnecessary", 5, dry_run=True)
     assert clip_df.shape[0] == 1
     assert clip_df.iloc[0]["begin_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
@@ -230,7 +232,7 @@ def test_non_integer_split_and_save_default(silence_10s_mp3_pathlib):
 def test_non_integer_split_and_save_remainder(silence_10s_mp3_pathlib):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
     clip_df = split_and_save(
-        audio, "unnecessary", "unnecessary", dry_run=True, final_clip="remainder"
+        audio, "unnecessary", "unnecessary", 5, dry_run=True, final_clip="remainder"
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["begin_time"] == 0.0
