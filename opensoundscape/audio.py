@@ -182,7 +182,7 @@ class Audio:
         Returns:
             sample: The rounded sample
         """
-        return round(time * self.sample_rate)
+        return int(time * self.sample_rate)
 
     def bandpass(self, low_f, high_f, order):
         """ bandpass audio signal frequencies
