@@ -190,14 +190,14 @@ def test_split_and_save_default(silence_10s_mp3_pathlib):
         Audio.from_file(silence_10s_mp3_pathlib),
         "unnecessary",
         "unnecessary",
-        5,
+        5.0,
         dry_run=True,
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["begin_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
-    assert clip_df.iloc[1]["begin_time"] == 4.0
-    assert clip_df.iloc[1]["end_time"] == 9.0
+    assert clip_df.iloc[1]["begin_time"] == 5.0
+    assert clip_df.iloc[1]["end_time"] == 10.0
     assert clip_df.iloc[1]["clip_duration"] == 5.0
 
 
@@ -206,7 +206,8 @@ def test_split_and_save_default_extend(silence_10s_mp3_pathlib):
         Audio.from_file(silence_10s_mp3_pathlib),
         "unnecessary",
         "unnecessary",
-        5,
+        5.0,
+        1.0,
         final_clip="extend",
         dry_run=True,
     )
@@ -237,6 +238,6 @@ def test_non_integer_split_and_save_remainder(silence_10s_mp3_pathlib):
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["begin_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
-    assert clip_df.iloc[1]["begin_time"] == 4.0
+    assert clip_df.iloc[1]["begin_time"] == 5.0
     assert clip_df.iloc[1]["end_time"] == 8.2
-    assert clip_df.iloc[1]["clip_duration"] == 4.2
+    assert clip_df.iloc[1]["clip_duration"] == 3.2
