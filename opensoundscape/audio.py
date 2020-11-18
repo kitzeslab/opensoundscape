@@ -258,14 +258,14 @@ class Audio:
 
         return len(self.samples) / self.sample_rate
 
-    def split(self, clip_duration=5, clip_overlap=1, final_clip=None):
+    def split(self, clip_duration, clip_overlap=0, final_clip=None):
         """ Split Audio into clips
 
         The Audio object is split into clips of a specified duration and overlap
 
         Arguments:
             clip_duration:  The duration in seconds of the clips
-            clip_overlap:   The overlap of the clips in seconds
+            clip_overlap:   The overlap of the clips in seconds [default: 0]
             final_clip:     Possible options (any other input will ignore the final clip entirely),
                                 - "remainder":          Include the remainder of the Audio
                                                             (clip will not have clip_duration length)
@@ -344,8 +344,8 @@ def split_and_save(
     audio,
     destination,
     prefix,
-    clip_duration=5,
-    clip_overlap=1,
+    clip_duration,
+    clip_overlap=0,
     final_clip=None,
     dry_run=False,
 ):
@@ -355,8 +355,8 @@ def split_and_save(
         audio:          The input Audio to split
         destination:    A folder to write clips to
         prefix:         A name to prepend to the written clips
-        clip_duration:  The duration of each clip in seconds [default: 5]
-        clip_overlap:   The overlap of each clip in seconds [default: 1]
+        clip_duration:  The duration of each clip in seconds
+        clip_overlap:   The overlap of each clip in seconds [default: 0]
         final_clip:     Possible options (any other input will ignore the final clip entirely) [default: None]
                             - "remainder":          Include the remainder of the Audio
                                                         (clip will not have clip_duration length)
