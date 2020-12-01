@@ -218,8 +218,8 @@ class Spectrogram:
 
         # take slices of the spectrogram and spec_freq that fall within desired range
         return Spectrogram(
-            self.spectrogram[lowest_index:highest_index, :],
-            self.frequencies[lowest_index:highest_index],
+            self.spectrogram[lowest_index:highest_index+1, :],
+            self.frequencies[lowest_index:highest_index+1],
             self.times,
         )
 
@@ -241,9 +241,9 @@ class Spectrogram:
 
         # take slices of the spectrogram and spec_freq that fall within desired range
         return Spectrogram(
-            self.spectrogram[:, lowest_index:highest_index],
+            self.spectrogram[:, lowest_index:highest_index+1],
             self.frequencies,
-            self.times[lowest_index:highest_index],
+            self.times[lowest_index:highest_index+1],
         )
 
     def plot(self, inline=True, fname=None, show_colorbar=False):
