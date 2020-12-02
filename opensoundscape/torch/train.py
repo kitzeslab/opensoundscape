@@ -88,10 +88,12 @@ def train(
 
     labels_yaml = yaml.dump(train_dataset.label_dict)
 
+    #make a dataloader to supply training images from train_dataset
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
     )
 
+    #make a dataloader to supply training images from valid_dataset
     valid_loader = torch.utils.data.DataLoader(
         valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
@@ -106,23 +108,32 @@ def train(
         raise ValueError(
             f"The classes should be integers! Got {train_dataset.label_dict.keys()}"
         )
-
+    
+    #loop for each training epoch
+    #1 epoch = seeing each training file 1 time
     for epoch in range(epochs):
-        # Train model
+        
+        # Set up logging
         if print_logging:
             print(f"Epoch {epoch}")
             print("  Training.")
         train_metrics = Metrics(classes, len(train_dataset))
+        
+        #put model in train mode
         model.train()
-
+        
+        
         epoch_train_scores = []
         epoch_train_targets = []
+        
+        #iterate through the training files, [batchsize] images at a time
         for t in train_loader:
             X, y = t["X"], t["y"]
             X = X.to(device)
             y = y.to(device)
             targets = y.squeeze(1)
-
+            
+            #perform tensor augmentations, such as time warp, time mask, and frequency mask
             if tensor_augment:
                 # X is currently shape [batch_size, 3, width, height]
                 # Take to shape [batch_size, 1, width, height] for use with `augment`
@@ -131,13 +142,15 @@ def train(
                 X = tensaug.time_mask(X, T=50, max_masks=5)
                 X = tensaug.freq_mask(X, F=50, max_masks=5)
 
-                # Take from 1 dimension to 3 dimensions
+                # Transform shape from 1 dimension to 3 dimensions
                 X = torch.cat([X] * 3, dim=1)
 
-            # Run model
+            # Forward pass
+            # (use the input images to generate output values)
             outputs = model(X)
 
-            # Learn from batch
+            # Backward pass
+            # (Learn from batch by updating the network weights)
             loss = loss_fn(outputs, targets)
             optimizer.zero_grad()
             loss.backward()
@@ -151,15 +164,16 @@ def train(
                 targets.cpu().clone().detach().numpy(),
                 batch_predictions.cpu().clone().detach().numpy(),
             )
-
-            # Save copy of scores and true vals
+            
+            # Save copy of scores and targets (labels)
             if save_scores:
                 epoch_train_scores.extend([sample.numpy() for sample in batch_scores])
                 epoch_train_targets.extend(
                     *y.clone().detach().reshape([1, len(y)]).numpy().tolist()
                 )
 
-        # Validate model
+        # Validation
+        # (Run predictions on a held-out validation set and measure accuracy)
         if print_logging:
             print("  Validating.")
         valid_metrics = Metrics(classes, len(valid_dataset))
@@ -167,6 +181,7 @@ def train(
         epoch_val_scores = []
         epoch_val_targets = []
         with torch.no_grad():
+            #iterate through validation set, [batch_size] images at a time
             for t in valid_loader:
                 X, y = t["X"], t["y"]
                 X = X.to(device)
