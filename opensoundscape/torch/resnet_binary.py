@@ -4,6 +4,9 @@
 #!/usr/bin/env python3
 import torch
 import torch.nn as nn
+from torch.nn.functional import softmax
+import torchvision
+
 from opensoundscape.metrics import Metrics
 import opensoundscape.torch.tensor_augment as tensaug
 import yaml
