@@ -42,11 +42,12 @@ class BaseModule(nn.Module):
         pass
         
 
-class ResnetBinary(BaseModule):
+class ResnetBinaryModel(BaseModule):
     #TODO: simplify train and predict functions, especially by making a train_epoch() function
     
     def __init__(self, train_dataset, valid_dataset):
-    
+        super(PlainResNet, self).__init__(train_dataset, valid_dataset)
+        
         #for now, we'll assume the user is providing a train_dataset and test_dataset 
         #that are instances of a Dataset class containing all preprocessing (supply tensorX, y)
         self.train_dataset=train_dataset
