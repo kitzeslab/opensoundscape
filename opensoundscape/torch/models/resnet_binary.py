@@ -40,21 +40,19 @@ class BaseModule(nn.Module):
 
     def update_best(self):
         pass
-        
+
 
 class ResnetBinaryModel(BaseModule):
-    #TODO: simplify train and predict functions, especially by making a train_epoch() function
-    
     def __init__(self, train_dataset, valid_dataset):
         super(ResnetBinaryModel, self).__init__()
-        
-        #for now, we'll assume the user is providing a train_dataset and test_dataset 
+
+        #for now, we'll assume the user is providing a train_dataset and test_dataset
         #that are instances of a Dataset class containing all preprocessing (supply tensorX, y)
         self.train_dataset=train_dataset
         self.valid_dataset=valid_dataset
         self.model = torchvision.models.resnet18(pretrained = True)
         self.model.fc = torch.nn.Linear(in_features = self.model.fc.in_features, out_features = 2)
-        
+
     def predict(self,
             prediction_dataset,
             batch_size=1,
@@ -64,8 +62,8 @@ class ResnetBinaryModel(BaseModule):
         ):
         """ Generate predictions on a dataset from a pytorch model object
         Input:
-            prediction_dataset: 
-                            a pytorch dataset object that returns tensors, such as datasets.SingleTargetAudioDataset()                
+            prediction_dataset:
+                            a pytorch dataset object that returns tensors, such as datasets.SingleTargetAudioDataset()
             batch_size:     The size of the batches (# files) [default: 1]
             num_workers:    The number of cores to use for batch preparation [default: 1]
                             - if you want to use all the cores on your machine, set it to 0 (this could freeze your computer)
@@ -112,7 +110,7 @@ class ResnetBinaryModel(BaseModule):
             pred_df = pred_df.rename(columns=label_dict)
 
         return pred_df
-    
+
     def train(self,
             save_dir,
             train_dataset,
@@ -155,14 +153,14 @@ class ResnetBinaryModel(BaseModule):
         Output:
             None
         Effects:
-            model parameters are saved to 
+            model parameters are saved to
         """
         self.tensor_augment = tensor_augment #this raises the question of whether all these parameters belong to class or train() method
         self.print_logging = print_logging
         self.loss_fn = loss_fn
         self.optimizer = optimizer
         self.save_scores = save_scores
-        
+
         # move this to its own function
         if save_dir is not None:
             # save model parameters to metadata file
@@ -215,7 +213,7 @@ class ResnetBinaryModel(BaseModule):
         #loop for each training epoch
         #1 epoch = seeing each training file 1 time
         for epoch in range(epochs):
-            
+
             # Set up logging
             if self.print_logging:
                 print(f"Epoch {epoch}")
@@ -225,17 +223,17 @@ class ResnetBinaryModel(BaseModule):
 
             # train one epoch
             epoch_train_scores, epoch_train_targets = self.train_epoch(epoch)
-            
+
             # evaluate on validation set
             epoch_val_scores, epoch_val_targets = self.evaluate_epoch(epoch)
-            
+
             # Save weights at every logging interval and at the last epoch
             if (epoch % log_every == 0) or (epoch == epochs - 1):
                 self.save_epoch_results()
 
         print("Training complete.")
         return
-    
+
     def train_epoch(self, epoch):
         #put model in train mode
         self.model.train()
@@ -288,14 +286,14 @@ class ResnetBinaryModel(BaseModule):
                 epoch_train_targets.extend(
                     *y.clone().detach().reshape([1, len(y)]).numpy().tolist()
                 )
-                
+
         return epoch_train_scores, epoch_train_targets
-    
+
     def evaluate_epoch(self,epoch):
         # Run predictions on a held-out validation set and measure accuracy
         if self.print_logging:
             print("  Validating.")
-            
+
         self.model.eval()
         epoch_val_scores = []
         epoch_val_targets = []
@@ -324,12 +322,12 @@ class ResnetBinaryModel(BaseModule):
                     epoch_val_targets.extend(
                         *y.clone().detach().reshape([1, len(y)]).numpy().tolist()
                     )
-                    
+
             return epoch_val_scores, epoch_val_targets
-        
+
     def save_epoch_results(self):
         #save model weights along with accuracy metrics for the current epoch
-        
+
         train_metrics_d = self.train_metrics.compute_epoch_metrics()
         valid_metrics_d = self.valid_metrics.compute_epoch_metrics()
 
@@ -375,15 +373,15 @@ class ResnetBinaryModel(BaseModule):
             torch.save(epoch_results, epoch_filename)
             if self.print_logging:
                 print(f"  Saved results to {epoch_filename}.")
-                
+
         def save(self,save_dir,name=None):
             """save model weights to .tar file
-            
+
             Args:
                 save_dir: path to save into
                 name: model filename
                     (if None, name is epoch-{self.current_epoch})
-            
+
             Effects:
                 saves model with weights and labels to a .tar file
             """
@@ -396,4 +394,3 @@ class ResnetBinaryModel(BaseModule):
                 name = f"epoch-{epoch}"
             filename = f"{save_dir}/{name}.tar"
             torch.save(model_dictionary, filename)
-            
