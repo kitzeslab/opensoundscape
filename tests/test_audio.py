@@ -239,5 +239,5 @@ def test_non_integer_split_and_save_remainder(silence_10s_mp3_pathlib):
     assert clip_df.iloc[0]["begin_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert clip_df.iloc[1]["begin_time"] == 5.0
-    assert abs(clip_df.iloc[1]["end_time"]-8.2) < 0.1
-    assert abs(clip_df.iloc[1]["clip_duration"]-3.2) < 0.1
+    assert abs(clip_df.iloc[1]["end_time"] - 8.2) < 0.1
+    assert abs(clip_df.iloc[1]["clip_duration"] - 3.2) < 0.1
