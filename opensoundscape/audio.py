@@ -2,8 +2,6 @@
 """ audio.py: Utilities for dealing with audio files
 """
 
-from pathlib import Path
-import io
 import librosa
 import soundfile
 import numpy as np
@@ -184,7 +182,7 @@ class Audio:
         Returns:
             sample: The rounded sample
         """
-        return round(time * self.sample_rate)
+        return int(time * self.sample_rate)
 
     def bandpass(self, low_f, high_f, order):
         """ bandpass audio signal frequencies
@@ -260,14 +258,14 @@ class Audio:
 
         return len(self.samples) / self.sample_rate
 
-    def split(self, clip_duration=5, clip_overlap=1, final_clip=None):
+    def split(self, clip_duration, clip_overlap=0, final_clip=None):
         """ Split Audio into clips
 
         The Audio object is split into clips of a specified duration and overlap
 
         Arguments:
             clip_duration:  The duration in seconds of the clips
-            clip_overlap:   The overlap of the clips in seconds
+            clip_overlap:   The overlap of the clips in seconds [default: 0]
             final_clip:     Possible options (any other input will ignore the final clip entirely),
                                 - "remainder":          Include the remainder of the Audio
                                                             (clip will not have clip_duration length)
@@ -310,7 +308,6 @@ class Audio:
                 )
                 return []
 
-        clip_times = np.arange(0.0, duration, duration / len(self.samples))
         num_clips = ceil((duration - clip_overlap) / (clip_duration - clip_overlap))
         to_return = [None] * num_clips
         for idx in range(num_clips):
@@ -347,8 +344,8 @@ def split_and_save(
     audio,
     destination,
     prefix,
-    clip_duration=5,
-    clip_overlap=1,
+    clip_duration,
+    clip_overlap=0,
     final_clip=None,
     dry_run=False,
 ):
@@ -358,8 +355,8 @@ def split_and_save(
         audio:          The input Audio to split
         destination:    A folder to write clips to
         prefix:         A name to prepend to the written clips
-        clip_duration:  The duration of each clip in seconds [default: 5]
-        clip_overlap:   The overlap of each clip in seconds [default: 1]
+        clip_duration:  The duration of each clip in seconds
+        clip_overlap:   The overlap of each clip in seconds [default: 0]
         final_clip:     Possible options (any other input will ignore the final clip entirely) [default: None]
                             - "remainder":          Include the remainder of the Audio
                                                         (clip will not have clip_duration length)

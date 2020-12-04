@@ -1,34 +1,9 @@
 """audio_tools.py: set of tools that filter or modify audio files or sample arrays (not Audio objects)
 """
 from librosa import load
-from scipy import signal
 import numpy as np
-from matplotlib import pyplot as plt
-import scipy
-import os
-from scipy.signal import butter, sosfiltfilt, sosfreqz
-
+from scipy.signal import butter, sosfiltfilt
 from opensoundscape.commands import run_command
-
-
-# def audio_gate(source_path, destination_path, cutoff=-38):
-#     """perform audio gate with ffmpeg and save new audio file
-
-#     audio gate refers to muting the file except when amplitude exceeds a threshold
-
-#     Args:
-#         source_path: path to an audio file
-#         destination_path: path to save output
-#         cutoff=-38: gate threshold in dB Full Scale
-#     Returns:
-#         os response of ffmpeg command
-#     """
-#     gatingCmd = (
-#         f'ffmpeg -i {source_path} "compand='
-#         + f'attacks=0.1:points=-115/-115|{float(cutoff) - 0.1}/-115|{cutoff}/{cutoff}|20/20" {destination_path} '
-#     )
-
-#     return run_command(gatingCmd)
 
 
 def butter_bandpass(low_f, high_f, sample_rate, order=9):

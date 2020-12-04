@@ -7,7 +7,6 @@ import numpy as np
 from opensoundscape.audio import Audio
 from opensoundscape.helpers import min_max_scale, linear_scale
 import warnings
-import pickle
 
 
 class Spectrogram:
@@ -219,8 +218,8 @@ class Spectrogram:
 
         # take slices of the spectrogram and spec_freq that fall within desired range
         return Spectrogram(
-            self.spectrogram[lowest_index:highest_index, :],
-            self.frequencies[lowest_index:highest_index],
+            self.spectrogram[lowest_index : highest_index + 1, :],
+            self.frequencies[lowest_index : highest_index + 1],
             self.times,
         )
 
@@ -242,9 +241,9 @@ class Spectrogram:
 
         # take slices of the spectrogram and spec_freq that fall within desired range
         return Spectrogram(
-            self.spectrogram[:, lowest_index:highest_index],
+            self.spectrogram[:, lowest_index : highest_index + 1],
             self.frequencies,
-            self.times[lowest_index:highest_index],
+            self.times[lowest_index : highest_index + 1],
         )
 
     def plot(self, inline=True, fname=None, show_colorbar=False):
@@ -257,7 +256,9 @@ class Spectrogram:
         """
         from matplotlib import pyplot as plt
 
-        plt.pcolormesh(self.times, self.frequencies, self.spectrogram, shading="auto")
+        plt.pcolormesh(
+            self.times, self.frequencies, self.spectrogram, shading="auto", cmap="Greys"
+        )
         plt.xlabel("time (sec)")
         plt.ylabel("frequency (Hz)")
         if show_colorbar:

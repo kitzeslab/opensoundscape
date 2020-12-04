@@ -58,6 +58,6 @@ def test_jitter():
     helpers.jitter([1, 2, 3], 1, distribution="uniform")
 
 
-def test_jitter():
+def test_jitter_nonexistant_raises_value_error():
     with pytest.raises(ValueError):
         helpers.jitter([1, 2, 3], 1, distribution="nonexistant")

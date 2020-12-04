@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import pandas as pd
 import numpy as np
-from math import ceil, floor
+from math import ceil
 from hashlib import md5
 from sys import stderr
 from pathlib import Path

@@ -5,25 +5,27 @@ from copy import copy
 from itertools import repeat, count
 
 
-def expand_multi_labeled(input_df):
+def expand_multi_labeled(input_df, column_header="Labels", label_separator="|"):
     """ Given a multi-labeled dataframe, generate a singly-labeled dataframe
 
     Given a Dataframe with a "Labels" column that is multi-labeled (e.g. "hello|world")
     split the row into singly labeled rows.
 
     Args:
-        input_df: A Dataframe with a multi-labeled "Labels" column (separated by "|")
+        input_df:           A Dataframe with a multi-labeled column
+        column_header:      The column containing multiple labels [default: "Labels"]
+        label_separator:    Multiple labels are separated by this [default: "|"]
 
     Output:
-        output_df: A Dataframe with singly-labeled "Labels" column
+        output_df:          A Dataframe with singly-labeled column in `column_header`
     """
-    assert "Labels" in input_df.columns
+    assert column_header in input_df.columns
 
     df = copy(input_df)
 
-    df["Labels"] = df["Labels"].str.split("|")
+    df[column_header] = df[column_header].str.split(label_separator)
 
-    return df.explode("Labels").reset_index(drop=True)
+    return df.explode(column_header).reset_index(drop=True)
 
 
 def train_valid_split(

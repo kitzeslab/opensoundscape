@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import opensoundscape as opso
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 import pytest
@@ -8,7 +7,7 @@ import numpy as np
 
 @pytest.fixture()
 def veryshort_wav_str():
-    return f"tests/veryshort.wav"
+    return "tests/veryshort.wav"
 
 
 def test_spectrogram_raises_typeerror():

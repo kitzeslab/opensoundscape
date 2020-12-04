@@ -31,7 +31,6 @@ def test_travel_time():
 def test_localize_2d():
     reciever_positions = [[0, 0], [0, 20], [20, 20], [20, 0]]
     arrival_times = [1, 1, 1, 1]
-    temperature = (20.0,)  # celcius
     invert_alg = ("gps",)  # options: 'lstsq', 'gps'
     center = (True,)  # True for original Sound Finder behavior
     pseudo = (True,)  # False for original Sound Finder
@@ -49,7 +48,6 @@ def test_localize_2d():
 def test_localize_3d():
     reciever_positions = [[0, 0, 0], [0, 20, 1], [20, 20, -1], [20, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
-    temperature = (20.0,)  # celcius
     invert_alg = ("gps",)  # options: 'lstsq', 'gps'
     center = (True,)  # True for original Sound Finder behavior
     pseudo = (True,)  # False for original Sound Finder
@@ -69,7 +67,6 @@ def test_localize_3d():
 def test_localize_lstsq():
     reciever_positions = [[0, 0, 0], [0, 20, 1], [20, 20, -1], [20, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
-    temperature = (20.0,)  # celcius
     invert_alg = ("lstsq",)  # options: 'lstsq', 'gps'
     center = (True,)  # True for original Sound Finder behavior
     pseudo = (True,)  # False for original Sound Finder
@@ -89,7 +86,6 @@ def test_localize_lstsq():
 def test_localize_nocenter():
     reciever_positions = [[100, 0, 0], [100, 20, 1], [120, 20, -1], [120, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
-    temperature = (20.0,)  # celcius
     invert_alg = ("lstsq",)  # options: 'lstsq', 'gps'
     center = (False,)  # True for original Sound Finder behavior
     pseudo = (True,)  # False for original Sound Finder
@@ -109,7 +105,6 @@ def test_localize_nocenter():
 def test_localize_nopseudo():
     reciever_positions = [[0, 0, 0], [0, 20, 1], [20, 20, -1], [20, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
-    temperature = (20.0,)  # celcius
     invert_alg = ("lstsq",)  # options: 'lstsq', 'gps'
     center = (True,)  # True for original Sound Finder behavior
     pseudo = (False,)  # False for original Sound Finder
