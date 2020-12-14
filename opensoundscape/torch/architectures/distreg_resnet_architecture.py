@@ -1,11 +1,11 @@
-#adapt from Miao's repository github.com/zhmiao/BirdMultiLabel
+# adapt from Miao's repository github.com/zhmiao/BirdMultiLabel
 # this "model" is a custom resnet model architecture plus custom loss functions
 # this .py file depends on (at least) a couple other things in the repository:
 # - resnet backbone (utilities for resnet nn stuff?)
 # - utility to register model in a list
 # - BaseModule
 
-#copying from https://github.com/zhmiao/BirdMultiLabel/blob/b31edf022e5c54a5d7ebe994460fec1579e90e96/src/models/distreg_resnet.py
+# copying from https://github.com/zhmiao/BirdMultiLabel/blob/b31edf022e5c54a5d7ebe994460fec1579e90e96/src/models/distreg_resnet.py
 
 import os
 import copy
@@ -19,12 +19,19 @@ from .utils import register_model, BaseModule
 from .resnet_backbone import ResNetFeature, BasicBlock, Bottleneck, model_urls
 
 
-@register_model('DistRegResNetClassifier')
+@register_model("DistRegResNetClassifier")
 class DistRegResNetClassifier(BaseModule):
 
-    name = 'DistRegResNetClassifier'
+    name = "DistRegResNetClassifier"
 
-    def __init__(self, num_cls=10, weights_init='ImageNet', num_layers=18, init_feat_only=True, class_freq=None):
+    def __init__(
+        self,
+        num_cls=10,
+        weights_init="ImageNet",
+        num_layers=18,
+        init_feat_only=True,
+        class_freq=None,
+    ):
         super(DistRegResNetClassifier, self).__init__()
         self.num_cls = num_cls
         self.num_layers = num_layers
@@ -36,12 +43,14 @@ class DistRegResNetClassifier(BaseModule):
 
         # Model setup and weights initialization
         self.setup_net()
-        if weights_init == 'ImageNet':
-            self.load(model_urls['resnet{}'.format(num_layers)], feat_only=init_feat_only)
+        if weights_init == "ImageNet":
+            self.load(
+                model_urls["resnet{}".format(num_layers)], feat_only=init_feat_only
+            )
         elif os.path.exists(weights_init):
             self.load(weights_init, feat_only=init_feat_only)
-        elif weights_init != 'ImageNet' and not os.path.exists(weights_init):
-            raise NameError('Initial weights not exists {}.'.format(weights_init))
+        elif weights_init != "ImageNet" and not os.path.exists(weights_init):
+            raise NameError("Initial weights not exists {}.".format(weights_init))
 
         # Criteria setup
         self.setup_critera()
@@ -57,7 +66,7 @@ class DistRegResNetClassifier(BaseModule):
             block = Bottleneck
             layers = [3, 4, 6, 3]
         else:
-            raise Exception('ResNet Type not supported.')
+            raise Exception("ResNet Type not supported.")
 
         self.feature = ResNetFeature(block, layers, **kwargs)
         self.classifier = nn.Linear(512 * block.expansion, self.num_cls)
@@ -67,14 +76,15 @@ class DistRegResNetClassifier(BaseModule):
 
     def load(self, init_path, feat_only=False):
 
-        if 'http' in init_path:
+        if "http" in init_path:
             init_weights = load_state_dict_from_url(init_path, progress=True)
         else:
             init_weights = torch.load(init_path)
 
         if feat_only:
-            init_weights = OrderedDict({k.replace('feature.', ''): init_weights[k]
-                                        for k in init_weights})
+            init_weights = OrderedDict(
+                {k.replace("feature.", ""): init_weights[k] for k in init_weights}
+            )
             self.feature.load_state_dict(init_weights, strict=False)
             load_keys = set(init_weights.keys())
             self_keys = set(self.feature.state_dict().keys())
@@ -115,7 +125,7 @@ def reduce_loss(loss, reduction):
         return loss.sum()
 
 
-def weight_reduce_loss(loss, weight=None, reduction='mean', avg_factor=None):
+def weight_reduce_loss(loss, weight=None, reduction="mean", avg_factor=None):
     """Apply element-wise weight and reduce loss.
 
     Args:
@@ -136,19 +146,15 @@ def weight_reduce_loss(loss, weight=None, reduction='mean', avg_factor=None):
         loss = reduce_loss(loss, reduction)
     else:
         # if reduction is mean, then average the loss by avg_factor
-        if reduction == 'mean':
+        if reduction == "mean":
             loss = loss.sum() / avg_factor
         # if reduction is 'none', then do nothing, otherwise raise an error
-        elif reduction != 'none':
+        elif reduction != "none":
             raise ValueError('avg_factor can not be used with reduction="sum"')
     return loss
 
 
-def binary_cross_entropy(pred,
-                         label,
-                         weight=None,
-                         reduction='mean',
-                         avg_factor=None):
+def binary_cross_entropy(pred, label, weight=None, reduction="mean", avg_factor=None):
     if pred.dim() != label.dim():
         if weight is not None:
             weight = weight.view(-1, 1).expand(weight.size(0), pred.size(-1))
@@ -159,7 +165,8 @@ def binary_cross_entropy(pred,
         weight = weight.float()
 
     loss = F.binary_cross_entropy_with_logits(
-        pred, label.float(), weight, reduction='none')
+        pred, label.float(), weight, reduction="none"
+    )
 
     loss = weight_reduce_loss(loss, reduction=reduction, avg_factor=avg_factor)
 
@@ -167,12 +174,7 @@ def binary_cross_entropy(pred,
 
 
 class ResampleLoss(nn.Module):
-
-    def __init__(self,
-                 class_freq,
-                 reduction='mean',
-                 loss_weight=1.0,
-                 ):
+    def __init__(self, class_freq, reduction="mean", loss_weight=1.0):
         super(ResampleLoss, self).__init__()
 
         self.loss_weight = loss_weight
@@ -200,30 +202,33 @@ class ResampleLoss(nn.Module):
         # init_bias = 0.05  # else 0.0
         self.neg_scale = 0.2  # else 1.0
         init_bias = 0.05  # else 0.0
-        self.init_bias = - torch.log(
-            self.train_num / self.class_freq - 1) * init_bias / self.neg_scale
+        self.init_bias = (
+            -torch.log(self.train_num / self.class_freq - 1)
+            * init_bias
+            / self.neg_scale
+        )
         self.freq_inv = torch.ones(self.class_freq.shape).cuda() / self.class_freq
         self.propotion_inv = self.train_num / self.class_freq
 
-    def forward(self,
-                cls_score,
-                label,
-                weight=None,
-                avg_factor=None,
-                reduction_override=None,
-                **kwargs):
+    def forward(
+        self,
+        cls_score,
+        label,
+        weight=None,
+        avg_factor=None,
+        reduction_override=None,
+        **kwargs,
+    ):
 
-        assert reduction_override in (None, 'none', 'mean', 'sum')
+        assert reduction_override in (None, "none", "mean", "sum")
 
-        reduction = (
-            reduction_override if reduction_override else self.reduction)
+        reduction = reduction_override if reduction_override else self.reduction
 
         weight = self.reweight_functions(label)
 
         cls_score, weight = self.logit_reg_functions(label.float(), cls_score, weight)
 
-        loss = self.cls_criterion(cls_score, label.float(), weight,
-                                  reduction=reduction)
+        loss = self.cls_criterion(cls_score, label.float(), weight, reduction=reduction)
 
         loss = self.loss_weight * loss
 
@@ -243,6 +248,8 @@ class ResampleLoss(nn.Module):
         repeat_rate = torch.sum(gt_labels.float() * self.freq_inv, dim=1, keepdim=True)
         pos_weight = self.freq_inv.clone().detach().unsqueeze(0) / repeat_rate
         # pos and neg are equally treated
-        weight = torch.sigmoid(self.map_beta * (pos_weight - self.map_gamma)) + self.map_alpha
+        weight = (
+            torch.sigmoid(self.map_beta * (pos_weight - self.map_gamma))
+            + self.map_alpha
+        )
         return weight
-

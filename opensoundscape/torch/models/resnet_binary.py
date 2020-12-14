@@ -1,7 +1,6 @@
-#a model class defines a model architecture, and these functions: self.train, predict, evaluate, save, load
-#a model class is used in combination with a Dataset, which defines the augmentations/preprocessing and tensor shape provided to the model
+# a model class defines a model architecture, and these functions: self.train, predict, evaluate, save, load
+# a model class is used in combination with a Dataset, which defines the augmentations/preprocessing and tensor shape provided to the model
 
-#!/usr/bin/env python3
 import torch
 import torch.nn as nn
 from torch.nn.functional import softmax
@@ -9,57 +8,33 @@ import torchvision
 
 from opensoundscape.metrics import Metrics
 import opensoundscape.torch.tensor_augment as tensaug
+import opensoundscape.torch.models.utils.BaseModule
 import yaml
 from os import path
 import time
-
-
-#TODO: put this somewhere else:
-class BaseModule(nn.Module):
-
-    """
-    Base module for reference.
-    """
-
-    name = None
-
-    def __init__(self):
-        super(BaseModule, self).__init__()
-
-    def setup_net(self):
-        pass
-
-    def setup_critera(self):
-        pass
-
-    def load(self, init_path):
-        pass
-
-    def save(self, out_path):
-        pass
-
-    def update_best(self):
-        pass
 
 
 class ResnetBinaryModel(BaseModule):
     def __init__(self, train_dataset, valid_dataset):
         super(ResnetBinaryModel, self).__init__()
 
-        #for now, we'll assume the user is providing a train_dataset and test_dataset
-        #that are instances of a Dataset class containing all preprocessing (supply tensorX, y)
-        self.train_dataset=train_dataset
-        self.valid_dataset=valid_dataset
-        self.model = torchvision.models.resnet18(pretrained = True)
-        self.model.fc = torch.nn.Linear(in_features = self.model.fc.in_features, out_features = 2)
+        # for now, we'll assume the user is providing a train_dataset and test_dataset
+        # that are instances of a Dataset class containing all preprocessing (supply tensorX, y)
+        self.train_dataset = train_dataset
+        self.valid_dataset = valid_dataset
+        self.model = torchvision.models.resnet18(pretrained=True)
+        self.model.fc = torch.nn.Linear(
+            in_features=self.model.fc.in_features, out_features=2
+        )
 
-    def predict(self,
-            prediction_dataset,
-            batch_size=1,
-            num_workers=1,
-            apply_softmax=False,
-            label_dict=None,
-        ):
+    def predict(
+        self,
+        prediction_dataset,
+        batch_size=1,
+        num_workers=1,
+        apply_softmax=False,
+        label_dict=None,
+    ):
         """ Generate predictions on a dataset from a pytorch model object
         Input:
             prediction_dataset:
@@ -111,21 +86,22 @@ class ResnetBinaryModel(BaseModule):
 
         return pred_df
 
-    def train(self,
-            save_dir,
-            train_dataset,
-            valid_dataset,
-            optimizer,
-            loss_fn,
-            epochs=25,
-            batch_size=1,
-            num_workers=0,
-            log_every=5,
-            tensor_augment=False,
-            debug=False,
-            print_logging=True,
-            save_scores=False,
-        ):
+    def train(
+        self,
+        save_dir,
+        train_dataset,
+        valid_dataset,
+        optimizer,
+        loss_fn,
+        epochs=25,
+        batch_size=1,
+        num_workers=0,
+        log_every=5,
+        tensor_augment=False,
+        debug=False,
+        print_logging=True,
+        save_scores=False,
+    ):
         """ Train the model using examples from train_dataset and evaluate with valid_dataset
         Input:
             save_dir:       A directory to save intermediate results
@@ -155,7 +131,9 @@ class ResnetBinaryModel(BaseModule):
         Effects:
             model parameters are saved to
         """
-        self.tensor_augment = tensor_augment #this raises the question of whether all these parameters belong to class or train() method
+        self.tensor_augment = (
+            tensor_augment
+        )  # this raises the question of whether all these parameters belong to class or train() method
         self.print_logging = print_logging
         self.loss_fn = loss_fn
         self.optimizer = optimizer
@@ -189,12 +167,12 @@ class ResnetBinaryModel(BaseModule):
 
         self.labels_yaml = yaml.dump(train_dataset.label_dict)
 
-        #make a dataloader to supply training images from train_dataset
+        # make a dataloader to supply training images from train_dataset
         self.train_loader = torch.utils.data.DataLoader(
             train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
         )
 
-        #make a dataloader to supply training images from valid_dataset
+        # make a dataloader to supply training images from valid_dataset
         self.valid_loader = torch.utils.data.DataLoader(
             valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
         )
@@ -210,8 +188,8 @@ class ResnetBinaryModel(BaseModule):
                 f"The classes should be integers! Got {train_dataset.label_dict.keys()}"
             )
 
-        #loop for each training epoch
-        #1 epoch = seeing each training file 1 time
+        # loop for each training epoch
+        # 1 epoch = seeing each training file 1 time
         for epoch in range(epochs):
 
             # Set up logging
@@ -235,20 +213,20 @@ class ResnetBinaryModel(BaseModule):
         return
 
     def train_epoch(self, epoch):
-        #put model in train mode
+        # put model in train mode
         self.model.train()
 
         epoch_train_scores = []
         epoch_train_targets = []
 
-        #iterate through the training files, [batchsize] images at a time
+        # iterate through the training files, [batchsize] images at a time
         for t in self.train_loader:
             X, y = t["X"], t["y"]
             X = X.to(self.device)
             y = y.to(self.device)
             targets = y.squeeze(1)
 
-            #perform tensor augmentations, such as time warp, time mask, and frequency mask
+            # perform tensor augmentations, such as time warp, time mask, and frequency mask
             if self.tensor_augment:
                 # X is currently shape [batch_size, 3, width, height]
                 # Take to shape [batch_size, 1, width, height] for use with `augment`
@@ -289,7 +267,7 @@ class ResnetBinaryModel(BaseModule):
 
         return epoch_train_scores, epoch_train_targets
 
-    def evaluate_epoch(self,epoch):
+    def evaluate_epoch(self, epoch):
         # Run predictions on a held-out validation set and measure accuracy
         if self.print_logging:
             print("  Validating.")
@@ -298,7 +276,7 @@ class ResnetBinaryModel(BaseModule):
         epoch_val_scores = []
         epoch_val_targets = []
         with torch.no_grad():
-            #iterate through validation set, [batch_size] images at a time
+            # iterate through validation set, [batch_size] images at a time
             for t in self.valid_loader:
                 X, y = t["X"], t["y"]
                 X = X.to(self.device)
@@ -326,7 +304,7 @@ class ResnetBinaryModel(BaseModule):
             return epoch_val_scores, epoch_val_targets
 
     def save_epoch_results(self):
-        #save model weights along with accuracy metrics for the current epoch
+        # save model weights along with accuracy metrics for the current epoch
 
         train_metrics_d = self.train_metrics.compute_epoch_metrics()
         valid_metrics_d = self.valid_metrics.compute_epoch_metrics()
@@ -374,7 +352,7 @@ class ResnetBinaryModel(BaseModule):
             if self.print_logging:
                 print(f"  Saved results to {epoch_filename}.")
 
-        def save(self,save_dir,name=None):
+        def save(self, save_dir, name=None):
             """save model weights to .tar file
 
             Args:
@@ -385,7 +363,7 @@ class ResnetBinaryModel(BaseModule):
             Effects:
                 saves model with weights and labels to a .tar file
             """
-            model_dictionary =  {
+            model_dictionary = {
                 "model_state_dict": self.model.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
                 "labels_yaml": self.labels_yaml,

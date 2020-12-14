@@ -1,4 +1,4 @@
-#copying from https://github.com/zhmiao/BirdMultiLabel/blob/b31edf022e5c54a5d7ebe994460fec1579e90e96/src/models/utils.py
+# copying from https://github.com/zhmiao/BirdMultiLabel/blob/b31edf022e5c54a5d7ebe994460fec1579e90e96/src/models/utils.py
 
 import torch
 import torch.nn as nn
@@ -15,6 +15,7 @@ def register_model(name):
     def decorator(cls):
         models[name] = cls
         return cls
+
     return decorator
 
 
