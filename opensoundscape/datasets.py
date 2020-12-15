@@ -13,7 +13,7 @@ from time import time
 
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
-
+import opensoundscape.torch.tensor_augment as tensaug
 
 def get_md5_digest(input_string):
     """ Generate MD5 sum for a string
@@ -215,8 +215,8 @@ class SplitterDataset(torch.utils.data.Dataset):
 class SingleTargetAudioDataset(torch.utils.data.Dataset):
     """ Single Target Audio -> Image Dataset
 
-    Given a DataFrame with audio files in one of the columns, generate
-    a Dataset of spectrogram images for basic machine learning tasks.
+    Given a DataFrame with audio file paths in the index, generate
+    a Dataset of spectrogram tensors for basic machine learning tasks.
 
     This class provides access to several types of augmentations that act on
     audio and images with the following arguments:
@@ -231,12 +231,10 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
     from the module `opensoundscape.torch.train`.
 
     Input:
-        df: A DataFrame with a column containing audio files
+        df: A DataFrame with index containing audio file paths
         label_dict: a dictionary mapping numeric labels to class names,
             - for example: {0:'American Robin',1:'Northern Cardinal'}
             - pass `None` if you wish to retain numeric labels
-        filename_column: The column in the DataFrame which contains paths to
-            data [default: Destination]
         from_audio: Whether the raw dataset is audio [default: True]
         label_column: The column with numeric labels if present [default: None]
         height: Height for resulting Tensor [default: 224]
@@ -281,7 +279,6 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         self,
         df,
         label_dict,
-        filename_column="Destination",
         from_audio=True,
         label_column=None,
         height=224,
@@ -294,24 +291,24 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         overlay_prob=0.2,
         overlay_weight="random",
         overlay_class=None,
+        tensor_augment=True,
         audio_sample_rate=22050,
         debug=None,
     ):
         self.df = df
         self.label_dict = label_dict
-        self.filename_column = filename_column
         self.from_audio = from_audio
         self.label_column = label_column
         self.height = height
         self.width = width
         self.add_noise = add_noise
-        self.save_dir = save_dir
         self.random_trim_length = random_trim_length
         self.extend_short_clips = extend_short_clips
         self.max_overlay_num = max_overlay_num
         self.overlay_prob = overlay_prob
         self.overlay_weight = overlay_weight
         self.overlay_class = overlay_class
+        self.tensor_augment = tensor_augment
         self.audio_sample_rate = audio_sample_rate
         self.debug = debug
 
@@ -395,7 +392,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
         # Select a random file from a class of choice
         else:
             choose_from = self.df[self.df[self.label_column] == self.overlay_class]
-        overlay_path = np.random.choice(choose_from[self.filename_column].values)
+        overlay_path = np.random.choice(choose_from.index.values)
         overlay_audio = Audio.from_file(
             overlay_path, sample_rate=self.audio_sample_rate
         )
@@ -434,7 +431,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
     def __getitem__(self, item_idx):
 
         row = self.df.iloc[item_idx]
-        audio_path = Path(row[self.filename_column])
+        audio_path = Path(row.name)
         audio = Audio.from_file(audio_path, sample_rate=self.audio_sample_rate)
 
         # trim to desired length if needed
@@ -457,12 +454,31 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             else:
                 break
 
-        if self.save_dir:
-            image.save(f"{self.save_dir}/{audio_path.stem}_{time()}.png")
+        # if self.save_dir:
+        #     image.save(f"{self.save_dir}/{audio_path.stem}_{time()}.png")
 
         # apply desired random transformations to image and convert to tensor
         image = image.convert("RGB")
         X = self.transform(image)
+
+        # perform tensor augmentations, such as time warp, time mask, and frequency mask
+        if self.tensor_augment:
+            # X is currently shape [3, width, height]
+            # Take to shape [1, 1, width, height] for use with `tensor_augment`
+            # since batch size is '1' (we are only doing one at a time)
+            #was: X = X[:,0].unsqueeze(1)
+            #add "batch" dimension (len 1)
+            X = X[0,:,:].unsqueeze(0).unsqueeze(0)
+            X = tensaug.time_warp(X.clone(), W=10)
+            X = tensaug.time_mask(X, T=50, max_masks=5)
+            X = tensaug.freq_mask(X, F=50, max_masks=5)
+
+            #remove "batch" dimension
+            X = X[0,:]
+
+            # Transform shape from 1 dimension to 3 dimensions
+            X = torch.cat([X] * 3, dim=0)#dim=1)
+
 
         if self.debug:
             from torchvision.utils import save_image
@@ -476,3 +492,309 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
 
         # Return data only (prediction)
         return {"X": X}
+
+
+class BasePreprocessor(torch.utils.data.Dataset):
+    """ torch Dataset that can be augmented with additional preprocessing steps
+
+    Given a DataFrame with audio file paths in the index, generate
+    a Dataset of spectrogram tensors for basic machine learning tasks.
+
+    This class provides access to several types of augmentations that act on
+    audio and images with the following arguments:
+    - add_noise: for adding RandomAffine and ColorJitter noise to images
+    - random_trim_length: for only using a short random clip extracted from the training data
+    - max_overlay_num / overlay_prob / overlay_weight:
+        controlling the maximum number of additional spectrograms to overlay,
+        the probability of overlaying an individual spectrogram,
+        and the weight for the weighted sum of the spectrograms
+
+    Additional augmentations on tensors are available when calling `train()`
+    from the module `opensoundscape.torch.train`.
+
+    Input:
+        df: A DataFrame with index containing audio file paths
+        label_dict: a dictionary mapping numeric labels to class names,
+            - for example: {0:'American Robin',1:'Northern Cardinal'}
+            - pass `None` if you wish to retain numeric labels
+        from_audio: Whether the raw dataset is audio [default: True]
+        label_column: The column with numeric labels if present [default: None]
+        height: Height for resulting Tensor [default: 224]
+        width: Width for resulting Tensor [default: 224]
+        add_noise: Apply RandomAffine and ColorJitter filters [default: False]
+        save_dir: Save images to a directory [default: None]
+        random_trim_length: Extract a clip of this many seconds of audio
+            starting at a random time. If None, the original clip will be used
+            [default: None]
+        extend_short_clips: If a file to be overlaid or trimmed from is too
+            short, extend it to the desired length by repeating it.
+            [default: False]
+        max_overlay_num: The maximum number of additional images to overlay,
+            each with probability overlay_prob [default: 0]
+        overlay_prob: Probability of an image from a different class being
+            overlayed (combined as a weighted sum)
+            on the training image. typical values: 0, 0.66 [default: 0.2]
+        overlay_weight: The weight given to the overlaid image during
+            augmentation. When 'random', will randomly select a different weight
+            between 0.2 and 0.5 for each overlay. When not 'random', should be a
+            float between 0 and 1 [default: 'random']
+        overlay_class: The label of the class that overlays should be drawn from.
+            Must be specified if max_overlay_num > 0. If 'different', draws
+            overlays from any class that is not the same class as the audio. If
+            set to a class label, draws overlays from that class. When creating
+            a presence/absence classifier, set overlay_class equal to the
+            absence class label [default: None]
+        audio_sample_rate: resample audio to this sample rate; specify None to
+            use original audio sample rate [default: 22050]
+        debug: path to save img files, images are created from the tensor
+            immediately before it is returned. When None, does not save images.
+            [default: None]
+
+    Output:
+        Dictionary:
+            { "X": (3, H, W)
+            , "y": (1) if label_column != None
+            }
+    """
+
+    def __init__(
+        self,
+        df,
+        label_dict,
+        from_audio=True,
+        label_column=None,
+        height=224,
+        width=224,
+        add_noise=False,
+        save_dir=None,
+        random_trim_length=None,
+        extend_short_clips=False,
+        max_overlay_num=0,
+        overlay_prob=0.2,
+        overlay_weight="random",
+        overlay_class=None,
+        tensor_augment=True,
+        audio_sample_rate=22050,
+        debug=None,
+    ):
+        self.df = df
+        self.label_dict = label_dict
+        self.from_audio = from_audio
+        self.label_column = label_column
+        self.height = height
+        self.width = width
+        self.add_noise = add_noise
+        self.random_trim_length = random_trim_length
+        self.extend_short_clips = extend_short_clips
+        self.max_overlay_num = max_overlay_num
+        self.overlay_prob = overlay_prob
+        self.overlay_weight = overlay_weight
+        self.overlay_class = overlay_class
+        self.tensor_augment = tensor_augment
+        self.audio_sample_rate = audio_sample_rate
+        self.debug = debug
+
+        # Check inputs
+        if (overlay_weight != "random") and (not 0 < overlay_weight < 1):
+            raise ValueError(
+                f"overlay_weight not in 0<overlay_weight<1 (given overlay_weight: {overlay_weight})"
+            )
+        if (not self.label_column) and (max_overlay_num != 0):
+            raise ValueError(
+                "label_column must be specified to use max_overlay_num != 0"
+            )
+        if (
+            (self.max_overlay_num > 0)
+            and (self.overlay_class != "different")
+            and (self.overlay_class not in df[self.label_column].unique())
+        ):
+            raise ValueError(
+                f"overlay_class must either be 'different' or a value in the label_column (got overlay_class {self.overlay_class} but labels {df[self.label_column].unique()})"
+            )
+
+        # Set up transform, including needed normalization variables
+        self.mean = torch.tensor([0.5 for _ in range(3)])  # [0.8013 for _ in range(3)])
+        self.std_dev = [0.5 for _ in range(3)]  # 0.1576 for _ in range(3)])
+
+    def load_audio(self,path):
+        """file path in, Audio out"""
+        audio = Audio.from_file(audio_path, sample_rate=self.audio_sample_rate)
+        # trim to desired length if needed
+        # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
+        audio_length = len(audio.samples) / audio.sample_rate
+        if self.random_trim_length is not None:
+            from opensoundscape.preprocess import random_audio_trim
+            audio = random_audio_trim(audio, audio_length, extend_short_clips)
+            audio_length = self.random_trim_length
+
+        return audio
+
+    def audio_transform(self,audio):
+        """Audio in, Audio out"""
+        return audio
+
+    def audio_to_img(self,audio):
+        """Audio in, PIL.Image out"""
+        #the reason I think these two should happen in one step
+        #is that it allows other audio to image representations
+        #besides Spectrogram. As long as its Audio->Image it works
+        #-SL
+
+        #convert to spectrogram #maybe this is in audio_to_image?
+        spectrogram = Spectrogram.from_audio(audio)
+
+        #convert to image
+        return spectrogram.to_image(shape=(self.width, self.height), mode="L")
+
+    def img_transform(self,image):
+        """img in, img out"""
+        transform_list = [transforms.Resize((self.height, self.width))]
+        if self.add_noise:
+            transform_list.extend(
+                [
+                    transforms.RandomAffine(
+                        degrees=0, translate=(0.2, 0.03), fillcolor=(50, 50, 50)
+                    ),
+                    transforms.ColorJitter(
+                        brightness=0.3, contrast=0.3, saturation=0.3, hue=0
+                    ),
+                ]
+            )
+        composed_transform = transforms.Compose(transform_list)
+        image =  composed_transform(image)
+        image = image.convert("RGB")
+
+        # should this happen here?
+        image = self.add_overlays(image)
+
+        return image
+
+    def img_to_tensor(self,img):
+        """PIL image in, tensor out"""
+        transform_list = [transforms.ToTensor()]
+        composed_transform = transforms.Compose(transform_list)
+        return composed_transform(image)
+
+    def tensor_transform(self,X):
+        """tensor in, tensor out"""
+        #transform_list.append(transforms.ToTensor())
+        transform_list = [transforms.Normalize(self.mean, self.std_dev)]
+        composed_transform = transforms.Compose(transform_list)
+        X = composed_transform(X) #returns a tensor!
+
+        # perform tensor augmentations, such as time warp, time mask, and frequency mask
+        if self.tensor_augment:
+            # X is currently shape [3, width, height]
+            # Take to shape [1, 1, width, height] for use with `tensor_augment`
+            # (tensor_augment is design for batch of [1,w,h] tensors)
+            # since batch size is '1' (we are only doing one at a time)
+            X = X[0,:,:].unsqueeze(0).unsqueeze(0)#was: X = X[:,0].unsqueeze(1)
+            X = tensaug.time_warp(X.clone(), W=10)
+            X = tensaug.time_mask(X, T=50, max_masks=5)
+            X = tensaug.freq_mask(X, F=50, max_masks=5)
+
+            #remove "batch" dimension
+            X = X[0,:]
+
+            # Transform shape from 1 dimension to 3 dimensions
+            X = torch.cat([X] * 3, dim=0) #dim=1)
+
+        return X
+
+
+    def overlay_random_image(
+        self, original_image, original_length, original_class, original_path
+    ):
+        """ Overlay an image from another class
+
+        Select a random file from a different class. Trim if necessary to the
+        same length as the given image. Overlay the images on top of each other
+        with a weight
+        """
+        # Select a random file from a different class
+        if self.overlay_class == "different":
+            choose_from = self.df[self.df[self.label_column] != original_class]
+        # Select a random file from a class of choice
+        else:
+            choose_from = self.df[self.df[self.label_column] == self.overlay_class]
+        overlay_path = np.random.choice(choose_from.index.values)
+        overlay_audio = Audio.from_file(
+            overlay_path, sample_rate=self.audio_sample_rate
+        )
+
+        # trim to same length as main clip
+        overlay_audio_length = len(overlay_audio.samples) / overlay_audio.sample_rate
+        if overlay_audio_length < original_length and not self.extend_short_clips:
+            raise ValueError(
+                f"the length of the overlay file ({overlay_audio_length} sec) was less than the length of the file {original_path} ({original_length} sec). To extend short clips, use extend_short_clips=True"
+            )
+        elif overlay_audio_length != original_length:
+            from opensoundscape.preprocess import random_audio_trim
+            overlay_audio = random_audio_trim(
+                overlay_audio, original_length, self.extend_short_clips
+            )
+        overlay_image = self.audio_to_img(overlay_audio)
+        # overlay_spectrogram = Spectrogram.from_audio(overlay_audio)
+        # overlay_image = spectrogram.to_image(shape=(self.width, self.height), mode="L")
+
+        # add blur??
+        blur_r = np.random.randint(0, 8) / 10
+        overlay_image = overlay_image.filter(ImageFilter.GaussianBlur(radius=blur_r))
+
+        # Select weight; <0.5 means more emphasis on original image
+        if self.overlay_weight == "random":
+            weight = np.random.randint(2, 5) / 10
+        else:
+            weight = self.overlay_weight
+
+        # use a weighted sum to overlay (blend) the images
+        return Image.blend(original_image, overlay_image, weight)
+
+    def add_overlays(self,image):
+        # here is the first deviation from the routine
+        # requires access to multiple rows
+        # add a blended/overlayed image from another class directly on top
+        for _ in range(self.max_overlay_num):
+            if self.overlay_prob > np.random.uniform():
+                image = self.overlay_random_image(
+                    original_image=image,
+                    original_length=audio_length,
+                    original_class=row[self.label_column],
+                    original_path=audio_path,
+                )
+            else:
+                break
+        return image
+
+    def upsample(self):
+        raise NotImplementedError("Upsampling is not implemented yet")
+
+    def __len__(self):
+        return self.df.shape[0]
+
+    def __getitem__(self, item_idx):
+
+        row = self.df.iloc[item_idx]
+        audio_path = Path(row.name) #the index contains the audio path
+
+        #can we make of list of these transformations to follow/skip?
+        audio = self.load_audio(self,path)
+        audio = self.audio_transform(self,audio) #currently does nothing
+        img = self.audio_to_img(audio) #to spectrogram, then image
+        img = self.img_transform(img) #includes overlays
+        tensor = self.img_to_tensor(img)
+        tensor = self.tensor_transform(tensor) #includes tensor_augment
+
+        # for debugging: save the tensor after all augmentations/transforms
+        if self.debug:
+            from torchvision.utils import save_image
+
+            save_image(X, f"{self.debug}/{audio_path.stem}_{time()}.png")
+
+        # Return data : label pairs (training/validation)
+        if self.label_column:
+            labels = np.array([row[self.label_column]])
+            return {"X": tensor, "y": torch.from_numpy(labels)}
+
+        # Return data only (prediction)
+        return {"X": tensor}
