@@ -147,7 +147,7 @@ def test_single_target_audio_dataset_to_image(single_target_audio_dataset_df):
 
 
 def test_single_target_audio_dataset_no_noise(
-    single_target_audio_dataset_long_audio_df
+    single_target_audio_dataset_long_audio_df,
 ):
     dataset = SingleTargetAudioDataset(
         single_target_audio_dataset_long_audio_df, label_dict=None
@@ -162,7 +162,7 @@ def test_single_target_audio_dataset_no_noise(
 
 
 def test_single_target_audio_dataset_with_noise(
-    single_target_audio_dataset_long_audio_df
+    single_target_audio_dataset_long_audio_df,
 ):
     dataset = SingleTargetAudioDataset(
         single_target_audio_dataset_long_audio_df,
