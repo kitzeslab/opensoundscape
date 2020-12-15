@@ -14,8 +14,9 @@ import yaml
 from os import path
 import time
 
+
 class ResnetBinaryModel(BaseModule):
-    def __init__(self,pretrained=False):
+    def __init__(self, pretrained=False):
         super(ResnetBinaryModel, self).__init__()
 
         # for now, we'll assume the user is providing a train_dataset and test_dataset
@@ -34,7 +35,7 @@ class ResnetBinaryModel(BaseModule):
         apply_softmax=False,
         label_dict=None,
     ):
-        """ Generate predictions on a dataset from a pytorch model object
+        """Generate predictions on a dataset from a pytorch model object
         Input:
             prediction_dataset:
                             a pytorch dataset object that returns tensors, such as datasets.SingleTargetAudioDataset()
@@ -101,7 +102,7 @@ class ResnetBinaryModel(BaseModule):
         print_logging=True,
         save_scores=False,
     ):
-        """ Train the model using examples from train_dataset and evaluate with valid_dataset
+        """Train the model using examples from train_dataset and evaluate with valid_dataset
         Input:
             save_dir:       A directory to save intermediate results
             train_dataset:  The training Dataset, e.g. created by SingleTargetAudioDataset()
@@ -131,7 +132,7 @@ class ResnetBinaryModel(BaseModule):
             model parameters are saved to metadata
         """
 
-        #eventually, we want the user to simply supply dataframes (I think)
+        # eventually, we want the user to simply supply dataframes (I think)
         # and a preprocessing pipeline
 
         self.tensor_augment = tensor_augment
@@ -140,9 +141,11 @@ class ResnetBinaryModel(BaseModule):
         self.loss_fn = loss_fn
         self.optimizer = optimizer
         self.save_scores = save_scores
+        self.save_dir = save_dir
+        self.current_epoch = 0
 
         # move this to its own function
-        if save_dir is not None:
+        if self.save_dir is not None:
             # save model parameters to metadata file
             metadata = {
                 "training_start_time": time.strftime("%X %x %Z"),
@@ -159,7 +162,7 @@ class ResnetBinaryModel(BaseModule):
                 "cuda_is_available:": torch.cuda.is_available(),
             }
 
-            with open(path.join(save_dir, "metadata.txt"), "w") as f:
+            with open(path.join(self.save_dir, "metadata.txt"), "w") as f:
                 f.writelines(yaml.dump(metadata))
 
         if torch.cuda.is_available():
@@ -193,22 +196,29 @@ class ResnetBinaryModel(BaseModule):
         # loop for each training epoch
         # 1 epoch = seeing each training file 1 time
         for epoch in range(epochs):
+            self.current_epoch = epoch
 
             # Set up logging
             if self.print_logging:
-                print(f"Epoch {epoch}")
+                print(f"Epoch {self.current_epoch}")
                 print("  Training.")
             self.train_metrics = Metrics(classes, len(train_dataset))
             self.valid_metrics = Metrics(classes, len(valid_dataset))
 
             # train one epoch
-            epoch_train_scores, epoch_train_targets = self.train_epoch(epoch)
+            epoch_train_scores, epoch_train_targets = self.train_epoch(
+                self.current_epoch
+            )
 
             # evaluate on validation set
-            epoch_val_scores, epoch_val_targets = self.evaluate_epoch(epoch)
+            epoch_val_scores, epoch_val_targets = self.evaluate_epoch(
+                self.current_epoch
+            )
 
             # Save weights at every logging interval and at the last epoch
-            if (epoch % log_every == 0) or (epoch == epochs - 1):
+            if (self.current_epoch % log_every == 0) or (
+                self.current_epoch == epochs - 1
+            ):
                 self.save_epoch_results()
 
         print("Training complete.")
@@ -348,8 +358,8 @@ class ResnetBinaryModel(BaseModule):
                 }
             )
 
-        if save_dir is not None:
-            epoch_filename = f"{save_dir}/epoch-{epoch}.tar"
+        if self.save_dir is not None:
+            epoch_filename = f"{self.save_dir}/epoch-{self.current_epoch}.tar"
             torch.save(epoch_results, epoch_filename)
             if self.print_logging:
                 print(f"  Saved results to {epoch_filename}.")
@@ -371,6 +381,6 @@ class ResnetBinaryModel(BaseModule):
                 "labels_yaml": self.labels_yaml,
             }
             if name is None:
-                name = f"epoch-{epoch}"
+                name = f"epoch-{self.current_epoch}"
             filename = f"{save_dir}/{name}.tar"
             torch.save(model_dictionary, filename)
