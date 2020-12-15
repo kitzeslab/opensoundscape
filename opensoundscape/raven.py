@@ -7,7 +7,7 @@ import pandas as pd
 from pathlib import Path
 from io import StringIO
 
-example_to_test_black_precommit = ['listitem', 'listitem', 'listitem', 'listitem', 'listitem', 'listitem', 'listitem', 'listitem']
+example_to_test_black_precommit = ['listitem', 'listitem', 'listitem', 'listitem', 'listitem', 'listitem', 'listitem', 'listitem', 'anotherone']
 
 
 def _get_lower_selections(input_p):
