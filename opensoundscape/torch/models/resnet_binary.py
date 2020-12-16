@@ -107,7 +107,7 @@ class ResnetBinaryModel(BaseModule):
             save_dir:       A directory to save intermediate results
             train_dataset:  The training Dataset, e.g. created by SingleTargetAudioDataset()
             valid_dataset:  The validation Dataset, e.g. created by SingleTargetAudioDataset()
-            optimizer:       A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
+            optimizer:      A torch optimizer, e.g. torch.optim.SGD(model.parameters(), lr=1e-3)
             loss_fn:        A torch loss function, e.g. torch.nn.CrossEntropyLoss()
             epochs:         The number of epochs [default: 25]
             batch_size:     The size of the batches [default: 1]
@@ -132,11 +132,11 @@ class ResnetBinaryModel(BaseModule):
             model parameters are saved to metadata
         """
 
-        # eventually, we want the user to simply supply dataframes (I think)
+        # TODO: eventually, we want the user to simply supply dataframes (I think)
         # and a preprocessing pipeline
 
         self.tensor_augment = tensor_augment
-        # this raises the question of whether all these parameters belong to class or train() method
+        # TODO: this raises the question of whether all these parameters belong to class or train() method
         self.print_logging = print_logging
         self.loss_fn = loss_fn
         self.optimizer = optimizer
@@ -170,7 +170,9 @@ class ResnetBinaryModel(BaseModule):
         else:
             self.device = torch.device("cpu")
 
-        self.labels_yaml = yaml.dump(train_dataset.label_dict)
+        # TODO: did we need self.labels_yaml? what am I breaking here?
+        # self.labels_yaml = yaml.dump(train_dataset.label_dict)
+        self.classes = train_dataset.labels
 
         # make a dataloader to supply training images from train_dataset
         self.train_loader = torch.utils.data.DataLoader(
@@ -185,13 +187,16 @@ class ResnetBinaryModel(BaseModule):
         self.model.to(self.device)
 
         # Model training
+        # TODO: modify classes, now they are 1-hot encoded
+        # TODO: Metrics is probably broken because it relies on single-label
+
         # Clases should be integer values
-        try:
-            classes = [int(x) for x in train_dataset.label_dict.keys()]
-        except:
-            raise ValueError(
-                f"The classes should be integers! Got {train_dataset.label_dict.keys()}"
-            )
+        # try:
+        #     classes = [int(x) for x in train_dataset.label_dict.keys()]
+        # except:
+        #     raise ValueError(
+        #         f"The classes should be integers! Got {train_dataset.label_dict.keys()}"
+        #     )
 
         # loop for each training epoch
         # 1 epoch = seeing each training file 1 time
@@ -202,8 +207,8 @@ class ResnetBinaryModel(BaseModule):
             if self.print_logging:
                 print(f"Epoch {self.current_epoch}")
                 print("  Training.")
-            self.train_metrics = Metrics(classes, len(train_dataset))
-            self.valid_metrics = Metrics(classes, len(valid_dataset))
+            self.train_metrics = Metrics(self.classes, len(train_dataset))
+            self.valid_metrics = Metrics(self.classes, len(valid_dataset))
 
             # train one epoch
             epoch_train_scores, epoch_train_targets = self.train_epoch(
@@ -236,19 +241,14 @@ class ResnetBinaryModel(BaseModule):
             X, y = t["X"], t["y"]
             X = X.to(self.device)
             y = y.to(self.device)
+            # remove the second dimension of size=1
+            # (eg, [10,1]->[10])
             targets = y.squeeze(1)
 
-            # # perform tensor augmentations, such as time warp, time mask, and frequency mask
-            # if self.tensor_augment:
-            #     # X is currently shape [batch_size, 3, width, height]
-            #     # Take to shape [batch_size, 1, width, height] for use with `augment`
-            #     X = X[:, 0].unsqueeze(1)
-            #     X = tensaug.time_warp(X.clone(), W=10)
-            #     X = tensaug.time_mask(X, T=50, max_masks=5)
-            #     X = tensaug.freq_mask(X, F=50, max_masks=5)
-            #
-            #     # Transform shape from 1 dimension to 3 dimensions
-            #     X = torch.cat([X] * 3, dim=1)
+            # TODO: labels are now one-hot encoded. If loss fn expects
+            # numeric labels, need to re-shape
+            # in this case, there should only be 1 column in the label df,
+            # for the binary classification, so it should remain the same
 
             # Forward pass
             # (use the input images to generate output values)
@@ -264,11 +264,13 @@ class ResnetBinaryModel(BaseModule):
             # Update metrics with loss & class predictions for batch
             batch_scores = outputs.clone().detach()
             batch_predictions = batch_scores.argmax(dim=1)
-            self.train_metrics.accumulate_batch_metrics(
-                loss.clone().detach().item(),
-                targets.cpu().clone().detach().numpy(),
-                batch_predictions.cpu().clone().detach().numpy(),
-            )
+
+            # TODO: fix metrics
+            # self.train_metrics.accumulate_batch_metrics(
+            #     loss.clone().detach().item(),
+            #     targets.cpu().clone().detach().numpy(),
+            #     batch_predictions.cpu().clone().detach().numpy(),
+            # )
 
             # Save copy of scores and targets (labels)
             if self.save_scores:
@@ -302,9 +304,10 @@ class ResnetBinaryModel(BaseModule):
                 batch_scores = outputs.clone().detach()
                 batch_predictions = batch_scores.argmax(dim=1)
                 # Loss isn't important here
-                self.valid_metrics.accumulate_batch_metrics(
-                    0.0, targets.cpu(), batch_predictions.cpu()
-                )
+                # TODO: fix
+                # self.valid_metrics.accumulate_batch_metrics(
+                #     0.0, targets.cpu(), batch_predictions.cpu()
+                # )
 
                 # Save copy of scores and true targets
                 if self.save_scores:
@@ -318,6 +321,7 @@ class ResnetBinaryModel(BaseModule):
     def save_epoch_results(self):
         # save model weights along with accuracy metrics for the current epoch
 
+        # TODO: fix metrics
         train_metrics_d = self.train_metrics.compute_epoch_metrics()
         valid_metrics_d = self.valid_metrics.compute_epoch_metrics()
 
@@ -344,7 +348,7 @@ class ResnetBinaryModel(BaseModule):
             {
                 "model_state_dict": self.model.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
-                "labels_yaml": self.labels_yaml,
+                "labels_yaml": self.classes,  # self.labels_yaml,
             }
         )
 
@@ -378,7 +382,7 @@ class ResnetBinaryModel(BaseModule):
             model_dictionary = {
                 "model_state_dict": self.model.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
-                "labels_yaml": self.labels_yaml,
+                "labels_yaml": self.classes,  # self.labels_yaml,
             }
             if name is None:
                 name = f"epoch-{self.current_epoch}"

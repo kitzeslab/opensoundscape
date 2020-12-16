@@ -213,288 +213,6 @@ class SplitterDataset(torch.utils.data.Dataset):
         return chain.from_iterable([x["data"] for x in batch[1]])
 
 
-class SingleTargetAudioDataset(torch.utils.data.Dataset):
-    """Single Target Audio -> Image Dataset
-
-    Given a DataFrame with audio file paths in the index, generate
-    a Dataset of spectrogram tensors for basic machine learning tasks.
-
-    This class provides access to several types of augmentations that act on
-    audio and images with the following arguments:
-    - add_noise: for adding RandomAffine and ColorJitter noise to images
-    - random_trim_length: for only using a short random clip extracted from the training data
-    - max_overlay_num / overlay_prob / overlay_weight:
-        controlling the maximum number of additional spectrograms to overlay,
-        the probability of overlaying an individual spectrogram,
-        and the weight for the weighted sum of the spectrograms
-
-    Additional augmentations on tensors are available when calling `train()`
-    from the module `opensoundscape.torch.train`.
-
-    Input:
-        df: A DataFrame with index containing audio file paths
-        label_dict: a dictionary mapping numeric labels to class names,
-            - for example: {0:'American Robin',1:'Northern Cardinal'}
-            - pass `None` if you wish to retain numeric labels
-        from_audio: Whether the raw dataset is audio [default: True]
-        label_column: The column with numeric labels if present [default: None]
-        height: Height for resulting Tensor [default: 224]
-        width: Width for resulting Tensor [default: 224]
-        add_noise: Apply RandomAffine and ColorJitter filters [default: False]
-        save_dir: Save images to a directory [default: None]
-        random_trim_length: Extract a clip of this many seconds of audio
-            starting at a random time. If None, the original clip will be used
-            [default: None]
-        extend_short_clips: If a file to be overlaid or trimmed from is too
-            short, extend it to the desired length by repeating it.
-            [default: False]
-        max_overlay_num: The maximum number of additional images to overlay,
-            each with probability overlay_prob [default: 0]
-        overlay_prob: Probability of an image from a different class being
-            overlayed (combined as a weighted sum)
-            on the training image. typical values: 0, 0.66 [default: 0.2]
-        overlay_weight: The weight given to the overlaid image during
-            augmentation. When 'random', will randomly select a different weight
-            between 0.2 and 0.5 for each overlay. When not 'random', should be a
-            float between 0 and 1 [default: 'random']
-        overlay_class: The label of the class that overlays should be drawn from.
-            Must be specified if max_overlay_num > 0. If 'different', draws
-            overlays from any class that is not the same class as the audio. If
-            set to a class label, draws overlays from that class. When creating
-            a presence/absence classifier, set overlay_class equal to the
-            absence class label [default: None]
-        audio_sample_rate: resample audio to this sample rate; specify None to
-            use original audio sample rate [default: 22050]
-        debug: path to save img files, images are created from the tensor
-            immediately before it is returned. When None, does not save images.
-            [default: None]
-
-    Output:
-        Dictionary:
-            { "X": (3, H, W)
-            , "y": (1) if label_column != None
-            }
-    """
-
-    def __init__(
-        self,
-        df,
-        label_dict,
-        from_audio=True,
-        label_column=None,
-        height=224,
-        width=224,
-        add_noise=False,
-        # save_dir=None,
-        random_trim_length=None,
-        extend_short_clips=False,
-        max_overlay_num=0,
-        overlay_prob=0.2,
-        overlay_weight="random",
-        overlay_class=None,
-        tensor_augment=True,
-        audio_sample_rate=22050,
-        debug=None,
-    ):
-        self.df = df
-        self.label_dict = label_dict
-        self.from_audio = from_audio
-        self.label_column = label_column
-        self.height = height
-        self.width = width
-        self.add_noise = add_noise
-        # self.save_dir = save_dir
-        self.random_trim_length = random_trim_length
-        self.extend_short_clips = extend_short_clips
-        self.max_overlay_num = max_overlay_num
-        self.overlay_prob = overlay_prob
-        self.overlay_weight = overlay_weight
-        self.overlay_class = overlay_class
-        self.tensor_augment = tensor_augment
-        self.audio_sample_rate = audio_sample_rate
-        self.debug = debug
-
-        # Check inputs
-        if (overlay_weight != "random") and (not 0 < overlay_weight < 1):
-            raise ValueError(
-                f"overlay_weight not in 0<overlay_weight<1 (given overlay_weight: {overlay_weight})"
-            )
-        if (not self.label_column) and (max_overlay_num != 0):
-            raise ValueError(
-                "label_column must be specified to use max_overlay_num != 0"
-            )
-        if (
-            (self.max_overlay_num > 0)
-            and (self.overlay_class != "different")
-            and (self.overlay_class not in df[self.label_column].unique())
-        ):
-            raise ValueError(
-                f"overlay_class must either be 'different' or a value in the label_column (got overlay_class {self.overlay_class} but labels {df[self.label_column].unique()})"
-            )
-
-        # Set up transform, including needed normalization variables
-        self.mean = torch.tensor([0.5 for _ in range(3)])  # [0.8013 for _ in range(3)])
-        self.std_dev = [0.5 for _ in range(3)]  # 0.1576 for _ in range(3)])
-        self.transform = self.set_transform()
-
-    def set_transform(self):
-        transform_list = [transforms.Resize((self.height, self.width))]
-        if self.add_noise:
-            transform_list.extend(
-                [
-                    transforms.RandomAffine(
-                        degrees=0, translate=(0.2, 0.03), fillcolor=(50, 50, 50)
-                    ),
-                    transforms.ColorJitter(
-                        brightness=0.3, contrast=0.3, saturation=0.3, hue=0
-                    ),
-                ]
-            )
-
-        transform_list.append(transforms.ToTensor())
-        transform_list.append(transforms.Normalize(self.mean, self.std_dev))
-
-        return transforms.Compose(transform_list)
-
-    def random_audio_trim(self, audio, audio_length, audio_path):
-        audio_length = len(audio.samples) / audio.sample_rate
-        if self.random_trim_length > audio_length:
-            if not self.extend_short_clips:
-                raise ValueError(
-                    f"the length of the original file ({audio_length} sec) was less than the length to extract ({self.random_trim_length} sec) for the file {audio_path}. . To extend short clips, use extend_short_clips=True"
-                )
-            else:
-                return audio.extend(self.random_trim_length)
-        extra_time = audio_length - self.random_trim_length
-        start_time = np.random.uniform() * extra_time
-        return audio.trim(start_time, start_time + self.random_trim_length)
-
-    def image_from_audio(self, audio, mode="RGB"):
-        """Create a PIL image from audio
-
-        Inputs:
-            audio: audio object
-            mode: PIL image mode, e.g. "L" or "RGB" [default: RGB]
-        """
-        spectrogram = Spectrogram.from_audio(audio)
-        return spectrogram.to_image(shape=(self.width, self.height), mode=mode)
-
-    def overlay_random_image(
-        self, original_image, original_length, original_class, original_path
-    ):
-        """Overlay an image from another class
-
-        Select a random file from a different class. Trim if necessary to the
-        same length as the given image. Overlay the images on top of each other
-        with a weight
-        """
-        # Select a random file from a different class
-        if self.overlay_class == "different":
-            choose_from = self.df[self.df[self.label_column] != original_class]
-        # Select a random file from a class of choice
-        else:
-            choose_from = self.df[self.df[self.label_column] == self.overlay_class]
-        overlay_path = np.random.choice(choose_from.index.values)
-        overlay_audio = Audio.from_file(
-            overlay_path, sample_rate=self.audio_sample_rate
-        )
-
-        # trim to same length as main clip
-        overlay_audio_length = len(overlay_audio.samples) / overlay_audio.sample_rate
-        if overlay_audio_length < original_length and not self.extend_short_clips:
-            raise ValueError(
-                f"the length of the overlay file ({overlay_audio_length} sec) was less than the length of the file {original_path} ({original_length} sec). To extend short clips, use extend_short_clips=True"
-            )
-        elif overlay_audio_length != original_length:
-            overlay_audio = self.random_audio_trim(
-                overlay_audio, original_length, overlay_path
-            )
-        overlay_image = self.image_from_audio(overlay_audio, mode="L")
-
-        # create an image and add blur
-        blur_r = np.random.randint(0, 8) / 10
-        overlay_image = overlay_image.filter(ImageFilter.GaussianBlur(radius=blur_r))
-
-        # Select weight; <0.5 means more emphasis on original image
-        if self.overlay_weight == "random":
-            weight = np.random.randint(2, 5) / 10
-        else:
-            weight = self.overlay_weight
-
-        # use a weighted sum to overlay (blend) the images
-        return Image.blend(original_image, overlay_image, weight)
-
-    def upsample(self):
-        raise NotImplementedError("Upsampling is not implemented yet")
-
-    def __len__(self):
-        return self.df.shape[0]
-
-    def __getitem__(self, item_idx):
-
-        row = self.df.iloc[item_idx]
-        audio_path = Path(row.name)
-        audio = Audio.from_file(audio_path, sample_rate=self.audio_sample_rate)
-
-        # trim to desired length if needed
-        # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
-        audio_length = len(audio.samples) / audio.sample_rate
-        if self.random_trim_length is not None:
-            audio = self.random_audio_trim(audio, audio_length, audio_path)
-            audio_length = self.random_trim_length
-        image = self.image_from_audio(audio, mode="L")
-
-        # add a blended/overlayed image from another class directly on top
-        for _ in range(self.max_overlay_num):
-            if self.overlay_prob > np.random.uniform():
-                image = self.overlay_random_image(
-                    original_image=image,
-                    original_length=audio_length,
-                    original_class=row[self.label_column],
-                    original_path=audio_path,
-                )
-            else:
-                break
-
-        # if self.save_dir:
-        #     image.save(f"{self.save_dir}/{audio_path.stem}_{time()}.png")
-
-        # apply desired random transformations to image and convert to tensor
-        image = image.convert("RGB")
-        X = self.transform(image)
-
-        # perform tensor augmentations, such as time warp, time mask, and frequency mask
-        if self.tensor_augment:
-            # X is currently shape [3, width, height]
-            # Take to shape [1, 1, width, height] for use with `tensor_augment`
-            # since batch size is '1' (we are only doing one at a time)
-            # was: X = X[:,0].unsqueeze(1)
-            # add "batch" dimension (len 1)
-            X = X[0, :, :].unsqueeze(0).unsqueeze(0)
-            X = tensaug.time_warp(X.clone(), W=10)
-            X = tensaug.time_mask(X, T=50, max_masks=5)
-            X = tensaug.freq_mask(X, F=50, max_masks=5)
-
-            # remove "batch" dimension
-            X = X[0, :]
-
-            # Transform shape from 1 dimension to 3 dimensions
-            X = torch.cat([X] * 3, dim=0)  # dim=1)
-
-        if self.debug:
-            from torchvision.utils import save_image
-
-            save_image(X, f"{self.debug}/{audio_path.stem}_{time()}.png")
-
-        # Return data : label pairs (training/validation)
-        if self.label_column:
-            labels = np.array([row[self.label_column]])
-            return {"X": X, "y": torch.from_numpy(labels)}
-
-        # Return data only (prediction)
-        return {"X": X}
-
-
 class BasePreprocessor(torch.utils.data.Dataset):
     """torch Dataset that can be augmented with additional preprocessing steps
 
@@ -515,9 +233,9 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
     Input:
         df: A DataFrame with index containing audio file paths
-        label_dict: a dictionary mapping numeric labels to class names,
-            - for example: {0:'American Robin',1:'Northern Cardinal'}
-            - pass `None` if you wish to retain numeric labels
+            - if labels are provided, they should be "one-hot" encoded
+            - that is, each column is a class and 1=present, 0=absent
+            - a binary classifier would have just one column, for presence
         from_audio: Whether the raw dataset is audio [default: True]
         label_column: The column with numeric labels if present [default: None]
         height: Height for resulting Tensor [default: 224]
@@ -554,16 +272,14 @@ class BasePreprocessor(torch.utils.data.Dataset):
     Output:
         Dictionary:
             { "X": (3, H, W)
-            , "y": (1) if label_column != None
+            , "y": (len(df.columns))
             }
     """
 
     def __init__(
         self,
         df,
-        label_dict,
         from_audio=True,
-        label_column=None,
         height=224,
         width=224,
         add_noise=False,
@@ -577,11 +293,10 @@ class BasePreprocessor(torch.utils.data.Dataset):
         tensor_augment=True,
         audio_sample_rate=22050,
         debug=None,
+        return_labels=True,
     ):
-        self.df = df
-        self.label_dict = label_dict
+        self.df = df  # TODO: do we want/need to carry this around?
         self.from_audio = from_audio
-        self.label_column = label_column
         self.height = height
         self.width = width
         self.add_noise = add_noise
@@ -594,23 +309,26 @@ class BasePreprocessor(torch.utils.data.Dataset):
         self.tensor_augment = tensor_augment
         self.audio_sample_rate = audio_sample_rate
         self.debug = debug
+        self.return_labels = return_labels
+
+        self.labels = self.df.columns
 
         # Check inputs
         if (overlay_weight != "random") and (not 0 < overlay_weight < 1):
             raise ValueError(
                 f"overlay_weight not in 0<overlay_weight<1 (given overlay_weight: {overlay_weight})"
             )
-        if (not self.label_column) and (max_overlay_num != 0):
-            raise ValueError(
-                "label_column must be specified to use max_overlay_num != 0"
-            )
+        # if (not self.label_column) and (max_overlay_num != 0):
+        #     raise ValueError(
+        #         "label_column must be specified to use max_overlay_num != 0"
+        #     )
         if (
             (self.max_overlay_num > 0)
             and (self.overlay_class != "different")
-            and (self.overlay_class not in df[self.label_column].unique())
+            and (self.overlay_class not in df.columns)
         ):
             raise ValueError(
-                f"overlay_class must either be 'different' or a value in the label_column (got overlay_class {self.overlay_class} but labels {df[self.label_column].unique()})"
+                f"overlay_class must either be 'different' or a value of a column header (got overlay_class {self.overlay_class} but labels {df.columns})"
             )
 
         # Set up transform, including needed normalization variables
@@ -633,12 +351,16 @@ class BasePreprocessor(torch.utils.data.Dataset):
             raise ValueError(f"loaded audio has got samples from file {audio_path}")
         # trim to desired length if needed
         # (if self.random_trim_length is specified, select a clip of that length at random from the original file)
-        audio_length = len(audio.samples) / audio.sample_rate
+
         if self.random_trim_length is not None:
+            # TODO: trimming to constant size deterministically should be default
+            # rather than not trimming at all as default (current)
             from opensoundscape.preprocess import random_audio_trim
 
-            audio = random_audio_trim(audio, audio_length, extend_short_clips)
             audio_length = self.random_trim_length
+            audio = random_audio_trim(audio, audio_length, extend_short_clips)
+
+        self.audio_length = audio.duration()
 
         return audio
 
@@ -661,7 +383,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
     def img_transform(self, image):
         """img in, img out"""
-        transform_list = [transforms.Resize((self.height, self.width))]
+        # transform_list = [transforms.Resize((self.height, self.width))]
         if self.add_noise:
             transform_list.extend(
                 [
@@ -676,9 +398,13 @@ class BasePreprocessor(torch.utils.data.Dataset):
         composed_transform = transforms.Compose(transform_list)
         image = composed_transform(image)
 
-        # should this happen here?
+        # overlay other classes. should this happen here?
         image = self.add_overlays(image)
 
+        # overlayGenerator will be a separate class initialized with .overlay_df
+        # it will recieve x and row_labels, then choose overlay files from
+        # self.overlay_df.
+        # overlay_df is set in Preprocessor() init
         return image
 
     def img_to_tensor(self, image):
@@ -713,47 +439,59 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
         return X
 
-    def overlay_random_image(
-        self, original_image, original_length, original_class, original_path
-    ):
+    def overlay_random_image(self, original_image, audio_length, original_labels):
         """Overlay an image from another class
 
         Select a random file from a different class. Trim if necessary to the
         same length as the given image. Overlay the images on top of each other
         with a weight
         """
-        # Select a random file from a different class
+        import random
+
+        # Select a random file containing none of the classes this file contains
         if self.overlay_class == "different":
-            choose_from = self.df[self.df[self.label_column] != original_class]
-        # Select a random file from a class of choice
-        else:
-            choose_from = self.df[self.df[self.label_column] == self.overlay_class]
-        overlay_path = np.random.choice(choose_from.index.values)
+            good_choice = False  # keep picking random ones until we satisfy criteria
+            while not good_choice:
+                candidate_idx = random.randint(0, len(self.df))
+                # check if this choice meets criteria
+                labels_overlap = sum(
+                    self.df.values[candidate_idx, :] * original_labels.values
+                )
+                good_choice = int(labels_overlap) == 0
+
+            # TODO: check that this is working as expected
+            overlay_path = self.df.index[candidate_idx]
+
+        else:  # Select a random file from a class of choice (may be slow)
+            choose_from = self.df[self.df[self.overlay_class] == 1]
+            overlay_path = np.random.choice(choose_from.index.values)
+
         overlay_audio = Audio.from_file(
             overlay_path, sample_rate=self.audio_sample_rate
         )
 
         # trim to same length as main clip
-        overlay_audio_length = len(overlay_audio.samples) / overlay_audio.sample_rate
-        if overlay_audio_length < original_length and not self.extend_short_clips:
+        overlay_audio_length = overlay_audio.duration()
+        if overlay_audio_length < audio_length and not self.extend_short_clips:
             raise ValueError(
-                f"the length of the overlay file ({overlay_audio_length} sec) was less than the length of the file {original_path} ({original_length} sec). To extend short clips, use extend_short_clips=True"
+                f"the length of the overlay file ({overlay_audio_length} sec) was less than the length of the original file ({audio_length} sec). To extend short clips, use extend_short_clips=True"
             )
-        elif overlay_audio_length != original_length:
+        elif overlay_audio_length > audio_length:
             from opensoundscape.preprocess import random_audio_trim
 
             overlay_audio = random_audio_trim(
-                overlay_audio, original_length, self.extend_short_clips
+                overlay_audio, audio_length, self.extend_short_clips
             )
+
         overlay_image = self.audio_to_img(overlay_audio)
         # overlay_spectrogram = Spectrogram.from_audio(overlay_audio)
         # overlay_image = spectrogram.to_image(shape=(self.width, self.height), mode="L")
 
-        # add blur??
+        # add blur?? Miao had this but not sure it should be here
         blur_r = np.random.randint(0, 8) / 10
         overlay_image = overlay_image.filter(ImageFilter.GaussianBlur(radius=blur_r))
 
-        # Select weight; <0.5 means more emphasis on original image
+        # Select weight of overlay; <0.5 means more emphasis on original image
         if self.overlay_weight == "random":
             weight = np.random.randint(2, 5) / 10
         else:
@@ -764,15 +502,15 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
     def add_overlays(self, image):
         # here is the first deviation from the routine
-        # requires access to multiple rows
+        # requires access to multiple rows of df
         # add a blended/overlayed image from another class directly on top
+        # this logic doesn't quite work for multi-label
         for _ in range(self.max_overlay_num):
             if self.overlay_prob > np.random.uniform():
                 image = self.overlay_random_image(
                     original_image=image,
-                    original_length=audio_length,
-                    original_class=row[self.label_column],
-                    original_path=audio_path,
+                    audio_length=self.audio_length,
+                    original_labels=row,
                 )
             else:
                 break
@@ -786,8 +524,8 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
     def __getitem__(self, item_idx):
 
-        row = self.df.iloc[item_idx]
-        audio_path = Path(row.name)  # the index contains the audio path
+        df_row = self.df.iloc[item_idx]
+        audio_path = Path(df_row.name)  # the index contains the audio path
 
         x = audio_path  # since x will change types, we give it a generic name
         for pipeline_element in self.pipeline:
@@ -796,7 +534,6 @@ class BasePreprocessor(torch.utils.data.Dataset):
                 x = pipeline_element(x)  # apply the transform
 
         # explicit version
-        # can we make of list of these transformations to follow/skip?
         # audio = self.load_audio(audio_path)
         # audio = self.audio_transform(audio)  # currently does nothing
         # img = self.audio_to_img(audio)  # to spectrogram, then image
@@ -812,9 +549,8 @@ class BasePreprocessor(torch.utils.data.Dataset):
             save_image(x, f"{self.debug}/{audio_path.stem}_{time()}.png")
 
         # Return data : label pairs (training/validation)
-        if self.label_column:
-            labels = np.array([row[self.label_column]])
-            return {"X": x, "y": torch.from_numpy(labels)}
+        if self.return_labels:
+            return {"X": x, "y": torch.from_numpy(df_row.values)}
 
         # Return data only (prediction)
         return {"X": x}
