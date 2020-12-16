@@ -617,6 +617,15 @@ class BasePreprocessor(torch.utils.data.Dataset):
         self.mean = torch.tensor([0.5 for _ in range(3)])  # [0.8013 for _ in range(3)])
         self.std_dev = [0.5 for _ in range(3)]  # 0.1576 for _ in range(3)])
 
+        self.pipeline = {
+            self.load_audio: True,
+            self.audio_transform: True,
+            self.audio_to_img: True,
+            self.img_transform: True,
+            self.img_to_tensor: True,
+            self.tensor_transform: True,
+        }
+
     def load_audio(self, audio_path):
         """file path in, Audio out"""
         audio = Audio.from_file(audio_path, sample_rate=self.audio_sample_rate)
@@ -666,7 +675,6 @@ class BasePreprocessor(torch.utils.data.Dataset):
             )
         composed_transform = transforms.Compose(transform_list)
         image = composed_transform(image)
-        image = image.convert("RGB")
 
         # should this happen here?
         image = self.add_overlays(image)
@@ -674,14 +682,14 @@ class BasePreprocessor(torch.utils.data.Dataset):
         return image
 
     def img_to_tensor(self, image):
-        """PIL image in, tensor out"""
+        """PIL Image in, torch Tensor out"""
+        image = image.convert("RGB")
         transform_list = [transforms.ToTensor()]
         composed_transform = transforms.Compose(transform_list)
         return composed_transform(image)
 
     def tensor_transform(self, X):
-        """tensor in, tensor out"""
-        # transform_list.append(transforms.ToTensor())
+        """torch Tensor in, torch Tensor out"""
         transform_list = [transforms.Normalize(self.mean, self.std_dev)]
         composed_transform = transforms.Compose(transform_list)
         X = composed_transform(X)  # returns a tensor!
@@ -781,24 +789,32 @@ class BasePreprocessor(torch.utils.data.Dataset):
         row = self.df.iloc[item_idx]
         audio_path = Path(row.name)  # the index contains the audio path
 
+        x = audio_path  # since x will change types, we give it a generic name
+        for pipeline_element in self.pipeline:
+            # the key is the funciton, the value is an on/off switch
+            if self.pipeline[pipeline_element]:  # if False, we skip this step
+                x = pipeline_element(x)  # apply the transform
+
+        # explicit version
         # can we make of list of these transformations to follow/skip?
-        audio = self.load_audio(audio_path)
-        audio = self.audio_transform(audio)  # currently does nothing
-        img = self.audio_to_img(audio)  # to spectrogram, then image
-        img = self.img_transform(img)  # includes overlays
-        tensor = self.img_to_tensor(img)
-        tensor = self.tensor_transform(tensor)  # includes tensor_augment
+        # audio = self.load_audio(audio_path)
+        # audio = self.audio_transform(audio)  # currently does nothing
+        # img = self.audio_to_img(audio)  # to spectrogram, then image
+        # img = self.img_transform(img)  # includes overlays
+        # tensor = self.img_to_tensor(img)
+        # tensor = self.tensor_transform(tensor)  # includes tensor_augment
+        # x=tensor
 
         # for debugging: save the tensor after all augmentations/transforms
         if self.debug:
             from torchvision.utils import save_image
 
-            save_image(X, f"{self.debug}/{audio_path.stem}_{time()}.png")
+            save_image(x, f"{self.debug}/{audio_path.stem}_{time()}.png")
 
         # Return data : label pairs (training/validation)
         if self.label_column:
             labels = np.array([row[self.label_column]])
-            return {"X": tensor, "y": torch.from_numpy(labels)}
+            return {"X": x, "y": torch.from_numpy(labels)}
 
         # Return data only (prediction)
-        return {"X": tensor}
+        return {"X": x}
