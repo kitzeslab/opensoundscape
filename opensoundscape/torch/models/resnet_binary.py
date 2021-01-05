@@ -74,9 +74,12 @@ class ResnetBinaryModel(BaseModule):
                 softmax_val = softmax(predictions, 1).detach().cpu().numpy()
                 for x in softmax_val:
                     all_predictions.append(x)
+                labels = prediction_dataset.df.columns
             else:
                 for x in predictions.detach().cpu().numpy():
                     all_predictions.append(list(x))  # .astype('float64')
+                label = prediction_dataset.df.columns
+                labels = [label + "_absent", label + "_present"]
 
         img_paths = prediction_dataset.df.index.values
         pred_df = pd.DataFrame(index=img_paths, data=all_predictions)
