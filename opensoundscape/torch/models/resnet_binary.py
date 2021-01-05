@@ -33,7 +33,6 @@ class ResnetBinaryModel(BaseModule):
         batch_size=1,
         num_workers=1,
         apply_softmax=False,
-        label_dict=None,
     ):
         """Generate predictions on a dataset from a pytorch model object
         Input:
@@ -78,11 +77,9 @@ class ResnetBinaryModel(BaseModule):
                 for x in predictions.detach().cpu().numpy():
                     all_predictions.append(list(x))  # .astype('float64')
 
-        img_paths = prediction_dataset.df[prediction_dataset.filename_column].values
+        img_paths = prediction_dataset.df.index.values
         pred_df = pd.DataFrame(index=img_paths, data=all_predictions)
-
-        if label_dict is not None:
-            pred_df = pred_df.rename(columns=label_dict)
+        # columns = [0,1])
 
         return pred_df
 
