@@ -13,6 +13,7 @@ from opensoundscape.torch.models.utils import BaseModule
 import yaml
 from os import path
 import time
+import pandas as pd
 
 
 class ResnetBinaryModel(BaseModule):
