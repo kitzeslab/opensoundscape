@@ -637,6 +637,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
         self.df = df
         self.return_labels = return_labels
+        self.labels = df.columns
 
         # actions: a collection of instances of BaseAction child classes
         self.actions = preprocess.ActionContainer()
@@ -659,11 +660,12 @@ class BasePreprocessor(torch.utils.data.Dataset):
             except LabelsRequiredError:  # need to pass labels
                 x = pipeline_element.go(x, df_row)
 
-        # Return data : label pairs (training/validation)
+        # Return sample & label pairs (training/validation)
         if self.return_labels:
-            return {"X": x, "y": torch.from_numpy(df_row.values)}
+            labels = torch.from_numpy(df_row.values)
+            return {"X": x, "y": labels}
 
-        # Return data only (prediction)
+        # Return sample only (prediction)
         return {"X": x}
 
 
