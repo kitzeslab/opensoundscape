@@ -29,11 +29,7 @@ class ResnetBinaryModel(BaseModule):
         )
 
     def predict(
-        self,
-        prediction_dataset,
-        batch_size=1,
-        num_workers=1,
-        apply_softmax=False,
+        self, prediction_dataset, batch_size=1, num_workers=1, apply_softmax=False
     ):
         """Generate predictions on a dataset from a pytorch model object
         Input:
@@ -73,17 +69,16 @@ class ResnetBinaryModel(BaseModule):
             if apply_softmax:
                 softmax_val = softmax(predictions, 1).detach().cpu().numpy()
                 for x in softmax_val:
-                    all_predictions.append(x)
-                labels = prediction_dataset.df.columns
+                    all_predictions.append(x[1])  # keep the present, not absent
+                labels = prediction_dataset.df.columns.values
             else:
                 for x in predictions.detach().cpu().numpy():
                     all_predictions.append(list(x))  # .astype('float64')
-                label = prediction_dataset.df.columns
+                label = prediction_dataset.df.columns.values[0]
                 labels = [label + "_absent", label + "_present"]
 
         img_paths = prediction_dataset.df.index.values
         pred_df = pd.DataFrame(index=img_paths, data=all_predictions, columns=labels)
-        # columns = [0,1])
 
         return pred_df
 
