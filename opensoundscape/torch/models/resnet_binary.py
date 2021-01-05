@@ -82,7 +82,7 @@ class ResnetBinaryModel(BaseModule):
                 labels = [label + "_absent", label + "_present"]
 
         img_paths = prediction_dataset.df.index.values
-        pred_df = pd.DataFrame(index=img_paths, data=all_predictions)
+        pred_df = pd.DataFrame(index=img_paths, data=all_predictions, columns=labels)
         # columns = [0,1])
 
         return pred_df
