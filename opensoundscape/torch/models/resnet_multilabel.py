@@ -1,18 +1,17 @@
-# adapt from Miao's repository github.com/zhmiao/BirdMultiLabel
-# this .py file depends on a few other things in the repository:
-# 1. selecting a "model" from the models folder, where models are hand-built architectures+loss funcitons
-#  - get_model selects one of these based on its name. also "register_algorithm" for tracking them
-# 2. argument parsing from .yaml file (should implement)
-# 3. dataset loading as implemented in src.data.utils.load_dataset (can probably use opso version instead)
-#  - this might include an augmentation routine, or that might be in the "model" ie architecture
-#  - some augmentation is coming from src.data.spec_augment, we have these in opso.torch.spec_augment I think
-# 4. some other utilities and base classes
+# todo: ask Miao how the labels /training set are expanded or something to make binary problem
+# todo: reload an epoch's weights (load model)
+# todo: save models in similar way to resnet_binary
+# todo: integrate class aware sampler
+# todo: allow choice of architecture
+# todo: write generic audioToImgPreprocessor
 
 # copying from https://github.com/zhmiao/BirdMultiLabel/blob/master/src/algorithms/plain_resnet.py
 
 import os
 import numpy as np
 from datetime import datetime
+import pandas as pd
+import numpy as np
 
 # from tqdm import tqdm
 import random
@@ -31,8 +30,6 @@ from opensoundscape.torch.models.utils import BaseModule
 # from src.models.utils import get_model
 #
 # from src.data.spec_augment import time_warp, time_mask, freq_mask
-
-import numpy as np
 
 
 # def load_data(args):
@@ -96,6 +93,8 @@ class PlainResNet(BaseModule):
         simply create the object then modify them
         """
         super(PlainResNet, self).__init__()
+
+        self.weights_path = "."  # todo: where to specify save path
 
         self.train_dataset = train_dataset
         self.valid_dataset = valid_dataset
@@ -424,7 +423,7 @@ class PlainResNet(BaseModule):
         best_epoch = 0
 
         for epoch in range(self.num_epochs):
-
+            self.current_epoch = epoch
             # Training
             self.train_epoch(epoch)
 
@@ -621,9 +620,11 @@ class PlainResNet(BaseModule):
     #     self.main_logger.info(eval_info)
 
     def save_model(self):
-        os.makedirs(self.weights_path.rsplit("/", 1)[0], exist_ok=True)
+        os.makedirs(
+            self.weights_path, exist_ok=True
+        )  # .rsplit("/", 1)[0], exist_ok=True)
         print("Saving to {}".format(self.weights_path))
-        self.network.save(self.weights_path)
+        self.network.save(f"{self.weights_path}/epoch-{self.current_epoch}.model")
 
     def predict(
         self,
@@ -671,7 +672,7 @@ class PlainResNet(BaseModule):
         # Forward and record # correct predictions of each class
         with torch.set_grad_enabled(False):
 
-            for sample in loader:
+            for sample in dataloader:
                 data = sample["X"].to(self.device)  # is this correct?
 
                 # setup data
@@ -701,8 +702,6 @@ class PlainResNet(BaseModule):
         #     labels = [label + "_absent", label + "_present"]
 
         img_paths = prediction_dataset.df.index.values
-        pred_df = pd.DataFrame(
-            index=img_paths, data=all_predictions, columns=self.classes
-        )
+        pred_df = pd.DataFrame(index=img_paths, data=total_logits, columns=self.classes)
 
         return pred_df
