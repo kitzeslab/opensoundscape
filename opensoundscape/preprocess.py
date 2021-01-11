@@ -3,12 +3,15 @@
 import numpy as np
 from PIL import Image
 import random
+from pathlib import Path
+from time import time
+import os
 from torchvision import transforms
 import torch
+from torchvision.utils import save_image
+
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
-import random
-from pathlib import Path
 
 
 class ParameterRequiredError(Exception):
@@ -98,18 +101,14 @@ class SpecToImg(BaseAction):
 class SaveTensorToDisk(BaseAction):
     """save a torch Tensor to disk"""
 
-    from torchvision.utils import save_image
-    from time import time
-    import os
-
     def __init__(self, save_path):
         # make this directory if it doesnt exist yet
         self.save_path = Path(save_path)
         self.save_path.mkdir(parents=True, exist_ok=True)
 
-    def go(self, x, x_labels):
+    def go(self, x, x_labels=None):
         """we require x_labels because the .name gives origin file name"""
-        if x_labels is None and overlay_class is not None:
+        if x_labels is None:
             raise ParameterRequiredError("Pass x_labels to SaveImgToDisk.go()")
 
         filename = os.path.basename(x_labels.name) + f"_{time()}.png"
