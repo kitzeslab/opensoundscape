@@ -657,8 +657,8 @@ class BasePreprocessor(torch.utils.data.Dataset):
         for pipeline_element in self.pipeline:
             try:
                 x = pipeline_element.go(x)
-            except LabelsRequiredError:  # need to pass labels
-                x = pipeline_element.go(x, df_row)
+            except ParameterRequiredError:  # need to pass labels
+                x, df_row = pipeline_element.go(x, df_row)
 
         # Return sample & label pairs (training/validation)
         if self.return_labels:
@@ -668,8 +668,17 @@ class BasePreprocessor(torch.utils.data.Dataset):
         # Return sample only (prediction)
         return {"X": x}
 
+    def class_counts_cal(self):
+        """count number of each label"""
+        print("Warning: check if this is the correct behavior")
+        labels = self.df.columns
+        counts = np.sum(self.df.values, 0)
+        return labels, counts
+
 
 class AudioLoadingPreprocessor(BasePreprocessor):
+    """creates Audio objects from file paths"""
+
     def __init__(self, df, return_labels=True):
 
         super(AudioLoadingPreprocessor, self).__init__(df, return_labels=return_labels)
@@ -682,6 +691,13 @@ class AudioLoadingPreprocessor(BasePreprocessor):
 
 
 class AudioToImagePreprocessor(BasePreprocessor):
+    """loads audio paths, performs various augmentations, returns tensor
+
+
+    perhaps this should be called something more specific, and a more generic
+    AudioToImagePreprocessor should contain only the basics
+    """
+
     def __init__(
         self,
         df,
@@ -717,10 +733,12 @@ class AudioToImagePreprocessor(BasePreprocessor):
             self.actions.overlay = preprocess.ImgOverlay(
                 overlay_df=overlay_df,
                 audio_length=self.audio_length,
-                prob_overlay=0.5,
+                prob_overlay=1,
                 max_overlay=1,
-                # will not update with changes?
+                overlay_class=None,
+                # might not update with changes?
                 loader_pipeline=self.pipeline[0:4],
+                update_labels=True,
             )
             self.pipeline.append(self.actions.overlay)
 
@@ -741,27 +759,133 @@ class AudioToImagePreprocessor(BasePreprocessor):
             self.actions.tensor_aug = preprocess.TensorAugment()
             self.pipeline.append(self.actions.tensor_aug)
 
-    def __getitem__(self, item_idx):
-        """Overrides base class to allow debug=path (save outputs to file)"""
+        if self.debug is not None:
+            self.actions.save_img = preprocess.SaveTensorToDisk(self.debug)
+            self.pipeline.append(self.actions.save_img)
 
-        df_row = self.df.iloc[item_idx]
-        x = Path(df_row.name)  # the index contains a path to a file
+    # now that there is an action for saving images, don't need to overrride
+    #
+    # def __getitem__(self, item_idx):
+    #     """Overrides base class to allow debug=path (save outputs to file)"""
+    #
+    #     df_row = self.df.iloc[item_idx]
+    #     x = Path(df_row.name)  # the index contains a path to a file
+    #
+    #     for pipeline_element in self.pipeline:
+    #         try:
+    #             x = pipeline_element.go(x)
+    #         except ParameterRequiredError:  # need to pass labels
+    #             x = pipeline_element.go(x, df_row)
+    #
+    #     # for debugging: save the tensor after all augmentations/transforms
+    #     if self.debug:
+    #         from torchvision.utils import save_image
+    #
+    #         save_image(x, f"{self.debug}/{audio_path.stem}_{time()}.png")
+    #
+    #     # Return data : label pairs (training/validation)
+    #     if self.return_labels:
+    #         return {"X": x, "y": torch.from_numpy(df_row.values)}
+    #
+    #     # Return data only (prediction)
+    #     return {"X": x}
 
-        for pipeline_element in self.pipeline:
-            try:
-                x = pipeline_element.go(x)
-            except ParameterRequiredError:  # need to pass labels
-                x = pipeline_element.go(x, df_row)
 
-        # for debugging: save the tensor after all augmentations/transforms
-        if self.debug:
-            from torchvision.utils import save_image
+class ResnetMultilabelPreprocessor(BasePreprocessor):
+    """loads audio paths, performs various augmentations, returns tensor"""
 
-            save_image(x, f"{self.debug}/{audio_path.stem}_{time()}.png")
+    def __init__(
+        self,
+        df,
+        audio_length=None,
+        return_labels=True,
+        augmentation=True,
+        debug=None,
+        overlay_df=None,
+    ):
 
-        # Return data : label pairs (training/validation)
-        if self.return_labels:
-            return {"X": x, "y": torch.from_numpy(df_row.values)}
+        super(ResnetMultilabelPreprocessor, self).__init__(
+            df, return_labels=return_labels
+        )
 
-        # Return data only (prediction)
-        return {"X": x}
+        self.audio_length = audio_length
+        self.augmentation = augmentation
+        self.return_labels = return_labels
+        self.debug = debug
+
+        # add each action to our tool kit, then to pipeline
+        self.actions.load_audio = preprocess.AudioLoader()
+        self.pipeline.append(self.actions.load_audio)
+
+        self.actions.trim_audio = preprocess.AudioTrimmer()
+        self.pipeline.append(self.actions.trim_audio)
+
+        self.actions.to_spec = preprocess.AudioToSpectrogram()
+        self.pipeline.append(self.actions.to_spec)
+
+        self.actions.to_img = preprocess.SpecToImg()
+        self.pipeline.append(self.actions.to_img)
+
+        # should make one without overlay, then subclass and add overlay
+        if self.augmentation:
+            self.actions.overlay = preprocess.ImgOverlay(
+                overlay_df=overlay_df,
+                audio_length=self.audio_length,
+                prob_overlay=0.5,
+                max_overlay=2,
+                overlay_weight=[0.2, 0.5],
+                # this pipeline might not update with changes to preprocessor?
+                loader_pipeline=self.pipeline[0:4],
+                update_labels=True,
+            )
+            self.pipeline.append(self.actions.overlay)
+
+            # color jitter and affine can be applied to img or tensor
+            # here, we choose to apply them to the PIL.Image
+            self.actions.color_jitter = preprocess.TorchColorJitter()
+            self.pipeline.append(self.actions.color_jitter)
+
+            self.actions.random_affine = preprocess.TorchRandomAffine()
+            self.pipeline.append(self.actions.random_affine)
+
+        self.actions.to_tensor = preprocess.ImgToTensor()
+        self.pipeline.append(self.actions.to_tensor)
+
+        if self.augmentation:
+            self.actions.tensor_aug = preprocess.TensorAugment()
+            self.pipeline.append(self.actions.tensor_aug)
+
+            self.actions.add_noise = preprocess.TensorAddNoise(std=1.0)
+            self.pipeline.append(self.actions.add_noise)
+
+        self.actions.normalize = preprocess.TensorNormalize()
+        self.pipeline.append(self.actions.normalize)
+
+        if self.debug is not None:
+            self.actions.save_img = preprocess.SaveTensorToDisk(self.debug)
+            self.pipeline.append(self.actions.save_img)
+
+    # def __getitem__(self, item_idx):
+    #     """Overrides base class to allow debug=path (save outputs to file)"""
+    #
+    #     df_row = self.df.iloc[item_idx]
+    #     x = Path(df_row.name)  # the index contains a path to a file
+    #
+    #     for pipeline_element in self.pipeline:
+    #         try:
+    #             x = pipeline_element.go(x)
+    #         except ParameterRequiredError:  # need to pass labels
+    #             #note: the function returns a new set of labels!
+    #             x, df_row = pipeline_element.go(x, df_row)
+    #
+    #     # for debugging: save the tensor after all augmentations/transforms
+    #     if self.debug:
+    #         from torchvision.utils import save_image
+    #         save_image(x, f"{self.debug}/{audio_path.stem}_{time()}.png")
+    #
+    #     # Return data : label pairs (training/validation)
+    #     if self.return_labels:
+    #         return {"X": x, "y": torch.from_numpy(df_row.values)}
+    #
+    #     # Return data only (prediction)
+    #     return {"X": x}

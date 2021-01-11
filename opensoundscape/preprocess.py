@@ -8,6 +8,7 @@ import torch
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 import random
+from pathlib import Path
 
 
 class ParameterRequiredError(Exception):
@@ -94,6 +95,29 @@ class SpecToImg(BaseAction):
         return spectrogram.to_image(**self.params)
 
 
+class SaveTensorToDisk(BaseAction):
+    """save a torch Tensor to disk"""
+
+    from torchvision.utils import save_image
+    from time import time
+    import os
+
+    def __init__(self, save_path):
+        # make this directory if it doesnt exist yet
+        self.save_path = Path(save_path)
+        self.save_path.mkdir(parents=True, exist_ok=True)
+
+    def go(self, x, x_labels):
+        """we require x_labels because the .name gives origin file name"""
+        if x_labels is None and overlay_class is not None:
+            raise ParameterRequiredError("Pass x_labels to SaveImgToDisk.go()")
+
+        filename = os.path.basename(x_labels.name) + f"_{time()}.png"
+        path = Path.joinpath(self.save_path, filename)
+        save_image(x, path)
+        return x, x_labels
+
+
 class TorchColorJitter(BaseAction):
     """Action child class for torchvision.transforms.ColorJitter"""
 
@@ -137,7 +161,6 @@ class ImgToTensor(BaseAction):
     """convert PIL.Image to torch Tensor"""
 
     def go(self, x):
-        print(type(x))
         x = x.convert("RGB")
         transform = transforms.Compose([transforms.ToTensor()])
         return transform(x)
@@ -191,9 +214,28 @@ class TensorAugment(BaseAction):
         return x
 
 
+class TensorAddNoise(BaseAction):
+    """random white noise added to sample"""
+
+    def __init__(self, **kwargs):
+        super(TensorAddNoise, self).__init__(**kwargs)
+
+        # default parameters
+        self.params["std"] = 1
+
+        # add parameters passed to __init__
+        self.params.update(kwargs)
+
+    def go(self, x):
+        noise = torch.empty_like(x).normal_(mean=0, std=self.params["std"])
+        return x + noise  # do we need to clamp to a range?
+
+
 class ImgOverlay(BaseAction):
     # iteratively overlay images with overlay_prob until stopping condition
-    def __init__(self, overlay_df, audio_length, loader_pipeline, **kwargs):
+    def __init__(
+        self, overlay_df, audio_length, loader_pipeline, update_labels, **kwargs
+    ):
         super(ImgOverlay, self).__init__()
 
         if overlay_df is None:
@@ -202,13 +244,14 @@ class ImgOverlay(BaseAction):
         # required arguments
         self.params["overlay_df"] = overlay_df
         self.params["audio_length"] = audio_length
+        self.params["update_labels"] = update_labels
         self.loader_pipeline = loader_pipeline
 
         # default overlay parameters
         self.params["overlay_class"] = "different"  # or None or specific class
         self.params["overlay_prob"] = 1
         self.params["max_overlay_num"] = 1
-        self.params["overlay_weight"] = 0.5
+        self.params["overlay_weight"] = 0.5  # [0.2,0.8] #specify float or range
 
         # parameters from **kwargs
         self.params.update(kwargs)
@@ -221,12 +264,15 @@ class ImgOverlay(BaseAction):
         Select a random file from a different class. Trim if necessary to the
         same length as the given image. Overlay the images on top of each other
         with a weight
+
+        overlay_weight: can be a float in (0,1) or range of floats (chooses
+        randomly from within range). <0.5 means more emphasis on original img
         """
         overlay_class = self.params["overlay_class"]
         df = self.params["overlay_df"]
 
-        # if overlay_class specified, enforce requirement of x_label
-        if x_labels is None and overlay_class is not None:
+        # (always) enforce requirement of x_label
+        if x_labels is None:  # and overlay_class is not None:
             raise ParameterRequiredError("ImgOverlay requires x_labels")
 
         overlays_performed = 0
@@ -237,7 +283,6 @@ class ImgOverlay(BaseAction):
             overlays_performed += 1
 
             # we want to overlay an image. lets pick one based on rules
-
             if overlay_class is None:
                 # choose any file from the overlay_df
                 overlay_path = random.choice(df.index)
@@ -245,8 +290,8 @@ class ImgOverlay(BaseAction):
             elif overlay_class == "different":
                 # Select a random file containing none of the classes this file contains
                 good_choice = (
-                    False
-                )  # keep picking random ones until we satisfy criteria
+                    False  # keep picking random ones until we satisfy criteria
+                )
                 while not good_choice:
                     candidate_idx = random.randint(0, len(df) - 1)
                     # check if this choice meets criteria
@@ -258,11 +303,20 @@ class ImgOverlay(BaseAction):
 
             else:
                 # Select a random file from a class of choice (may be slow)
+                # However, in the case of a fixed overlay class, we could
+                # pass an overlay_df containing only that class
                 choose_from = df[df[overlay_class] == 1]
                 overlay_path = np.random.choice(choose_from.index.values)
+
             # now we have picked a file to overlay (overlay_path)
             # we also know its labels, if we need them
-            # (overlay_df.loc[overlay_path])
+            overlay_labels = df.loc[overlay_path].values
+
+            # update the labels with new classes
+            if self.params["update_labels"]:
+                # update labels as union of both files' labels
+                new_labels = iter(x_labels.values + overlay_labels)
+                x_labels = x_labels.apply(lambda x: min(1, int(next(new_labels))))
 
             # now we need to run the pipeline to get from audio path -> image
             x2 = overlay_path
@@ -277,14 +331,18 @@ class ImgOverlay(BaseAction):
             # now we blend the two images together
             # Select weight of overlay; <0.5 means more emphasis on original image
             # TODO: change this to a user-provided tuple of weight ranges
-            if self.params["overlay_weight"] == "random":
-                weight = np.random.randint(2, 5) / 10
+            weight = self.params["overlay_weight"]
+            if type(weight) in (list, tuple, np.ndarray):
+                if len(weight) != 2:
+                    raise ValueError("Weight must be float or have length 2")
+                weight = random.uniform(weight[0], weight[1])
             else:
                 weight = self.params["overlay_weight"]
 
             # use a weighted sum to overlay (blend) the images
-            return Image.blend(x, overlay_image, weight)
-        return image
+            x = Image.blend(x, overlay_image, weight)
+
+        return x, x_labels
 
 
 def random_audio_trim(audio, duration, extend_short_clips=False):

@@ -23,9 +23,9 @@ class ResnetBinaryModel(BaseModule):
         # for now, we'll assume the user is providing a train_dataset and test_dataset
         # that are instances of a Dataset class containing all preprocessing (supply tensorX, y)
         # what we want eventually: user provides the preprocessing pipeline and 2 dfs
-        self.model = torchvision.models.resnet18(pretrained=pretrained)
-        self.model.fc = torch.nn.Linear(
-            in_features=self.model.fc.in_features, out_features=2
+        self.net = torchvision.models.resnet18(pretrained=pretrained)
+        self.net.fc = torch.nn.Linear(
+            in_features=self.net.fc.in_features, out_features=2
         )
 
     def predict(
@@ -52,8 +52,8 @@ class ResnetBinaryModel(BaseModule):
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
-        self.model.eval()
-        self.model.to(self.device)
+        self.net.eval()
+        self.net.to(self.device)
 
         dataloader = torch.utils.data.DataLoader(
             prediction_dataset,
@@ -65,7 +65,7 @@ class ResnetBinaryModel(BaseModule):
         # run prediction
         all_predictions = []
         for i, inputs in enumerate(dataloader):
-            predictions = self.model(inputs["X"].to(self.device))
+            predictions = self.net(inputs["X"].to(self.device))
             if apply_softmax:
                 softmax_val = softmax(predictions, 1).detach().cpu().numpy()
                 for x in softmax_val:
@@ -180,7 +180,7 @@ class ResnetBinaryModel(BaseModule):
             valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
         )
 
-        self.model.to(self.device)
+        self.net.to(self.device)
 
         # Model training
         # TODO: modify classes, now they are 1-hot encoded
@@ -227,7 +227,7 @@ class ResnetBinaryModel(BaseModule):
 
     def train_epoch(self, epoch):
         # put model in train mode
-        self.model.train()
+        self.net.train()
 
         epoch_train_scores = []
         epoch_train_targets = []
@@ -237,18 +237,18 @@ class ResnetBinaryModel(BaseModule):
             X, y = t["X"], t["y"]
             X = X.to(self.device)
             y = y.to(self.device)
-            # remove the second dimension of size=1
+            # remove the second dimension (1) of size=1
             # (eg, [10,1]->[10])
             targets = y.squeeze(1)
 
-            # TODO: labels are now one-hot encoded. If loss fn expects
+            # NOTE: labels are now one-hot encoded. If loss fn expects
             # numeric labels, need to re-shape
             # in this case, there should only be 1 column in the label df,
             # for the binary classification, so it should remain the same
 
             # Forward pass
             # (use the input images to generate output values)
-            outputs = self.model(X)
+            outputs = self.net(X)
 
             # Backward pass
             # (Learn from batch by updating the network weights)
@@ -282,7 +282,7 @@ class ResnetBinaryModel(BaseModule):
         if self.print_logging:
             print("  Validating.")
 
-        self.model.eval()
+        self.net.eval()
         epoch_val_scores = []
         epoch_val_targets = []
         with torch.no_grad():
@@ -294,7 +294,7 @@ class ResnetBinaryModel(BaseModule):
                 targets = y.squeeze(1)
 
                 # Run model
-                outputs = self.model(X)
+                outputs = self.net(X)
 
                 # Update metrics with class predictions for batch
                 batch_scores = outputs.clone().detach()
@@ -342,7 +342,7 @@ class ResnetBinaryModel(BaseModule):
 
         epoch_results.update(
             {
-                "model_state_dict": self.model.state_dict(),
+                "model_state_dict": self.net.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
                 "labels_yaml": self.classes,  # self.labels_yaml,
             }
@@ -376,7 +376,7 @@ class ResnetBinaryModel(BaseModule):
                 saves model with weights and labels to a .tar file
             """
             model_dictionary = {
-                "model_state_dict": self.model.state_dict(),
+                "model_state_dict": self.net.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
                 "labels_yaml": self.classes,  # self.labels_yaml,
             }

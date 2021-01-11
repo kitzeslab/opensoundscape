@@ -31,31 +31,38 @@ class BaseModule(nn.Module):
         pass
 
 
-# def load_dataset(name, dset, num_channels=3, batch_size=64, rootdir='', shuffle=True, num_workers=1,
-#                  augment=0, cas_sampler=False, **add_args):
-#
-#     """
-#     Dataset loader
-#     """
-#
-#     if dset != 'train':
-#         shuffle = False
-#
-#     dataset = get_dataset(name, rootdir, dset, num_channels=num_channels, augment=augment, **add_args)
-#
-#     if len(dataset) == 0:
-#         return None
-#
-#     if cas_sampler:
-#         print("** USING CAS SAMPLER!! **")
-#         sampler = ClassAwareSampler(dataset.digit_labels, 2)
-#         loader = DataLoader(dataset, batch_size=batch_size, shuffle=False,
-#                             num_workers=num_workers, pin_memory=True,
-#                             sampler=sampler)
-#     else:
-#         loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=True)
-#
-#     return loader
+def get_dataloader(
+    dataset, batch_size=64, shuffle=False, num_workers=1, cas_sampler=False
+):
+    """
+    Dataset loader
+    """
+    if len(dataset) == 0:
+        return None
+
+    if cas_sampler:
+        print("** USING CAS SAMPLER!! **")
+        # note: I didn't implement dataset.digit_labels, not sure what it is or
+        # if we need it
+        sampler = ClassAwareSampler(dataset.digit_labels, 2)
+        loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True,
+            sampler=sampler,
+        )
+    else:
+        loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
+
+    return loader
 
 
 def cas_dataloader(

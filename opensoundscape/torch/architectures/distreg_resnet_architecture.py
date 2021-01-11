@@ -15,12 +15,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.hub import load_state_dict_from_url
 
-from .utils import register_model, BaseModule
-from .resnet_backbone import ResNetFeature, BasicBlock, Bottleneck, model_urls
+from opensoundscape.torch.architectures.utils import BaseArchitecture
+from opensoundscape.torch.architectures.resnet_backbone import (
+    ResNetFeature,
+    BasicBlock,
+    Bottleneck,
+    model_urls,
+)
 
 
-@register_model("DistRegResNetClassifier")
-class DistRegResNetClassifier(BaseModule):
+# @register_model("DistRegResNetClassifier")
+class DistRegResNetClassifier(BaseArchitecture):
 
     name = "DistRegResNetClassifier"
 
@@ -53,7 +58,7 @@ class DistRegResNetClassifier(BaseModule):
             raise NameError("Initial weights not exists {}.".format(weights_init))
 
         # Criteria setup
-        self.setup_critera()
+        self.setup_criteria()
 
     def setup_net(self):
 
@@ -71,7 +76,7 @@ class DistRegResNetClassifier(BaseModule):
         self.feature = ResNetFeature(block, layers, **kwargs)
         self.classifier = nn.Linear(512 * block.expansion, self.num_cls)
 
-    def setup_critera(self):
+    def setup_criteria(self):
         self.criterion_cls = ResampleLoss(class_freq=self.class_freq)
 
     def load(self, init_path, feat_only=False):
@@ -177,6 +182,11 @@ class ResampleLoss(nn.Module):
     def __init__(self, class_freq, reduction="mean", loss_weight=1.0):
         super(ResampleLoss, self).__init__()
 
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+
         self.loss_weight = loss_weight
         self.reduction = reduction
 
@@ -192,7 +202,7 @@ class ResampleLoss(nn.Module):
         self.map_beta = 0.2
         self.map_gamma = 0.1
 
-        self.class_freq = torch.from_numpy(class_freq).float().cuda()
+        self.class_freq = torch.from_numpy(class_freq).float().to(self.device)
         self.neg_class_freq = self.class_freq.sum() - self.class_freq
         self.num_classes = self.class_freq.shape[0]
         self.train_num = self.class_freq.sum()
@@ -207,7 +217,9 @@ class ResampleLoss(nn.Module):
             * init_bias
             / self.neg_scale
         )
-        self.freq_inv = torch.ones(self.class_freq.shape).cuda() / self.class_freq
+        self.freq_inv = (
+            torch.ones(self.class_freq.shape).to(self.device) / self.class_freq
+        )
         self.propotion_inv = self.train_num / self.class_freq
 
     def forward(

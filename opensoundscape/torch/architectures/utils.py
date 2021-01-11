@@ -31,16 +31,16 @@ def get_model(name, **args):
     return net
 
 
-class BaseModule(nn.Module):
+class BaseArchitecture(nn.Module):
 
     """
-    Base module for reference.
+    Base architecture for reference.
     """
 
     name = None
 
     def __init__(self):
-        super(BaseModule, self).__init__()
+        super(BaseArchitecture, self).__init__()
 
     def setup_net(self):
         pass
