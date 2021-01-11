@@ -26,6 +26,7 @@ class BaseAction:
         # pass any parameters as kwargs
         self.params = {}
         self.params.update(kwargs)
+        self.bypass = False  # if off, no action is performed
 
     def go(self, x, **kwargs):
         return x
@@ -36,6 +37,12 @@ class BaseAction:
     def get(self, arg):
         return self.params[arg]
 
+    def off(self):
+        self.bypass = True
+
+    def on(self):
+        self.bypass = False
+
 
 class ActionContainer:
     """this is an empty object which holds instances of Action child-classes
@@ -45,6 +52,9 @@ class ActionContainer:
 
     def __init__(self):
         pass
+
+    def list_actions(self):
+        return list(vars(self).keys())
 
 
 class AudioLoader(BaseAction):
@@ -101,7 +111,8 @@ class SpecToImg(BaseAction):
 class SaveTensorToDisk(BaseAction):
     """save a torch Tensor to disk"""
 
-    def __init__(self, save_path):
+    def __init__(self, save_path, **kwargs):
+        super(SaveTensorToDisk, self).__init__(**kwargs)
         # make this directory if it doesnt exist yet
         self.save_path = Path(save_path)
         self.save_path.mkdir(parents=True, exist_ok=True)
