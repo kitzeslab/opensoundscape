@@ -32,7 +32,7 @@ class BaseModule(nn.Module):
 
 
 def get_dataloader(
-    dataset, batch_size=64, shuffle=False, num_workers=1, cas_sampler=False
+    dataset, batch_size=64, num_workers=1, shuffle=False, cas_sampler=False
 ):
     """
     Dataset loader
