@@ -3,7 +3,7 @@
 
 # OpenSoundscape
 
-OpenSoundscape is a utility library for analyzing bioacoustic data.
+OpenSoundscape ([GitHub](https://github.com/kitzeslab/opensoundscape)) is a utility library for analyzing bioacoustic data.
 It consists of command line scripts for tasks such as preprocessing audio data,
 training machine learning models to classify vocalizations, estimating the
 spatial location of sounds, identifying which species' sounds are present in
