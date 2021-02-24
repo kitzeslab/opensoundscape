@@ -1,12 +1,8 @@
 # Contributors
-Contributors and advanced users can use this workflow to install via Poetry.
+Contributors and advanced users can use this workflow to install via Poetry. Poetry installation allows direct use of the most recent version of the code. This workflow allows advanced users to use the newest features in OpenSoundscape, and allows developers/contributors to build and test their contributions.
+
 
 ## Poetry installation
-Poetry installation allows direct use of the most recent version of the code.
-This workflow allows advanced users to use the newest features in OpenSoundscape,
-and allows developers/contributors to build and test their contributions.
-
-To install via poetry, do the following:
 * Download [poetry](https://poetry.eustace.io/docs/#installation)
 * Download
   [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/en/latest/install.html)
@@ -38,21 +34,6 @@ To install via poetry, do the following:
 * Check that OpenSoundscape runs: `opensoundscape -h`
 * Run tests (from the top-level directory): `poetry run pytest`
 * Go back to your system's Python when you are done: `deactivate`
-
-### Jupyter
-To use OpenSoundscape within JupyterLab, you will have to make an `ipykernel`
-for the OpenSoundscape virtual environment.
-
-- Activate poetry virtual environment, e.g.: `workon opensoundscape-dxMTH98s-py3.7`
-    - Use `poetry env list` if you're not sure what the name of the environment is
-- Create ipython kernel: `python -m ipykernel install --user --name=[name of poetry environment] --display-name=OpenSoundscape`
-- Now when you make a new document on JupyterLab, you should see a Python kernel available called OpenSoundscape.
-- Contributors: if you include Jupyter's `autoreload`, any changes you make to the source code
-  installed via poetry will be reflected whenever you run the `%autoreload` line magic in a cell:
-    ```
-    %load_ext autoreload
-    %autoreload
-    ```
 
 ## Contribution workflow
 
