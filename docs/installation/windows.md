@@ -1,7 +1,7 @@
 # Windows
 We recommend that Windows users install and use OpenSoundscape using Windows Subsystem for Linux, because some of the machine learning and audio processing packages required by OpenSoundscape do not install easily on Windows computers. Below we describe the typical installation method. This gives you access to a Linux operating system (we recommend Ubuntu 20.04) in which to use Python and install and use OpenSoundscape. Using Ubuntu 20.04 is as simple as opening a program on your computer.
 
-## 1. Get Ubuntu through Windows Subsystem for Linux
+## Get Ubuntu shell
 If you don't already use Windows Subsystem for Linux (WSL), activate it using the following:
 - Search for the "Powershell" program on your computer
 - Right click on "Powershell," then click “Run as administrator” and in the pop-up, allow it to run as administrator
@@ -15,7 +15,7 @@ Once you have WSL, follow these steps to get an Ubuntu shell on your computer:
 - Set username and password to something you will remember
 - Run `sudo apt update` and type in the password you just set
 
-## 2. Download Anaconda
+## Download Anaconda
 We recommend installing OpenSoundscape in a package manager. We find that the easiest package manager for new users is "Anaconda," a program which includes Python and tools for managing Python packages. Below are instructions for downloading Anaconda in the Ubuntu environment.
 
 - Open [this page](https://www.anaconda.com/products/individual) and scroll down to the "Anaconda Installers" section. Under the Linux section, right click on the link “64-Bit (x86) Installer” and click “Copy link”`
@@ -33,7 +33,7 @@ We recommend installing OpenSoundscape in a package manager. We find that the ea
 
 You can now manage packages with `conda`.
 
-## 3. Use `conda` to install OpenSoundscape
+## Install OpenSoundscape in virtual environment
 - Create a Python 3.7 conda environment for opensoundscape `conda create --name opensoundscape pip python=3.7`
 - Activate the environment `conda activate opensoundscape`
 - Install opensoundscape using pip: `pip install opensoundscape==0.4.6`
@@ -44,9 +44,3 @@ If you run into this error and you are on a Windows 10 machine:
 WARNING: Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f7603c5da90>: Failed to establish a new connection: [Errno -2] Name or service not known')': /simple/opensoundscape/
 ```
 You may be able to solve it by going to System Settings, searching for “Proxy Settings,” and beneath “Automatic proxy setup,” turning “Automatically detect settings” OFF. Restart your terminal for changes to take effect. Then activate the environment and install OpenSoundscape using pip.
-
-## Optional: Jupyterlab setup
-If you want to use OpenSoundscape in JupyterLab or a Jupyter Notebook:
-- Activate the conda environment
-- Start JupyterLab from inside the conda environment: `jupyter lab`
-- Copy and paste the JupyterLab link into your browser
