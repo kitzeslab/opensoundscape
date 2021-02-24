@@ -1,4 +1,5 @@
 # Contributors
+Contributors and advanced users can use this workflow to install via Poetry.
 
 ## Poetry installation
 Poetry installation allows direct use of the most recent version of the code.
@@ -52,3 +53,27 @@ for the OpenSoundscape virtual environment.
     %load_ext autoreload
     %autoreload
     ```
+
+## Contribution workflow
+
+### Contributing to code
+Make contributions by editing the code in your fork. Create branches
+for features using `git checkout -b feature_branch_name` and push these
+changes to remote using `git push -u origin feature_branch_name`. To merge a
+feature branch into the development branch, use the GitHub
+web interface to create a merge request.
+
+When contributions in your fork are complete, open a pull request using the
+GitHub web interface. Before opening a PR, do the following to
+ensure the code is consistent with the rest of the package:
+* Run tests: `poetry run pytest`
+* Format the code with `black` style (from the top level of the repo): `poetry run black .`
+  * To automatically handle this, `poetry run pre-commit install`
+* Additional libraries to be installed should be installed with `poetry add`, but
+  in most cases contributors should not add libraries.
+
+### Contributing to documentation
+
+Build the documentation using either poetry or sphinx-build
+- With poetry: `poetry run build_docs`
+- With sphinx-build: `sphinx-build doc doc/_build`
