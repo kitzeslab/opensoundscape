@@ -27,4 +27,4 @@ The Getting Started section below provide guidance on installing OpSo. The Tutor
    :caption: API Documentation
 
    api
-   genindex
+   :ref:`genindex`
