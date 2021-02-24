@@ -19,6 +19,7 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
    installation/mac_and_linux.md
    installation/windows.md
    installation/contributors.md
+   installation/jupyter.md
 
 .. toctree::
    :maxdepth: 2
