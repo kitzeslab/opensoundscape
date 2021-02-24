@@ -10,10 +10,13 @@ Feel free to use another virtual environment manager (e.g. `virtualenvwrapper`) 
 
 ## Installation via Anaconda
 
-* Install Anaconda if you don't already have it. Follow the [installation instructions in the Anaconda documentation](https://docs.anaconda.com/anaconda/install/) for your operating system.
-* Create a Python 3.7 conda environment for opensoundscape `conda create --name opensoundscape pip python=3.7`
-* Activate the environment `conda activate opensoundscape`
+* Install Anaconda if you don't already have it. 
+   * Download the installer [here](https://www.anaconda.com/products/individual), or
+   * follow the [installation instructions](https://docs.anaconda.com/anaconda/install/) for your operating system.
+* Create a Python 3.7 conda environment for opensoundscape: `conda create --name opensoundscape pip python=3.7`
+* Activate the environment: `conda activate opensoundscape`
 * Install opensoundscape using pip: `pip install opensoundscape==0.4.6`
+* Deactivate the environment when you're done using it: `conda deactivate`
 
 ## Installation via `venv`
 
@@ -25,7 +28,7 @@ Run the following commands in your bash terminal:
     * Tip:  You can use this folder to store virtual environments for other projects as well, so put it somewhere that makes sense for you, e.g. in your home directory.
 * Make a directory for virtual environments and `cd` into it: `mkdir .venv && cd .venv`
 * Create an environment called `opensoundscape` in the directory: `python3 -m venv opensoundscape`
-* Activate/use the environment `source opensoundscape/bin/activate`
+* Activate/use the environment: `source opensoundscape/bin/activate`
 * Install OpenSoundscape in the environment: `pip install opensoundscape==0.4.6`
 * Once you are done with OpenSoundscape, deactivate the environment: `deactivate`
 * To use the environment again, you will have to refer to absolute path of the virtual environments folder. For instance, if I were on a Mac and created `.venv` inside a directory `/Users/MyFiles/Code` I would activate the virtual environment using: `source /Users/MyFiles/Code/.venv/opensoundscape/bin/activate`
