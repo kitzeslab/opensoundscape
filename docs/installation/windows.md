@@ -5,7 +5,12 @@ We recommend that Windows users install and use OpenSoundscape using Windows Sub
 If you don't already use Windows Subsystem for Linux (WSL), activate it using the following:
 - Search for the "Powershell" program on your computer
 - Right click on "Powershell," then click “Run as administrator” and in the pop-up, allow it to run as administrator
-- Install WSL1: `dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart` (more information: https://docs.microsoft.com/en-us/windows/wsl/install-win10)
+- Install WSL1 (more information: https://docs.microsoft.com/en-us/windows/wsl/install-win10):
+
+    ```
+    dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+    ```
+    
 - Restart your computer
 
 Once you have WSL, follow these steps to get an Ubuntu shell on your computer:
@@ -21,8 +26,18 @@ We recommend installing OpenSoundscape in a package manager. We find that the ea
 - Open [this page](https://www.anaconda.com/products/individual) and scroll down to the "Anaconda Installers" section. Under the Linux section, right click on the link “64-Bit (x86) Installer” and click “Copy link”`
 - Download the installer:
     - Open the Ubuntu terminal
-    - Type in `wget` then paste the link you copied, e.g.: `wget https://repo.anaconda.com/archive/Anaconda3-2020.07-Linux-x86_64.sh` (the filename of your file may differ)
-- Execute the downloaded installer, e.g. `bash Anaconda3-2020.07-Linux-x86_64.sh` (the filename of your file may differ)
+    - Type in `wget` then paste the link you copied, e.g.: (the filename of your file may differ)
+   
+   ```
+   wget https://repo.anaconda.com/archive/Anaconda3-2020.07-Linux-x86_64.sh
+   ```
+ 
+- Execute the downloaded installer, e.g.: (the filename of your file may differ) 
+
+    ```
+    bash Anaconda3-2020.07-Linux-x86_64.sh
+    ```
+    
     - Press ENTER, read the installation requirements, press Q, then type “yes” and press enter to install
     - Wait for it to install
     - If your download hangs, press CTRL+C, `rm -rf ~/anaconda3` and try again
@@ -34,8 +49,8 @@ We recommend installing OpenSoundscape in a package manager. We find that the ea
 You can now manage packages with `conda`.
 
 ## Install OpenSoundscape in virtual environment
-- Create a Python 3.7 conda environment for opensoundscape `conda create --name opensoundscape pip python=3.7`
-- Activate the environment `conda activate opensoundscape`
+- Create a Python 3.7 conda environment for opensoundscape: `conda create --name opensoundscape pip python=3.7`
+- Activate the environment: `conda activate opensoundscape`
 - Install opensoundscape using pip: `pip install opensoundscape==0.4.6`
 
 If you run into this error and you are on a Windows 10 machine:
