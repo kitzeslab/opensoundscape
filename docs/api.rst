@@ -31,16 +31,16 @@ Config
 .. automodule:: opensoundscape.config
    :members:
 
-Console Checks
-^^^^^^^^^^^^^^
-
-.. automodule:: opensoundscape.console_checks
-   :members:
-
 Console
 ^^^^^^^
 
 .. automodule:: opensoundscape.console
+   :members:
+
+Console Checks
+^^^^^^^^^^^^^^
+
+.. automodule:: opensoundscape.console_checks
    :members:
 
 Data Selection
@@ -73,6 +73,12 @@ Localization
 .. automodule:: opensoundscape.localization
    :members:
 
+Mel Spectrogram
+^^^^^^^
+
+.. automodule:: opensoundscape.melspectrogram
+   :members:
+
 Metrics
 ^^^^^^^
 
@@ -85,16 +91,17 @@ Pulse Finder
 .. automodule:: opensoundscape.pulse_finder
    :members:
 
-PyTorch Prediction
-^^^^^^^^^^^^^^^^^^
-
-.. automodule:: opensoundscape.pytorch_prediction
-   :members:
-
 Raven
 ^^^^^
 
 .. automodule:: opensoundscape.raven
+   :members:
+   
+  
+Ribbit
+^^^^^
+
+.. automodule:: opensoundscape.ribbit
    :members:
 
 Species Table
@@ -115,13 +122,19 @@ Taxa
 .. automodule:: opensoundscape.taxa
    :members:
 
-Torch Spectrogram Augmentation
+PyTorch Prediction
+^^^^^^^^^^^^^^
+
+.. automodule:: opensoundscape.torch.predict
+   :members:
+
+PyTorch Spectrogram Augmentation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: opensoundscape.torch.tensor_augment
    :members:
 
-Torch Training
+PyTorch Training
 ^^^^^^^^^^^^^^
 
 .. automodule:: opensoundscape.torch.train
