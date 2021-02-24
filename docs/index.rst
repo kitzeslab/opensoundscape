@@ -1,7 +1,7 @@
 OpenSoundscape
 ==============
 
-OpenSoundsoundscape is free and open source software for the analysis of bioacoustic recordings. Its main goals are to allow users to train their own custom species classification models using a variety of frameworks (including convolutional neural networks) and to use trained models to predict whether species are present in field recordings. OpSo can be installed and run on a single computer or in a cluster or cloud environment.
+OpenSoundscape  (`GitHub <https://github.com/kitzeslab/opensoundscape>`_) is free and open source software for the analysis of bioacoustic recordings. Its main goals are to allow users to train their own custom species classification models using a variety of frameworks (including convolutional neural networks) and to use trained models to predict whether species are present in field recordings. OpSo can be installed and run on a single computer or in a cluster or cloud environment.
 
 OpenSoundcape is developed and maintained by the `Kitzes Lab <http://www.kitzeslab.org/>`_ at the University of Pittsburgh.
 
