@@ -1,19 +1,23 @@
-# Mac or Linux
+# Mac and Linux
 
-OpenSoundscape can be installed either via pip (for users) or poetry (for
-developers contributing to the code). Either way, Python 3.7 or higher is required.
+OpenSoundscape can be installed on Mac and Linux machines with Python 3.7 using the pip command `pip install opensoundscape==0.4.6`. We recommend installing OpenSoundscape in a virtual environment to prevent dependency conflicts. 
 
-## Pip command
+Below are instructions for installation with two package managers:
+* `conda`: Python and package management through Anaconda, a package manager popular among scientific programmers
+* `venv`: Python's included virtual environment manager, `venv`
 
-Already familiar with installing python packages via pip? The pip command to install OpenSoundscape is `pip install opensoundscape==0.4.6`.
+Feel free to use another virtual environment manager (e.g. `virtualenvwrapper`) if desired.
 
-## Conda
+## Installation via Anaconda
 
-## Virtualenvwrapper
+* Install Anaconda if you don't already have it. Follow the [installation instructions in the Anaconda documentation](https://docs.anaconda.com/anaconda/install/) for your operating system.
+* Create a Python 3.7 conda environment for opensoundscape `conda create --name opensoundscape pip python=3.7`
+* Activate the environment `conda activate opensoundscape`
+* Install opensoundscape using pip: `pip install opensoundscape==0.4.6`
 
-Python 3.7 is required to run OpenSoundscape. Download it from [this website](https://www.python.org/downloads/).
+## Installation via `venv`
 
-We recommend installing OpenSoundscape in a virtual environment to prevent dependency conflicts. Below are instructions for installation with Python's included virtual environment manager, `venv`, but feel free to use another virtual environment manager (e.g. `conda`, `virtualenvwrapper`) if desired.
+Download Python 3.7 from [this website](https://www.python.org/downloads/).
 
 Run the following commands in your bash terminal:
 * Check that you have installed Python 3.7.\_: `python3 --version`
@@ -27,3 +31,10 @@ Run the following commands in your bash terminal:
 * To use the environment again, you will have to refer to absolute path of the virtual environments folder. For instance, if I were on a Mac and created `.venv` inside a directory `/Users/MyFiles/Code` I would activate the virtual environment using: `source /Users/MyFiles/Code/.venv/opensoundscape/bin/activate`
 
 For some of our functions, you will need a version of `ffmpeg >= 0.4.1`. On Mac machines, `ffmpeg` can be installed via `brew`.
+
+## JupyterLab setup
+
+If you want to use OpenSoundscape in JupyterLab or a Jupyter Notebook:
+- Activate the virtual environment
+- Start JupyterLab or Jupyter Notebook from inside the conda environment, e.g.: `jupyter lab`
+- Copy and paste the JupyterLab link into your web browser
