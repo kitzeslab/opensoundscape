@@ -34,10 +34,3 @@ Run the following commands in your bash terminal:
 * To use the environment again, you will have to refer to absolute path of the virtual environments folder. For instance, if I were on a Mac and created `.venv` inside a directory `/Users/MyFiles/Code` I would activate the virtual environment using: `source /Users/MyFiles/Code/.venv/opensoundscape/bin/activate`
 
 For some of our functions, you will need a version of `ffmpeg >= 0.4.1`. On Mac machines, `ffmpeg` can be installed via `brew`.
-
-## JupyterLab setup
-
-If you want to use OpenSoundscape in JupyterLab or a Jupyter Notebook:
-- Activate the virtual environment
-- Start JupyterLab or Jupyter Notebook from inside the conda environment, e.g.: `jupyter lab`
-- Copy and paste the JupyterLab link into your web browser
