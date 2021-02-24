@@ -36,6 +36,6 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
    api
    
 .. toctree::
-   :hidden: #hides from index
+   :maxdepth: 0
 
    genindex
