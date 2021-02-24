@@ -11,7 +11,7 @@ The Getting Started section below provide guidance on installing OpSo. The Tutor
    :maxdepth: 2
    :caption: Getting Started
 
-   installation
+   installation/installation
 
 .. toctree::
    :maxdepth: 2
