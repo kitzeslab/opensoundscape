@@ -8,7 +8,7 @@ OpenSoundcape is developed and maintained by the `Kitzes Lab <http://www.kitzesl
 The Getting Started section below provide guidance on installing OpSo. The Tutorials pages below are written as Jupyter Notebooks that can also be downloaded from the `project repository <http://github.com/kitzeslab/opensoundscape/>`_ on GitHub.
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 0
 
    index
 
@@ -32,10 +32,4 @@ The Getting Started section below provide guidance on installing OpSo. The Tutor
    :caption: API Documentation
 
    api
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+   genindex
