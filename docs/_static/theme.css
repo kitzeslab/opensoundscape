@@ -1,0 +1,29 @@
+/* side header on desktop and mobile */
+.wy-side-nav-search, .wy-nav-top {
+      background: #1d9a5a;
+    }
+
+/* header text on menu and index TOC */
+span.caption-text {
+    color: #1d9a5a;
+}
+
+/* unvisited link */
+a:link {
+  color: #02bd75;
+}
+
+/* visited link */
+a:visited {
+  color: #009440;
+}
+
+/* mouse over link */
+a:hover {
+  color: #0b8fa3;
+}
+
+/* selected link */
+a:active {
+  color: #0b8fa3;
+}
