@@ -85,20 +85,13 @@ Metrics
 .. automodule:: opensoundscape.metrics
    :members:
 
-Pulse Finder
-^^^^^^^^^^^^
-
-.. automodule:: opensoundscape.pulse_finder
-   :members:
-
 Raven
 ^^^^^
 
 .. automodule:: opensoundscape.raven
    :members:
    
-  
-Ribbit
+RIBBIT
 ^^^^^
 
 .. automodule:: opensoundscape.ribbit
