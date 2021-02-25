@@ -158,7 +158,7 @@ def mixdown_with_delays(
 ):
     """use ffmpeg to mixdown a set of audio files, each starting at a specified time (padding beginnings with zeros)
     
-    parameters:
+    Args:
         files_to_mix: list of audio file paths
         destination: path to save mixdown to
         delays=None: list of delays (how many seconds of zero-padding to add at beginning of each file)
@@ -167,7 +167,7 @@ def mixdown_with_delays(
         verbose=0: if >0, prints ffmpeg command and doesn't suppress ffmpeg output (command line output is returned from this function)
         create_txt_file=False: if True, also creates a second output file which lists all files that were included in the mixdown
         
-    returns:
+    Returns:
         ffmpeg command line output
     """
 
