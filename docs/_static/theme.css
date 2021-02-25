@@ -8,22 +8,24 @@ span.caption-text {
     color: #1d9a5a;
 }
 
+
 /* unvisited link */
+/*
 a:link {
   color: #02bd75;
-}
+}*/
 
 /* visited link */
-a:visited {
+/*a:visited {
   color: #009440;
-}
+}*/
 
 /* mouse over link */
-a:hover {
+/*a:hover {
   color: #0b8fa3;
-}
+}*/
 
 /* selected link */
-a:active {
+/*a:active {
   color: #0b8fa3;
-}
+}*/
