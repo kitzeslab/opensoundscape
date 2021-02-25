@@ -31,3 +31,9 @@ Console Checks
 
 .. automodule:: opensoundscape.console_checks
    :members:
+
+Helpers
+^^^^^^^
+
+.. automodule:: opensoundscape.helpers
+   :members:
