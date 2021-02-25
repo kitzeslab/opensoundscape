@@ -229,7 +229,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
     Additional augmentations on tensors are available when calling `train()`
     from the module `opensoundscape.torch.train`.
 
-    Input:
+    Args:
         df: A DataFrame with a column containing audio files
         label_dict: a dictionary mapping numeric labels to class names,
             - for example: {0:'American Robin',1:'Northern Cardinal'}
@@ -269,7 +269,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             immediately before it is returned. When None, does not save images.
             [default: None]
 
-    Output:
+    Returns:
         Dictionary:
             { "X": (3, H, W)
             , "y": (1) if label_column != None
