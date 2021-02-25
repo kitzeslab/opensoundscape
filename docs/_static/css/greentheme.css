@@ -16,16 +16,14 @@ a:link {
 }*/
 
 /* visited link */
-a:visited {
-  color: #3281a8;
+a:visited{color:#1d6985}
+a:hover{color:#1d8579}
+/* Keep menu links uncolorful */
+.wy-menu-vertical a{color: #d9d9d9}
+
+/* Code Colors */
+code,.rst-content tt,.rst-content code{
+    background:#fff;
+    border:solid 1px #e1e4e5;
+    color:#E74C3C;
 }
-
-/* mouse over link */
-/*a:hover {
-  color: #0b8fa3;
-}*/
-
-/* selected link */
-/*a:active {
-  color: #0b8fa3;
-}*/
