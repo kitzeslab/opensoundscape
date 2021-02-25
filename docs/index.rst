@@ -31,10 +31,16 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
    tutorials/RIBBIT_pulse_rate_demo
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: API Documentation
 
-   api
+   api/annotations
+   api/audio
+   api/localization
+   api/machine_learning
+   api/miscellaneous
+   api/ribbit
+   api/spectrogram
    
 .. toctree::
    :maxdepth: 0
