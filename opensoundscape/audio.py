@@ -375,6 +375,7 @@ def split_and_save(
         clip_name = (
             f"{destination}/{prefix}_{clip['begin_time']}s_{clip['end_time']}s.wav"
         )
+        clip['filename'] = clip_name
         if not dry_run:
             clip["clip"].save(clip_name)
 
