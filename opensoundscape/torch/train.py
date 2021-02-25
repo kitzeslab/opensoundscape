@@ -47,19 +47,17 @@ def train(
 
     Effects:
         Write a file `epoch-{epoch}.tar` containing (rate of `log_every`):
-        - Model state dictionary
-        - Optimizer state dictionary
-        - Labels in YAML format
-        - Train: loss, accuracy, precision, recall, and f1 score
-        - Validation: accuracy, precision, recall, and f1 score
-        - train_dataset.label_dict
+          * Model state dictionary
+          * Optimizer state dictionary
+          * Labels in YAML format
+          * Train: loss, accuracy, precision, recall, and f1 score
+          * Validation: accuracy, precision, recall, and f1 score
+          * train_dataset.label_dict
+          
         Write a metadata file with parameter values to save_dir/metadata.txt
         
     Returns:
         None
-        
-    Effects:
-        model parameters are saved to 
         
     """
     if save_dir is not None:
