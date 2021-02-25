@@ -16,9 +16,9 @@ a:link {
 }*/
 
 /* visited link */
-/*a:visited {
-  color: #009440;
-}*/
+a:visited {
+  color: #3281a8;
+}
 
 /* mouse over link */
 /*a:hover {
