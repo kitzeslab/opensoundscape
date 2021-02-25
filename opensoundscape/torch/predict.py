@@ -16,7 +16,7 @@ def predict(
 ):
     """ Generate predictions on a dataset from a pytorch model object
 
-    Input:
+    Args:
         model:          A binary torch model, e.g. torchvision.models.resnet18(pretrained=True)
                         - must override classes, e.g. model.fc = torch.nn.Linear(model.fc.in_features, 2)
         prediction_dataset: 
@@ -29,7 +29,7 @@ def predict(
                         - if None, the dataframe returned will have numeric column names
                         - if list of class names, returned dataframe will have class names as column names
 
-    Output:
+    Returns:
         A dataframe with the CNN prediction results for each class and each file
         
     Notes:
