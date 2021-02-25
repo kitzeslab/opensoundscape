@@ -27,7 +27,7 @@ def train(
 ):
     """ Train a model
 
-    Input:
+    Args:
         save_dir:       A directory to save intermediate results
         model:          A binary torch model,
                         - e.g. torchvision.models.resnet18(pretrained=True)
@@ -45,7 +45,7 @@ def train(
         print_logging:  Whether to print training progress to stdout [default: True]
         save_scores:    Whether to save the scores on the train/val set each epoch [default: False]
 
-    Side Effects:
+    Effects:
         Write a file `epoch-{epoch}.tar` containing (rate of `log_every`):
         - Model state dictionary
         - Optimizer state dictionary
@@ -54,7 +54,8 @@ def train(
         - Validation: accuracy, precision, recall, and f1 score
         - train_dataset.label_dict
         Write a metadata file with parameter values to save_dir/metadata.txt
-    Output:
+        
+    Returns:
         None
         
     Effects:
