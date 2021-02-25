@@ -82,6 +82,7 @@ html_css_files = [
     'theme.css',
 ]
 
+style_nav_header_background = '#2980B9'
 
 # Mock libraries we don't want to install on RTD
 autodoc_mock_imports = [
