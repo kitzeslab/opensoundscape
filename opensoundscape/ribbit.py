@@ -75,7 +75,7 @@ def ribbit(
     
     This tool searches for periodic energy fluctuations at specific repetition rates and frequencies. 
     
-    Inputs:
+    Args:
         spectrogram: opensoundscape.Spectrogram object of an audio file
         signal_band: [min, max] frequency range of the target species, in Hz
         pulse_rate_range: [min,max] pulses per second for the target species
@@ -87,7 +87,7 @@ def ribbit(
                     - default: None
         plot=False : if True, plot the power spectral density for each window
     
-    Outputs:
+    Returns:
         array of pulse_score: pulse score (float) for each time window
         array of time: start time of each window
         
