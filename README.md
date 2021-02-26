@@ -11,7 +11,7 @@ OpenSoundscape is currently in active development. If you find a bug, please sub
 
 # Installation
 
-OpenSoundscape can be installed on Windows, Mac, and Linux machines. It should be run on Python 3.7.
+OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.7.
 
 Most users should install OpenSoundscape via pip: `pip opensoundscape==0.4.6`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
 
