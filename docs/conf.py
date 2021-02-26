@@ -83,20 +83,6 @@ html_css_files = ["css/greentheme.css"]
 style_nav_header_background = "#2980B9"
 
 # Mock libraries we don't want to install on RTD
-autodoc_mock_imports = [
-    "docopt",
-    "pandas",
-    "librosa",
-    "ray",
-    "torch",
-    "sklearn",
-    "numpy",
-    "schema",
-    "soundfile",
-    "scipy",
-    "yaml",
-    "torchvision",
-    "matplotlib",
-]
+autodoc_mock_imports = ["docopt", "pandas","librosa","ray","torch","sklearn","numpy","schema","soundfile","scipy","yaml","torchvision","matplotlib"]
 
 master_doc = "index"
