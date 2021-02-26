@@ -31,7 +31,7 @@ class Audio:
     sample rate. Use `Audio.from_file` or `Audio.from_bytesio` with
     `sample_rate=None` to use a native sampling rate.
 
-    Arguments:
+    Args:
         samples (np.array):     The audio samples
         sample_rate (integer):  The sampling rate for the audio samples
         resample_type (str):    The resampling method to use [default: "kaiser_fast"]
@@ -118,7 +118,7 @@ class Audio:
         TODO:
             Describe how to initialize an Audio file as a BytesIO object
 
-        Arguments:
+        Args:
             bytesio: Contents of WAV file as BytesIO
             sample_rate: The final sampling rate of Audio object [default: None]
             max_duration: The maximum duration of the audio file [default: None]
@@ -161,6 +161,7 @@ class Audio:
 
         Args:
             length: the final length in seconds of the extended file
+        
         Returns:
             a new Audio object of the desired length
         """
@@ -179,6 +180,7 @@ class Audio:
 
         Args:
             time: The time to multiply with the sample_rate
+        
         Returns:
             sample: The rounded sample
         """
@@ -252,7 +254,7 @@ class Audio:
     def duration(self):
         """ Return duration of Audio
 
-        Output:
+        Returns:
             duration (float): The duration of the Audio
         """
 
@@ -263,7 +265,7 @@ class Audio:
 
         The Audio object is split into clips of a specified duration and overlap
 
-        Arguments:
+        Args:
             clip_duration:  The duration in seconds of the clips
             clip_overlap:   The overlap of the clips in seconds [default: 0]
             final_clip:     Possible options (any other input will ignore the final clip entirely),
@@ -271,7 +273,7 @@ class Audio:
                                                             (clip will not have clip_duration length)
                                 - "full":               Increase the overlap to yield a clip with clip_duration
                                 - "extend":             Similar to remainder but extend the clip to clip_duration
-        Results:
+        Returns:
             A list of dictionaries with keys: ["audio", "begin_time", "end_time"]
         """
 
@@ -351,7 +353,7 @@ def split_and_save(
 ):
     """ Split audio into clips and save them to a folder
 
-    Arguments:
+    Args:
         audio:          The input Audio to split
         destination:    A folder to write clips to
         prefix:         A name to prepend to the written clips

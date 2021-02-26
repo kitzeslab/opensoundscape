@@ -2,6 +2,7 @@
 import pytest
 import opensoundscape.raven as raven
 from pathlib import Path
+import pandas as pd
 
 
 @pytest.fixture()
@@ -42,7 +43,12 @@ def test_raven_annotation_check_on_okay(raven_okay_dir):
     raven.annotation_check(raven_okay_dir)
 
 
-def test_raven_annotation_check_on_bad_warns(raven_warn_dir):
+def test_raven_annotation_check_on_missing_col_warns(raven_okay_dir):
+    with pytest.warns(UserWarning):
+        raven.annotation_check(raven_okay_dir, col="col_that_doesnt_exist")
+
+
+def test_raven_annotation_check_on_missing_label_warns(raven_warn_dir):
     with pytest.warns(UserWarning):
         raven.annotation_check(raven_warn_dir)
 
@@ -60,15 +66,36 @@ def test_raven_generate_class_corrections_with_okay(
     assert csv == "raw,corrected\nhello,hello\n"
 
 
-def test_raven_generate_class_corrections_with_bad(
+def test_raven_generate_class_corrections_with_empty_labels(
     raven_warn_dir, raven_annotations_lower_warn
 ):
     csv = raven.generate_class_corrections(raven_warn_dir)
     assert csv == "raw,corrected\nunknown,unknown\n"
 
 
+def test_raven_generate_class_corrections_check_on_missing_col_warns(
+    raven_warn_dir, raven_annotations_lower_warn
+):
+    with pytest.warns(UserWarning):
+        raven.generate_class_corrections(raven_warn_dir, col="col_that_doesnt_exist")
+
+
 def test_raven_query_annotations_with_okay(
     raven_okay_dir, raven_annotations_lower_okay
 ):
-    output = raven.query_annotations(raven_okay_dir, "hello")
-    assert len(output) != 0
+    output = raven.query_annotations(raven_okay_dir, cls="hello")
+    file_path = Path(raven_annotations_lower_okay)
+    true_keys = [file_path]
+    true_vals = pd.read_csv(file_path, sep="\t")
+    assert list(output.keys()) == true_keys
+    assert len(list(output.values())) == 1
+    pd.testing.assert_frame_equal(list(output.values())[0], true_vals)
+
+
+def test_raven_query_annotations_check_on_missing_col_warns(
+    raven_okay_dir, raven_annotations_lower_okay
+):
+    with pytest.warns(UserWarning):
+        raven.query_annotations(
+            raven_okay_dir, cls="hello", col="col_that_doesnt_exist"
+        )
