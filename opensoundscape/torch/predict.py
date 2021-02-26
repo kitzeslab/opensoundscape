@@ -11,10 +11,10 @@ def predict(
     prediction_dataset,
     batch_size=1,
     num_workers=1,
-    apply_softmax=False,
+    apply_softmax=True,
     label_dict=None,
 ):
-    """ Generate predictions on a dataset from a pytorch model object
+    """ Generate predictions on a dataset from a binary pytorch model object
 
     Args:
         model:          A binary torch model, e.g. torchvision.models.resnet18(pretrained=True)
