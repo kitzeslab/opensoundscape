@@ -12,6 +12,7 @@ import numpy as np
 from datetime import datetime
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
 # from tqdm import tqdm
 import random
@@ -135,7 +136,6 @@ class PlainResNet(BaseModule):
 
         print(f"Building DistRegResNetClassifier architecture")
         self.network = DistRegResNetClassifier(  # or pass architecture as argument
-            # name='PlainResNet',
             num_cls=len(self.classes),
             weights_init=self.weights_init,
             num_layers=self.num_layers,
@@ -440,7 +440,7 @@ class PlainResNet(BaseModule):
                 best_epoch, best_f1 * 100
             )
         )
-        self.save_model()
+        self.save_weights()
 
     def evaluate_epoch(self, loader):
 
@@ -619,12 +619,34 @@ class PlainResNet(BaseModule):
     #     )
     #     self.main_logger.info(eval_info)
 
-    def save_model(self):
-        os.makedirs(
-            self.weights_path, exist_ok=True
-        )  # .rsplit("/", 1)[0], exist_ok=True)
-        print("Saving to {}".format(self.weights_path))
-        self.network.save(f"{self.weights_path}/epoch-{self.current_epoch}.model")
+    def save_weights(self, path=None):
+        """save model weights (default location is self.weights_path)"""
+        if path is None:
+            path = f"{self.weights_path}/epoch-{self.current_epoch}.model"
+        path = Path(path)
+        os.makedirs(path.parent, exist_ok=True)  # .rsplit("/", 1)[0], exist_ok=True)
+        print(f"Saving to {path}")
+        self.network.save(path)
+
+    def load_weights(self, path=None):
+        """load model weights from disk
+        path: location of weights path. if None, attempts to find file
+        using {self.weights_path}/epoch-{self.current_epoch}.model
+        """
+        if path is None:
+            path = f"{self.weights_path}/epoch-{self.current_epoch}.model"
+        path = Path(path)
+        assert path.exists(), f"did not find a file at {path}"
+
+        # copying this from the __init__:
+        print(f"Building DistRegResNetClassifier architecture")
+        self.network = DistRegResNetClassifier(  # or pass architecture as argument
+            num_cls=len(self.classes),
+            weights_init=path,
+            num_layers=self.num_layers,
+            init_feat_only=True,
+            class_freq=np.array(self.train_class_counts),
+        )
 
     def predict(
         self,
