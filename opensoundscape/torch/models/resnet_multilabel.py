@@ -1,5 +1,4 @@
 # todo: ask Miao how the labels /training set are expanded or something to make binary problem
-# todo: reload an epoch's weights (load model)
 # todo: save models in similar way to resnet_binary
 # todo: integrate class aware sampler
 # todo: allow choice of architecture
@@ -24,7 +23,7 @@ from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore
 from opensoundscape.torch.architectures.distreg_resnet_architecture import (
     DistRegResNetClassifier,
 )
-from opensoundscape.torch.models.utils import BaseModule
+from opensoundscape.torch.models.utils import BaseModule, get_dataloader
 
 # from .utils import register_algorithm, Algorithm, single_acc, WarmupScheduler
 # from src.data.utils import load_dataset
@@ -89,13 +88,13 @@ class PlainResNet(BaseModule):
     opt_net = None
     scheduler = None
 
-    def __init__(self, train_dataset, valid_dataset):
+    def __init__(self, train_dataset, valid_dataset, weights_path="."):
         """if you want to change other parameters,
         simply create the object then modify them
         """
         super(PlainResNet, self).__init__()
 
-        self.weights_path = "."  # todo: where to specify save path
+        self.weights_path = weights_path
 
         self.train_dataset = train_dataset
         self.valid_dataset = valid_dataset
@@ -103,10 +102,15 @@ class PlainResNet(BaseModule):
         self.classes = train_dataset.labels
         print(f"n classes: {len(self.classes)}")
 
+        ### network parameters ###
         self.weights_init = "ImageNet"
         self.prediction_threshold = 0.25
-        self.num_layers = 18
-        # optimization parameters
+        self.num_layers = 18  # can use 50 for resnet50
+        self.class_aware_sampler = (
+            False  # True for balanced batches with a few classes each
+        )
+
+        ### optimization parameters ###
         # defaults from https://github.com/zhmiao/BirdMultiLabel/blob/master/configs/XENO/multi_label_reg_10_091620.yaml
         # feature
         self.lr_feature = 0.001
@@ -183,12 +187,20 @@ class PlainResNet(BaseModule):
         # set up train_loader and valid_loader dataloaders
         # make a dataloader to supply training images from train_dataset
         # eventually should use models.utils.get_dataloader() for cas sampler
-        self.train_loader = torch.utils.data.DataLoader(
+        self.train_loader = get_dataloader(
             self.train_dataset,
             batch_size=batch_size,
-            shuffle=True,
             num_workers=num_workers,
+            shuffle=True,
+            cas_sampler=self.class_aware_sampler,
         )
+        #
+        # torch.utils.data.DataLoader(
+        #     self.train_dataset,
+        #     batch_size=batch_size,
+        #     shuffle=True,
+        #     num_workers=num_workers,
+        # )
 
         # make a dataloader to supply training images from valid_dataset
         self.valid_loader = torch.utils.data.DataLoader(

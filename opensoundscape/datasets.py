@@ -285,12 +285,7 @@ class AudioToImagePreprocessor(BasePreprocessor):
     - if no labels, df will have no columns
     """
 
-    def __init__(
-        self,
-        df,
-        audio_length=None,
-        return_labels=True,
-    ):
+    def __init__(self, df, audio_length=None, return_labels=True):
 
         super(AudioToImagePreprocessor, self).__init__(df, return_labels=return_labels)
 
@@ -331,9 +326,7 @@ class CnnPreprocessor(AudioToImagePreprocessor):
     ):
 
         super(CnnPreprocessor, self).__init__(
-            df,
-            audio_length=audio_length,
-            return_labels=return_labels,
+            df, audio_length=audio_length, return_labels=return_labels
         )
 
         self.augmentation = augmentation

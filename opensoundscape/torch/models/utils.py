@@ -35,25 +35,18 @@ def get_dataloader(
     dataset, batch_size=64, num_workers=1, shuffle=False, cas_sampler=False
 ):
     """
-    Dataset loader
+    Create a DataLoader from a DataSet
+    - chooses between normal pytorch DataLoader and class aware sampler (CAS).
+    - Class aware sampler requires single target labels
+
     """
     if len(dataset) == 0:
         return None
 
     if cas_sampler:
-        print("** USING CAS SAMPLER!! **")
-        # note: I didn't implement dataset.digit_labels, not sure what it is or
-        # if we need it
-        sampler = ClassAwareSampler(dataset.digit_labels, 2)
-        loader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=True,
-            sampler=sampler,
-        )
-    else:
+        loader = cas_dataloader(dataset, batch_size=batch_size, num_workers=num_workers)
+    # could implement other sampler options here
+    else:  # just use a regular DataLoader
         loader = DataLoader(
             dataset,
             batch_size=batch_size,
@@ -65,14 +58,12 @@ def get_dataloader(
     return loader
 
 
-def cas_dataloader(
-    dataset, batch_size=64, num_workers=1
-):  # shuffle=False, don't use shuffle for cas?
+def cas_dataloader(dataset, batch_size, num_workers):
     """
     Return a dataloader that uses the class aware sampler
 
-    Class aware sampler tries to balance the examples per class in each batch,
-    and selects just a few classes to be present in each batch. It then samples
+    Class aware sampler tries to balance the examples per class in each batch.
+    It selects just a few classes to be present in each batch, then samples
     those classes for even representation in the batch.
 
     Args:
@@ -85,11 +76,27 @@ def cas_dataloader(
         return None
 
     print("** USING CAS SAMPLER!! **")
-    sampler = ClassAwareSampler(dataset.digit_labels, 2)
+
+    # check that the data is single-target
+    max_labels_per_file = max(dataset.df.values.sum(1))
+    min_labels_per_file = min(dataset.df.values.sum(1))
+    assert (
+        max_labels_per_file <= 1
+    ), "Class Aware Sampler for multi-target labels is not implemented. Use single-target labels."
+    assert (
+        min_labels_per_file > 0
+    ), "Class Aware Sampler requires that every sample have a label. Some samples had 0 labels."
+
+    # we need to convert one-hot labels to digit labels for the CAS
+    # first class name -> 0, next class name -> 1, etc
+    digit_labels = dataset.df.values.argmax(1)
+
+    # create the class aware sampler object and DataLoader
+    sampler = ClassAwareSampler(digit_labels, num_samples_cls=2)
     loader = DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=False,  # don't use shuffle for cas because it does its own sampling
         num_workers=num_workers,
         pin_memory=True,
         sampler=sampler,
