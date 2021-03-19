@@ -93,10 +93,11 @@ def cas_dataloader(dataset, batch_size, num_workers):
 
     # create the class aware sampler object and DataLoader
     sampler = ClassAwareSampler(digit_labels, num_samples_cls=2)
+
     loader = DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=False,  # don't use shuffle for cas because it does its own sampling
+        shuffle=False,  # don't shuffle bc CAS does its own sampling
         num_workers=num_workers,
         pin_memory=True,
         sampler=sampler,

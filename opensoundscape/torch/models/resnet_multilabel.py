@@ -1,10 +1,8 @@
-# todo: ask Miao how the labels /training set are expanded or something to make binary problem
-# todo: save models in similar way to resnet_binary
-# todo: integrate class aware sampler
-# todo: allow choice of architecture
-# todo: write generic audioToImgPreprocessor
+# todo: save models with extras in similar way to resnet_binary
+# (includes train/valid scores/preds)
 
-# copying from https://github.com/zhmiao/BirdMultiLabel/blob/master/src/algorithms/plain_resnet.py
+# adapted from zhmiao
+# github.com/zhmiao/BirdMultiLabel/blob/master/src/algorithms/plain_resnet.py
 
 import os
 import numpy as np
@@ -23,94 +21,52 @@ from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore
 from opensoundscape.torch.architectures.distreg_resnet_architecture import (
     DistRegResNetClassifier,
 )
+from opensoundscape.torch.architectures.plain_resnet import PlainResNetClassifier
 from opensoundscape.torch.models.utils import BaseModule, get_dataloader
-
-# from .utils import register_algorithm, Algorithm, single_acc, WarmupScheduler
-# from src.data.utils import load_dataset
-# from src.models.utils import get_model
-#
-# from src.data.spec_augment import time_warp, time_mask, freq_mask
-
-
-# def load_data(args):
-#
-#     """
-#     Dataloading function. This function can change alg by alg as well.
-#     """
-#
-#     trainloader = load_dataset(
-#         name=args.dataset_name,
-#         dset="train",
-#         num_channels=args.num_channels,
-#         rootdir=args.dataset_root,
-#         batch_size=args.batch_size,
-#         shuffle=False,
-#         num_workers=args.num_workers,
-#         augment=args.augment,
-#         cas_sampler=True,
-#     )
-#
-#     testloader = load_dataset(
-#         name=args.dataset_name,
-#         dset="test",
-#         num_channels=args.num_channels,
-#         rootdir=args.dataset_root,
-#         batch_size=args.batch_size,
-#         shuffle=False,
-#         num_workers=args.num_workers,
-#     )
-#
-#     valloader = load_dataset(
-#         name=args.dataset_name,
-#         dset="val",
-#         num_channels=args.num_channels,
-#         rootdir=args.dataset_root,
-#         batch_size=args.batch_size,
-#         shuffle=False,
-#         num_workers=args.num_workers,
-#     )
-#
-#     return trainloader, testloader, valloader
 
 
 # NOTE: Turning off all logging for now. may want to use logging module in future
 
-# @register_algorithm("PlainResNet")
-# class PlainResNet(Algorithm):
-class PlainResNet(BaseModule):
+
+class PytorchModel(BaseModule):
 
     """
-    Overall training function.
+    Generic Pytorch Model with training and prediction, flexible architecture.
     """
 
-    name = "PlainResNet"
+    name = "PytorchModel"
     net = None
-    opt_net = None
+    optimizer = None
     scheduler = None
 
-    def __init__(self, train_dataset, valid_dataset, weights_path="."):
+    def __init__(
+        self, architecture, classes
+    ):  # train_dataset, valid_dataset, architecture, weights_path="."):
         """if you want to change other parameters,
         simply create the object then modify them
+        TODO: should not require train and valid ds for prediction
+        maybe you should just provide the classes, then
+        give train_ds and valid_ds to model.train()?
         """
-        super(PlainResNet, self).__init__()
+        super(PytorchModel, self).__init__()
+
+        # todo: should I initialize self.optimizer?
 
         self.weights_path = weights_path
 
-        self.train_dataset = train_dataset
-        self.valid_dataset = valid_dataset
+        # self.train_dataset = train_dataset
+        # self.valid_dataset = valid_dataset
         # self.num_classes = len(train_dataset.labels)
-        self.classes = train_dataset.labels
+        self.classes = classes  # train_dataset.labels
         print(f"n classes: {len(self.classes)}")
 
         ### network parameters ###
         self.weights_init = "ImageNet"
         self.prediction_threshold = 0.25
         self.num_layers = 18  # can use 50 for resnet50
-        self.class_aware_sampler = (
-            False  # True for balanced batches with a few classes each
-        )
+        self.class_aware_sampler = False
 
-        ### optimization parameters ###
+        ### training parameters ###
         # defaults from https://github.com/zhmiao/BirdMultiLabel/blob/master/configs/XENO/multi_label_reg_10_091620.yaml
         # feature
         self.lr_feature = 0.001
@@ -138,14 +94,27 @@ class PlainResNet(BaseModule):
         # TODO: why is total steps different from len(df)? It seems to be instead
         # equal to number of total positive labels
 
-        print(f"Building DistRegResNetClassifier architecture")
-        self.network = DistRegResNetClassifier(  # or pass architecture as argument
-            num_cls=len(self.classes),
-            weights_init=self.weights_init,
-            num_layers=self.num_layers,
-            init_feat_only=True,
-            class_freq=np.array(self.train_class_counts),
-        )
+        # print(f"Architecture supplied by user")
+        self.network = architecture
+
+    def init_optimizer(self, optimizer_class=optim.SGD, params_list=None):
+        if params_list is None:
+            # default params list
+            params_list = [
+                {
+                    "params": self.network.feature.parameters(),
+                    "lr": self.lr_feature,
+                    "momentum": self.momentum_feature,
+                    "weight_decay": self.weight_decay_feature,
+                },
+                {
+                    "params": self.network.classifier.parameters(),
+                    "lr": self.lr_classifier,
+                    "momentum": self.momentum_classifier,
+                    "weight_decay": self.weight_decay_classifier,
+                },
+            ]
+        return optimizer_class(params_list)
 
     def set_train(self, batch_size, num_workers):
         ###########################
@@ -164,24 +133,12 @@ class PlainResNet(BaseModule):
         # Optimization setup #
         ######################
         # Setup optimizer parameters for each network component
-        net_optim_params_list = [
-            {
-                "params": self.network.feature.parameters(),
-                "lr": self.lr_feature,
-                "momentum": self.momentum_feature,
-                "weight_decay": self.weight_decay_feature,
-            },
-            {
-                "params": self.network.classifier.parameters(),
-                "lr": self.lr_classifier,
-                "momentum": self.momentum_classifier,
-                "weight_decay": self.weight_decay_classifier,
-            },
-        ]
+        # TODO: optimizer needs to be initialized in order to .load_state_dict()
+
         # Setup optimizer and optimizer scheduler
-        self.opt_net = optim.SGD(net_optim_params_list)
+        self.optimizer = self.init_optimizer()
         self.scheduler = optim.lr_scheduler.StepLR(
-            self.opt_net, step_size=self.step_size, gamma=self.gamma
+            self.optimizer, step_size=self.step_size, gamma=self.gamma
         )
 
         # set up train_loader and valid_loader dataloaders
@@ -194,20 +151,14 @@ class PlainResNet(BaseModule):
             shuffle=True,
             cas_sampler=self.class_aware_sampler,
         )
-        #
-        # torch.utils.data.DataLoader(
-        #     self.train_dataset,
-        #     batch_size=batch_size,
-        #     shuffle=True,
-        #     num_workers=num_workers,
-        # )
 
         # make a dataloader to supply training images from valid_dataset
-        self.valid_loader = torch.utils.data.DataLoader(
+        self.valid_loader = get_dataloader(
             self.valid_dataset,
             batch_size=batch_size,
-            shuffle=False,
             num_workers=num_workers,
+            shuffle=False,
+            cas_sampler=False,
         )
 
     def set_eval(self):
@@ -233,149 +184,19 @@ class PlainResNet(BaseModule):
 
     def train_epoch(self, epoch):
 
-        # TODO : add noise augmentation
-        # noise = torch.empty_like(data_2).normal_(mean=0, std=1.0).cuda()
-        # data_2 += noise
-        # TODO:  labels should include all classes in overlayed imgs
-
         self.network.train()
 
-        # N = len(self.trainloader)
-        # # N = self.total_steps * 3
-        # # N = self.total_steps
-        #
-        # tr_iter = iter(self.trainloader)
-        # tr_iter_2 = iter(self.trainloader)
-        # tr_iter_3 = iter(self.trainloader)
-
         for batch_idx, item in enumerate(self.train_loader):
-            # all augmentation occurs in the Preprocessor
-            data, labels = item["X"], item["y"]
-            data = data.to(self.device)
-            labels = labels.to(self.device)
+
+            # all augmentation occurs in the Preprocessor (train_loader)
+            data, labels = item["X"].to(self.device), item["y"].to(self.device)
             labels = labels.squeeze(1)
 
-            # data, labels = next(tr_iter)
-            #
             # # log basic adda train info
             N = len(self.train_loader)
-            info_str = "[Train PlainResNet] Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
+            info_str = "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
                 epoch, batch_idx, N, 100 * batch_idx / N
             )
-            #
-            # ########################
-            # # Setup data variables #
-            # ########################
-            # data, labels = data.cuda(), labels.cuda()
-            # data.requires_grad = False
-            # labels.requires_grad = False
-            #
-            # with torch.set_grad_enabled(False):
-            #     if self.args.augment != 0:
-            #         info_str += "-aug- "
-            #         data = time_warp(data.clone(), W=self.args.time_warp_W)
-            #         data = time_mask(
-            #             data, T=self.args.time_mask_T, max_masks=self.args.max_time_mask
-            #         )
-            #         data = freq_mask(
-            #             data, F=self.args.freq_mask_F, max_masks=self.args.max_freq_mask
-            #         )
-            #     data = torch.cat([data] * 3, dim=1)
-            #
-            #     noise = torch.empty_like(data).normal_(mean=0, std=1.0).cuda()
-            #     data += noise
-            #
-            #     # -----------
-            #     # overlap_switch = random.choice([0, 1, 1])
-            #     # # overlap_switch = random.choice([1, 1])
-            #     # if overlap_switch == 1:
-            #
-            #     overlap_switch = torch.tensor(
-            #         [random.choice([0, 0, 0, 1]) for _ in range(len(data))]
-            #     ).cuda()
-            #
-            #     data_2, labels_2 = next(tr_iter_2)
-            #     data_2, labels_2 = data_2.cuda(), labels_2.cuda()
-            #     data_2.requires_grad = False
-            #     labels_2.requires_grad = False
-            #
-            #     if self.args.augment != 0:
-            #         data_2 = time_warp(data_2.clone(), W=self.args.time_warp_W)
-            #         data_2 = time_mask(
-            #             data_2,
-            #             T=self.args.time_mask_T,
-            #             max_masks=self.args.max_time_mask,
-            #         )
-            #         data_2 = freq_mask(
-            #             data_2,
-            #             F=self.args.freq_mask_F,
-            #             max_masks=self.args.max_freq_mask,
-            #         )
-            #     data_2 = torch.cat([data_2] * 3, dim=1)
-            #
-            #     noise = torch.empty_like(data_2).normal_(mean=0, std=1.0).cuda()
-            #     data_2 += noise
-            #
-            #     overlap_weight = random.randint(5, 10) / 10
-            #     data = data + (
-            #         data_2 * overlap_weight * overlap_switch.reshape((-1, 1, 1, 1))
-            #     )
-            #
-            #     norm = (
-            #         torch.tensor([overlap_weight for _ in range(len(data))])
-            #         .cuda()
-            #         .reshape((-1, 1, 1, 1))
-            #     )
-            #     #this is just normalizing after adding images to eachother
-            #     data = data / (1.0 + overlap_switch.reshape((-1, 1, 1, 1)) * norm)
-            #
-            #     #Note: labels are updated to include all classes in overlayed img
-            #     labels += labels_2 * overlap_switch.reshape((-1, 1))
-            #     labels[labels > 1.0] = 1.0
-            #
-            #     # overlap_switch = random.choice([0, 0, 0, 1])
-            #     # if overlap_switch == 1:
-            #     overlap_switch = torch.tensor(
-            #         [random.choice([0, 0, 0, 1]) for _ in range(len(data))]
-            #     ).cuda()
-            #
-            #     data_3, labels_3 = next(tr_iter_3)
-            #     data_3, labels_3 = data_3.cuda(), labels_3.cuda()
-            #     data_3.requires_grad = False
-            #     labels_3.requires_grad = False
-            #
-            #     if self.args.augment != 0:
-            #         data_3 = time_warp(data_3.clone(), W=self.args.time_warp_W)
-            #         data_3 = time_mask(
-            #             data_3,
-            #             T=self.args.time_mask_T,
-            #             max_masks=self.args.max_time_mask,
-            #         )
-            #         data_3 = freq_mask(
-            #             data_3,
-            #             F=self.args.freq_mask_F,
-            #             max_masks=self.args.max_freq_mask,
-            #         )
-            #     data_3 = torch.cat([data_3] * 3, dim=1)
-            #
-            #     noise = torch.empty_like(data_3).normal_(mean=0, std=1.0).cuda()
-            #     data_3 += noise
-            #
-            #     overlap_weight = random.randint(5, 10) / 10
-            #     data = data + (
-            #         data_3 * overlap_weight * overlap_switch.reshape((-1, 1, 1, 1))
-            #     )
-            #     norm = (
-            #         torch.tensor([overlap_weight for _ in range(len(data))])
-            #         .cuda()
-            #         .reshape((-1, 1, 1, 1))
-            #     )
-            #     data = data / (1.0 + overlap_switch.reshape((-1, 1, 1, 1)) * norm)
-            #     # data /= (1 + overlap_weight)
-            #
-            #     labels += labels_3 * overlap_switch.reshape((-1, 1))
-            #     labels[labels > 1.0] = 1.0
-            #     # -----------
 
             ####################
             # Forward and loss #
@@ -390,11 +211,17 @@ class PlainResNet(BaseModule):
             # Backward and optimization #
             #############################
             # zero gradients for optimizer
-            self.opt_net.zero_grad()
+            self.optimizer.zero_grad()
             # loss backpropagation
             loss.backward()
             # optimize step
-            self.opt_net.step()
+            self.optimizer.step()
+
+            ################
+            # Save weights #
+            ################
+            if batch_idx % self.save_interval == 0:
+                self.save(self.weights_path)
 
             ###########
             # Logging #
@@ -424,10 +251,24 @@ class PlainResNet(BaseModule):
 
         self.scheduler.step()
 
-    def train(self, num_epochs, log_interval=10, batch_size=1, num_workers=1):
+    def train(
+        self,
+        train_dataset,
+        valid_dataset,
+        num_epochs,
+        batch_size=1,
+        num_workers=1,
+        weights_path=".",
+        save_interval=1,
+        log_interval=10,
+    ):
 
         self.num_epochs = num_epochs
         self.log_interval = log_interval
+        self.save_interval = save_interval
+        self.train_dataset = train_dataset
+        self.valid_dataset = valid_dataset
+        self.weights_path = weights_path
 
         self.set_train(batch_size, num_workers)
 
@@ -436,6 +277,7 @@ class PlainResNet(BaseModule):
 
         for epoch in range(self.num_epochs):
             self.current_epoch = epoch
+
             # Training
             self.train_epoch(epoch)
 
@@ -536,129 +378,56 @@ class PlainResNet(BaseModule):
 
         return eval_f1
 
-    # "deploy" means test performance with binary predictions
-    # def deploy_epoch(self, loader, target_id, target_spp):
-    #
-    #     self.network.eval()
-    #
-    #     total_preds = []
-    #     total_tgts = []
-    #     total_logits = []
-    #
-    #     # Forward and record # correct predictions of each class
-    #     with torch.set_grad_enabled(False):
-    #
-    #         for data, labels in tqdm(loader, total=len(loader)):
-    #
-    #             # setup data
-    #             data, labels = data.cuda(), labels.cuda()
-    #             data.requires_grad = False
-    #             labels.requires_grad = False
-    #
-    #             data = torch.cat([data] * 3, dim=1)
-    #
-    #             # forward
-    #             feats = self.network.feature(data)
-    #             logits = self.network.classifier(feats)
-    #
-    #             total_logits.append(logits.detach().cpu().numpy()[:, target_id])
-    #
-    #             # Threashold prediction
-    #             preds = (
-    #                 (torch.sigmoid(logits) >= self.prediction_threshold).int().detach().cpu().numpy()
-    #             )
-    #             # preds = (torch.sigmoid(logits) >= 0.1).int().detach().cpu().numpy()
-    #
-    #             preds = preds[:, target_id]
-    #
-    #             tgts = labels.int().detach().cpu().numpy()
-    #
-    #             total_preds.append(preds)
-    #             total_tgts.append(tgts)
-    #
-    #     total_logits = np.concatenate(total_logits, axis=0)
-    #     total_preds = np.concatenate(total_preds, axis=0)
-    #     total_tgts = np.concatenate(total_tgts, axis=0)
-    #
-    #     # Record per class precision, recall, and f1
-    #     class_pre, class_rec, class_f1, _ = precision_recall_fscore_support(
-    #         total_tgts, total_preds, average=None, zero_division=0
-    #     )
-    #
-    #     eval_info = "{} Per-class evaluation results: \n".format(
-    #         datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-    #     )
-    #     for i in range(len(class_pre)):
-    #         eval_info += (
-    #             "[Class {}] ".format(i)
-    #             + "Pre: {:.3f}; ".format(class_pre[i] * 100)
-    #             + "Rec: {:.3f}; ".format(class_rec[i] * 100)
-    #             + "F1: {:.3f};\n".format(class_f1[i] * 100)
-    #         )
-    #
-    #     eval_info += (
-    #         "Macro Pre: {:.3f}; ".format(class_pre.mean() * 100)
-    #         + "Macro Rec: {:.3f}; ".format(class_rec.mean() * 100)
-    #         + "Macro F1: {:.3f}\n".format(class_f1.mean() * 100)
-    #     )
-    #
-    #     logits_path = self.weights_path.replace(".pth", "_{}.npz".format(target_spp))
-    #     self.main_logger.info("Saving logits and targets to {}".format(logits_path))
-    #     np.savez(logits_path, logits=total_logits, targets=total_tgts)
-    #
-    #     return eval_info
-
-    # def deploy(self, target_spp):
-    #
-    #     self.set_eval()
-    #
-    #     #?? maybe the class label?
-    #     target_id = self.trainloader.dataset.species_ids[target_spp]
-    #
-    #     deployloader = load_dataset(
-    #         name="POWD",
-    #         dset="test",
-    #         num_channels=self.args.num_channels,
-    #         rootdir=self.args.dataset_root,
-    #         batch_size=self.args.batch_size,
-    #         shuffle=False,
-    #         num_workers=self.args.num_workers,
-    #         target_spp=target_spp,
-    #     )
-    #
-    #     eval_info = self.deploy_epoch(
-    #         deployloader, target_id=target_id, target_spp=target_spp
-    #     )
-    #     self.main_logger.info(eval_info)
-
-    def save_weights(self, path=None):
+    def save(self, path=None):
         """save model weights (default location is self.weights_path)"""
         if path is None:
             path = f"{self.weights_path}/epoch-{self.current_epoch}.model"
         path = Path(path)
         os.makedirs(path.parent, exist_ok=True)  # .rsplit("/", 1)[0], exist_ok=True)
         print(f"Saving to {path}")
-        self.network.save(path)
-
-    def load_weights(self, path=None):
-        """load model weights from disk
-        path: location of weights path. if None, attempts to find file
-        using {self.weights_path}/epoch-{self.current_epoch}.model
-        """
-        if path is None:
-            path = f"{self.weights_path}/epoch-{self.current_epoch}.model"
-        path = Path(path)
-        assert path.exists(), f"did not find a file at {path}"
-
-        # copying this from the __init__:
-        print(f"Building DistRegResNetClassifier architecture")
-        self.network = DistRegResNetClassifier(  # or pass architecture as argument
-            num_cls=len(self.classes),
-            weights_init=path,
-            num_layers=self.num_layers,
-            init_feat_only=True,
-            class_freq=np.array(self.train_class_counts),
+        torch.save(
+            {
+                "epoch": self.current_epoch,
+                "model_state_dict": self.network.state_dict(),
+                "optimizer_state_dict": self.optimizer.state_dict()  # TODO: is this correct?
+                #'loss': loss,
+            }
         )
+        # self.network.save(path)
+
+    def load(self, path):
+        # TODO: test if saving and loading works properly
+        """load model and optimizer state dicts from disk
+
+        the object should be saved with model.save()
+        which uses torch.save with keys for 'model_state_dict' and 'optimizer_state_dict'
+
+        """
+        checkpoint = torch.load(path)
+
+        # load the nn feature weights from the checkpoint
+        self.load_state_dict(checkpoint["model_state_dict"])
+
+        # create an optimizer then load the checkpoint state dict
+        self.optimizer = self.init_optimizer()
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        # self.network.load(path)
+
+        # if path is None:
+        #     path = f"{self.weights_path}/epoch-{self.current_epoch}.model"
+        # path = Path(path)
+        # assert path.exists(), f"did not find a file at {path}"
+
+        # # copying this from the __init__:
+        # print(f"Building architecture")
+        # self.network = DistRegResNetClassifier(
+        #     num_cls=len(self.classes),
+        #     weights_init=path,
+        #     num_layers=self.num_layers,
+        #     init_feat_only=True,
+        #     class_freq=np.array(self.train_class_counts),
+        # )
 
     def predict(
         self,
@@ -739,3 +508,49 @@ class PlainResNet(BaseModule):
         pred_df = pd.DataFrame(index=img_paths, data=total_logits, columns=self.classes)
 
         return pred_df
+
+
+class Resnet18Multilabel(
+    PytorchModel
+):  # TODO: move train_dataset and valid_dataset elsewhere
+    def __init__(self, train_dataset, valid_dataset, weights_path="."):
+        """if you want to change other parameters,
+        simply create the object then modify them
+        """
+        self.classes = train_dataset.labels
+        self.weights_init = "ImageNet"
+        _, self.train_class_counts = train_dataset.class_counts_cal()
+        print(f"train class counts: {self.train_class_counts}")
+
+        architecture = DistRegResNetClassifier(  # pass architecture as argument
+            num_cls=len(self.classes),
+            weights_init=self.weights_init,
+            num_layers=18,
+            init_feat_only=True,
+            class_freq=np.array(self.train_class_counts),
+        )
+
+        super(Resnet18Multilabel, self).__init__(
+            train_dataset, valid_dataset, architecture, weights_path
+        )
+
+
+class Resnet18Binary(
+    PytorchModel
+):  # TODO: move train_dataset and valid_dataset elsewhere
+    def __init__(self, weights_path="."):
+        """if you want to change other parameters,
+        simply create the object then modify them
+        """
+        self.weights_init = "ImageNet"
+
+        architecture = PlainResNetClassifier(  # pass architecture as argument
+            num_cls=2,
+            weights_init=self.weights_init,
+            num_layers=18,
+            init_feat_only=True,
+        )
+
+        super(Resnet18Binary, self).__init__(
+            train_dataset, valid_dataset, architecture, weights_path
+        )

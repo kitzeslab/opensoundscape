@@ -261,7 +261,7 @@ class ImgOverlay(BaseAction):
         self.params["overlay_class"] = "different"  # or None or specific class
         self.params["overlay_prob"] = 1
         self.params["max_overlay_num"] = 1
-        self.params["overlay_weight"] = 0.5  # [0.2,0.8] #specify float or range
+        self.params["overlay_weight"] = 0.5  # allows float or range
 
         # parameters from **kwargs
         self.params.update(kwargs)
@@ -273,10 +273,13 @@ class ImgOverlay(BaseAction):
         if overlay_class is different
         Select a random file from a different class. Trim if necessary to the
         same length as the given image. Overlay the images on top of each other
-        with a weight
+        with a weight.
 
         overlay_weight: can be a float in (0,1) or range of floats (chooses
-        randomly from within range). <0.5 means more emphasis on original img
+        randomly from within range) such as [0.1,0.7].
+        An overlay_weight <0.5 means more emphasis on original image.
+
+        update_labels: if True, add labels of overlayed class to returned labels
         """
         overlay_class = self.params["overlay_class"]
         df = self.params["overlay_df"]
@@ -340,7 +343,7 @@ class ImgOverlay(BaseAction):
 
             # now we blend the two images together
             # Select weight of overlay; <0.5 means more emphasis on original image
-            # TODO: change this to a user-provided tuple of weight ranges
+            # allows random selection from a range of weights eg [0.1,0.7]
             weight = self.params["overlay_weight"]
             if type(weight) in (list, tuple, np.ndarray):
                 if len(weight) != 2:

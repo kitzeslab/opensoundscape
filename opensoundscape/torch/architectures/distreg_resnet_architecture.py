@@ -31,7 +31,7 @@ class DistRegResNetClassifier(BaseArchitecture):
 
     def __init__(
         self,
-        num_cls=10,
+        num_cls,
         weights_init="ImageNet",
         num_layers=18,
         init_feat_only=True,
@@ -77,14 +77,19 @@ class DistRegResNetClassifier(BaseArchitecture):
         self.classifier = nn.Linear(512 * block.expansion, self.num_cls)
 
     def setup_criteria(self):
-        self.criterion_cls = ResampleLoss(class_freq=self.class_freq)
-
-    def load(self, init_path, feat_only=False):
-
-        if "http" in init_path:
-            init_weights = load_state_dict_from_url(init_path, progress=True)
+        if self.class_freq is not None:
+            self.criterion_cls = ResampleLoss(class_freq=self.class_freq)
         else:
-            init_weights = torch.load(init_path)
+            print(
+                "initializing network without loss self.criterion_cls (loss function) because class_freq was not provided"
+            )
+            self.criterion_cls = None
+
+    def load_url(self, weights_url, feat_only=False):
+        init_weights = load_state_dict_from_url(weights_url, progress=True)
+        self.load_weights(init_weights, feat_only)
+
+    def load_weights(self, init_weights, feat_only=False):
 
         if feat_only:
             init_weights = OrderedDict(
