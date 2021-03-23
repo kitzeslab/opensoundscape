@@ -323,10 +323,14 @@ class CnnPreprocessor(AudioToImagePreprocessor):
         augmentation=True,
         debug=None,
         overlay_df=None,
+        out_shape=[224, 224],
     ):
 
         super(CnnPreprocessor, self).__init__(
-            df, audio_length=audio_length, return_labels=return_labels
+            df,
+            audio_length=audio_length,
+            out_shape=out_shape,
+            return_labels=return_labels,
         )
 
         self.augmentation = augmentation
