@@ -337,8 +337,8 @@ class CnnPreprocessor(AudioToImagePreprocessor):
             self.actions.overlay = preprocess.ImgOverlay(
                 overlay_df=overlay_df,
                 audio_length=self.audio_length,
-                prob_overlay=1,
-                max_overlay=1,
+                overlay_prob=1,
+                max_overlay_num=1,
                 overlay_class=None,
                 # might not update with changes?
                 loader_pipeline=self.pipeline[0:4],
@@ -420,8 +420,8 @@ class ResnetMultilabelPreprocessor(BasePreprocessor):
             self.actions.overlay = preprocess.ImgOverlay(
                 overlay_df=overlay_df,
                 audio_length=self.audio_length,
-                prob_overlay=0.5,
-                max_overlay=2,
+                overlay_prob=0.5,
+                max_overlay_num=2,
                 overlay_weight=[0.2, 0.5],
                 # this pipeline might not update with changes to preprocessor?
                 loader_pipeline=self.pipeline[0:4],
