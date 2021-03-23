@@ -25,12 +25,12 @@ def _col_in_df(df, col, filename):
     return True
 
 
-def annotation_check(directory, col="class"):
+def annotation_check(directory, col):
     """ Check that rows of Raven annotations files contain class labels
 
     Args:
         directory:  The path which contains Raven annotations file(s)
-        col:        Name of column containing annotations [default: "class"]
+        col:        Name of column containing annotations
 
     Returns:
         None
@@ -85,12 +85,12 @@ def lowercase_annotations(directory, out_dir=None):
                 out.write(line.lower())
 
 
-def generate_class_corrections(directory, col="class"):
+def generate_class_corrections(directory, col):
     """ Generate a CSV to specify any class overrides
 
     Args:
         directory:  The path which contains lowercase Raven annotations file(s)
-        col:        Name of column containing annotations [default: "class"]
+        col:        Name of column containing annotations
 
     Returns:
         csv (string): A multiline string containing a CSV file with two columns
@@ -120,13 +120,13 @@ def generate_class_corrections(directory, col="class"):
         return f.getvalue()
 
 
-def query_annotations(directory, cls, col="class", print_out=False):
+def query_annotations(directory, cls, col, print_out=False):
     """ Given a directory of Raven annotations, query for a specific class
 
     Args:
         directory:  The path which contains lowercase Raven annotations file(s)
         cls:        The class which you would like to query for
-        col:        Name of column containing annotations [default: "class"]
+        col:        Name of column containing annotations
         print_out:  Format of output.
                         If True, output contains delimiters.
                         If False, returns output
@@ -161,17 +161,17 @@ def query_annotations(directory, cls, col="class", print_out=False):
 
 
 def split_single_annotation(
-    raven_path, split_len_s, total_len_s=None, species=None, col="class"
+    raven_path, col, split_len_s, total_len_s=None, species=None,
 ):
     """Split a Raven selection table into short annotations
 
     Args:
         raven_path (str):       path to Raven selections file
+        col (str):              name of column in Raven file to look for annotations in
         split_len_s (int):      length of segments to break annotations into (e.g. for 5s: 5)
         total_len_s (float):    length of original file (e.g. for 5-minute file: 300)
                                 If not provided, estimates length based on end time of last annotation [default: None]
         species (list):         list of species annotations to look for [default: None]
-        col (str):              name of column in Raven file to look for annotations in [default: "class"]
 
     Returns:
         splits_df (pd.DataFrame): columns 'seg_start', 'end_start', and all species,
@@ -219,7 +219,7 @@ def split_single_annotation(
 
 
 def generate_split_labels_file(
-    directory, split_len_s, total_len_s=None, species=None, col="class", out_csv=None
+    directory, col, split_len_s, total_len_s=None, species=None, out_csv=None
 ):
     """Generate binary labels for a directory of Raven annotations
 
@@ -229,12 +229,12 @@ def generate_split_labels_file(
 
     Args:
         directory:              The path which contains lowercase Raven annotations file(s)
+        col (str):              name of column in Raven file to look for annotations in
         split_len_s (int):      length of segments to break annotations into (e.g. for 5s: 5)
         total_len_s (float):    length of original files (e.g. for 5-minute file: 300).
                                 If not provided, estimates length individually for each file
                                 based on end time of last annotation [default: None]
         species (list):         list of species annotations to look for [default: None]
-        col (str):              name of column in Raven file to look for annotations in [default: "class"]
         out_csv (str)           (optional) csv filename to save output at [default: None]
 
     Returns:
