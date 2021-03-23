@@ -1,5 +1,6 @@
 import torch.nn as nn
 from opensoundscape.torch.class_aware_sampler import ClassAwareSampler
+from opensoundscape.torch.imbalanced_dataset_sampler import ImbalancedDatasetSampler
 from torch.utils.data import DataLoader
 
 
@@ -31,22 +32,26 @@ class BaseModule(nn.Module):
         pass
 
 
-def get_dataloader(
-    dataset, batch_size=64, num_workers=1, shuffle=False, cas_sampler=False
-):
+def get_dataloader(dataset, batch_size=64, num_workers=1, shuffle=False, sampler=""):
     """
     Create a DataLoader from a DataSet
-    - chooses between normal pytorch DataLoader and class aware sampler (CAS).
-    - Class aware sampler requires single target labels
+    - chooses between normal pytorch DataLoader and ImbalancedDatasetSampler.
+    - Sampler: None -> default DataLoader; 'imbalanced'->ImbalancedDatasetSampler
 
     """
     if len(dataset) == 0:
         return None
 
-    if cas_sampler:
-        loader = cas_dataloader(dataset, batch_size=batch_size, num_workers=num_workers)
+    if sampler == "imbalanced":
+        loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            sampler=ImbalancedDatasetSampler(dataset),
+        )
     # could implement other sampler options here
-    else:  # just use a regular DataLoader
+    else:  # just use a regular Pytorch DataLoader
         loader = DataLoader(
             dataset,
             batch_size=batch_size,
@@ -54,6 +59,7 @@ def get_dataloader(
             num_workers=num_workers,
             pin_memory=True,
         )
+    # will class aware sampler still work?
 
     return loader
 

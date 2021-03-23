@@ -18,9 +18,7 @@ class PlainResNetClassifier(BaseArchitecture):
 
     name = "PlainResNetClassifier"
 
-    def __init__(
-        self, num_cls, weights_init="ImageNet", num_layers=18, init_feat_only=True
-    ):
+    def __init__(self, num_cls, weights_init="ImageNet", num_layers=18):
 
         super(PlainResNetClassifier, self).__init__()
         self.num_cls = num_cls
@@ -33,16 +31,14 @@ class PlainResNetClassifier(BaseArchitecture):
         # Model setup and weights initialization
         self.setup_net()
         if weights_init == "ImageNet":
-            self.load(
-                model_urls["resnet{}".format(num_layers)], feat_only=init_feat_only
-            )
+            self.load(model_urls["resnet{}".format(num_layers)])
         elif os.path.exists(weights_init):
-            self.load(weights_init, feat_only=init_feat_only)
+            self.load(weights_init)
         elif weights_init != "ImageNet" and not os.path.exists(weights_init):
             raise NameError("Initial weights not exists {}.".format(weights_init))
 
-        # Criteria setup
-        self.setup_critera()
+        # Criteria (loss function) setup
+        self.setup_loss()
 
     def setup_net(self):
 
@@ -60,14 +56,26 @@ class PlainResNetClassifier(BaseArchitecture):
         self.feature = ResNetFeature(block, layers, **kwargs)
         self.classifier = nn.Linear(512 * block.expansion, self.num_cls)
 
-    def setup_critera(self):
+    def setup_loss(self):
         self.criterion_cls = BCEWithLogitsLoss_hot()
 
+    # def load(self,weights_init):
+    #     self.load_state_dict(init_weights, strict=False)
+    #     load_keys = set(init_weights.keys())
+    #     self_keys = set(self.state_dict().keys())
+    #
+    #     missing_keys = self_keys - load_keys
+    #     unused_keys = load_keys - self_keys
+    #     print("missing keys: {}".format(sorted(list(missing_keys))))
+    #     print("unused_keys: {}".format(sorted(list(unused_keys))))
+    #
     # def load_url(self,weights_url,feat_only=False):
+    #     #we don't use this anymore?
     #     init_weights = load_state_dict_from_url(weights_url, progress=True)
     #     self.load_weights(init_weights, feat_only)
 
     # def load_weights(self, init_weights, feat_only=False):
+    #     #we don't use this anymore?
     #     #
     #     # #we will provide the init_weights dictionary instead of loading it from disk
     #     # if 'http' in init_path:
@@ -90,12 +98,13 @@ class PlainResNetClassifier(BaseArchitecture):
     #     unused_keys = load_keys - self_keys
     #     print("missing keys: {}".format(sorted(list(missing_keys))))
     #     print("unused_keys: {}".format(sorted(list(unused_keys))))
-    #
-    # def save(self, out_path):
-    #     torch.save(self.best_weights, out_path)
-    #
-    # def update_best(self):
-    #     self.best_weights = copy.deepcopy(self.state_dict())
+
+    def save(self, out_path):
+        # we don't use this anymore?
+        torch.save(self.best_weights, out_path)
+
+    def update_best(self):
+        self.best_weights = copy.deepcopy(self.state_dict())
 
 
 class BCEWithLogitsLoss_hot(nn.BCEWithLogitsLoss):
