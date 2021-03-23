@@ -28,11 +28,11 @@ def _col_in_df(df, col, filename):
 def annotation_check(directory, col="class"):
     """ Check that rows of Raven annotations files contain class labels
 
-    Input:
+    Args:
         directory:  The path which contains Raven annotations file(s)
-        col:        Name of column containing annotations (default: "class")
+        col:        Name of column containing annotations [default: "class"]
 
-    Output:
+    Returns:
         None
     """
     input_p = Path(directory)
@@ -62,11 +62,11 @@ def annotation_check(directory, col="class"):
 def lowercase_annotations(directory, out_dir=None):
     """ Convert Raven annotation files to lowercase and save
 
-    Input:
+    Args:
         directory:  The path which contains Raven annotations file(s)
-        out_dir:    The path at which to save (default: save in `directory`, same location as annotations)
+        out_dir:    The path at which to save (default: save in `directory`, same location as annotations) [default: None]
 
-    Output:
+    Returns:
         None
     """
     input_p = Path(directory)
@@ -88,11 +88,11 @@ def lowercase_annotations(directory, out_dir=None):
 def generate_class_corrections(directory, col="class"):
     """ Generate a CSV to specify any class overrides
 
-    Input:
+    Args:
         directory:  The path which contains lowercase Raven annotations file(s)
-        col:        Name of column containing annotations (default: "class")
+        col:        Name of column containing annotations [default: "class"]
 
-    Output:
+    Returns:
         csv (string): A multiline string containing a CSV file with two columns
                       `raw` and `corrected`
     """
@@ -123,15 +123,16 @@ def generate_class_corrections(directory, col="class"):
 def query_annotations(directory, cls, col="class", print_out=False):
     """ Given a directory of Raven annotations, query for a specific class
 
-    Input:
+    Args:
         directory:  The path which contains lowercase Raven annotations file(s)
         cls:        The class which you would like to query for
-        col:        Name of column containing annotations (default: "class")
+        col:        Name of column containing annotations [default: "class"]
         print_out:  Format of output.
                         If True, output contains delimiters.
                         If False, returns output
+                    [default: False]
 
-    Output:
+    Returns:
         output (string): A multiline string containing annotation file and rows matching the query cls
     """
 
@@ -164,15 +165,15 @@ def split_single_annotation(
 ):
     """Split a Raven selection table into short annotations
 
-    Input:
+    Args:
         raven_path (str):       path to Raven selections file
         split_len_s (int):      length of segments to break annotations into (e.g. for 5s: 5)
         total_len_s (float):    length of original file (e.g. for 5-minute file: 300)
-                                If not provided, estimates length based on end time of last annotation
-        species (list):         list of species annotations to look for
-        col (str):              name of column in Raven file to look for annotations in
+                                If not provided, estimates length based on end time of last annotation [default: None]
+        species (list):         list of species annotations to look for [default: None]
+        col (str):              name of column in Raven file to look for annotations in [default: "class"]
 
-    Output:
+    Returns:
         splits_df (pd.DataFrame): columns 'seg_start', 'end_start', and all species,
             each row containing 1/0 annotations for each species in a segment
     """
@@ -226,17 +227,17 @@ def generate_split_labels_file(
     segments that can be used as labels for machine learning programs that only
     take short segments.
 
-    Inputs:
+    Args:
         directory:              The path which contains lowercase Raven annotations file(s)
         split_len_s (int):      length of segments to break annotations into (e.g. for 5s: 5)
         total_len_s (float):    length of original files (e.g. for 5-minute file: 300).
                                 If not provided, estimates length individually for each file
-                                based on end time of last annotation
-        species (list):         list of species annotations to look for
-        col (str):              name of column in Raven file to look for annotations in
-        out_csv (str)           (optional) csv filename to save output at
+                                based on end time of last annotation [default: None]
+        species (list):         list of species annotations to look for [default: None]
+        col (str):              name of column in Raven file to look for annotations in [default: "class"]
+        out_csv (str)           (optional) csv filename to save output at [default: None]
 
-    Outputs:
+    Returns:
         all_selections (pd.DataFrame): split file of the format
             filename, start_seg, end_seg, species1, species2, ..., speciesN
             orig/fname1, 0, 5, 0, 1, ..., 1
