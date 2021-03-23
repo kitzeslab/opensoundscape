@@ -285,7 +285,7 @@ class AudioToImagePreprocessor(BasePreprocessor):
     - if no labels, df will have no columns
     """
 
-    def __init__(self, df, audio_length=None, return_labels=True):
+    def __init__(self, df, audio_length=None, out_shape=[224, 224], return_labels=True):
 
         super(AudioToImagePreprocessor, self).__init__(df, return_labels=return_labels)
 
@@ -302,7 +302,7 @@ class AudioToImagePreprocessor(BasePreprocessor):
         self.actions.to_spec = preprocess.AudioToSpectrogram()
         self.pipeline.append(self.actions.to_spec)
 
-        self.actions.to_img = preprocess.SpecToImg()
+        self.actions.to_img = preprocess.SpecToImg(shape=out_shape)
         self.pipeline.append(self.actions.to_img)
 
         self.actions.to_tensor = preprocess.ImgToTensor()
