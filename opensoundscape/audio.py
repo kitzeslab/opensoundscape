@@ -278,68 +278,56 @@ class Audio:
 
         duration = self.duration()
 
-        # Handle splitting a file shorter than the desired clip_duration
-        if clip_duration > duration:
-            if final_clip == "remainder":
-                return_clip = Audio(
-                    self.samples,
-                    self.sample_rate,
-                    resample_type=self.resample_type,
-                    max_duration=self.max_duration,
-                )
-                return [
-                    {
-                        "clip": return_clip,
-                        "clip_duration": return_clip.duration(),
-                        "begin_time": 0,
-                        "end_time": duration,
-                    }
-                ]
-            elif final_clip in ["full", "extend"]:
-                return_clip = self.extend(clip_duration)
-                return [
-                    {
-                        "clip": return_clip,
-                        "clip_duration": return_clip.duration(),
-                        "begin_time": 0,
-                        "end_time": duration,
-                    }
-                ]
-            else:
-                warnings.warn(
-                    f"Given Audio object with duration of `{duration}` seconds and `clip_duration={clip_duration}` but `final_clip={final_clip}` produces no clips. Returning empty list."
-                )
-                return []
+        # Lists of start and end times for clips
+        increment = clip_duration - clip_overlap
+        starts = np.arange(0, duration, increment)
+        ends = starts + clip_duration
 
-        # Split files longer than the desired clip_duration
-        num_clips = ceil((duration - clip_overlap) / (clip_duration - clip_overlap))
-        to_return = [None] * num_clips
-        for idx in range(num_clips):
-            if idx == num_clips - 1:
+        # Remove final_clip if needed
+        if final_clip not in ["remainder", "full", "extend"]:
+            # Throw away any clips with end times beyond the duration
+            keeps = ends <= duration
+            ends = ends[keeps]
+            starts = starts[keeps]
+
+        # Now we have the starts and ends
+        final_idx = len(ends) - 1
+        to_return = [None] * (final_idx + 1)
+        print("starts", starts)
+        print("ends", ends)
+        for idx, (start, end) in enumerate(zip(starts, ends)):
+            # By default
+            begin_time = start
+            end_time = end
+
+            # Change defaults to handle final clip
+            if idx >= final_idx:
                 if final_clip in ["remainder", "extend"]:
-                    begin_time = clip_duration * idx - clip_overlap * idx
+                    begin_time = start
                     end_time = duration
                 elif final_clip == "full":
-                    begin_time = int(duration - clip_duration)
+                    begin_time = duration - clip_duration
                     end_time = duration
-                else:
-                    begin_time = clip_duration * idx - clip_overlap * idx
-                    end_time = begin_time + clip_duration
-                    if end_time > duration:
-                        return to_return[:-1]
-            else:
-                begin_time = clip_duration * idx - clip_overlap * idx
-                end_time = begin_time + clip_duration
+                # If final_clip not one of the above, nothing will change
 
+            # Trim the clip as needed
             audio_clip = self.trim(begin_time, end_time)
             if final_clip == "extend":
                 audio_clip = audio_clip.extend(clip_duration)
+
+            # Add one clip to list
             to_return[idx] = {
                 "clip": audio_clip,
                 "clip_duration": audio_clip.duration(),
                 "begin_time": begin_time,
                 "end_time": end_time,
             }
+
+        if len(to_return) == 0:
+            warnings.warn(
+                f"Given Audio object with duration of `{duration}` seconds and `clip_duration={clip_duration}` but `final_clip={final_clip}` produces no clips. Returning empty list."
+            )
+            return []
 
         return to_return
 
