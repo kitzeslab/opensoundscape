@@ -4,8 +4,10 @@
 
 from warnings import warn
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from io import StringIO
+from math import ceil
 
 
 def _get_lower_selections(input_p):
@@ -160,46 +162,38 @@ def query_annotations(directory, cls, col, print_out=False):
     return output
 
 
-def split_single_annotation(
-    raven_path, col, split_len_s, total_len_s=None, species=None,
-):
-    """Split a Raven selection table into short annotations
+def split_starts_ends(raven_file, col, starts, ends, species=None):
+    """Use a list of start and end times to split a Raven files
+
+    This function can be used with lists of start and end times.
+    It is called by `split_single_annotation()`, which generates the lists.
+    It is also called by `raven_audio_split_and_save()`, which get the lists
+    from metadata about audio files split by opensoundscape.audio.split_and_save.
 
     Args:
-        raven_path (str):       path to Raven selections file
-        col (str):              name of column in Raven file to look for annotations in
-        split_len_s (int):      length of segments to break annotations into (e.g. for 5s: 5)
-        total_len_s (float):    length of original file (e.g. for 5-minute file: 300)
-                                If not provided, estimates length based on end time of last annotation [default: None]
-        species (list):         list of species annotations to look for [default: None]
+        raven_file (pathlib.Path or str):   path to selections.txt file
+        col (str):                          name of column containing annotations
+        starts (list):                      start times of clips
+        ends (list):                        end times of clips
+        species (list):                     species names for columns of one-hot encoded file [default: None]
 
-    Returns:
+    Retturns:
         splits_df (pd.DataFrame): columns 'seg_start', 'end_start', and all species,
             each row containing 1/0 annotations for each species in a segment
     """
-
-    selections_df = pd.read_csv(raven_path, sep="\t")
+    selections_df = pd.read_csv(raven_file, sep="\t")
     if col not in selections_df.columns:
         return
 
-    # If not specified, get total length of annots file (only gets length of last annotation)
-    if not total_len_s:
-        total_len_s = ceil(
-            selections_df["end time (s)"]
-            .sort_values(ascending=False)
-            .reset_index(drop=True)[0]
-        )
-
     # If not specified, get list of species (only gets species in current file)
-    if species == None:
+    if species is None:
         species = selections_df[col].unique()
 
     cols = ["seg_start", "seg_end", *species]
     splits_df = pd.DataFrame(columns=cols)
 
     # Create a dataframe of split_len_s segments and the annotations in each segment
-    for start in range(0, total_len_s, split_len_s):
-        end = start + split_len_s
+    for start, end in zip(starts, ends):
 
         # Annotations in this section
         annots = selections_df[
@@ -215,7 +209,69 @@ def split_single_annotation(
         ]
         splits_df = splits_df.append(segment_df)
 
-    return splits_df.reset_index(drop=True)
+    return splits_df
+
+
+def split_single_annotation(
+    raven_file,
+    col,
+    split_len_s,
+    overlap_len_s=0,
+    total_len_s=None,
+    keep_final=False,
+    species=None,
+):
+    """Split a Raven selection table into short annotations
+
+    Args:
+        raven_file (str):       path to Raven selections file
+        col (str):              name of column in Raven file to look for annotations in
+        split_len_s (float):    length of segments to break annotations into (e.g. for 5s: 5)
+        overlap_len_s (float):  length of overlap between segments (e.g. for 2.5s: 2.5)
+        total_len_s (float):    length of original file (e.g. for 5-minute file: 300)
+                                If not provided, estimates length based on end time of last annotation [default: None]
+        keep_final (string):    whether to keep annotations from the final clip
+                                if the final clip is less tthan split_len_s long.
+                                If using "remainder", "full", or "extend" with split_and_save, make this True.
+                                Else, make it False. [default: False]
+        species (list):         list of species annotations to look for [default: None]
+    Returns:
+        splits_df (pd.DataFrame): columns 'seg_start', 'end_start', and all species,
+            each row containing 1/0 annotations for each species in a segment
+    """
+
+    selections_df = pd.read_csv(raven_file, sep="\t")
+    if col not in selections_df.columns:
+        return
+
+    # If not specified, get total length of annots file (only gets length of last annotation)
+    if not total_len_s:
+        total_len_s = ceil(
+            selections_df["end time (s)"]
+            .sort_values(ascending=False)
+            .reset_index(drop=True)[0]
+        )
+
+    # If not specified, get list of species (only gets species in current file)
+    if species is None:
+        species = selections_df[col].unique()
+
+    # Create a dataframe of split_len_s segments and the annotations in each segment
+    starts = []
+    ends = []
+    increment = split_len_s - overlap_len_s
+    starts = np.arange(0, total_len_s, increment)
+    ends = starts + split_len_s
+
+    if not keep_final:
+        # Ignore clip entirely
+        keeps = ends <= total_len_s
+        ends = ends[keeps]
+        starts = starts[keeps]
+
+    return split_starts_ends(
+        raven_file=raven_file, col=col, starts=starts, ends=ends, species=species
+    )
 
 
 def generate_split_labels_file(
