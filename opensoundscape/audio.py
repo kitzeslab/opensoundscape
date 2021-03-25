@@ -263,19 +263,22 @@ class Audio:
 
         The Audio object is split into clips of a specified duration and overlap
 
-        Arguments:
-            clip_duration:  The duration in seconds of the clips
-            clip_overlap:   The overlap of the clips in seconds [default: 0]
-            final_clip:     Possible options (any other input will ignore the final clip entirely),
-                                - "remainder":          Include the remainder of the Audio
-                                                            (clip will not have clip_duration length)
-                                - "full":               Increase the overlap to yield a clip with clip_duration
-                                - "extend":             Similar to remainder but extend the clip to clip_duration
-        Results:
+        Args:
+            clip_duration (float):  The duration in seconds of the clips
+            clip_overlap (float):   The overlap of the clips in seconds [default: 0]
+            final_clip (str):       Behavior if final_clip is less than clip_duration seconds long. [default: None]
+                By default, ignores final clip entirely.
+                Possible options (any other input will ignore the final clip entirely),
+                    - "remainder":          Include the remainder of the Audio (clip will not have clip_duration length)
+                    - "full":               Increase the overlap to yield a clip with clip_duration length
+                    - "extend":             Similar to remainder but extend the clip to clip_duration length
+        Returns:
             A list of dictionaries with keys: ["audio", "begin_time", "end_time"]
         """
 
         duration = self.duration()
+
+        # Handle splitting a file shorter than the desired clip_duration
         if clip_duration > duration:
             if final_clip == "remainder":
                 return_clip = Audio(
@@ -308,6 +311,7 @@ class Audio:
                 )
                 return []
 
+        # Split files longer than the desired clip_duration
         num_clips = ceil((duration - clip_overlap) / (clip_duration - clip_overlap))
         to_return = [None] * num_clips
         for idx in range(num_clips):
@@ -347,23 +351,25 @@ def split_and_save(
     clip_duration,
     clip_overlap=0,
     final_clip=None,
+    raven_file=None,
     dry_run=False,
 ):
     """ Split audio into clips and save them to a folder
 
     Arguments:
-        audio:          The input Audio to split
-        destination:    A folder to write clips to
-        prefix:         A name to prepend to the written clips
-        clip_duration:  The duration of each clip in seconds
-        clip_overlap:   The overlap of each clip in seconds [default: 0]
-        final_clip:     Possible options (any other input will ignore the final clip entirely) [default: None]
-                            - "remainder":          Include the remainder of the Audio
-                                                        (clip will not have clip_duration length)
-                            - "full":               Increase the overlap to yield a clip with clip_duration
-                            - "extend":             Similar to remainder but extend the clip to clip_duration
+        audio:              The input Audio to split
+        destination:        A folder to write clips to
+        prefix:             A name to prepend to the written clips
+        clip_duration:      The duration of each clip in seconds
+        clip_overlap:       The overlap of each clip in seconds [default: 0]
+        final_clip (str):   Behavior if final_clip is less than clip_duration seconds long. [default: None]
+            By default, ignores final clip entirely.
+            Possible options (any other input will ignore the final clip entirely),
+                - "remainder":          Include the remainder of the Audio (clip will not have clip_duration length)
+                - "full":               Increase the overlap to yield a clip with clip_duration length
+                - "extend":             Similar to remainder but extend the clip to clip_duration length
         dry_run:        If True, skip writing audio and just return clip DataFrame [default: False]
-    
+
     Returns:
         pandas.DataFrame containing begin and end times for each clip from the source audio
     """
