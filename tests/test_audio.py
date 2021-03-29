@@ -10,22 +10,22 @@ from math import isclose
 
 @pytest.fixture()
 def veryshort_wav_str():
-    return "tests/veryshort.wav"
+    return "tests/audio/veryshort.wav"
 
 
 @pytest.fixture()
 def silence_10s_mp3_str():
-    return "tests/silence_10s.mp3"
+    return "tests/audio/silence_10s.mp3"
 
 
 @pytest.fixture()
 def not_a_file_str():
-    return "tests/not_a_file.wav"
+    return "tests/audio/not_a_file.wav"
 
 
 @pytest.fixture()
 def out_path():
-    return "tests/audio_out"
+    return "tests/audio/audio_out"
 
 
 @pytest.fixture()

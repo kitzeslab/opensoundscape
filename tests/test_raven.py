@@ -10,22 +10,22 @@ import pandas.testing as pdt
 
 @pytest.fixture()
 def raven_warn_dir():
-    return "./tests/raven_warn"
+    return "./tests/raven/raven_warn"
 
 
 @pytest.fixture()
 def raven_short_okay_dir():
-    return "./tests/raven_okay_short"
+    return "./tests/raven/raven_okay_short"
 
 
 @pytest.fixture()
 def raven_long_okay_dir():
-    return "./tests/raven_okay_long"
+    return "./tests/raven/raven_okay_long"
 
 
 @pytest.fixture()
 def raven_empty_okay_dir():
-    return "./tests/raven_okay_empty"
+    return "./tests/raven/raven_okay_empty"
 
 
 @pytest.fixture()
