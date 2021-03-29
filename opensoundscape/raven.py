@@ -8,6 +8,7 @@ import numpy as np
 from pathlib import Path
 from io import StringIO
 from math import ceil
+import opensoundscape.audio as audio
 
 
 def _get_lower_selections(input_p):
@@ -355,3 +356,126 @@ def generate_split_labels_file(
         all_selections.to_csv(out_csv, index=False)
 
     return all_selections
+
+
+def raven_audio_split_and_save(
+    # directory, split_len_s, total_len_s=None, species=None, col=, out_csv=None
+    raven_directory,
+    audio_directory,
+    destination,
+    col,
+    sample_rate,
+    clip_duration,
+    clip_overlap=0,
+    final_clip=None,
+    csv_name="labels.csv",
+    species=None,
+    dry_run=False,
+    verbose=False,
+):
+    """Split audio and annotations files simultaneously
+
+    Splits audio into short clips with the desired overlap. Saves these clips
+    and a one-hot encoded labels CSV into the directory of choice. Labels for
+    csv are selected based on all labels in clips.
+
+    Args:
+        raven_directory (str or pathlib.Path):  The path which contains lowercase Raven annotations file(s)
+        audio_directory (str or pathlib.Path):  The path which contains wav file(s) with names the same as annotation files
+        destination (str or pathlib.Path):      The path at which to save the splits and the one-hot encoded labels file
+        col (str):                              The column containing species labels in the Raven files
+        sample_rate (int):                      Desired sample rate of split audio clips
+        clip_duration (float):                  Length of each clip
+        clip_overlap (float):                   Amount of overlap between subsequent clips [default: 0]
+        final_clip (str or None):               Behavior if final_clip is less than clip_duration seconds long. [default: None]
+            By default, ignores final clip entirely.
+            Possible options (any other input will ignore the final clip entirely),
+                - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
+                - "full":       Increase the overlap to yield a clip with clip_duration length
+                - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+        csv_name (str):                         Filename of the csv [default: 'labels.csv']
+        species (str or None):                  Species labels to get. If None, gets a list of labels from all selections files. [default: None]
+        dry_run (bool):                         If True, skip writing audio and just return clip DataFrame [default: False]
+        verbose (bool):                         If True, prints progress information [default:False]
+
+    Returns:
+    """
+
+    # List all label files
+    all_selections = _get_lower_selections(Path(raven_directory))
+
+    # List all audio files
+    all_audio = list(Path(audio_directory).glob("*.wav"))
+
+    # Get audio files and selection files with same stem
+    def _truestem(path_obj):
+        return path_obj.name.split(".")[0]
+
+    sel_dict = dict(zip([_truestem(Path(s)) for s in all_selections], all_selections))
+    aud_dict = dict(zip([_truestem(Path(a)) for a in all_audio], all_audio))
+    keep_keys = set(sel_dict.keys()).intersection(aud_dict.keys())
+    keep_keys = list(keep_keys)
+    matched_audio = [aud_dict[k] for k in keep_keys]
+    matched_selections = [sel_dict[k] for k in keep_keys]
+    assert len(matched_audio) == len(matched_selections)
+
+    # Print results for user
+    print(
+        f"Found {len(matched_audio)} sets of matching audio files and selection tables out of {len(all_audio)} audio files and {len(all_selections)} selection tables"
+    )
+    if not verbose:
+        print("To see unmatched files, use `verbose = True`")
+    if verbose:
+        print("Unmatched audio files:")
+        print("  " + str(set(all_audio) - set(matched_audio)))
+        print("Unmatched selection tables:")
+        print("  " + str(set(all_selections) - set(matched_selections)))
+
+    # Get all species in labels file
+    if species is None:
+        species = get_labels_in_dataset(selections_files=matched_selections, col=col)
+
+    # for each label file:
+    # run split_and_save on associated audio
+    dfs = []
+    destination = Path(destination)
+    for idx, (key, aud_file, sel_file) in enumerate(
+        zip(keep_keys, matched_audio, matched_selections)
+    ):
+        # Split audio and get corresponding start and end times
+        begin_end_times_df = audio.split_and_save(
+            audio=audio.Audio.from_file(aud_file, sample_rate=sample_rate),
+            destination=destination,
+            clip_duration=clip_duration,
+            clip_overlap=clip_overlap,
+            final_clip=final_clip,
+            dry_run=dry_run,
+            prefix=key,
+            return_names=True,
+        )
+
+        # Use start and end times to split label file
+        df = split_starts_ends(
+            raven_file=sel_file,
+            col=col,
+            starts=begin_end_times_df["begin_time"].values,
+            ends=begin_end_times_df["end_time"].values,
+            species=species,
+        )
+
+        # Add clip filenames
+        df.index = begin_end_times_df.index
+        dfs.append(df)
+
+        if verbose:
+            print(f"{idx+1}. Finished {aud_file}")
+
+    # Format dataframes in format filename, label1, label2, etc.
+    one_hot_encoded_df = pd.concat(dfs)
+    one_hot_encoded_df.drop(["seg_start", "seg_end"], axis=1, inplace=True)
+    one_hot_encoded_df.index.name = "filename"
+
+    # Save labels file if desired
+    if not dry_run:
+        one_hot_encoded_df.to_csv(destination.joinpath(csv_name))
+    return one_hot_encoded_df
