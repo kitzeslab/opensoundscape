@@ -293,8 +293,6 @@ class Audio:
         # Now we have the starts and ends
         final_idx = len(ends) - 1
         to_return = [None] * (final_idx + 1)
-        print("starts", starts)
-        print("ends", ends)
         for idx, (start, end) in enumerate(zip(starts, ends)):
             # By default
             begin_time = start
@@ -341,6 +339,7 @@ def split_and_save(
     final_clip=None,
     raven_file=None,
     dry_run=False,
+    return_names=False,
 ):
     """ Split audio into clips and save them to a folder
 
@@ -356,7 +355,8 @@ def split_and_save(
                 - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
                 - "full":       Increase the overlap to yield a clip with clip_duration length
                 - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
-        dry_run:        If True, skip writing audio and just return clip DataFrame [default: False]
+        dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
+        return_names (bool): If True, returned dataframe has clip filenames as index [default: False]
 
     Returns:
         pandas.DataFrame containing begin and end times for each clip from the source audio
@@ -365,14 +365,19 @@ def split_and_save(
     clips = audio.split(
         clip_duration=clip_duration, clip_overlap=clip_overlap, final_clip=final_clip
     )
+    clip_names = []
     for clip in clips:
         clip_name = (
             f"{destination}/{prefix}_{clip['begin_time']}s_{clip['end_time']}s.wav"
         )
+        clip_names.append(clip_name)
         if not dry_run:
             clip["clip"].save(clip_name)
 
     # Convert [{k: v}] -> {k: [v]}
-    return pd.DataFrame(
+    sels = pd.DataFrame(
         {key: [clip[key] for clip in clips] for key in clips[0].keys() if key != "clip"}
     )
+    if return_names:
+        sels.index = clip_names
+    return sels
