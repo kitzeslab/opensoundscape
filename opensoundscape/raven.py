@@ -193,6 +193,7 @@ def split_starts_ends(raven_file, col, starts, ends, species=None):
     splits_df = pd.DataFrame(columns=cols)
 
     # Create a dataframe of split_len_s segments and the annotations in each segment
+    dfs = []
     for start, end in zip(starts, ends):
 
         # Annotations in this section
@@ -207,7 +208,7 @@ def split_starts_ends(raven_file, col, starts, ends, species=None):
             end,
             *list(pd.Series(species).isin(annots[col]).astype(int)),
         ]
-        splits_df = splits_df.append(segment_df)
+        splits_df = splits_df.append(segment_df, ignore_index=True)
 
     return splits_df
 
@@ -236,13 +237,15 @@ def split_single_annotation(
                                 Else, make it False. [default: False]
         species (list):         list of species annotations to look for [default: None]
     Returns:
-        splits_df (pd.DataFrame): columns 'seg_start', 'end_start', and all species,
+        splits_df (pd.DataFrame): columns 'seg_start', 'seg_end', and all species,
             each row containing 1/0 annotations for each species in a segment
     """
 
     selections_df = pd.read_csv(raven_file, sep="\t")
     if col not in selections_df.columns:
         return
+    if selections_df.shape[0] == 0:
+        return pd.DataFrame({"seg_start": [], "seg_end": []})
 
     # If not specified, get total length of annots file (only gets length of last annotation)
     if not total_len_s:
@@ -272,6 +275,24 @@ def split_single_annotation(
     return split_starts_ends(
         raven_file=raven_file, col=col, starts=starts, ends=ends, species=species
     )
+
+
+def get_labels_in_dataset(selections_files, col):
+    """Get list of all labels in selections_files
+
+    Args:
+        selections_files (list):    list of Raven selections.txt files
+        col (str):                  the name of the column containing the labels
+
+    Returns:
+        a list of the unique values found in the label column of this dataset
+    """
+    labels = []
+    for selection in selections_files:
+        selections_df = pd.read_csv(selection, sep="\t")
+        if _col_in_df(selections_df, col, selection):
+            labels.extend(selections_df[col].values)
+    return list(set(labels))
 
 
 def generate_split_labels_file(
@@ -309,12 +330,7 @@ def generate_split_labels_file(
 
     # If list of species not provided, get all species present in dataset
     if not species:
-        species = []
-        for selection in selections:
-            selections_df = pd.read_csv(selection, sep="\t")
-            if _col_in_df(selections_df, col, selection):
-                species.extend(selections_df[col].values)
-        species = list(set(species))
+        species = get_labels_in_dataset(selections_files=selections, col=col)
 
     all_selections = pd.DataFrame()
     for selection in selections:

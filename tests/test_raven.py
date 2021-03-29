@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import numpy.testing as npt
+import pandas.testing as pdt
 
 
 @pytest.fixture()
@@ -20,6 +21,18 @@ def raven_short_okay_dir():
 @pytest.fixture()
 def raven_long_okay_dir():
     return "./tests/raven_okay_long"
+
+
+@pytest.fixture()
+def raven_annotations_empty(request, raven_short_okay_dir):
+    raven.lowercase_annotations(raven_short_okay_dir)
+    path = Path(f"{raven_short_okay_dir}/EmptyExample.Table.1.selections.txt.lower")
+
+    def fin():
+        path.unlink()
+
+    request.addfinalizer(fin)
+    return path
 
 
 @pytest.fixture()
@@ -124,30 +137,35 @@ def test_raven_split_single_annotation_short(raven_annotations_lower_okay_short)
     result_df = raven.split_single_annotation(
         raven_annotations_lower_okay_short, col="class", split_len_s=5
     )
-    # print(result_df['seg_start'])
-    print(result_df.hello.values)
-    print(len(result_df.hello.values))
-    npt.assert_array_equal(result_df.columns.values, ["seg_start", "seg_end", "hello"])
-    npt.assert_array_equal(result_df["seg_start"].values, list(range(0, 381, 5)))
-    npt.assert_array_equal(result_df["seg_end"].values, list(range(5, 386, 5)))
-    npt.assert_array_equal(result_df["hello"].values, [*[0] * 71, *[1] * 6])
+    pdt.assert_frame_equal(
+        result_df,
+        pd.DataFrame(
+            {
+                "seg_start": list(range(0, 381, 5)),
+                "seg_end": list(range(5, 386, 5)),
+                "hello": [*[0] * 71, *[1] * 6],
+            }
+        ),
+        check_dtype=False,
+    )
 
 
 def test_raven_split_single_annotation_long_skiplast(raven_annotations_lower_okay_long):
     result_df = raven.split_single_annotation(
         raven_annotations_lower_okay_long, col="class", split_len_s=5
     )
-    # print(result_df['seg_start'])
-    print(len(result_df.woth.values))
-    print(result_df.woth.values)
-    print(result_df.eato.values)
-    npt.assert_array_equal(
-        result_df.columns.values, ["seg_start", "seg_end", "woth", "eato"]
+    pdt.assert_frame_equal(
+        result_df,
+        pd.DataFrame(
+            {
+                "seg_start": list(range(0, 26, 5)),
+                "seg_end": list(range(5, 31, 5)),
+                "woth": [1, 1, 1, 1, 1, 1],
+                "eato": [0, 1, 1, 1, 1, 1],
+            }
+        ),
+        check_dtype=False,
     )
-    npt.assert_array_equal(result_df["seg_start"].values, list(range(0, 26, 5)))
-    npt.assert_array_equal(result_df["seg_end"].values, list(range(5, 31, 5)))
-    npt.assert_array_equal(result_df["woth"].values, [1, 1, 1, 1, 1, 1])
-    npt.assert_array_equal(result_df["eato"].values, [0, 1, 1, 1, 1, 1])
 
 
 def test_raven_split_single_annotation_long_includelast(
@@ -156,14 +174,33 @@ def test_raven_split_single_annotation_long_includelast(
     result_df = raven.split_single_annotation(
         raven_annotations_lower_okay_long, col="class", split_len_s=5, keep_final=True
     )
-    # print(result_df['seg_start'])
-    print(len(result_df.woth.values))
-    print(result_df.woth.values)
-    print(result_df.eato.values)
-    npt.assert_array_equal(
-        result_df.columns.values, ["seg_start", "seg_end", "woth", "eato"]
+    pdt.assert_frame_equal(
+        result_df,
+        pd.DataFrame(
+            {
+                "seg_start": list(range(0, 31, 5)),
+                "seg_end": list(range(5, 36, 5)),
+                "woth": [1, 1, 1, 1, 1, 1, 0],
+                "eato": [0, 1, 1, 1, 1, 1, 1],
+            }
+        ),
+        check_dtype=False,
     )
-    npt.assert_array_equal(result_df["seg_start"].values, list(range(0, 31, 5)))
-    npt.assert_array_equal(result_df["seg_end"].values, list(range(5, 36, 5)))
-    npt.assert_array_equal(result_df["woth"].values, [1, 1, 1, 1, 1, 1, 0])
-    npt.assert_array_equal(result_df["eato"].values, [0, 1, 1, 1, 1, 1, 1])
+
+
+def test_raven_split_single_annotation_empty(raven_annotations_empty,):
+    result_df = raven.split_single_annotation(
+        raven_annotations_empty, col="class", split_len_s=5
+    )
+    pdt.assert_frame_equal(result_df, pd.DataFrame({"seg_start": [], "seg_end": []}))
+
+
+def test_raven_split_starts_ends_empty(raven_annotations_empty,):
+    result_df = raven.split_starts_ends(
+        raven_annotations_empty, col="class", starts=[0, 5], ends=[5, 10]
+    )
+    pdt.assert_frame_equal(
+        result_df,
+        pd.DataFrame({"seg_start": [0, 5], "seg_end": [5, 10]}),
+        check_dtype=False,
+    )
