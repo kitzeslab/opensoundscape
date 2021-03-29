@@ -24,9 +24,14 @@ def raven_long_okay_dir():
 
 
 @pytest.fixture()
-def raven_annotations_empty(request, raven_short_okay_dir):
-    raven.lowercase_annotations(raven_short_okay_dir)
-    path = Path(f"{raven_short_okay_dir}/EmptyExample.Table.1.selections.txt.lower")
+def raven_empty_okay_dir():
+    return "./tests/raven_okay_empty"
+
+
+@pytest.fixture()
+def raven_annotations_empty(request, raven_empty_okay_dir):
+    raven.lowercase_annotations(raven_empty_okay_dir)
+    path = Path(f"{raven_empty_okay_dir}/EmptyExample.Table.1.selections.txt.lower")
 
     def fin():
         path.unlink()
