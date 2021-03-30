@@ -2,10 +2,21 @@
 import pytest
 import opensoundscape.raven as raven
 from pathlib import Path
+import shutil
 import pandas as pd
 import numpy as np
 import numpy.testing as npt
 import pandas.testing as pdt
+
+tmp_path = "tests/_tmp_raven"
+
+
+@pytest.fixture()
+def temporary_split_storage(request):
+    path = Path(tmp_path)
+    path.mkdir()
+    yield path
+    shutil.rmtree(path)
 
 
 @pytest.fixture()
@@ -26,6 +37,16 @@ def raven_long_okay_dir():
 @pytest.fixture()
 def raven_empty_okay_dir():
     return "./tests/raven/raven_okay_empty"
+
+
+@pytest.fixture()
+def raven_annots_dir():
+    return "./tests/raven/raven_annots"
+
+
+@pytest.fixture()
+def audio_dir():
+    return "./tests/audio"
 
 
 @pytest.fixture()
@@ -68,6 +89,20 @@ def raven_annotations_lower_okay_long(request, raven_long_okay_dir):
 def raven_annotations_lower_warn(request, raven_warn_dir):
     raven.lowercase_annotations(raven_warn_dir)
     path = Path(f"{raven_warn_dir}/Example.Table.1.selections.txt.lower")
+
+    def fin():
+        path.unlink()
+
+    request.addfinalizer(fin)
+    return path
+
+
+@pytest.fixture()
+def raven_annotations_true_annots(request, raven_annots_dir):
+    raven.lowercase_annotations(raven_annots_dir)
+    path = Path(
+        f"{raven_annots_dir}/MSD-0003_20180427_5minstart00-15.Table.1.selections.txt.lower"
+    )
 
     def fin():
         path.unlink()
@@ -209,3 +244,42 @@ def test_raven_split_starts_ends_empty(raven_annotations_empty,):
         pd.DataFrame({"seg_start": [0, 5], "seg_end": [5, 10]}),
         check_dtype=False,
     )
+
+
+def test_raven_audio_split_and_save(
+    temporary_split_storage, raven_annotations_true_annots, raven_annots_dir, audio_dir
+):
+    result_df = raven.raven_audio_split_and_save(
+        raven_directory=raven_annots_dir,
+        audio_directory=audio_dir,
+        destination=temporary_split_storage,
+        col="species",
+        sample_rate=22050,
+        clip_duration=5,
+    )
+    print(result_df.head())
+
+    # Correct number of files created
+    assert len(list(temporary_split_storage.glob("*.wav"))) == 60
+
+    # All species found and labeled correctly
+    npt.assert_array_equal(result_df.columns, ["eato", "lowa", "woth"])
+    pdt.assert_frame_equal(
+        pd.DataFrame([56.0, 2.0, 44.0], index=["eato", "lowa", "woth"]),
+        pd.DataFrame(result_df.sum()),
+    )
+
+    # Save is same as return
+    pdt.assert_frame_equal(
+        result_df,
+        pd.read_csv(
+            temporary_split_storage.joinpath("labels.csv"), index_col="filename"
+        ),
+    )
+
+    # Dataframe contains all clips
+    clips_index = list(result_df.index)
+    clips_index.sort()
+    clips_created = [str(p) for p in temporary_split_storage.glob("*.wav")]
+    clips_created.sort()
+    npt.assert_array_equal(clips_index, clips_created)
