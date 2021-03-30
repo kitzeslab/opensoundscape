@@ -37,12 +37,8 @@ from pathlib import Path
 def ribbit_demo_notebook(request):
     base = Path("tests/notebooks/RIBBIT_pulse_rate_demo.ipynb")
     nbconv = Path("tests/notebooks/RIBBIT_pulse_rate_demo.nbconvert.ipynb")
-
-    def fin():
-        nbconv.unlink()
-
-    request.addfinalizer(fin)
-    return base
+    yield base
+    nbconv.unlink()
 
 
 @pytest.fixture
@@ -51,14 +47,10 @@ def spectrogram_example_notebook(request):
     nbconv = Path("tests/notebooks/spectrogram_example.nbconvert.ipynb")
     picture_one = Path("tests/notebooks/saved_spectrogram.png")
     picture_two = Path("tests/notebooks/saved_spectrogram_2.png")
-
-    def fin():
-        nbconv.unlink()
-        picture_one.unlink()
-        picture_two.unlink()
-
-    request.addfinalizer(fin)
-    return base
+    yield base
+    nbconv.unlink()
+    picture_one.unlink()
+    picture_two.unlink()
 
 
 def check_return_code_from_notebook(notebook):
