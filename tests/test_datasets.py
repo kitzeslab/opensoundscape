@@ -14,38 +14,26 @@ tmp_path = "tests/_tmp_split"
 def temporary_split_storage(request):
     path = Path(tmp_path)
     path.mkdir()
-
-    def fin():
-        path.rmdir()
-
-    request.addfinalizer(fin)
-    return path
+    yield path
+    path.rmdir()
 
 
 @pytest.fixture()
 def splitter_results_default(request):
     split0 = Path(f"{tmp_path}/a1f220f1640c2e35de106c930e5cd20f.wav")
     split1 = Path(f"{tmp_path}/f7ed400e5093fbafc09df578ff9c5425.wav")
-
-    def fin():
-        split0.unlink()
-        split1.unlink()
-
-    request.addfinalizer(fin)
-    return split0, split1
+    yield split0, split1
+    split0.unlink()
+    split1.unlink()
 
 
 @pytest.fixture()
 def splitter_results_last(request):
     split0 = Path(f"{tmp_path}/36fec9935a0d1c38da05004e5d096f6d.wav")
     split1 = Path(f"{tmp_path}/200c78d44bf9b3985d464e06f7cb395b.wav")
-
-    def fin():
-        split0.unlink()
-        split1.unlink()
-
-    request.addfinalizer(fin)
-    return split0, split1
+    yield split0, split1
+    split0.unlink()
+    split1.unlink()
 
 
 @pytest.fixture()
