@@ -6,10 +6,10 @@ from shlex import split
 def run_command(cmd):
     """ Run a command returning output, error
 
-    Input:
+    Args:
         cmd: A string containing some command
 
-    Output:
+    Returns:
         (stdout, stderr): A tuple of standard out and standard error
     """
 
@@ -19,10 +19,10 @@ def run_command(cmd):
 def run_command_return_code(cmd):
     """ Run a command returning the return code
 
-    Input:
+    Args:
         cmd: A string containing some command
 
-    Output:
+    Returns:
         return_code: The return code of the function
     """
     proc = Popen(split(cmd), stdout=DEVNULL, stderr=DEVNULL)

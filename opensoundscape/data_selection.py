@@ -16,7 +16,7 @@ def expand_multi_labeled(input_df, column_header="Labels", label_separator="|"):
         column_header:      The column containing multiple labels [default: "Labels"]
         label_separator:    Multiple labels are separated by this [default: "|"]
 
-    Output:
+    Returns:
         output_df:          A Dataframe with singly-labeled column in `column_header`
     """
     assert column_header in input_df.columns
@@ -44,7 +44,7 @@ def train_valid_split(
         train_size:             The decimal fraction to use for the training set [default: 0.8]
         random_state:           The random state to use for train_test_split [default: 101]
 
-    Output:
+    Returns:
         train_df:       A Dataframe containing the training set
         valid_df:       A Dataframe containing the validation set
     """
@@ -78,7 +78,7 @@ def add_binary_numeric_labels(
         input_column:   The column to read labels from
         output_column:  The column to write numeric labels to
 
-    Output:
+    Returns:
         output_df:      A dataframe with an additional output_column
         label_map:      A dictionary, keys are f"not_{label}" and f"{label}", values are 0 and 1
     """
@@ -100,7 +100,7 @@ def add_numeric_labels(input_df, input_column="Labels", output_column="NumericLa
         input_column:   The column to read labels from
         output_column:  The column to write numeric labels to
 
-    Output:
+    Returns:
         output_df:      A dataframe with an additional output_column
         label_map:      A dictionary, keys are the unique labels and monotonically increasing values starting at 0
     """
@@ -119,12 +119,12 @@ def upsample(input_df, label_column="Labels", random_state=None):
     are repeated up to `max_count // rows`. Then, we randomly sample the rows
     to fill up to `max_count`.
 
-    Input:
+    Args:
         input_df:       A DataFrame to upsample
         label_column:   The column to draw unique labels from
         random_state:   Set the random_state during sampling
 
-    Output:
+    Returns:
         df:             An upsampled DataFrame
     """
 

@@ -31,7 +31,7 @@ class Audio:
     sample rate. Use `Audio.from_file` or `Audio.from_bytesio` with
     `sample_rate=None` to use a native sampling rate.
 
-    Arguments:
+    Args:
         samples (np.array):     The audio samples
         sample_rate (integer):  The sampling rate for the audio samples
         resample_type (str):    The resampling method to use [default: "kaiser_fast"]
@@ -118,7 +118,7 @@ class Audio:
         TODO:
             Describe how to initialize an Audio file as a BytesIO object
 
-        Arguments:
+        Args:
             bytesio: Contents of WAV file as BytesIO
             sample_rate: The final sampling rate of Audio object [default: None]
             max_duration: The maximum duration of the audio file [default: None]
@@ -161,6 +161,7 @@ class Audio:
 
         Args:
             length: the final length in seconds of the extended file
+
         Returns:
             a new Audio object of the desired length
         """
@@ -179,6 +180,7 @@ class Audio:
 
         Args:
             time: The time to multiply with the sample_rate
+
         Returns:
             sample: The rounded sample
         """
@@ -252,7 +254,7 @@ class Audio:
     def duration(self):
         """ Return duration of Audio
 
-        Output:
+        Returns:
             duration (float): The duration of the Audio
         """
 

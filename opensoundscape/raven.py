@@ -178,7 +178,7 @@ def split_starts_ends(raven_file, col, starts, ends, species=None):
         ends (list):                        end times of clips
         species (list):                     species names for columns of one-hot encoded file [default: None]
 
-    Retturns:
+    Returns:
         splits_df (pd.DataFrame): columns 'seg_start', 'end_start', and all species,
             each row containing 1/0 annotations for each species in a segment
     """

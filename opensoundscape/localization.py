@@ -33,11 +33,11 @@ def lorentz_ip(u, v=None):
         
         u[0]*v[0] + u[1]*v[1] - u[2]*v[2]
     
-    Args
+    Args:
         u: vector with shape either (3,) or (4,) 
         v: vector with same shape as x1; if None (default), sets v = u
 
-    Returns
+    Returns:
         float: value of Lorentz IP """
     if v is None:
         v = u
