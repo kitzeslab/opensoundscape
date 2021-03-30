@@ -341,7 +341,6 @@ def split_and_save(
     final_clip=None,
     raven_file=None,
     dry_run=False,
-    return_names=False,
 ):
     """ Split audio into clips and save them to a folder
 
@@ -358,7 +357,6 @@ def split_and_save(
                 - "full":       Increase the overlap to yield a clip with clip_duration length
                 - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
         dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
-        return_names (bool): If True, returned dataframe has clip filenames as index [default: False]
 
     Returns:
         pandas.DataFrame containing begin and end times for each clip from the source audio
@@ -378,8 +376,11 @@ def split_and_save(
 
     # Convert [{k: v}] -> {k: [v]}
     sels = pd.DataFrame(
-        {key: [clip[key] for clip in clips] for key in clips[0].keys() if key != "clip"}
+        {
+            key: [clip[key] for clip in clips]
+            for key in clips[0].keys()
+            if key != "clip"
+        },
+        index=clip_names,
     )
-    if return_names:
-        sels.index = clip_names
     return sels

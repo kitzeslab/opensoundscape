@@ -451,7 +451,6 @@ def raven_audio_split_and_save(
             final_clip=final_clip,
             dry_run=dry_run,
             prefix=key,
-            return_names=True,
         )
 
         # Use start and end times to split label file
