@@ -200,8 +200,8 @@ def test_raven_split_single_annotation_long_skiplast(raven_annotations_lower_oka
             {
                 "seg_start": list(range(0, 26, 5)),
                 "seg_end": list(range(5, 31, 5)),
-                "woth": [1, 1, 1, 1, 1, 1],
                 "eato": [0, 1, 1, 1, 1, 1],
+                "woth": [1, 1, 1, 1, 1, 1],
             }
         ),
         check_dtype=False,
@@ -220,8 +220,8 @@ def test_raven_split_single_annotation_long_includelast(
             {
                 "seg_start": list(range(0, 31, 5)),
                 "seg_end": list(range(5, 36, 5)),
-                "woth": [1, 1, 1, 1, 1, 1, 0],
                 "eato": [0, 1, 1, 1, 1, 1, 1],
+                "woth": [1, 1, 1, 1, 1, 1, 0],
             }
         ),
         check_dtype=False,
