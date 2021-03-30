@@ -189,6 +189,7 @@ def split_starts_ends(raven_file, col, starts, ends, species=None):
     # If not specified, get list of species (only gets species in current file)
     if species is None:
         species = selections_df[col].unique()
+    species.sort()
 
     cols = ["seg_start", "seg_end", *species]
     splits_df = pd.DataFrame(columns=cols)
@@ -359,7 +360,6 @@ def generate_split_labels_file(
 
 
 def raven_audio_split_and_save(
-    # directory, split_len_s, total_len_s=None, species=None, col=, out_csv=None
     raven_directory,
     audio_directory,
     destination,
