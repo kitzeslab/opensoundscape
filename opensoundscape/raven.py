@@ -389,6 +389,7 @@ def raven_audio_split_and_save(
     final_clip=None,
     extensions=["wav", "WAV", "mp3"],
     csv_name="labels.csv",
+    min_label_len=0,
     species=None,
     dry_run=False,
     verbose=False,
@@ -423,6 +424,11 @@ def raven_audio_split_and_save(
                 - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
         extensions (list):                      List of audio filename extensions to look for. [default: `['wav', 'WAV', 'mp3']`]
         csv_name (str):                         Filename of the csv [default: 'labels.csv']
+        min_label_len (float):                  the minimum amount a label must overlap with the split to be considered a label.
+                                                Useful for excluding short annotations or annotations that barely overlap the split.
+                                                For example, if 1, the label will only be included if the annotation is at least 1s long
+                                                and either starts at least 1s before the end of the split, or ends at least 1s
+                                                after the start of the split. By default, any label is kept [default: 0]
         species (str or None):                  Species labels to get. If None, gets a list of labels from all selections files. [default: None]
         dry_run (bool):                         If True, skip writing audio and just return clip DataFrame [default: False]
         verbose (bool):                         If True, prints progress information [default:False]
@@ -496,6 +502,7 @@ def raven_audio_split_and_save(
             starts=begin_end_times_df["begin_time"].values,
             ends=begin_end_times_df["end_time"].values,
             species=species,
+            min_label_len=min_label_len,
         )
 
         # Add clip filenames
