@@ -208,6 +208,24 @@ def test_raven_split_single_annotation_long_skiplast(raven_annotations_lower_oka
     )
 
 
+def test_raven_split_single_annotation_min_overlap(raven_annotations_lower_okay_long):
+    result_df = raven.split_single_annotation(
+        raven_annotations_lower_okay_long, col="class", split_len_s=5, min_label_len=1
+    )
+    pdt.assert_frame_equal(
+        result_df,
+        pd.DataFrame(
+            {
+                "seg_start": list(range(0, 26, 5)),
+                "seg_end": list(range(5, 31, 5)),
+                "eato": [0, 1, 0, 1, 0, 0],
+                "woth": [1, 1, 1, 1, 1, 1],
+            }
+        ),
+        check_dtype=False,
+    )
+
+
 def test_raven_split_single_annotation_long_includelast(
     raven_annotations_lower_okay_long,
 ):
