@@ -451,6 +451,10 @@ def raven_audio_split_and_save(
     # run split_and_save on associated audio
     dfs = []
     destination = Path(destination)
+    if not destination.exists():
+        if verbose:
+            print("Making directory", destination)
+        destination.mkdir()
     for idx, (key, aud_file, sel_file) in enumerate(
         zip(keep_keys, matched_audio, matched_selections)
     ):
