@@ -190,24 +190,6 @@ def test_raven_split_single_annotation_short(raven_annotations_lower_okay_short)
     )
 
 
-def test_raven_split_single_annotation_long_skiplast(raven_annotations_lower_okay_long):
-    result_df = raven.split_single_annotation(
-        raven_annotations_lower_okay_long, col="class", split_len_s=5
-    )
-    pdt.assert_frame_equal(
-        result_df,
-        pd.DataFrame(
-            {
-                "seg_start": list(range(0, 26, 5)),
-                "seg_end": list(range(5, 31, 5)),
-                "eato": [0, 1, 1, 1, 1, 1],
-                "woth": [1, 1, 1, 1, 1, 1],
-            }
-        ),
-        check_dtype=False,
-    )
-
-
 def test_raven_split_single_annotation_min_overlap(raven_annotations_lower_okay_long):
     result_df = raven.split_single_annotation(
         raven_annotations_lower_okay_long, col="class", split_len_s=5, min_label_len=1
@@ -226,9 +208,32 @@ def test_raven_split_single_annotation_min_overlap(raven_annotations_lower_okay_
     )
 
 
+def test_raven_split_single_annotation_long_skiplast(raven_annotations_lower_okay_long):
+
+    # This annotation file has last annotation at about 31.2s
+    # Discarding the incomplete annotation should keep up to 30s
+    result_df = raven.split_single_annotation(
+        raven_annotations_lower_okay_long, col="class", split_len_s=5
+    )
+    pdt.assert_frame_equal(
+        result_df,
+        pd.DataFrame(
+            {
+                "seg_start": list(range(0, 26, 5)),
+                "seg_end": list(range(5, 31, 5)),
+                "eato": [0, 1, 1, 1, 1, 1],
+                "woth": [1, 1, 1, 1, 1, 1],
+            }
+        ),
+        check_dtype=False,
+    )
+
+
 def test_raven_split_single_annotation_long_includelast(
     raven_annotations_lower_okay_long,
 ):
+    # This annotation file has last annotation at about 31.2s
+    # Keeping the final annotation should keep up to 35s
     result_df = raven.split_single_annotation(
         raven_annotations_lower_okay_long, col="class", split_len_s=5, keep_final=True
     )
