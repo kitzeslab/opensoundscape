@@ -415,6 +415,7 @@ def raven_audio_split_and_save(
     all_selections = _get_lower_selections(Path(raven_directory))
 
     # List all audio files
+    audio_directory = Path(audio_directory)
     all_audio = [
         f for f in audio_directory.glob("**/*") if f.suffix.strip(".") in extensions
     ]
