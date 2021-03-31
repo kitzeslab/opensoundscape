@@ -312,7 +312,9 @@ class Audio:
 
             # Trim the clip as needed
             audio_clip = self.trim(begin_time, end_time)
-            if final_clip == "extend":
+
+            # Extend the final clip if needed
+            if (idx >= final_idx) & (final_clip == "extend"):
                 audio_clip = audio_clip.extend(clip_duration)
 
             # Add one clip to list
@@ -339,7 +341,6 @@ def split_and_save(
     clip_duration,
     clip_overlap=0,
     final_clip=None,
-    raven_file=None,
     dry_run=False,
 ):
     """ Split audio into clips and save them to a folder
