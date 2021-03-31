@@ -163,7 +163,7 @@ def query_annotations(directory, cls, col, print_out=False):
     return output
 
 
-def split_starts_ends(raven_file, col, starts, ends, species=None):
+def split_starts_ends(raven_file, col, starts, ends, species=None, min_label_len=0):
     """Use a list of start and end times to split a Raven files
 
     This function can be used with lists of start and end times.
@@ -177,6 +177,11 @@ def split_starts_ends(raven_file, col, starts, ends, species=None):
         starts (list):                      start times of clips
         ends (list):                        end times of clips
         species (list):                     species names for columns of one-hot encoded file [default: None]
+        min_label_len (float):              the minimum amount a label must overlap with the split to be considered a label.
+                                            Useful for excluding short annotations or annotations that barely overlap the split.
+                                            For example, if 1, the label will only be included if the annotation is at least 1s long
+                                            and either starts at least 1s before the end of the split, or ends at least 1s
+                                            after the start of the split. By default, any label is kept [default: 0]
 
     Returns:
         splits_df (pd.DataFrame): columns 'seg_start', 'end_start', and all species,
@@ -200,8 +205,12 @@ def split_starts_ends(raven_file, col, starts, ends, species=None):
 
         # Annotations in this section
         annots = selections_df[
-            (selections_df["end time (s)"] > start)
-            & (selections_df["begin time (s)"] < end)
+            (selections_df["end time (s)"] > start + min_label_len)
+            & (selections_df["begin time (s)"] < end - min_label_len)
+            & (
+                selections_df["end time (s)"] - selections_df["begin time (s)"]
+                >= min_label_len
+            )
         ]
 
         segment_df = pd.DataFrame(columns=cols)
@@ -223,21 +232,26 @@ def split_single_annotation(
     total_len_s=None,
     keep_final=False,
     species=None,
+    min_label_len=0,
 ):
     """Split a Raven selection table into short annotations
 
     Args:
-        raven_file (str):       path to Raven selections file
-        col (str):              name of column in Raven file to look for annotations in
-        split_len_s (float):    length of segments to break annotations into (e.g. for 5s: 5)
-        overlap_len_s (float):  length of overlap between segments (e.g. for 2.5s: 2.5)
-        total_len_s (float):    length of original file (e.g. for 5-minute file: 300)
-                                If not provided, estimates length based on end time of last annotation [default: None]
-        keep_final (string):    whether to keep annotations from the final clip
-                                if the final clip is less tthan split_len_s long.
-                                If using "remainder", "full", or "extend" with split_and_save, make this True.
-                                Else, make it False. [default: False]
-        species (list):         list of species annotations to look for [default: None]
+        raven_file (str):           path to Raven selections file
+        col (str):                  name of column in Raven file to look for annotations in
+        split_len_s (float):        length of segments to break annotations into (e.g. for 5s: 5)
+        overlap_len_s (float):      length of overlap between segments (e.g. for 2.5s: 2.5)
+        total_len_s (float):        length of original file (e.g. for 5-minute file: 300)
+                                    If not provided, estimates length based on end time of last annotation [default: None]
+        keep_final (string):        whether to keep annotations from the final clip if the final
+                                    clip is less than split_len_s long. If using "remainder", "full", or "extend"
+                                    with split_and_save, make this True. Else, make it False. [default: False]
+        species (list):             list of species annotations to look for [default: None]
+        min_label_len (float):      the minimum amount a label must overlap with the split to be considered a label.
+                                    Useful for excluding short annotations or annotations that barely overlap the split.
+                                    For example, if 1, the label will only be included if the annotation is at least 1s long
+                                    and either starts at least 1s before the end of the split, or ends at least 1s
+                                    after the start of the split. By default, any label is kept [default: 0]
     Returns:
         splits_df (pd.DataFrame): columns 'seg_start', 'seg_end', and all species,
             each row containing 1/0 annotations for each species in a segment
@@ -275,7 +289,12 @@ def split_single_annotation(
         starts = starts[keeps]
 
     return split_starts_ends(
-        raven_file=raven_file, col=col, starts=starts, ends=ends, species=species
+        raven_file=raven_file,
+        col=col,
+        starts=starts,
+        ends=ends,
+        species=species,
+        min_label_len=min_label_len,
     )
 
 
