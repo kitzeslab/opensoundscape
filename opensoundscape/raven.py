@@ -368,6 +368,7 @@ def raven_audio_split_and_save(
     clip_duration,
     clip_overlap=0,
     final_clip=None,
+    extensions=["wav", "WAV", "mp3"],
     csv_name="labels.csv",
     species=None,
     dry_run=False,
@@ -379,9 +380,17 @@ def raven_audio_split_and_save(
     and a one-hot encoded labels CSV into the directory of choice. Labels for
     csv are selected based on all labels in clips.
 
+    Requires that audio and annotation filenames are unique, and that the "stem"
+    of annotation filenames is the same as the corresponding stem of the audio
+    filename (Raven saves files using this convention by default).
+
+    E.g. The following format is correct:
+    audio_directory/audio_file_1.wav
+    raven_directory/audio_file_1.Table.1.selections.txt
+
     Args:
         raven_directory (str or pathlib.Path):  The path which contains lowercase Raven annotations file(s)
-        audio_directory (str or pathlib.Path):  The path which contains wav file(s) with names the same as annotation files
+        audio_directory (str or pathlib.Path):  The path which contains audio file(s) with names the same as annotation files
         destination (str or pathlib.Path):      The path at which to save the splits and the one-hot encoded labels file
         col (str):                              The column containing species labels in the Raven files
         sample_rate (int):                      Desired sample rate of split audio clips
@@ -393,6 +402,7 @@ def raven_audio_split_and_save(
                 - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
                 - "full":       Increase the overlap to yield a clip with clip_duration length
                 - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+        extensions (list):                      List of audio filename extensions to look for. [default: `['wav', 'WAV', 'mp3']`]
         csv_name (str):                         Filename of the csv [default: 'labels.csv']
         species (str or None):                  Species labels to get. If None, gets a list of labels from all selections files. [default: None]
         dry_run (bool):                         If True, skip writing audio and just return clip DataFrame [default: False]
@@ -405,7 +415,9 @@ def raven_audio_split_and_save(
     all_selections = _get_lower_selections(Path(raven_directory))
 
     # List all audio files
-    all_audio = list(Path(audio_directory).glob("*.wav"))
+    all_audio = [
+        f for f in audio_directory.glob("**/*") if f.suffix.strip(".") in extensions
+    ]
 
     # Get audio files and selection files with same stem
     def _truestem(path_obj):
