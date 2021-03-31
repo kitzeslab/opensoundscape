@@ -301,3 +301,19 @@ def test_raven_audio_split_and_save(
     clips_created = [str(p) for p in temporary_split_storage.glob("*.wav")]
     clips_created.sort()
     npt.assert_array_equal(clips_index, clips_created)
+
+
+def test_raven_audio_split_and_save_dry_run(
+    raven_annotations_true_annots, raven_annots_dir, audio_dir
+):
+    destination = Path("this_dir_should_not_be_created")
+    result_df = raven.raven_audio_split_and_save(
+        raven_directory=raven_annots_dir,
+        audio_directory=audio_dir,
+        destination=destination,
+        col="species",
+        sample_rate=22050,
+        clip_duration=5,
+        dry_run=True,
+    )
+    len(list(destination.glob("*"))) == 0
