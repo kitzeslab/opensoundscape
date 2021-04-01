@@ -378,6 +378,11 @@ def generate_split_labels_file(
     return all_selections
 
 
+def split_single_raven_and_audio():
+    """Splits a raven file and an annotation file simultaneously
+    """
+
+
 def raven_audio_split_and_save(
     raven_directory,
     audio_directory,
@@ -389,6 +394,7 @@ def raven_audio_split_and_save(
     final_clip=None,
     extensions=["wav", "WAV", "mp3"],
     csv_name="labels.csv",
+    labeled_clips_only=False,
     min_label_len=0,
     species=None,
     dry_run=False,
@@ -423,12 +429,13 @@ def raven_audio_split_and_save(
                 - "full":       Increase the overlap to yield a clip with clip_duration length
                 - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
         extensions (list):                      List of audio filename extensions to look for. [default: `['wav', 'WAV', 'mp3']`]
-        csv_name (str):                         Filename of the csv [default: 'labels.csv']
+        csv_name (str):                         Filename of the output csv, to be saved in the specified destination [default: 'labels.csv']
         min_label_len (float):                  the minimum amount a label must overlap with the split to be considered a label.
                                                 Useful for excluding short annotations or annotations that barely overlap the split.
                                                 For example, if 1, the label will only be included if the annotation is at least 1s long
                                                 and either starts at least 1s before the end of the split, or ends at least 1s
                                                 after the start of the split. By default, any label is kept [default: 0]
+        labeled_clips_only (bool):              Whether to only save clips that contain labels of the species of interest. [default: False]
         species (str or None):                  Species labels to get. If None, gets a list of labels from all selections files. [default: None]
         dry_run (bool):                         If True, skip writing audio and just return clip DataFrame [default: False]
         verbose (bool):                         If True, prints progress information [default:False]
@@ -473,25 +480,34 @@ def raven_audio_split_and_save(
     if species is None:
         species = get_labels_in_dataset(selections_files=matched_selections, col=col)
 
-    # for each label file:
-    # run split_and_save on associated audio
-    dfs = []
+    # Create output directory if needed
     destination = Path(destination)
     if not destination.exists():
         if verbose:
             print("Making directory", destination)
-        destination.mkdir()
+        if not dry_run:
+            destination.mkdir()
+
+    # If saving labeled clips only, don't split audio on first run
+    audio_initial_dry_run = labeled_clips_only | dry_run
+
+    # for each label file:
+    # run split_and_save on associated audio
+    dfs = []
     for idx, (key, aud_file, sel_file) in enumerate(
         zip(keep_keys, matched_audio, matched_selections)
     ):
+
         # Split audio and get corresponding start and end times
+        a = audio.Audio.from_file(aud_file, sample_rate=sample_rate)
+        total_duration = a.duration()
         begin_end_times_df = audio.split_and_save(
-            audio=audio.Audio.from_file(aud_file, sample_rate=sample_rate),
+            audio=a,
             destination=destination,
             clip_duration=clip_duration,
             clip_overlap=clip_overlap,
             final_clip=final_clip,
-            dry_run=dry_run,
+            dry_run=audio_initial_dry_run,
             prefix=key,
         )
 
@@ -505,19 +521,32 @@ def raven_audio_split_and_save(
             min_label_len=min_label_len,
         )
 
-        # Add clip filenames
+        # Keep track of clip filenames
         df.index = begin_end_times_df.index
+
+        # For saving only labeled clips:
+        if labeled_clips_only:
+            df = df[df[species].sum(axis=1) > 0]
+            for clip_name, clip_info in df.iterrows():
+                seg_start = clip_info["seg_start"]
+                seg_end = clip_info["seg_end"]
+                trimmed = a.trim(seg_start, seg_end)
+                if (seg_end > total_duration) & (final_clip == "extend"):
+                    trimmed.extend(clip_duration)
+                if not dry_run:
+                    trimmed.save(clip_name)
+
         dfs.append(df)
 
         if verbose:
             print(f"{idx+1}. Finished {aud_file}")
 
-    # Format dataframes in format filename, label1, label2, etc.
+    # Format dataframes as single df with columns filename, label1, label2, ...
     one_hot_encoded_df = pd.concat(dfs)
     one_hot_encoded_df.drop(["seg_start", "seg_end"], axis=1, inplace=True)
     one_hot_encoded_df.index.name = "filename"
 
-    # Save labels file if desired
+    # Save labels file if needed
     if not dry_run:
         one_hot_encoded_df.to_csv(destination.joinpath(csv_name))
     return one_hot_encoded_df
