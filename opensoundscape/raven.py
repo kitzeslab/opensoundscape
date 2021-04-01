@@ -378,11 +378,6 @@ def generate_split_labels_file(
     return all_selections
 
 
-def split_single_raven_and_audio():
-    """Splits a raven file and an annotation file simultaneously
-    """
-
-
 def raven_audio_split_and_save(
     raven_directory,
     audio_directory,
