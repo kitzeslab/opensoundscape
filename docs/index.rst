@@ -26,6 +26,7 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
    :caption: Tutorials
 
    tutorials/audio_and_spectrogram
+   tutorials/raven
    tutorials/train
    tutorials/predict
    tutorials/RIBBIT_pulse_rate_demo
@@ -41,7 +42,7 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
    api/miscellaneous
    api/ribbit
    api/spectrogram
-   
+
 .. toctree::
    :maxdepth: 0
 
