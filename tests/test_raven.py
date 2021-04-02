@@ -280,7 +280,6 @@ def test_raven_audio_split_and_save(
         sample_rate=22050,
         clip_duration=5,
     )
-    print(result_df.head())
 
     # Correct number of files created
     assert len(list(temporary_split_storage.glob("*.wav"))) == 60
@@ -337,8 +336,6 @@ def test_raven_audio_split_and_save_labeled_only(
         labeled_clips_only=True,
         species=["lowa"],
     )
-    print(result_df.head())
 
     # Correct number of files created
     assert len(list(temporary_split_storage.glob("*.wav"))) == 2
-    assert 0
