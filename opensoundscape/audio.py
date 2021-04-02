@@ -158,7 +158,7 @@ class Audio:
         )
 
     def trim(self, start_time, end_time):
-        """ trim Audio object in time
+        """ Trim Audio object in time
 
         Args:
             start_time: time in seconds for start of extracted clip
@@ -207,9 +207,9 @@ class Audio:
         return int(time * self.sample_rate)
 
     def bandpass(self, low_f, high_f, order):
-        """ bandpass audio signal frequencies
+        """ Bandpass audio signal frequencies
 
-        uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
+        Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
 
         Args:
             low_f: low frequency cutoff (-3 dB)  in Hz of bandpass filter
@@ -237,7 +237,7 @@ class Audio:
 
     # can act on an audio file and be moved into Audio class
     def spectrum(self):
-        """create frequency spectrum from an Audio object using fft
+        """ Create frequency spectrum from an Audio object using fft
 
         Args:
             self
@@ -262,7 +262,7 @@ class Audio:
         return fft, frequencies
 
     def save(self, path):
-        """save Audio to file
+        """ Save Audio to file
 
         Args:
             path: destination for output
