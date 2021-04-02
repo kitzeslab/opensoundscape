@@ -128,6 +128,13 @@ def test_property_trim_length_is_correct(silence_10s_mp3_str):
         )
 
 
+def test_resample(silence_10s_mp3_str):
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    dur = audio.duration()
+    resampled_audio = audio.resample(5000)
+    assert resampled_audio.duration() == dur
+
+
 def test_extend_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     duration = audio.duration()

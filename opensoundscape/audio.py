@@ -137,6 +137,26 @@ class Audio:
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
 
+    def resample(self, sample_rate):
+        """ Resample Audio object
+
+        Args:
+            sample_rate: the new sample rate
+
+        Returns:
+            a new Audio object of the desired sample rate
+        """
+        samples_resampled = librosa.resample(
+            self.samples, orig_sr=self.sample_rate, target_sr=sample_rate
+        )
+
+        return Audio(
+            samples_resampled,
+            sample_rate,
+            resample_type=self.resample_type,
+            max_duration=self.max_duration,
+        )
+
     def trim(self, start_time, end_time):
         """ trim Audio object in time
 
