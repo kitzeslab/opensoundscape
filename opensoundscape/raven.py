@@ -465,13 +465,16 @@ def raven_audio_split_and_save(
     print(
         f"Found {len(matched_audio)} sets of matching audio files and selection tables out of {len(all_audio)} audio files and {len(all_selections)} selection tables"
     )
-    if not verbose:
-        print("To see unmatched files, use `verbose = True`")
-    if verbose:
-        print("Unmatched audio files:")
-        print("  " + str(set(all_audio) - set(matched_audio)))
-        print("Unmatched selection tables:")
-        print("  " + str(set(all_selections) - set(matched_selections)))
+    if (len(all_audio) - len(matched_audio)) > 0 or (
+        len(all_selections) - len(matched_audio) > 0
+    ):
+        if not verbose:
+            print("To see unmatched files, use `verbose = True`")
+        else:
+            print("Unmatched audio files:")
+            print("  " + str(set(all_audio) - set(matched_audio)))
+            print("Unmatched selection tables:")
+            print("  " + str(set(all_selections) - set(matched_selections)))
 
     # Get all species in labels file
     if species is None:
