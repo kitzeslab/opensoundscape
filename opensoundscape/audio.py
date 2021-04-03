@@ -396,7 +396,7 @@ def split_and_save(
             clip["clip"].save(clip_name)
 
     # Convert [{k: v}] -> {k: [v]}
-    sels = pd.DataFrame(
+    return pd.DataFrame(
         {
             key: [clip[key] for clip in clips]
             for key in clips[0].keys()
@@ -404,4 +404,3 @@ def split_and_save(
         },
         index=clip_names,
     )
-    return sels
