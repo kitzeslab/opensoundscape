@@ -6,6 +6,7 @@ import io
 import numpy as np
 from random import uniform
 from math import isclose
+import numpy.testing as npt
 
 
 @pytest.fixture()
@@ -128,11 +129,27 @@ def test_property_trim_length_is_correct(silence_10s_mp3_str):
         )
 
 
-def test_resample(silence_10s_mp3_str):
+def test_resample_veryshort_wav(veryshort_wav_str):
+    audio = Audio.from_file(veryshort_wav_str)
+    dur = audio.duration()
+    resampled_audio = audio.resample(22050)
+    assert resampled_audio.duration() == dur
+    assert resampled_audio.samples.shape == (3133,)
+
+
+def test_resample_mp3_nonstandard_sr(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     dur = audio.duration()
     resampled_audio = audio.resample(5000)
     assert resampled_audio.duration() == dur
+    assert resampled_audio.sample_rate == 5000
+
+
+def test_resample_classmethod_vs_instancemethod(silence_10s_mp3_str):
+    a1 = Audio.from_file(silence_10s_mp3_str)
+    a1 = a1.resample(2000)
+    a2 = Audio.from_file(silence_10s_mp3_str, sample_rate=2000)
+    npt.assert_array_almost_equal(a1.samples, a2.samples, decimal=5)
 
 
 def test_extend_length_is_correct(silence_10s_mp3_str):
