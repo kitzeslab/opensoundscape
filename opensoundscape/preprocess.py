@@ -1,5 +1,5 @@
 """preprocess.py: utilities for augmentation and preprocessing pipelines"""
-
+# todo: add parameters into docstrings for easy access using "?"
 import numpy as np
 from PIL import Image
 import random
@@ -58,7 +58,18 @@ class ActionContainer:
 
 
 class AudioLoader(BaseAction):
-    """Action child class for Audio.from_file()"""
+    """Action child class for Audio.from_file()
+
+    default sample_rate is None (use file's sample rate)
+    """
+
+    def __init__(self, **kwargs):
+        super(AudioLoader, self).__init__(**kwargs)
+        # default parameters
+        self.params["sample_rate"] = None
+
+        # add parameters passed to __init__
+        self.params.update(kwargs)
 
     def go(self, path):
         return Audio.from_file(path, **self.params)
