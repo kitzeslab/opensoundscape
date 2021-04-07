@@ -13,12 +13,18 @@ from opensoundscape.torch.architectures.resnet_backbone import (
     model_urls,
 )
 
-# @register_model('PlainResNetClassifier')
+
 class PlainResNetClassifier(BaseArchitecture):
 
     name = "PlainResNetClassifier"
 
-    def __init__(self, num_cls, weights_init="ImageNet", num_layers=18):
+    def __init__(
+        self,
+        num_cls,
+        weights_init="ImageNet",
+        num_layers=18,
+        init_classifier_weights=False,
+    ):
 
         super(PlainResNetClassifier, self).__init__()
         self.num_cls = num_cls
@@ -29,12 +35,17 @@ class PlainResNetClassifier(BaseArchitecture):
         self.best_weights = None
 
         # Model setup and weights initialization
+        # if init_classifier_weights=False: copy feature weights but not classifier weights
+        # ie if we want to re-use trained feature extractor w/ different classifier
         self.setup_net()
         if weights_init == "ImageNet":
-            self.load(model_urls["resnet{}".format(num_layers)])
-        elif os.path.exists(weights_init):
-            self.load(weights_init)
-        elif weights_init != "ImageNet" and not os.path.exists(weights_init):
+            self.load(
+                model_urls["resnet{}".format(num_layers)],
+                init_classifier_weights=init_classifier_weights,
+            )
+        elif os.path.exists(weights_init):  # load weights from disk
+            self.load(weights_init, init_classifier_weights=init_classifier_weights)
+        else:
             raise NameError("Initial weights not exists {}.".format(weights_init))
 
         # Criteria (loss function) setup
@@ -59,45 +70,36 @@ class PlainResNetClassifier(BaseArchitecture):
     def setup_loss(self):
         self.criterion_cls = BCEWithLogitsLoss_hot()
 
-    # def load(self,weights_init):
-    #     self.load_state_dict(init_weights, strict=False)
-    #     load_keys = set(init_weights.keys())
-    #     self_keys = set(self.state_dict().keys())
-    #
-    #     missing_keys = self_keys - load_keys
-    #     unused_keys = load_keys - self_keys
-    #     print("missing keys: {}".format(sorted(list(missing_keys))))
-    #     print("unused_keys: {}".format(sorted(list(unused_keys))))
-    #
-    # def load_url(self,weights_url,feat_only=False):
-    #     #we don't use this anymore?
-    #     init_weights = load_state_dict_from_url(weights_url, progress=True)
-    #     self.load_weights(init_weights, feat_only)
+    def load(self, init_path, init_classifier_weights=True, verbose=False):
+        """load state dict (weights) of the feature+classifier
+        optionally load only feature weights not classifier weights
 
-    # def load_weights(self, init_weights, feat_only=False):
-    #     #we don't use this anymore?
-    #     #
-    #     # #we will provide the init_weights dictionary instead of loading it from disk
-    #     # if 'http' in init_path:
-    #     #     init_weights = load_state_dict_from_url(init_path, progress=True)
-    #     # else:
-    #     #     init_weights = torch.load(init_path)
-    #
-    #     if feat_only:
-    #         init_weights = OrderedDict({k.replace('feature.', ''): init_weights[k]
-    #                                     for k in init_weights})
-    #         self.feature.load_state_dict(init_weights, strict=False)
-    #         load_keys = set(init_weights.keys())
-    #         self_keys = set(self.feature.state_dict().keys())
-    #     else:
-    #         self.load_state_dict(init_weights, strict=False)
-    #         load_keys = set(init_weights.keys())
-    #         self_keys = set(self.state_dict().keys())
-    #
-    #     missing_keys = self_keys - load_keys
-    #     unused_keys = load_keys - self_keys
-    #     print("missing keys: {}".format(sorted(list(missing_keys))))
-    #     print("unused_keys: {}".format(sorted(list(unused_keys))))
+        if verbose==True: print missing/unused keys
+        """
+
+        if "http" in init_path:
+            init_weights = load_state_dict_from_url(init_path, progress=True)
+        else:
+            init_weights = torch.load(init_path)
+
+        if init_classifier_weights:  # load all weights
+            self.load_state_dict(init_weights, strict=False)
+            load_keys = set(init_weights.keys())
+            self_keys = set(self.state_dict().keys())
+        else:  # only load feature weights not classifier weights
+            init_weights = OrderedDict(
+                {k.replace("feature.", ""): init_weights[k] for k in init_weights}
+            )  # remove prefix
+            self.feature.load_state_dict(init_weights, strict=False)
+            load_keys = set(init_weights.keys())
+            self_keys = set(self.feature.state_dict().keys())
+
+        if verbose:
+            # check if some weight_dict keys were missing or unused
+            missing_keys = self_keys - load_keys
+            unused_keys = load_keys - self_keys
+            print("missing keys: {}".format(sorted(list(missing_keys))))
+            print("unused_keys: {}".format(sorted(list(unused_keys))))
 
     def save(self, out_path):
         # we don't use this anymore?

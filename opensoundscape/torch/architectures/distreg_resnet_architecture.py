@@ -24,7 +24,7 @@ from opensoundscape.torch.architectures.resnet_backbone import (
 )
 
 
-# @register_model("DistRegResNetClassifier")
+# TODO: init_classifier_weights modifications like plain_resnet
 class DistRegResNetClassifier(BaseArchitecture):
 
     name = "DistRegResNetClassifier"
@@ -34,7 +34,7 @@ class DistRegResNetClassifier(BaseArchitecture):
         num_cls,
         weights_init="ImageNet",
         num_layers=18,
-        # init_feat_only=True,
+        init_classifier_weights=False,
         class_freq=None,
     ):
         super(DistRegResNetClassifier, self).__init__()
@@ -50,10 +50,11 @@ class DistRegResNetClassifier(BaseArchitecture):
         self.setup_net()
         if weights_init == "ImageNet":
             self.load(
-                model_urls["resnet{}".format(num_layers)]  # , feat_only=init_feat_only
+                model_urls["resnet{}".format(num_layers)],
+                init_classifier_weights=init_classifier_weights,
             )
         elif os.path.exists(weights_init):
-            self.load(weights_init)  # , feat_only=init_feat_only)
+            self.load(weights_init, feat_only=init_feat_only)
         elif weights_init != "ImageNet" and not os.path.exists(weights_init):
             raise NameError("Initial weights not exists {}.".format(weights_init))
 
@@ -85,29 +86,30 @@ class DistRegResNetClassifier(BaseArchitecture):
         else:
             self.criterion_cls = ResampleLoss(class_freq=self.class_freq)
 
-    # def load_url(self, weights_url)#, feat_only=False):
-    #     #I believe we don't use this anymore
-    #     init_weights = load_state_dict_from_url(weights_url, progress=True)
-    #     self.load_weights(init_weights, feat_only)
-    #
-    # def load_weights(self, init_weights)#, feat_only=False):
-    #     #I believe we don't use this anymore
-    #     if feat_only:
-    #         init_weights = OrderedDict(
-    #             {k.replace("feature.", ""): init_weights[k] for k in init_weights}
-    #         )
-    #         self.feature.load_state_dict(init_weights, strict=False)
-    #         load_keys = set(init_weights.keys())
-    #         self_keys = set(self.feature.state_dict().keys())
-    #     else:
-    #         self.load_state_dict(init_weights, strict=False)
-    #         load_keys = set(init_weights.keys())
-    #         self_keys = set(self.state_dict().keys())
-    #
-    #     missing_keys = self_keys - load_keys
-    #     unused_keys = load_keys - self_keys
-    #     print("missing keys: {}".format(sorted(list(missing_keys))))
-    #     print("unused_keys: {}".format(sorted(list(unused_keys))))
+    def load(self, init_path, init_classifier_weights=True, verbose=False):
+
+        if "http" in init_path:
+            init_weights = load_state_dict_from_url(init_path, progress=True)
+        else:
+            init_weights = torch.load(init_path)
+
+        if init_classifier_weights:
+            self.load_state_dict(init_weights, strict=False)
+            load_keys = set(init_weights.keys())
+            self_keys = set(self.state_dict().keys())
+        else:
+            init_weights = OrderedDict(
+                {k.replace("feature.", ""): init_weights[k] for k in init_weights}
+            )
+            self.feature.load_state_dict(init_weights, strict=False)
+            load_keys = set(init_weights.keys())
+            self_keys = set(self.feature.state_dict().keys())
+
+        if verbose:
+            missing_keys = self_keys - load_keys
+            unused_keys = load_keys - self_keys
+            print("missing keys: {}".format(sorted(list(missing_keys))))
+            print("unused_keys: {}".format(sorted(list(unused_keys))))
 
     def save(self, out_path):
         torch.save(self.best_weights, out_path)

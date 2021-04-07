@@ -10,6 +10,7 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from collections import OrderedDict
 
 # from tqdm import tqdm
 import random
@@ -48,6 +49,7 @@ class PytorchModel(BaseModule):
 
         self.name = "PytorchModel"
 
+        # model characteristics
         self.classes = classes  # train_dataset.labels
         print(f"n classes: {len(self.classes)}")
 
@@ -56,6 +58,7 @@ class PytorchModel(BaseModule):
         self.prediction_threshold = 0.25
         self.num_layers = 18  # can use 50 for resnet50
         self.sampler = None  # can be "imbalanced"
+        self.current_epoch = 0
 
         ### training parameters ###
         # defaults from https://github.com/zhmiao/BirdMultiLabel/blob/master/configs/XENO/multi_label_reg_10_091620.yaml
@@ -76,8 +79,10 @@ class PytorchModel(BaseModule):
         ### metrics ###
         # self.metrics is a dictionary with accuracy metrics for each epoch
         self.metrics_fn = multiclass_metrics  # or binary_metrics
+        self.single_target = False  # if True: predict class w max score
         self.train_metrics = {}
         self.valid_metrics = {}
+        self.loss = {}
 
         ### architecture ###
         # (feature extraction + classifier + loss fn)
@@ -180,7 +185,7 @@ class PytorchModel(BaseModule):
         # do we need to re-initialize the network? I don't think so.
         self.network.to(self.device)
 
-    def train_epoch(self, epoch):
+    def train_epoch(self):
         """forward, backward, loss for one epoch
 
         return targets and prediction scores
@@ -201,7 +206,7 @@ class PytorchModel(BaseModule):
             N = len(self.train_loader)
             print(
                 "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
-                    epoch, batch_idx, N, 100 * batch_idx / N
+                    self.current_epoch, batch_idx, N, 100 * batch_idx / N
                 )
             )
 
@@ -228,6 +233,7 @@ class PytorchModel(BaseModule):
 
             # calculate loss
             loss = self.network.criterion_cls(logits, labels)
+            self.loss[self.current_epoch] = float(loss)
 
             #############################
             # Backward and optimization #
@@ -252,7 +258,7 @@ class PytorchModel(BaseModule):
                 """show some basic progress metrics during the epoch"""
                 tgts = labels.int().detach().cpu().numpy()
 
-                # Threashold prediction
+                # Threshold prediction
                 preds = (
                     (torch.sigmoid(logits) >= self.prediction_threshold)
                     .int()
@@ -298,9 +304,10 @@ class PytorchModel(BaseModule):
         save interval: save weights to disk every n epochs
         log_interval: print some basic metrics every n batches
         save_path: where to save model weights
+
+        #TODO: verbose switch
         """
 
-        self.num_epochs = num_epochs
         self.log_interval = log_interval
         self.save_interval = save_interval
         self.train_dataset = train_dataset
@@ -312,35 +319,36 @@ class PytorchModel(BaseModule):
         best_f1 = 0.0
         best_epoch = 0
 
-        for epoch in range(self.num_epochs):
+        for epoch in range(num_epochs):
             # 1 epoch = 1 view of each training file
             # loss fn & backpropogation occurs after each batch
-            self.current_epoch = epoch
+            self.current_epoch += 1
 
             ### Training ###
-            train_targets, train_preds, train_scores = self.train_epoch(epoch)
+            train_targets, train_preds, train_scores = self.train_epoch()
 
             #### Validation ###
             print("\nValidation.")
             valid_targets, valid_preds, valid_scores = self.evaluate(
                 self.valid_loader, set_eval=False
-            )
-            # during validation we use set_eval=False
+            )  # during validation we use set_eval=False
 
             ### Metrics ###
-            self.valid_metrics[epoch] = self.metrics_fn(
+            self.valid_metrics[self.current_epoch] = self.metrics_fn(
                 valid_targets, valid_preds, self.classes
             )
-            self.train_metrics[epoch] = self.metrics_fn(
+            self.train_metrics[self.current_epoch] = self.metrics_fn(
                 train_targets, train_preds, self.classes
             )
             # print basic metrics (this could  break if metrics_fn changes)
-            print(f"\t Precision: {self.valid_metrics[epoch]['precision']}")
-            print(f"\t Recall: {self.valid_metrics[epoch]['recall']}")
-            print(f"\t F1: {self.valid_metrics[epoch]['f1']}")
+            print(
+                f"\t Precision: {self.valid_metrics[self.current_epoch]['precision']}"
+            )
+            print(f"\t Recall: {self.valid_metrics[self.current_epoch]['recall']}")
+            print(f"\t F1: {self.valid_metrics[self.current_epoch]['f1']}")
 
             ### Save ###
-            if (epoch + 1) % self.save_interval == 0:
+            if (self.current_epoch + 1) % self.save_interval == 0:
                 print("Saving weights, metrics, and train/valid scores.")
 
                 self.save(
@@ -353,11 +361,11 @@ class PytorchModel(BaseModule):
                 )
 
             # if best, update & save weights
-            f1 = self.valid_metrics[epoch]["f1"]
+            f1 = self.valid_metrics[self.current_epoch]["f1"]
             if f1 > best_f1:
                 self.network.update_best()
                 best_f1 = f1
-                best_epoch = epoch
+                best_epoch = self.current_epoch
                 print("Updating best model")
                 self.save(
                     f"{self.save_path}/best.model",
@@ -404,13 +412,21 @@ class PytorchModel(BaseModule):
                 logits = self.network.classifier(feats)
 
                 # Threshold prediction
-                batch_preds = (
-                    (torch.sigmoid(logits) >= self.prediction_threshold)
-                    .int()
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
+                # TODO: should have softmax if binary / single-target
+                if self.single_target:
+                    # highest scoring class = 1, rest = 0
+                    # TODO: check if this is working correctly
+                    batch_preds = np.zeros(np.shape(logits))
+                    for i, class_scores in enumerate(logits):
+                        batch_preds[i, np.argmax(class_scores)] = 1
+                else:
+                    batch_preds = (
+                        (torch.sigmoid(logits) >= self.prediction_threshold)
+                        .int()
+                        .detach()
+                        .cpu()
+                        .numpy()
+                    )
                 total_preds.append(batch_preds)
                 total_tgts.append(labels.int().detach().cpu().numpy())
                 total_scores.append(logits.detach().cpu().numpy())
@@ -421,10 +437,18 @@ class PytorchModel(BaseModule):
 
         return total_tgts, total_preds, total_scores
 
-    def save(self, path=None, save_weights=True, extras={}):
-        """save model weights (default location is self.save_path)
+    def save(
+        self,
+        path=None,
+        save_weights=True,
+        save_optimizer=True,  # TODO: do we need to save the scheduler?
+        extras={},
+    ):
+        """save model with weights (default location is self.save_path)
 
-        if save_weights is False, only save metadata/metrics
+        if save_weights is False: only save metadata/metrics
+        if save_optimizer is False: don't save self.optim.state_dict()
+        extras: arbitrary dictionary of things to save, eg valid-preds
         """
 
         if path is None:
@@ -438,14 +462,14 @@ class PytorchModel(BaseModule):
             "epoch": self.current_epoch,
             "valid_metrics": self.valid_metrics,
             "train_metrics": self.valid_metrics,
+            "loss": self.loss,
         }
         if save_weights:
-            model_dict.update(
-                {
-                    "model_state_dict": self.network.state_dict(),
-                    "optimizer_state_dict": self.opt_net.state_dict(),
-                }
-            )
+            model_dict.update({"model_state_dict": self.network.state_dict()})
+        if save_optimizer:
+            if self.opt_net is None:
+                self.opt_net = self.init_optimizer()
+            model_dict.update({"optimizer_state_dict": self.opt_net.state_dict()})
 
         # user can provide an arbitrary dictionary of extra things to save
         model_dict.update(extras)
@@ -453,29 +477,63 @@ class PytorchModel(BaseModule):
         print(f"Saving to {path}")
         torch.save(model_dict, path)
 
-    def load(self, path):
-        # TODO: test if saving and loading works properly
+    def load(
+        self,
+        path,
+        load_weights=True,
+        load_classifier_weights=True,
+        load_optimizer_state_dict=True,
+    ):
         """load model and optimizer state_dict from disk
 
         the object should be saved with model.save()
         which uses torch.save with keys for 'model_state_dict' and 'optimizer_state_dict'
 
         """
-        checkpoint = torch.load(path)
+        model_dict = torch.load(path)
 
-        # load the nn feature weights from the checkpoint
-        self.network.load_state_dict(checkpoint["model_state_dict"])
+        init_weights = model_dict["model_state_dict"]
+
+        # load the nn feature/classifier weights from the checkpoint
+        if load_weights:
+            print("loading weights from saved object")
+            # init_weights = OrderedDict({'network.'+k: init_weights[k]
+            #                         for k in init_weights})
+            if load_classifier_weights:
+                self.network.load_state_dict(init_weights, strict=False)
+                load_keys = set(init_weights.keys())
+                self_keys = set(self.network.state_dict().keys())
+            else:  # load only the feature weights
+                init_weights = OrderedDict(
+                    {k.replace("feature.", ""): init_weights[k] for k in init_weights}
+                )
+                self.network.feature.load_state_dict(init_weights, strict=False)
+                load_keys = set(init_weights.keys())
+                self_keys = set(self.network.feature.state_dict().keys())
+
+            # check if some weight_dict keys were missing or unused
+            missing_keys = self_keys - load_keys
+            unused_keys = load_keys - self_keys
+            print("missing keys: {}".format(sorted(list(missing_keys))))
+            print("unused_keys: {}".format(sorted(list(unused_keys))))
 
         # create an optimizer then load the checkpoint state dict
         self.opt_net = self.init_optimizer()
-        self.opt_net.load_state_dict(checkpoint["optimizer_state_dict"])
+        if load_optimizer_state_dict:
+            self.opt_net.load_state_dict(model_dict["optimizer_state_dict"])
+
+        # load other saved info
+        self.current_epoch = model_dict["epoch"]
+        self.train_metrics = model_dict["train_metrics"]
+        self.valid_metrics = model_dict["valid_metrics"]
+        self.loss = model_dict["loss"]
 
     def predict(
         self,
         prediction_dataset,
         batch_size=1,
         num_workers=1,
-        # apply_softmax=False
+        # apply_softmax=False #TODO: re-add softmax option (and logit-softmax?)
     ):
         """Generate predictions on a dataset from a pytorch model object
         Input:
@@ -551,9 +609,7 @@ class PytorchModel(BaseModule):
         return pred_df
 
 
-class Resnet18Multilabel(
-    PytorchModel
-):  # TODO: move train_dataset and valid_dataset elsewhere
+class Resnet18Multilabel(PytorchModel):
     def __init__(self, classes):
         """if you want to change other parameters,
         simply create the object then modify them
@@ -585,17 +641,14 @@ class Resnet18Multilabel(
 
 class Resnet18Binary(
     PytorchModel
-):  # TODO: move train_dataset and valid_dataset elsewhere
+):  # TODO: binary model should not make [1,1] prediction (need softmax)
     def __init__(self):
         """if you want to change parameters, create the object then modify them"""
         self.weights_init = "ImageNet"
         self.classes = ["negative", "positive"]
 
         architecture = PlainResNetClassifier(  # pass architecture as argument
-            num_cls=2,
-            weights_init=self.weights_init,
-            num_layers=18,
-            # init_feat_only=True,
+            num_cls=2, weights_init=self.weights_init, num_layers=18
         )
 
         super(Resnet18Binary, self).__init__(architecture, self.classes)
