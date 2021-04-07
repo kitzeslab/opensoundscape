@@ -280,6 +280,8 @@ class AudioLoadingPreprocessor(BasePreprocessor):
 class AudioToImagePreprocessor(BasePreprocessor):
     """loads audio paths, performs various augmentations, returns tensor
 
+    by default, resamples audio to sr=22050
+    can always change with .actions.load_audio.set(sample_rate=)
 
     df must have audio paths as index and class names as columns
     - if no labels, df will have no columns
@@ -293,7 +295,7 @@ class AudioToImagePreprocessor(BasePreprocessor):
         self.return_labels = return_labels
 
         # add each action to our tool kit, then to pipeline
-        self.actions.load_audio = preprocess.AudioLoader()
+        self.actions.load_audio = preprocess.AudioLoader(sample_rate=22050)
         self.pipeline.append(self.actions.load_audio)
 
         self.actions.trim_audio = preprocess.AudioTrimmer()
@@ -346,7 +348,7 @@ class CnnPreprocessor(AudioToImagePreprocessor):
                 overlay_class=None,
                 # might not update with changes?
                 loader_pipeline=self.pipeline[0:4],
-                update_labels=True,
+                update_labels=False,
             )
 
             self.actions.color_jitter = preprocess.TorchColorJitter()
@@ -429,7 +431,7 @@ class ResnetMultilabelPreprocessor(BasePreprocessor):
                 overlay_weight=[0.2, 0.5],
                 # this pipeline might not update with changes to preprocessor?
                 loader_pipeline=self.pipeline[0:4],
-                update_labels=True,
+                update_labels=False,
             )
             self.pipeline.append(self.actions.overlay)
 
