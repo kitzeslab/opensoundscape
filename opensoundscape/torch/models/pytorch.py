@@ -36,6 +36,8 @@ class PytorchModel(BaseModule):
     Generic Pytorch Model with training and prediction, flexible architecture.
     """
 
+    # TODO: move hyperparameters into self.hyperparameters (dictionary?)
+
     def __init__(
         self, architecture, classes
     ):  # train_dataset, valid_dataset, architecture, ):
@@ -77,16 +79,18 @@ class PytorchModel(BaseModule):
         self.opt_net = None
 
         ### metrics ###
-        # self.metrics is a dictionary with accuracy metrics for each epoch
         self.metrics_fn = multiclass_metrics  # or binary_metrics
         self.single_target = False  # if True: predict class w max score
+        # dictionaries with accuracy metrics & loss for each epoch
         self.train_metrics = {}
         self.valid_metrics = {}
-        self.loss = {}
+        self.loss = {}  # could add TensorBoard tracking
 
         ### architecture ###
         # (feature extraction + classifier + loss fn)
         self.network = architecture
+
+        ##TODO: should be easier to change loss function
 
     def init_optimizer(self, optimizer_class=optim.SGD, params_list=None):
         """overwrite this method in subclass to use a different optimizer"""
@@ -170,20 +174,6 @@ class PytorchModel(BaseModule):
             shuffle=False,
             sampler=None,
         )
-
-    def set_eval(self):
-        ###############################
-        # Load weights for evaluation #
-        ###############################
-        # self.main_logger.info("\nGetting {} model.".format(self.args.model_name))
-        # self.main_logger.info("\nLoading from {}".format(self.save_path))
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
-
-        # do we need to re-initialize the network? I don't think so.
-        self.network.to(self.device)
 
     def train_epoch(self):
         """forward, backward, loss for one epoch
@@ -286,14 +276,14 @@ class PytorchModel(BaseModule):
         self,
         train_dataset,
         valid_dataset,
-        num_epochs=1,
+        epochs=1,
         batch_size=1,
         num_workers=1,
         save_path=".",
         save_interval=1,  # save weights every n epochs
         log_interval=10,  # print metrics every n batches
     ):
-        """train the model on train_dataset samples for num_epochs.
+        """train the model on train_dataset samples for epochs.
 
         If customized loss functions, networks, optimizers, or schedulers
         are desired, modify the object before running .train().
@@ -319,19 +309,16 @@ class PytorchModel(BaseModule):
         best_f1 = 0.0
         best_epoch = 0
 
-        for epoch in range(num_epochs):
+        for epoch in range(epochs):
             # 1 epoch = 1 view of each training file
             # loss fn & backpropogation occurs after each batch
-            self.current_epoch += 1
 
             ### Training ###
             train_targets, train_preds, train_scores = self.train_epoch()
 
             #### Validation ###
             print("\nValidation.")
-            valid_targets, valid_preds, valid_scores = self.evaluate(
-                self.valid_loader, set_eval=False
-            )  # during validation we use set_eval=False
+            valid_targets, valid_preds, valid_scores = self.evaluate(self.valid_loader)
 
             ### Metrics ###
             self.valid_metrics[self.current_epoch] = self.metrics_fn(
@@ -377,6 +364,8 @@ class PytorchModel(BaseModule):
                     },
                 )
 
+            self.current_epoch += 1
+
         print(f"\nBest Model Appears at Epoch {best_epoch} with F1 {best_f1:.3f}.")
 
         # save after the last epoch
@@ -384,9 +373,15 @@ class PytorchModel(BaseModule):
 
     def evaluate(self, loader, set_eval=True):
         """Predict on data from DataLoader, return targets, preds, scores."""
+        # TODO: should simply call predict()
 
-        if set_eval:
-            self.set_eval()
+        # TODO: Do we need these lines?
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+        # do we need to re-initialize the network? I don't think so.
+        self.network.to(self.device)
 
         self.network.eval()
 
@@ -414,9 +409,9 @@ class PytorchModel(BaseModule):
                 # Threshold prediction
                 # TODO: should have softmax if binary / single-target
                 if self.single_target:
-                    # highest scoring class = 1, rest = 0
+                    # highest scoring class = 1, other classes = 0
                     # TODO: check if this is working correctly
-                    batch_preds = np.zeros(np.shape(logits))
+                    batch_preds = np.zeros(np.shape(logits)).astype(int)
                     for i, class_scores in enumerate(logits):
                         batch_preds[i, np.argmax(class_scores)] = 1
                 else:
@@ -483,12 +478,14 @@ class PytorchModel(BaseModule):
         load_weights=True,
         load_classifier_weights=True,
         load_optimizer_state_dict=True,
+        verbose=False,
     ):
         """load model and optimizer state_dict from disk
 
         the object should be saved with model.save()
         which uses torch.save with keys for 'model_state_dict' and 'optimizer_state_dict'
 
+        verbose: if True, print missing/unused keys for model weights
         """
         model_dict = torch.load(path)
 
@@ -511,11 +508,12 @@ class PytorchModel(BaseModule):
                 load_keys = set(init_weights.keys())
                 self_keys = set(self.network.feature.state_dict().keys())
 
-            # check if some weight_dict keys were missing or unused
-            missing_keys = self_keys - load_keys
-            unused_keys = load_keys - self_keys
-            print("missing keys: {}".format(sorted(list(missing_keys))))
-            print("unused_keys: {}".format(sorted(list(unused_keys))))
+            if verbose:
+                # check if some weight_dict keys were missing or unused
+                missing_keys = self_keys - load_keys
+                unused_keys = load_keys - self_keys
+                print("missing keys: {}".format(sorted(list(missing_keys))))
+                print("unused_keys: {}".format(sorted(list(unused_keys))))
 
         # create an optimizer then load the checkpoint state dict
         self.opt_net = self.init_optimizer()
@@ -575,7 +573,7 @@ class PytorchModel(BaseModule):
         with torch.set_grad_enabled(False):
 
             for sample in dataloader:
-                data = sample["X"].to(self.device)  # is this correct?
+                data = sample["X"].to(self.device)
 
                 # setup data
                 data.requires_grad = False
@@ -614,6 +612,7 @@ class Resnet18Multilabel(PytorchModel):
         """if you want to change other parameters,
         simply create the object then modify them
         """
+        # TODO: check that df columns match self.classes
         self.classes = classes
         self.weights_init = "ImageNet"
 
@@ -629,19 +628,22 @@ class Resnet18Multilabel(PytorchModel):
         super(Resnet18Multilabel, self).__init__(architecture, self.classes)
         self.name = "Resnet18Multilabel"
 
-    def from_checkpoint(self, path):
+    def from_checkpoint(self, path):  # TODO
         print("not implemented")
         # torch.load(path)
         # classes =
         # self.__init__(classes)
         # look at Audio.from_file for how to initialize
-        # load weights and optimizer state dict
+        # otherwise similar to .load(). May be able to load entire state dict
         pass
 
 
 class Resnet18Binary(
     PytorchModel
 ):  # TODO: binary model should not make [1,1] prediction (need softmax)
+    # TODO: binary model should only accept train/test dfs w/1 column
+    # TODO: validate that index of df is path and labels are one-hot
+    # TODO: make a single-target class, this is just a special case w 2 classes
     def __init__(self):
         """if you want to change parameters, create the object then modify them"""
         self.weights_init = "ImageNet"
@@ -655,3 +657,4 @@ class Resnet18Binary(
         self.name = "Resnet18Binary"
 
         self.metrics_fn = binary_metrics
+        self.single_target = True

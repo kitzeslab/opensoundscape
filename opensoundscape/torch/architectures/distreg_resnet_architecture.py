@@ -1,11 +1,6 @@
 # adapt from Miao's repository github.com/zhmiao/BirdMultiLabel
-# this "model" is a custom resnet model architecture plus custom loss functions
-# this .py file depends on (at least) a couple other things in the repository:
-# - resnet backbone (utilities for resnet nn stuff?)
-# - utility to register model in a list
-# - BaseModule
-
-# copying from https://github.com/zhmiao/BirdMultiLabel/blob/b31edf022e5c54a5d7ebe994460fec1579e90e96/src/models/distreg_resnet.py
+# this "model" is a normal resnet model architecture with a custom loss function
+# based on https://github.com/zhmiao/BirdMultiLabel/blob/b31edf022e5c54a5d7ebe994460fec1579e90e96/src/models/distreg_resnet.py
 
 import os
 import copy
@@ -15,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.hub import load_state_dict_from_url
 
-from opensoundscape.torch.architectures.utils import BaseArchitecture
+from opensoundscape.torch.architectures.plain_resnet import PlainResNetClassifier
 from opensoundscape.torch.architectures.resnet_backbone import (
     ResNetFeature,
     BasicBlock,
@@ -24,8 +19,7 @@ from opensoundscape.torch.architectures.resnet_backbone import (
 )
 
 
-# TODO: init_classifier_weights modifications like plain_resnet
-class DistRegResNetClassifier(BaseArchitecture):
+class DistRegResNetClassifier(PlainResNetClassifier):
 
     name = "DistRegResNetClassifier"
 
@@ -37,45 +31,14 @@ class DistRegResNetClassifier(BaseArchitecture):
         init_classifier_weights=False,
         class_freq=None,
     ):
-        super(DistRegResNetClassifier, self).__init__()
-        self.num_cls = num_cls
-        self.num_layers = num_layers
-        self.feature = None
-        self.classifier = None
-        self.criterion_cls = None
-        self.best_weights = None
         self.class_freq = class_freq
 
-        # Model setup and weights initialization
-        self.setup_net()
-        if weights_init == "ImageNet":
-            self.load(
-                model_urls["resnet{}".format(num_layers)],
-                init_classifier_weights=init_classifier_weights,
-            )
-        elif os.path.exists(weights_init):
-            self.load(weights_init, feat_only=init_feat_only)
-        elif weights_init != "ImageNet" and not os.path.exists(weights_init):
-            raise NameError("Initial weights not exists {}.".format(weights_init))
-
-        # Criteria (Loss function) setup
-        self.setup_loss()
-
-    def setup_net(self):
-
-        kwargs = {}
-
-        if self.num_layers == 18:
-            block = BasicBlock
-            layers = [2, 2, 2, 2]
-        elif self.num_layers == 50:
-            block = Bottleneck
-            layers = [3, 4, 6, 3]
-        else:
-            raise Exception("ResNet Type not supported.")
-
-        self.feature = ResNetFeature(block, layers, **kwargs)
-        self.classifier = nn.Linear(512 * block.expansion, self.num_cls)
+        super(DistRegResNetClassifier, self).__init__(
+            num_cls,
+            weights_init=weights_init,
+            num_layers=num_layers,
+            init_classifier_weights=init_classifier_weights,
+        )
 
     def setup_loss(self):
         if self.class_freq is None:
@@ -85,37 +48,6 @@ class DistRegResNetClassifier(BaseArchitecture):
             self.criterion_cls = None
         else:
             self.criterion_cls = ResampleLoss(class_freq=self.class_freq)
-
-    def load(self, init_path, init_classifier_weights=True, verbose=False):
-
-        if "http" in init_path:
-            init_weights = load_state_dict_from_url(init_path, progress=True)
-        else:
-            init_weights = torch.load(init_path)
-
-        if init_classifier_weights:
-            self.load_state_dict(init_weights, strict=False)
-            load_keys = set(init_weights.keys())
-            self_keys = set(self.state_dict().keys())
-        else:
-            init_weights = OrderedDict(
-                {k.replace("feature.", ""): init_weights[k] for k in init_weights}
-            )
-            self.feature.load_state_dict(init_weights, strict=False)
-            load_keys = set(init_weights.keys())
-            self_keys = set(self.feature.state_dict().keys())
-
-        if verbose:
-            missing_keys = self_keys - load_keys
-            unused_keys = load_keys - self_keys
-            print("missing keys: {}".format(sorted(list(missing_keys))))
-            print("unused_keys: {}".format(sorted(list(unused_keys))))
-
-    def save(self, out_path):
-        torch.save(self.best_weights, out_path)
-
-    def update_best(self):
-        self.best_weights = copy.deepcopy(self.state_dict())
 
 
 def reduce_loss(loss, reduction):
