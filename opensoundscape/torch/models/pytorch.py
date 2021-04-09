@@ -73,8 +73,8 @@ class PytorchModel(BaseModule):
         self.momentum_classifier = 0.9
         self.weight_decay_classifier = 0.0005
         # lr_scheduler
-        self.step_size = 10
-        self.gamma = 0.1
+        self.lr_update_interval = 10  # update learning rates every # epochs
+        self.lr_cooling_factor = 0.7  # multiply learning rates by # on each update
         # optimizer
         self.opt_net = None
 
@@ -151,13 +151,16 @@ class PytorchModel(BaseModule):
         self.network.setup_loss()
 
         # TODO: do we need to save the state dict of the scheduler?
-        # I think all we need is saved in the optimizer state_dict
+        # (yes, to continue training)
         self.scheduler = optim.lr_scheduler.StepLR(
-            self.opt_net, step_size=self.step_size, gamma=self.gamma
+            self.opt_net,
+            step_size=self.lr_update_interval,
+            gamma=self.lr_cooling_factor,
         )
 
         # set up train_loader and valid_loader dataloaders
-        # make a dataloader to supply training images from train_dataset
+
+        # this samples batches of training images + labels from train_dataset
         self.train_loader = get_dataloader(
             self.train_dataset,
             batch_size=batch_size,
@@ -166,7 +169,7 @@ class PytorchModel(BaseModule):
             sampler=self.sampler,
         )
 
-        # make a dataloader to supply training images from valid_dataset
+        # this samples batches of training images + labels from valid_dataset
         self.valid_loader = get_dataloader(
             self.valid_dataset,
             batch_size=batch_size,
@@ -176,9 +179,9 @@ class PytorchModel(BaseModule):
         )
 
     def train_epoch(self):
-        """forward, backward, loss for one epoch
+        """perform forward pass, loss, backpropagation for one epoch
 
-        return targets and prediction scores
+        return: (targets, predictions, scores) for training files
         """
         self.network.train()
 
@@ -187,18 +190,10 @@ class PytorchModel(BaseModule):
         total_scores = []
 
         for batch_idx, item in enumerate(self.train_loader):
+            # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
-
             data, labels = item["X"].to(self.device), item["y"].to(self.device)
             labels = labels.squeeze(1)
-
-            # log basic train info
-            N = len(self.train_loader)
-            print(
-                "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
-                    self.current_epoch, batch_idx, N, 100 * batch_idx / N
-                )
-            )
 
             ####################
             # Forward and loss #
@@ -220,7 +215,6 @@ class PytorchModel(BaseModule):
                     .numpy()
                 )
             )
-
             # calculate loss
             loss = self.network.criterion_cls(logits, labels)
             self.loss[self.current_epoch] = float(loss)
@@ -230,9 +224,9 @@ class PytorchModel(BaseModule):
             #############################
             # zero gradients for optimizer
             self.opt_net.zero_grad()
-            # backward pass: loss backpropagation
+            # backward pass: calculate the gradients
             loss.backward()
-            # update the optimizer: step parameters
+            # update the network using the gradients*lr
             self.opt_net.step()
 
             ################
@@ -244,11 +238,19 @@ class PytorchModel(BaseModule):
             ###########
             # Logging #
             ###########
+            # log basic train info (used to print every batch)
             if batch_idx % self.log_interval == 0:
                 """show some basic progress metrics during the epoch"""
+                N = len(self.train_loader)
+                print(
+                    "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
+                        self.current_epoch, batch_idx, N, 100 * batch_idx / N
+                    )
+                )
+
                 tgts = labels.int().detach().cpu().numpy()
 
-                # Threshold prediction
+                # Threshold prediction #TODO: single_target option
                 preds = (
                     (torch.sigmoid(logits) >= self.prediction_threshold)
                     .int()
@@ -278,7 +280,7 @@ class PytorchModel(BaseModule):
         valid_dataset,
         epochs=1,
         batch_size=1,
-        num_workers=1,
+        num_workers=0,
         save_path=".",
         save_interval=1,  # save weights every n epochs
         log_interval=10,  # print metrics every n batches
@@ -287,6 +289,8 @@ class PytorchModel(BaseModule):
 
         If customized loss functions, networks, optimizers, or schedulers
         are desired, modify the object before running .train().
+
+        num_workers: pytorch child processes (=cpus), use 0 for root process
 
         train_dataset: a Preprocessor that loads audio files and provides Tensor
         valid_dataset: a Preprocessor for evaluating performance
@@ -369,7 +373,7 @@ class PytorchModel(BaseModule):
         print(f"\nBest Model Appears at Epoch {best_epoch} with F1 {best_f1:.3f}.")
 
         # save after the last epoch
-        self.save()
+        self.save()  # TODO: this will overwrite a saved epoch with metrics
 
     def evaluate(self, loader, set_eval=True):
         """Predict on data from DataLoader, return targets, preds, scores."""
@@ -530,7 +534,7 @@ class PytorchModel(BaseModule):
         self,
         prediction_dataset,
         batch_size=1,
-        num_workers=1,
+        num_workers=0,
         # apply_softmax=False #TODO: re-add softmax option (and logit-softmax?)
     ):
         """Generate predictions on a dataset from a pytorch model object
@@ -613,6 +617,8 @@ class Resnet18Multilabel(PytorchModel):
         simply create the object then modify them
         """
         # TODO: check that df columns match self.classes
+        # TODO: what does log_interval do?
+
         self.classes = classes
         self.weights_init = "ImageNet"
 
@@ -650,7 +656,9 @@ class Resnet18Binary(
         self.classes = ["negative", "positive"]
 
         architecture = PlainResNetClassifier(  # pass architecture as argument
-            num_cls=2, weights_init=self.weights_init, num_layers=18
+            num_cls=2,
+            weights_init=self.weights_init,
+            num_layers=18,
         )
 
         super(Resnet18Binary, self).__init__(architecture, self.classes)

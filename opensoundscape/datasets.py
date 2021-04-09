@@ -339,6 +339,7 @@ class CnnPreprocessor(AudioToImagePreprocessor):
         self.debug = debug
 
         # add extra Actions
+        # TODO: changing .augmentation should change pipeline
         if self.augmentation:
             self.actions.overlay = preprocess.ImgOverlay(
                 overlay_df=overlay_df,
@@ -346,7 +347,7 @@ class CnnPreprocessor(AudioToImagePreprocessor):
                 overlay_prob=1,
                 max_overlay_num=1,
                 overlay_class=None,
-                # might not update with changes?
+                # TODO: check - might not update with changes?
                 loader_pipeline=self.pipeline[0:4],
                 update_labels=False,
             )
@@ -357,6 +358,7 @@ class CnnPreprocessor(AudioToImagePreprocessor):
             self.actions.add_noise = preprocess.TensorAddNoise(std=0.005)
 
         # re-define the action sequence
+        # thought: may want to random affine after normalization
         if self.augmentation:
             self.pipeline = [
                 self.actions.load_audio,
@@ -365,11 +367,11 @@ class CnnPreprocessor(AudioToImagePreprocessor):
                 self.actions.to_img,
                 self.actions.overlay,
                 self.actions.color_jitter,
-                self.actions.random_affine,
                 self.actions.to_tensor,
                 self.actions.tensor_aug,
                 self.actions.add_noise,
                 self.actions.normalize,
+                self.actions.random_affine,
             ]
         else:
             self.pipeline = [

@@ -160,7 +160,15 @@ class TorchColorJitter(BaseAction):
 
 
 class TorchRandomAffine(BaseAction):
-    """Action child class with torchvision.transforms.RandomAffine"""
+    """Action child class with torchvision.transforms.RandomAffine
+
+    can act on PIL image or torch Tensor
+
+    note: we recommend applying RandomAffine after image
+    normalization. In this case, an intermediate grey value is 0.
+    If normalization is applied after RandomAffine on a PIL image, use an
+    intermediate fill color such as (122,122,122).
+    """
 
     def __init__(self, **kwargs):
         super(TorchRandomAffine, self).__init__(**kwargs)
@@ -168,7 +176,7 @@ class TorchRandomAffine(BaseAction):
         # default parameters
         self.params["degrees"] = 0
         self.params["translate"] = (0.2, 0.03)
-        self.params["fillcolor"] = (50, 50, 50)
+        self.params["fill"] = (0, 0, 0)  # 0-255
 
         # add parameters passed to __init__
         self.params.update(kwargs)
