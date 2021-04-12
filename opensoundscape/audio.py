@@ -137,23 +137,28 @@ class Audio:
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
 
-    def resample(self, sample_rate):
+    def resample(self, sample_rate, resample_type=self.resample_type):
         """ Resample Audio object
 
         Args:
-            sample_rate: the new sample rate
+            sample_rate (scalar):   the new sample rate
+            resample_type (str):    resampling algorithm to use
+                                    [default: self.resample_type of instance]
 
         Returns:
             a new Audio object of the desired sample rate
         """
         samples_resampled = librosa.resample(
-            self.samples, orig_sr=self.sample_rate, target_sr=sample_rate
+            self.samples,
+            orig_sr=self.sample_rate,
+            target_sr=sample_rate,
+            res_type=resample_type,
         )
 
         return Audio(
             samples_resampled,
             sample_rate,
-            resample_type=self.resample_type,
+            resample_type=resample_type,
             max_duration=self.max_duration,
         )
 
