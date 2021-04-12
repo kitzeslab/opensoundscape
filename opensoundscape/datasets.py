@@ -340,6 +340,7 @@ class CnnPreprocessor(AudioToImagePreprocessor):
 
         # add extra Actions
         # TODO: changing .augmentation should change pipeline
+        # TODO: should be able to create this without overlay_df
         if self.augmentation:
             self.actions.overlay = preprocess.ImgOverlay(
                 overlay_df=overlay_df,
@@ -354,11 +355,12 @@ class CnnPreprocessor(AudioToImagePreprocessor):
 
             self.actions.color_jitter = preprocess.TorchColorJitter()
             self.actions.random_affine = preprocess.TorchRandomAffine()
-            self.actions.tensor_aug = preprocess.TensorAugment()
+            self.actions.time_mask = preprocess.TimeMask()
+            self.actions.frequency_mask = preprocess.FrequencyMask()
+            # self.actions.time_warp = preprocess.TimeWarp()
             self.actions.add_noise = preprocess.TensorAddNoise(std=0.005)
 
         # re-define the action sequence
-        # thought: may want to random affine after normalization
         if self.augmentation:
             self.pipeline = [
                 self.actions.load_audio,
@@ -368,7 +370,9 @@ class CnnPreprocessor(AudioToImagePreprocessor):
                 self.actions.overlay,
                 self.actions.color_jitter,
                 self.actions.to_tensor,
-                self.actions.tensor_aug,
+                # self.actions.time_warp,
+                self.actions.time_mask,
+                self.actions.frequency_mask,
                 self.actions.add_noise,
                 self.actions.normalize,
                 self.actions.random_affine,

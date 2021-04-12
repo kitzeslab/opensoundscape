@@ -9,7 +9,12 @@ import torch
 
 
 def time_warp(spec, W=5):
+    """apply time stretch and shearing to spectrogram
 
+    fills empty space on right side with horizontal bars
+
+    W controls amount of warping. Random with occasional large warp.
+    """
     batch_size = spec.shape[0]
     num_channel = spec.shape[1]
     num_rows = spec.shape[2]
@@ -17,7 +22,7 @@ def time_warp(spec, W=5):
     device = spec.device
 
     if num_channel != 1:
-        raise NameError("Warping only support one channel input currently.")
+        raise NameError("Warping only supports one channel input currently.")
 
     spec = spec.reshape(batch_size, num_rows, spec_len)
 
@@ -306,6 +311,14 @@ def interpolate_bilinear(
 
 
 def freq_mask(spec, F=30, max_masks=3, replace_with_zero=False):
+    """draws horizontal bars over the image
+
+    F:maximum frequency-width of bars in pixels
+
+    max_masks: maximum number of bars to draw
+
+    replace_with_zero: if True, bars are 0s, otherwise, mean img value
+    """
     cloned = spec.clone()
     batch_size = cloned.shape[0]
     num_mel_channels = cloned.shape[2]
@@ -339,6 +352,14 @@ def freq_mask(spec, F=30, max_masks=3, replace_with_zero=False):
 
 
 def time_mask(spec, T=40, max_masks=3, replace_with_zero=False):
+    """draws vertical bars over the image
+
+    T:maximum time-width of bars in pixels
+
+    max_masks: maximum number of bars to draw
+
+    replace_with_zero: if True, bars are 0s, otherwise, mean img value
+    """
     cloned = spec.clone()
     batch_size = cloned.shape[0]
     len_spectro = cloned.shape[3]

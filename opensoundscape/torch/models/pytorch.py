@@ -150,8 +150,6 @@ class PytorchModel(BaseModule):
         self.network.class_freq = np.sum(self.train_dataset.df.values, 0)
         self.network.setup_loss()
 
-        # TODO: do we need to save the state dict of the scheduler?
-        # (yes, to continue training)
         self.scheduler = optim.lr_scheduler.StepLR(
             self.opt_net,
             step_size=self.lr_update_interval,
@@ -493,11 +491,10 @@ class PytorchModel(BaseModule):
         """
         model_dict = torch.load(path)
 
-        init_weights = model_dict["model_state_dict"]
-
         # load the nn feature/classifier weights from the checkpoint
-        if load_weights:
+        if load_weights and "model_state_dict" in model_dict:
             print("loading weights from saved object")
+            init_weights = model_dict["model_state_dict"]
             # init_weights = OrderedDict({'network.'+k: init_weights[k]
             #                         for k in init_weights})
             if load_classifier_weights:
@@ -521,7 +518,7 @@ class PytorchModel(BaseModule):
 
         # create an optimizer then load the checkpoint state dict
         self.opt_net = self.init_optimizer()
-        if load_optimizer_state_dict:
+        if load_optimizer_state_dict and "optimizer_state_dict" in model_dict:
             self.opt_net.load_state_dict(model_dict["optimizer_state_dict"])
 
         # load other saved info

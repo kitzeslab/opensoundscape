@@ -187,7 +187,7 @@ class TorchRandomAffine(BaseAction):
 
 
 class ImgToTensor(BaseAction):
-    """convert PIL.Image to torch Tensor"""
+    """convert PIL.Image w/range [0,255] to torch Tensor w/range [0,1]"""
 
     def go(self, x):
         x = x.convert("RGB")
@@ -204,6 +204,8 @@ class TensorNormalize(BaseAction):
         # default parameters
         self.params["mean"] = 0.5
         self.params["std"] = 0.5
+        # these are NOT the target mu and sd, but the assumed mu and sd of img->
+        # callibrates to mu=0, sd=1 by shift and scale
 
         # add parameters passed to __init__
         self.params.update(kwargs)
@@ -214,7 +216,7 @@ class TensorNormalize(BaseAction):
         return transform(x)
 
 
-class TensorAugment(BaseAction):
+class TimeWarp(BaseAction):
     """perform tensor augmentations
 
     such as time warp, time mask, and frequency mask
@@ -222,22 +224,119 @@ class TensorAugment(BaseAction):
 
     """
 
+    def __init__(self, **kwargs):
+        super(TimeWarp, self).__init__(**kwargs)
+
+        # default parameters
+        self.params["warp_amount"] = 5
+
+        # add parameters passed to __init__
+        self.params.update(kwargs)
+
+    def go(self, x):
+        """torch Tensor in, torch Tensor out"""
+        from opensoundscape.torch import tensor_augment as tensaug
+
+        # add "batch" dimension to tensor and use just first channel
+        x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+        # perform transform
+        x = tensaug.time_warp(x.clone(), W=self.params["warp_amount"])
+        # remove "batch" dimension
+        x = x[0, :]
+        # Copy 1 channel to 3 RGB channels
+        x = torch.cat([x] * 3, dim=0)  # dim=1)
+        return x
+
+
+class TimeMask(BaseAction):
+    """add vertical bars over image"""
+
+    def __init__(self, **kwargs):
+        super(TimeMask, self).__init__(**kwargs)
+
+        # default parameters
+        self.params["max_masks"] = 3
+        self.params["max_width_px"] = 40
+
+        # add parameters passed to __init__
+        self.params.update(kwargs)
+
+    def go(self, x):
+        """torch Tensor in, torch Tensor out"""
+        from opensoundscape.torch import tensor_augment as tensaug
+
+        # add "batch" dimension to tensor and use just first channel
+        x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+        # perform transform
+        x = tensaug.time_mask(
+            x, T=self.params["max_width_px"], max_masks=self.params["max_masks"]
+        )
+        # remove "batch" dimension
+        x = x[0, :]
+        # Copy 1 channel to 3 RGB channels
+        x = torch.cat([x] * 3, dim=0)
+        return x
+
+
+class FrequencyMask(BaseAction):
+    """add vertical bars over image"""
+
+    def __init__(self, **kwargs):
+        super(FrequencyMask, self).__init__(**kwargs)
+
+        # default parameters
+        self.params["max_masks"] = 3
+        self.params["max_width_px"] = 40
+
+        # add parameters passed to __init__
+        self.params.update(kwargs)
+
+    def go(self, x):
+        """torch Tensor in, torch Tensor out"""
+        from opensoundscape.torch import tensor_augment as tensaug
+
+        # add "batch" dimension to tensor and use just first channel
+        x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+        # perform transform
+        x = tensaug.freq_mask(
+            x, F=self.params["max_width_px"], max_masks=self.params["max_masks"]
+        )
+        # remove "batch" dimension
+        x = x[0, :]
+        # Copy 1 channel to 3 RGB channels
+        x = torch.cat([x] * 3, dim=0)
+        return x
+
+
+class TensorAugment(BaseAction):
+    """combination of 3 augmentations with hard-coded parameters
+
+    time warp, time mask, and frequency mask
+    """
+
+    def __init__(self, **kwargs):
+        super(TensorAugment, self).__init__(**kwargs)
+
+        # default parameters
+        self.params["time_warp"] = True
+        self.params["time_mask"] = True
+        self.params["freq_mask"] = True
+
+        # add parameters passed to __init__
+        self.params.update(kwargs)
+
     def go(self, x):
         from opensoundscape.torch import tensor_augment as tensaug
 
         """torch Tensor in, torch Tensor out"""
-        # X is currently shape [3, width, height]
-        # Take to shape [1, 1, width, height] for use with `tensor_augment`
-        # (tensor_augment is design for batch of [1,w,h] tensors)
-        # since batch size is '1' (we are only doing one at a time)
+        # add "batch" dimension to tensor and keep just first channel
         x = x[0, :, :].unsqueeze(0).unsqueeze(0)  # was: X = X[:,0].unsqueeze(1)
         x = tensaug.time_warp(x.clone(), W=10)
         x = tensaug.time_mask(x, T=50, max_masks=5)
         x = tensaug.freq_mask(x, F=50, max_masks=5)
-
         # remove "batch" dimension
         x = x[0, :]
-        # Transform shape from 1 dimension to 3 dimensions
+        # Copy 1 channel to 3 RGB channels
         x = torch.cat([x] * 3, dim=0)  # dim=1)
 
         return x
