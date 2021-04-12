@@ -164,12 +164,16 @@ def query_annotations(directory, cls, col, print_out=False):
 
 
 def split_starts_ends(raven_file, col, starts, ends, species=None, min_label_len=0):
-    """Use a list of start and end times to split a Raven files
+    """Split Raven annotations using a list of start and end times
 
-    This function can be used with lists of start and end times.
-    It is called by `split_single_annotation()`, which generates the lists.
-    It is also called by `raven_audio_split_and_save()`, which get the lists
-    from metadata about audio files split by opensoundscape.audio.split_and_save.
+    This function takes an array of start times and an array of end times,
+    creating a one-hot encoded labels file by finding all Raven labels
+    that fall within each start and end time pair.
+
+    This function is called by `split_single_annotation()`, which generates lists
+    of start and end times. It is also called by `raven_audio_split_and_save()`,
+    which gets the lists from metadata about audio files split by
+    opensoundscape.audio.split_and_save.
 
     Args:
         raven_file (pathlib.Path or str):   path to selections.txt file
@@ -184,8 +188,9 @@ def split_starts_ends(raven_file, col, starts, ends, species=None, min_label_len
                                             after the start of the split. By default, any label is kept [default: 0]
 
     Returns:
-        splits_df (pd.DataFrame): columns 'seg_start', 'end_start', and all species,
-            each row containing 1/0 annotations for each species in a segment
+        splits_df (pd.DataFrame):
+            columns: 'seg_start', 'seg_end', and all unique labels ('species')
+            rows: one per segment, containing 1/0 annotations for each potential label
     """
     selections_df = pd.read_csv(raven_file, sep="\t")
     if col not in selections_df.columns:
@@ -201,7 +206,7 @@ def split_starts_ends(raven_file, col, starts, ends, species=None, min_label_len
     cols = ["seg_start", "seg_end", *species]
     splits_df = pd.DataFrame(columns=cols)
 
-    # Create a dataframe of split_len_s segments and the annotations in each segment
+    # Create a dataframe of the annotations in each segment
     dfs = []
     for start, end in zip(starts, ends):
 
@@ -237,6 +242,9 @@ def split_single_annotation(
     min_label_len=0,
 ):
     """Split a Raven selection table into short annotations
+
+    Aggregate one-hot annotations for even-lengthed time segments, drawing
+    annotations from a specified column of a Raven selection table
 
     Args:
         raven_file (str):               path to Raven selections file
