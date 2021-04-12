@@ -192,9 +192,12 @@ def split_starts_ends(raven_file, col, starts, ends, species=None, min_label_len
             columns: 'seg_start', 'seg_end', and all unique labels ('species')
             rows: one per segment, containing 1/0 annotations for each potential label
     """
+    if not len(starts) == len(ends):
+        raise ValueError("Arrays of start times and end times must be the same length.")
+
     selections_df = pd.read_csv(raven_file, sep="\t")
     if col not in selections_df.columns:
-        return
+        raise ValueError(f"Selections dataframe did not include column {col}")
 
     # If not specified, get list of species (only gets species in current file)
     if species is None:

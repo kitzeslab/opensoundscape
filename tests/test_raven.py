@@ -173,6 +173,25 @@ def test_raven_query_annotations_check_on_missing_col_warns(
         )
 
 
+def test_split_starts_ends_uneven_length_error():
+    with pytest.raises(ValueError):
+        raven.split_starts_ends(
+            raven_file="irrelevant", col="irrelevant", starts=[1, 2], ends=[1]
+        )
+
+
+def test_split_starts_ends_col_not_in_dataframe_error(
+    raven_annotations_lower_okay_short,
+):
+    with pytest.raises(ValueError):
+        raven.split_starts_ends(
+            raven_file=raven_annotations_lower_okay_short,
+            col="column_not_in_here",
+            starts=[1],
+            ends=[2],
+        )
+
+
 def test_raven_split_single_annotation_short(raven_annotations_lower_okay_short):
     result_df = raven.split_single_annotation(
         raven_annotations_lower_okay_short, col="class", split_len_s=5
@@ -321,6 +340,7 @@ def test_raven_audio_split_and_save_dry_run(
         dry_run=True,
     )
     len(list(destination.glob("*"))) == 0
+    assert not destination.exists()
 
 
 def test_raven_audio_split_and_save_labeled_only(
