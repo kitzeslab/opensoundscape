@@ -37,7 +37,6 @@ class PytorchModel(BaseModule):
     """
 
     # TODO: move hyperparameters into self.hyperparameters (dictionary?)
-
     def __init__(
         self, architecture, classes
     ):  # train_dataset, valid_dataset, architecture, ):
@@ -62,61 +61,68 @@ class PytorchModel(BaseModule):
         self.sampler = None  # can be "imbalanced"
         self.current_epoch = 0
 
-        ### training parameters ###
-        # defaults from https://github.com/zhmiao/BirdMultiLabel/blob/master/configs/XENO/multi_label_reg_10_091620.yaml
-        # feature
-        self.lr_feature = 0.001
-        self.momentum_feature = 0.9
-        self.weight_decay_feature = 0.0005
-        # classifier
-        self.lr_classifier = 0.01
-        self.momentum_classifier = 0.9
-        self.weight_decay_classifier = 0.0005
-        # lr_scheduler
-        self.lr_update_interval = 10  # update learning rates every # epochs
-        self.lr_cooling_factor = 0.7  # multiply learning rates by # on each update
-        # optimizer
-        self.opt_net = None
-
-        ### metrics ###
-        self.metrics_fn = multiclass_metrics  # or binary_metrics
-        self.single_target = False  # if True: predict class w max score
-        # dictionaries with accuracy metrics & loss for each epoch
-        self.train_metrics = {}
-        self.valid_metrics = {}
-        self.loss = {}  # could add TensorBoard tracking
+        # TODO: can it be easier to change the loss function?
 
         ### architecture ###
         # (feature extraction + classifier + loss fn)
         self.network = architecture
 
-        ##TODO: should be easier to change loss function
+        ### training parameters ###
+        # defaults partially from https://github.com/zhmiao/BirdMultiLabel/blob/master/configs/XENO/multi_label_reg_10_091620.yaml
+        # optimizer
+        self.opt_net = None  # don't set directly. initialized during training
+        self.optimizer = optim.SGD  # or torch.optim.Adam, etc
+        self.optimizer_params = {
+            # optimization parameters for parts of the networks - see
+            # https://pytorch.org/docs/stable/optim.html#per-parameter-options
+            "feature": {  # optimizer parameters for feature extraction layers
+                "params": self.network.feature.parameters(),
+                "lr": 0.001,
+                "momentum": 0.9,
+                "weight_decay": 0.0005,
+            },
+            "classifier": {  # optimizer parameters for classification layers
+                "params": self.network.classifier.parameters(),
+                "lr": 0.01,
+                "momentum": 0.9,
+                "weight_decay": 0.0005,
+            },
+        }
+        # lr_scheduler
+        self.lr_update_interval = 10  # update learning rates every # epochs
+        self.lr_cooling_factor = 0.7  # multiply learning rates by # on each update
 
-    def init_optimizer(self, optimizer_class=optim.SGD, params_list=None):
-        """overwrite this method in subclass to use a different optimizer"""
-        if params_list is None:
-            # default params list
-            params_list = [
-                {
-                    "params": self.network.feature.parameters(),
-                    "lr": self.lr_feature,
-                    "momentum": self.momentum_feature,
-                    "weight_decay": self.weight_decay_feature,
-                },
-                {
-                    "params": self.network.classifier.parameters(),
-                    "lr": self.lr_classifier,
-                    "momentum": self.momentum_classifier,
-                    "weight_decay": self.weight_decay_classifier,
-                },
-            ]
-        return optimizer_class(params_list)
+        ### metrics ###
+        self.metrics_fn = multiclass_metrics  # or binary_metrics
+        self.single_target = False  # if True: predict only class w max score
+        # dictionaries to store accuracy metrics & loss for each epoch
+        self.train_metrics = {}
+        self.valid_metrics = {}
+        self.loss = {}  # could add TensorBoard tracking
 
-    def set_train(self, batch_size, num_workers):
+    def _init_optimizer(self):
+        """initialize an instance of self.optimizer
+
+        This function is called at during .train()
+
+        To modify the optimizer, change the value of
+        self.optimizer and/or self.optimizer_params
+        prior to calling .train().
+        """
+        return self.optimizer(self.optimizer_params.values())
+
+    def _set_train(self, batch_size, num_workers):
         """Prepare network for training on train_dataset
 
-        Sets up the optimization, loss function, and network.
-        Creates Train and Validation data loaders"""
+        Args:
+            batch_size: number of training files to load/process before
+                        re-calculating the loss function and backpropagation
+            num_workers: parallelization (number of cores or cpus)
+
+        Effects:
+            Sets up the optimization, loss function, and network.
+            Creates self.train_loader and self.valid_loader
+        """
 
         ###########################
         # Setup cuda and networks #
@@ -125,40 +131,40 @@ class PytorchModel(BaseModule):
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
-
-        # setup network
-        # self.main_logger.info("\nGetting {} model.".format(self.args.model_name))
         self.network.to(self.device)
 
         ######################
         # Optimization setup #
         ######################
-        # Setup optimizer parameters for each network component
-        # Setup optimizer and optimizer scheduler
 
+        # Setup optimizer parameters for each network component
         # If optimizer already exists, keep the same state dict
         # (for instance, user may be resuming training)
-        # we re-create it bc the user may have changed self.init_optimizer()
+        # we re-create it bc the user may have changed self.optimizer
         if self.opt_net is not None:
             optim_state_dict = self.opt_net.state_dict()
-            self.opt_net = self.init_optimizer()
+            self.opt_net = self._init_optimizer()
             self.opt_net.load_state_dict(optim_state_dict)
         else:
-            self.opt_net = self.init_optimizer()
+            self.opt_net = self._init_optimizer()
 
-        # Update loss function now that we have class counts from train_dataset
+        # Update loss function in case it required knowledge of class_freq
         self.network.class_freq = np.sum(self.train_dataset.df.values, 0)
         self.network.setup_loss()
 
+        # Set up learning rate cooling schedule
         self.scheduler = optim.lr_scheduler.StepLR(
             self.opt_net,
             step_size=self.lr_update_interval,
             gamma=self.lr_cooling_factor,
+            last_epoch=self.current_epoch - 1,
         )
 
-        # set up train_loader and valid_loader dataloaders
+        ######################
+        # Dataloader setup #
+        ######################
 
-        # this samples batches of training images + labels from train_dataset
+        # train_loader samples batches of images + labels from train_dataset
         self.train_loader = get_dataloader(
             self.train_dataset,
             batch_size=batch_size,
@@ -167,7 +173,7 @@ class PytorchModel(BaseModule):
             sampler=self.sampler,
         )
 
-        # this samples batches of training images + labels from valid_dataset
+        # valid_loader samples batches of images + labels from valid_dataset
         self.valid_loader = get_dataloader(
             self.valid_dataset,
             batch_size=batch_size,
@@ -179,7 +185,7 @@ class PytorchModel(BaseModule):
     def train_epoch(self):
         """perform forward pass, loss, backpropagation for one epoch
 
-        return: (targets, predictions, scores) for training files
+        Returns: (targets, predictions, scores) on training files
         """
         self.network.train()
 
@@ -283,19 +289,28 @@ class PytorchModel(BaseModule):
         save_interval=1,  # save weights every n epochs
         log_interval=10,  # print metrics every n batches
     ):
-        """train the model on train_dataset samples for epochs.
+        """train the model on samples from train_dataset
 
         If customized loss functions, networks, optimizers, or schedulers
-        are desired, modify the object before running .train().
+        are desired, modify the respective attributes before calling .train().
 
-        num_workers: pytorch child processes (=cpus), use 0 for root process
-
-        train_dataset: a Preprocessor that loads audio files and provides Tensor
-        valid_dataset: a Preprocessor for evaluating performance
-
-        save interval: save weights to disk every n epochs
-        log_interval: print some basic metrics every n batches
-        save_path: where to save model weights
+        Args:
+            train_dataset: a Preprocessor that loads sample (audio file + label)
+                           to Tensor in batches (see docs/tutorials for details)
+            valid_dataset: a Preprocessor for evaluating performance
+            epochs: number of epochs to train for [default=1]
+                    (1 epoch constitutes 1 view of each training sample)
+            batch_size: number of training files to load/process before
+                        re-calculating the loss function and backpropagation
+            num_workers: parallelization (ie, cores or cpus)
+                        Note: use 0 for single (root) process (not 1)
+            save_path: location to save intermediate and best model objects
+                        [default=".", ie current location of script]
+            save_interval: interval in epochs to save model object with weights
+                            [default:1] Note: the best model is always saved to
+                            best.model in addition to other saved epochs.
+            log_interval: interval in epochs to evaluate model with validation
+                          dataset and print metrics to the log
 
         #TODO: verbose switch
         """
@@ -306,7 +321,7 @@ class PytorchModel(BaseModule):
         self.valid_dataset = valid_dataset
         self.save_path = save_path
 
-        self.set_train(batch_size, num_workers)
+        self._set_train(batch_size, num_workers)
 
         best_f1 = 0.0
         best_epoch = 0
@@ -337,7 +352,9 @@ class PytorchModel(BaseModule):
             print(f"\t F1: {self.valid_metrics[self.current_epoch]['f1']}")
 
             ### Save ###
-            if (self.current_epoch + 1) % self.save_interval == 0:
+            if (
+                self.current_epoch + 1
+            ) % self.save_interval == 0 or epoch >= epochs - 1:
                 print("Saving weights, metrics, and train/valid scores.")
 
                 self.save(
@@ -349,7 +366,7 @@ class PytorchModel(BaseModule):
                     }
                 )
 
-            # if best, update & save weights
+            # if best model (by F1 score), update & save weights to best.model
             f1 = self.valid_metrics[self.current_epoch]["f1"]
             if f1 > best_f1:
                 self.network.update_best()
@@ -370,12 +387,9 @@ class PytorchModel(BaseModule):
 
         print(f"\nBest Model Appears at Epoch {best_epoch} with F1 {best_f1:.3f}.")
 
-        # save after the last epoch
-        self.save()  # TODO: this will overwrite a saved epoch with metrics
-
     def evaluate(self, loader, set_eval=True):
         """Predict on data from DataLoader, return targets, preds, scores."""
-        # TODO: should simply call predict()
+        # TODO: should simply call predict() with flag to return targets & preds
 
         # TODO: Do we need these lines?
         if torch.cuda.is_available():
@@ -460,12 +474,15 @@ class PytorchModel(BaseModule):
             "valid_metrics": self.valid_metrics,
             "train_metrics": self.valid_metrics,
             "loss": self.loss,
+            "lr_update_interval": self.lr_update_interval,
+            "lr_cooling_factor": self.lr_cooling_factor,
+            "single_target": self.single_target,
         }
         if save_weights:
             model_dict.update({"model_state_dict": self.network.state_dict()})
         if save_optimizer:
             if self.opt_net is None:
-                self.opt_net = self.init_optimizer()
+                self.opt_net = self._init_optimizer()
             model_dict.update({"optimizer_state_dict": self.opt_net.state_dict()})
 
         # user can provide an arbitrary dictionary of extra things to save
@@ -490,6 +507,15 @@ class PytorchModel(BaseModule):
         verbose: if True, print missing/unused keys for model weights
         """
         model_dict = torch.load(path)
+
+        # load misc saved items
+        self.current_epoch = model_dict["epoch"]
+        self.train_metrics = model_dict["train_metrics"]
+        self.valid_metrics = model_dict["valid_metrics"]
+        self.loss = model_dict["loss"]
+        self.lr_update_interval = model_dict["lr_update_interval"]
+        self.lr_cooling_factor = model_dict["lr_cooling_factor"]
+        self.single_target = model_dict["single_target"]
 
         # load the nn feature/classifier weights from the checkpoint
         if load_weights and "model_state_dict" in model_dict:
@@ -517,15 +543,9 @@ class PytorchModel(BaseModule):
                 print("unused_keys: {}".format(sorted(list(unused_keys))))
 
         # create an optimizer then load the checkpoint state dict
-        self.opt_net = self.init_optimizer()
+        self.opt_net = self._init_optimizer()
         if load_optimizer_state_dict and "optimizer_state_dict" in model_dict:
             self.opt_net.load_state_dict(model_dict["optimizer_state_dict"])
-
-        # load other saved info
-        self.current_epoch = model_dict["epoch"]
-        self.train_metrics = model_dict["train_metrics"]
-        self.valid_metrics = model_dict["valid_metrics"]
-        self.loss = model_dict["loss"]
 
     def predict(
         self,
@@ -533,22 +553,18 @@ class PytorchModel(BaseModule):
         batch_size=1,
         num_workers=0,
         # apply_softmax=False #TODO: re-add softmax option (and logit-softmax?)
+        # TODO: add flags to return labels and thresholded predictions
     ):
         """Generate predictions on a dataset from a pytorch model object
         Input:
             prediction_dataset:
                             a pytorch dataset object that returns tensors, such as datasets.SingleTargetAudioDataset()
-            batch_size:     The size of the batches (# files) [default: 1]
-            num_workers:    The number of cores to use for batch preparation [default: 1]
-                            - if you want to use all the cores on your machine, set it to 0 (this could freeze your computer)
-            apply_softmax:  Apply a softmax activation layer to the raw outputs of the model
-            label_dict:     List of names of each class, with indices corresponding to NumericLabels [default: None]
-                            - if None, the dataframe returned will have numeric column names
-                            - if list of class names, returned dataframe will have class names as column names
+            batch_size:     Number of files to load simultaneously [default: 1]
+            num_workers:    parallelization (ie cpus or cores), use 0 for current proess
+            #apply_softmax:  Apply a softmax activation layer to the raw outputs of the model
+
         Output:
             A dataframe with the CNN prediction results for each class and each file
-        Notes:
-            if label_dict is not None, the returned dataframe's columns will be class names instead of numeric labels
         """
 
         if torch.cuda.is_available():
@@ -567,39 +583,28 @@ class PytorchModel(BaseModule):
         )
 
         ### Prediction ###
-
         total_logits = []
 
         # Forward and record # correct predictions of each class
-        with torch.set_grad_enabled(False):
+        with torch.set_grad_enabled(False):  # disable gradient updates during inference
 
-            for sample in dataloader:
-                data = sample["X"].to(self.device)
+            for batch in dataloader:
+                # get batch Tensors
+                batch_tensors = batch["X"].to(self.device)
+                batch_tensors.requires_grad = False
 
-                # setup data
-                data.requires_grad = False
-                # data = torch.cat([data] * 3, dim=1)
-
-                # forward pass of network: feature extratcor + classifier
-                feats = self.network.feature(data)
+                # forward pass of network: feature extractor + classifier
+                feats = self.network.feature(batch_tensors)
                 logits = self.network.classifier(feats)
 
-                total_logits.append(logits.detach().cpu().numpy())  # [:, target_id])
-        total_logits = np.concatenate(total_logits, axis=0)
+                # todo: could apply softmax here
 
-        # all_predictions = []
-        # for i, inputs in enumerate(dataloader):
-        #     predictions = self.network(inputs["X"].to(self.device))
-        # if apply_softmax:
-        #     softmax_val = softmax(predictions, 1).detach().cpu().numpy()
-        #     for x in softmax_val:
-        #         all_predictions.append(x[1])  # keep the present, not absent
-        #     labels = prediction_dataset.df.columns.values
-        # else:
-        #     for x in predictions.detach().cpu().numpy():
-        #         all_predictions.append(list(x))  # .astype('float64')
-        #     label = prediction_dataset.df.columns.values[0]
-        #     labels = [label + "_absent", label + "_present"]
+                # detach the returned value: its currently tethered to gradients
+                # and updates via the loss function/backprop. detach() returns
+                # just numeric values.
+                total_logits.append(logits.detach().cpu().numpy())
+        # aggregate predictions across all batches
+        total_logits = np.concatenate(total_logits, axis=0)
 
         # return a score DataFrame with samples as index, classes as columns
         samples = prediction_dataset.df.index.values
