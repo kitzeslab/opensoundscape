@@ -212,6 +212,9 @@ class Spectrogram:
 
         """
 
+        if min_f >= max_f:
+            raise ValueError(f"min_f must be less than max_f (got min_f {min_f}, max_f {max_f}")
+        
         # find indices of the frequencies in spec_freq closest to min_f and max_f
         lowest_index = np.abs(self.frequencies - min_f).argmin()
         highest_index = np.abs(self.frequencies - max_f).argmin()
