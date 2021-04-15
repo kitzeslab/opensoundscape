@@ -524,7 +524,10 @@ class PytorchModel(BaseModule):
 
         verbose: if True, print missing/unused keys for model weights
         """
-        model_dict = torch.load(path)
+        try:
+            model_dict = torch.load(path)
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            model_dict = torch.load(path, map_location=torch.device("cpu"))
 
         # load misc saved items
         self.current_epoch = model_dict["epoch"]
@@ -729,51 +732,6 @@ class PytorchModel(BaseModule):
         )
 
         return score_df, pred_df, label_df
-
-    def predict_simple(self, prediction_dataset):
-        """Generate predictions on a dataset"""
-
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
-
-        self.network.to(self.device)
-
-        self.network.eval()
-
-        dataloader = torch.utils.data.DataLoader(
-            prediction_dataset,
-            batch_size=1,
-            num_workers=0,
-            shuffle=False,
-            # pin_memory=True,
-            # TODO: what does pin_memory=True do?
-        )
-
-        ### Prediction ###
-        total_scores = []
-
-        # disable gradient updates during inference
-        with torch.set_grad_enabled(False):
-
-            for batch in dataloader:
-                # get batch of Tensors
-                batch_tensors = batch["X"].to(self.device)
-
-                # forward pass of network: feature extractor + classifier
-                feats = self.network.feature(batch_tensors)
-                logits = self.network.classifier(feats)
-
-                total_scores.append(logits.detach().cpu().numpy())
-
-        # aggregate across all batches
-        total_scores = np.concatenate(total_scores, axis=0)
-
-        # return DataFrame with same index/columns as prediction_dataset's df
-        samples = prediction_dataset.df.index.values
-        score_df = pd.DataFrame(index=samples, data=total_scores, columns=self.classes)
-        return score_df
 
     @classmethod
     def from_checkpoint(cls, path):
