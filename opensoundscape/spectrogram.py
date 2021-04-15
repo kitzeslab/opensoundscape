@@ -213,7 +213,9 @@ class Spectrogram:
         """
 
         if min_f >= max_f:
-            raise ValueError(f"min_f must be less than max_f (got min_f {min_f}, max_f {max_f}")
+            raise ValueError(
+                f"min_f must be less than max_f (got min_f {min_f}, max_f {max_f}"
+            )
         
         # find indices of the frequencies in spec_freq closest to min_f and max_f
         lowest_index = np.abs(self.frequencies - min_f).argmin()
@@ -343,17 +345,19 @@ class Spectrogram:
     #         with open(destination,'wb') as file:
     #             pickle.dump(self,file)
 
-    def to_image(self, shape=None, mode="RGB", spec_range=[-100, -20]):
-        """
-        create a Pillow Image from spectrogram
-        linearly rescales values from db_range (default [-100, -20]) to [255,0]
-        (ie, -20 db is loudest -> black, -100 db is quietest -> white)
+    def to_image(self, shape=None, mode="RGB"):
+        """Create a Pillow Image from spectrogram
+        
+        Linearly rescales values in the spectrogram from 
+        self.decibel_limits to [255,0]
+        
+        Default of self.decibel_limits on load is [-100, -20], so, e.g.,
+        -20 db is loudest -> black, -100 db is quietest -> white
 
         Args:
             destination: a file path (string)
             shape=None: tuple of image dimensions, eg (224,224)
             mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
-            spec_range=[-100,-20]: the lowest and highest possible values in the spectrogram
 
         Returns:
             Pillow Image object
@@ -361,7 +365,11 @@ class Spectrogram:
         from PIL import Image
 
         # rescale spec_range to [255, 0]
-        array = linear_scale(self.spectrogram, in_range=spec_range, out_range=(255, 0))
+        array = linear_scale(
+            self.spectrogram,
+            in_range=self.decibel_limits,
+            out_range=(255, 0),
+        )
 
         # create and save pillow Image
         # we pass the array upside-down to create right-side-up image
