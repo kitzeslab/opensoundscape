@@ -216,7 +216,7 @@ class Spectrogram:
             raise ValueError(
                 f"min_f must be less than max_f (got min_f {min_f}, max_f {max_f}"
             )
-        
+
         # find indices of the frequencies in spec_freq closest to min_f and max_f
         lowest_index = np.abs(self.frequencies - min_f).argmin()
         highest_index = np.abs(self.frequencies - max_f).argmin()
@@ -366,9 +366,7 @@ class Spectrogram:
 
         # rescale spec_range to [255, 0]
         array = linear_scale(
-            self.spectrogram,
-            in_range=self.decibel_limits,
-            out_range=(255, 0),
+            self.spectrogram, in_range=self.decibel_limits, out_range=(255, 0)
         )
 
         # create and save pillow Image
