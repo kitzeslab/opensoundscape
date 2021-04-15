@@ -18,6 +18,8 @@ class ParameterRequiredError(Exception):
     """Raised if action.go(x) called when action.go(x,x_labels) is required"""
 
 
+# TODO: documentation for actions should include parameters or reference to docs
+
 ### Audio transforms ###
 class BaseAction:
     """Parent class for all Pipeline Elements"""
@@ -111,8 +113,26 @@ class AudioToSpectrogram(BaseAction):
         return Spectrogram.from_audio(audio, **self.params)
 
 
+class SpectrogramBandpass(BaseAction):
+    """Action child class for Spectrogram.bandpass()
+
+    initialize like: SpectrogramBandpass(1000,5000)
+    to bandpass the spectrogram from 1kHz to 5Khz
+
+    parmas: min_f, max_f
+    see opensoundscape.spectrogram.Spectrogram.bandpass() for documentation
+
+    Spectrogram in, Spectrogram out
+    """
+
+    def go(self, spectrogram):
+        return spectrogram.bandpass(**self.params)
+
+
 class SpecToImg(BaseAction):
-    """Action child class for spec to image"""
+    """Action child class for spec to image
+
+    Spectrogram in, PIL.Image out"""
 
     # shape=(self.width, self.height), mode="L" during construction
     def go(self, spectrogram):
@@ -249,7 +269,7 @@ class TimeWarp(BaseAction):
 
 
 class TimeMask(BaseAction):
-    """add vertical bars over image"""
+    """add random vertical bars over image"""
 
     def __init__(self, **kwargs):
         super(TimeMask, self).__init__(**kwargs)
@@ -279,7 +299,16 @@ class TimeMask(BaseAction):
 
 
 class FrequencyMask(BaseAction):
-    """add vertical bars over image"""
+    """add random horizontal bars over image
+
+    initialize with **kwargs parameters, or
+    use .set(**kwargs) to update parameters
+
+    Parameters:
+        max_masks: max number of horizontal bars [default: 3]
+        max_width_px: maximum height of horizontal bars in image pixel units
+        #TODO: should it use fraction of img instead of pixels?
+    """
 
     def __init__(self, **kwargs):
         super(FrequencyMask, self).__init__(**kwargs)

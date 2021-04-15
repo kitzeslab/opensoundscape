@@ -277,8 +277,11 @@ class AudioLoadingPreprocessor(BasePreprocessor):
         self.pipeline.append(self.actions.load_audio)
 
 
-class AudioToImagePreprocessor(BasePreprocessor):
-    """loads audio paths, performs various augmentations, returns tensor
+class AudioToImagePreprocessor(
+    BasePreprocessor
+):  # TODO: rename as AudioToSpectrogramPreprocessor
+    # TODO (enhancement): add MelSpectrogram, Scalogram, MFCC preprocessors
+    """loads audio paths, creates spectrogram, returns tensor
 
     by default, resamples audio to sr=22050
     can always change with .actions.load_audio.set(sample_rate=)
@@ -303,6 +306,10 @@ class AudioToImagePreprocessor(BasePreprocessor):
 
         self.actions.to_spec = preprocess.AudioToSpectrogram()
         self.pipeline.append(self.actions.to_spec)
+
+        self.actions.bandpass = preprocess.SpectrogramBandpass(min_f=0, max_f=20000)
+        self.pipeline.append(self.actions.bandpass)
+        self.actions.bandpass.off()  # bandpass is off by default
 
         self.actions.to_img = preprocess.SpecToImg(shape=out_shape)
         self.pipeline.append(self.actions.to_img)
@@ -335,20 +342,20 @@ class CnnPreprocessor(AudioToImagePreprocessor):
             return_labels=return_labels,
         )
 
-        self.augmentation = augmentation
+        self._augmentation = augmentation
         self.debug = debug
 
         # add extra Actions
-        # TODO: changing .augmentation should change pipeline
+        # TODO: changing .augmentation T/F should change pipeline
         # TODO: should be able to create this without overlay_df
-        if self.augmentation:
+        if self._augmentation:
             self.actions.overlay = preprocess.ImgOverlay(
                 overlay_df=overlay_df,
                 audio_length=self.audio_length,
                 overlay_prob=1,
                 max_overlay_num=1,
                 overlay_class=None,
-                # TODO: check - might not update with changes?
+                # TODO: check - overlay pipeline might not update with changes?
                 loader_pipeline=self.pipeline[0:4],
                 update_labels=False,
             )
@@ -360,12 +367,11 @@ class CnnPreprocessor(AudioToImagePreprocessor):
             # self.actions.time_warp = preprocess.TimeWarp()
             self.actions.add_noise = preprocess.TensorAddNoise(std=0.005)
 
-        # re-define the action sequence
-        if self.augmentation:
             self.pipeline = [
                 self.actions.load_audio,
                 self.actions.trim_audio,
                 self.actions.to_spec,
+                self.actions.bandpass,
                 self.actions.to_img,
                 self.actions.overlay,
                 self.actions.color_jitter,
@@ -377,11 +383,33 @@ class CnnPreprocessor(AudioToImagePreprocessor):
                 self.actions.normalize,
                 self.actions.random_affine,
             ]
-        else:
+
+        def augmentation_on():
+            """use pipeline containing all actions including augmentations"""
             self.pipeline = [
                 self.actions.load_audio,
                 self.actions.trim_audio,
                 self.actions.to_spec,
+                self.actions.bandpass,
+                self.actions.to_img,
+                self.actions.overlay,
+                self.actions.color_jitter,
+                self.actions.to_tensor,
+                # self.actions.time_warp,
+                self.actions.time_mask,
+                self.actions.frequency_mask,
+                self.actions.add_noise,
+                self.actions.normalize,
+                self.actions.random_affine,
+            ]
+
+        def augmentation_off():
+            """use pipeline that skips all augmentations"""
+            self.pipeline = [
+                self.actions.load_audio,
+                self.actions.trim_audio,
+                self.actions.to_spec,
+                self.actions.bandpass,
                 self.actions.to_img,
                 self.actions.to_tensor,
                 self.actions.normalize,
