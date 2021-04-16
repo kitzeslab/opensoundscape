@@ -6,7 +6,7 @@ import pandas as pd
 
 @pytest.fixture
 def upsample_df():
-    return pd.read_csv("tests/to_upsample.csv")
+    return pd.read_csv("tests/csvs/to_upsample.csv")
 
 
 @pytest.fixture

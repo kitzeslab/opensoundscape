@@ -6,12 +6,12 @@ from pathlib import Path
 
 @pytest.fixture()
 def veryshort_wav_str():
-    return "tests/veryshort.wav"
+    return "tests/audio/veryshort.wav"
 
 
 @pytest.fixture()
 def silent_wav_str():
-    return "tests/silence_10s.mp3"
+    return "tests/audio/silence_10s.mp3"
 
 
 @pytest.fixture()

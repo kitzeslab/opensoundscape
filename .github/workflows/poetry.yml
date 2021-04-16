@@ -29,4 +29,4 @@ jobs:
       - name: Poetry run pytest
         run: ~/.poetry/bin/poetry run pytest
       - name: Poetry run black check
-        run: ~/.poetry/bin/poetry run black . --check
+        run: ~/.poetry/bin/poetry run black . --check --diff

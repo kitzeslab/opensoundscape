@@ -27,10 +27,10 @@ Usage:
     opensoundscape [-hv]
     opensoundscape completions
     opensoundscape default_config
-    opensoundscape raven_annotation_check <directory>
+    opensoundscape raven_annotation_check <directory> <col>
     opensoundscape raven_lowercase_annotations <directory>
-    opensoundscape raven_generate_class_corrections <directory> <output.csv>
-    opensoundscape raven_query_annotations <directory> <class>
+    opensoundscape raven_generate_class_corrections <directory> <col> <output.csv>
+    opensoundscape raven_query_annotations <directory> <class> <col>
     opensoundscape split_audio (-i <directory>) (-o <directory>) (-s <segments.csv>) [-c <opensoundscape.yaml>]
     opensoundscape predict_from_directory (-i <directory>) (-d <state_dict.pth>) [-c <opensoundscape.yaml>]
     opensoundscape split_and_save (-a <audio.wav>) (-o <directory>) (-s <segments.csv) [-c <opensoundscape.yaml>]
@@ -77,17 +77,20 @@ def entrypoint():
         print(DEFAULT_CONFIG)
 
     elif args["raven_annotation_check"]:
-        raven.annotation_check(args["<directory>"])
+        raven.annotation_check(args["<directory>"], col=args["<col>"])
 
     elif args["raven_generate_class_corrections"]:
-        csv = raven.generate_class_corrections(
-            args["<directory>"], lower=args["--lower"]
-        )
+        csv = raven.generate_class_corrections(args["<directory>"], col=args["<col>"])
         with open(args["<output.csv>"], "w") as f:
             f.write(csv)
 
     elif args["raven_query_annotations"]:
-        raven.query_annotations(args["<directory>"], args["<class>"])
+        raven.query_annotations(
+            directory=args["<directory>"],
+            cls=args["<class>"],
+            col=args["<col>"],
+            print_out=True,
+        )
 
     elif args["split_audio"]:
         config = get_default_config()

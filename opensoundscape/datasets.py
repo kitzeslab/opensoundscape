@@ -18,10 +18,10 @@ from opensoundscape.spectrogram import Spectrogram
 def get_md5_digest(input_string):
     """ Generate MD5 sum for a string
 
-    Inputs:
+    Args:
         input_string: An input string
 
-    Outputs:
+    Returns:
         output: A string containing the md5 hash of input string
     """
     obj = md5()
@@ -32,12 +32,12 @@ def get_md5_digest(input_string):
 def annotations_with_overlaps_with_clip(df, begin, end):
     """ Determine if any rows overlap with current segment
 
-    Inputs:
+    Args:
         df:     A dataframe containing a Raven annotation file
         begin:  The begin time of the current segment (unit: seconds)
         end:    The end time of the current segment (unit: seconds)
 
-    Output:
+    Returns:
         sub_df: A dataframe of annotations which overlap with the begin/end times
     """
     return df[
@@ -49,7 +49,9 @@ def annotations_with_overlaps_with_clip(df, begin, end):
 class SplitterDataset(torch.utils.data.Dataset):
     """ A PyTorch Dataset for splitting a WAV files
 
-    Inputs:
+    Segments will be written to the `output_directory`
+
+    Args:
         wavs:                   A list of WAV files to split
         annotations:            Should we search for corresponding annotations files? (default: False)
         label_corrections:      Specify a correction labels CSV file w/ column headers "raw" and "corrected" (default: None)
@@ -60,10 +62,7 @@ class SplitterDataset(torch.utils.data.Dataset):
         column_separator:       What character should we use to separate columns (default: "\t")
         species_separator:      What character should we use to separate species (default: "|")
 
-    Effects:
-        - Segments will be written to the `output_directory`
-
-    Outputs:
+    Returns:
         output: A list of CSV rows (separated by `column_separator`) containing
             the source audio, segment begin time (seconds), segment end time
             (seconds), segment audio, and present classes separated by
@@ -230,7 +229,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
     Additional augmentations on tensors are available when calling `train()`
     from the module `opensoundscape.torch.train`.
 
-    Input:
+    Args:
         df: A DataFrame with a column containing audio files
         label_dict: a dictionary mapping numeric labels to class names,
             - for example: {0:'American Robin',1:'Northern Cardinal'}
@@ -270,7 +269,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
             immediately before it is returned. When None, does not save images.
             [default: None]
 
-    Output:
+    Returns:
         Dictionary:
             { "X": (3, H, W)
             , "y": (1) if label_column != None
@@ -373,7 +372,7 @@ class SingleTargetAudioDataset(torch.utils.data.Dataset):
     def image_from_audio(self, audio, mode="RGB"):
         """ Create a PIL image from audio
 
-        Inputs:
+        Args:
             audio: audio object
             mode: PIL image mode, e.g. "L" or "RGB" [default: RGB]
         """

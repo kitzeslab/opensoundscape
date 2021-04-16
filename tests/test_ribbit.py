@@ -9,7 +9,7 @@ import pandas as pd
 
 @pytest.fixture()
 def gpt_path():
-    return "tests/great_plains_toad.wav"
+    return "tests/audio/great_plains_toad.wav"
 
 
 def test_calculate_pulse_score():
@@ -40,7 +40,7 @@ def test_calculate_pulse_score_zero_len_input():
 
 
 def test_ribbit():
-    path = "./tests/silence_10s.mp3"
+    path = "./tests/audio/silence_10s.mp3"
     audio = Audio.from_file(path, sample_rate=22050)
     spec = Spectrogram.from_audio(audio)
 

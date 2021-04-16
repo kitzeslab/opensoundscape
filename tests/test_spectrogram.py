@@ -7,7 +7,7 @@ import numpy as np
 
 @pytest.fixture()
 def veryshort_wav_str():
-    return "tests/veryshort.wav"
+    return "tests/audio/veryshort.wav"
 
 
 def test_spectrogram_raises_typeerror():
