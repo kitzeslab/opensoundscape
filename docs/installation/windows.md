@@ -10,7 +10,7 @@ If you don't already use Windows Subsystem for Linux (WSL), activate it using th
     ```
     dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
     ```
-    
+
 - Restart your computer
 
 Once you have WSL, follow these steps to get an Ubuntu shell on your computer:
@@ -27,17 +27,17 @@ We recommend installing OpenSoundscape in a package manager. We find that the ea
 - Download the installer:
     - Open the Ubuntu terminal
     - Type in `wget` then paste the link you copied, e.g.: (the filename of your file may differ)
-   
+
    ```
    wget https://repo.anaconda.com/archive/Anaconda3-2020.07-Linux-x86_64.sh
    ```
- 
-- Execute the downloaded installer, e.g.: (the filename of your file may differ) 
+
+- Execute the downloaded installer, e.g.: (the filename of your file may differ)
 
     ```
     bash Anaconda3-2020.07-Linux-x86_64.sh
     ```
-    
+
     - Press ENTER, read the installation requirements, press Q, then type “yes” and press enter to install
     - Wait for it to install
     - If your download hangs, press CTRL+C, `rm -rf ~/anaconda3` and try again
@@ -51,11 +51,11 @@ You can now manage packages with `conda`.
 ## Install OpenSoundscape in virtual environment
 - Create a Python 3.7 conda environment for opensoundscape: `conda create --name opensoundscape pip python=3.7`
 - Activate the environment: `conda activate opensoundscape`
-- Install opensoundscape using pip: `pip install opensoundscape==0.4.6`
+- Install opensoundscape using pip: `pip install opensoundscape==0.4.7`
 
 If you run into this error and you are on a Windows 10 machine:
 ```
-(opensoundscape_0.4.6) username@computername:~$ pip install opensoundscape==0.4.6
+(opensoundscape_environment) username@computername:~$ pip install opensoundscape==0.4.7
 WARNING: Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f7603c5da90>: Failed to establish a new connection: [Errno -2] Name or service not known')': /simple/opensoundscape/
 ```
 You may be able to solve it by going to System Settings, searching for “Proxy Settings,” and beneath “Automatic proxy setup,” turning “Automatically detect settings” OFF. Restart your terminal for changes to take effect. Then activate the environment and install OpenSoundscape using pip.
