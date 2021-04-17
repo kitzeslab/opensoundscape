@@ -219,6 +219,7 @@ from opensoundscape.preprocess import ParameterRequiredError
 
 class BasePreprocessor(torch.utils.data.Dataset):
     def __init__(self, df, return_labels=True):
+        # TODO: add .sample method
 
         self.df = df
         self.return_labels = return_labels
@@ -329,7 +330,6 @@ class CnnPreprocessor(AudioToImagePreprocessor):
         df,
         audio_length=None,
         return_labels=True,
-        augmentation=True,
         debug=None,
         overlay_df=None,
         out_shape=[224, 224],
@@ -342,82 +342,66 @@ class CnnPreprocessor(AudioToImagePreprocessor):
             return_labels=return_labels,
         )
 
-        self._augmentation = augmentation
         self.debug = debug
 
-        # add extra Actions
-        # TODO: changing .augmentation T/F should change pipeline
-        # TODO: should be able to create this without overlay_df
-        if self._augmentation:
-            self.actions.overlay = preprocess.ImgOverlay(
-                overlay_df=overlay_df,
-                audio_length=self.audio_length,
-                overlay_prob=1,
-                max_overlay_num=1,
-                overlay_class=None,
-                # TODO: check - overlay pipeline might not update with changes?
-                loader_pipeline=self.pipeline[0:4],
-                update_labels=False,
-            )
+        # extra Actions for augmentation steps
+        # TODO: should be able to create object without overlay_df
+        self.actions.overlay = preprocess.ImgOverlay(
+            overlay_df=overlay_df,
+            audio_length=self.audio_length,
+            overlay_prob=1,
+            max_overlay_num=1,
+            overlay_class=None,
+            # TODO: check - overlay pipeline might not update with changes?
+            loader_pipeline=self.pipeline[0:5],  # all actions before overlay
+            update_labels=False,
+        )
 
-            self.actions.color_jitter = preprocess.TorchColorJitter()
-            self.actions.random_affine = preprocess.TorchRandomAffine()
-            self.actions.time_mask = preprocess.TimeMask()
-            self.actions.frequency_mask = preprocess.FrequencyMask()
-            # self.actions.time_warp = preprocess.TimeWarp()
-            self.actions.add_noise = preprocess.TensorAddNoise(std=0.005)
+        self.actions.color_jitter = preprocess.TorchColorJitter()
+        self.actions.random_affine = preprocess.TorchRandomAffine()
+        self.actions.time_mask = preprocess.TimeMask()
+        self.actions.frequency_mask = preprocess.FrequencyMask()
+        # self.actions.time_warp = preprocess.TimeWarp()
+        self.actions.add_noise = preprocess.TensorAddNoise(std=0.005)
 
-            self.pipeline = [
-                self.actions.load_audio,
-                self.actions.trim_audio,
-                self.actions.to_spec,
-                self.actions.bandpass,
-                self.actions.to_img,
-                self.actions.overlay,
-                self.actions.color_jitter,
-                self.actions.to_tensor,
-                # self.actions.time_warp,
-                self.actions.time_mask,
-                self.actions.frequency_mask,
-                self.actions.add_noise,
-                self.actions.normalize,
-                self.actions.random_affine,
-            ]
+        self.augmentation_pipeline = [
+            self.actions.load_audio,
+            self.actions.trim_audio,
+            self.actions.to_spec,
+            self.actions.bandpass,
+            self.actions.to_img,
+            self.actions.overlay,
+            self.actions.color_jitter,
+            self.actions.to_tensor,
+            # self.actions.time_warp,
+            self.actions.time_mask,
+            self.actions.frequency_mask,
+            self.actions.add_noise,
+            self.actions.normalize,
+            self.actions.random_affine,
+        ]
 
-        def augmentation_on():
-            """use pipeline containing all actions including augmentations"""
-            self.pipeline = [
-                self.actions.load_audio,
-                self.actions.trim_audio,
-                self.actions.to_spec,
-                self.actions.bandpass,
-                self.actions.to_img,
-                self.actions.overlay,
-                self.actions.color_jitter,
-                self.actions.to_tensor,
-                # self.actions.time_warp,
-                self.actions.time_mask,
-                self.actions.frequency_mask,
-                self.actions.add_noise,
-                self.actions.normalize,
-                self.actions.random_affine,
-            ]
-
-        def augmentation_off():
-            """use pipeline that skips all augmentations"""
-            self.pipeline = [
-                self.actions.load_audio,
-                self.actions.trim_audio,
-                self.actions.to_spec,
-                self.actions.bandpass,
-                self.actions.to_img,
-                self.actions.to_tensor,
-                self.actions.normalize,
-            ]
+        self.no_augmentation_pipeline = [
+            self.actions.load_audio,
+            self.actions.trim_audio,
+            self.actions.to_spec,
+            self.actions.bandpass,
+            self.actions.to_img,
+            self.actions.to_tensor,
+            self.actions.normalize,
+        ]
 
         if self.debug is not None:
             self.actions.save_img = preprocess.SaveTensorToDisk(self.debug)
             self.pipeline.append(self.actions.save_img)
+
+    def augmentation_on():
+        """use pipeline containing all actions including augmentations"""
+        self.pipeline = self.augmentation_pipeline
+
+    def augmentation_off():
+        """use pipeline that skips all augmentations"""
+        self.pipeline = self.no_augmentation_pipeline
 
 
 class ResnetMultilabelPreprocessor(BasePreprocessor):
