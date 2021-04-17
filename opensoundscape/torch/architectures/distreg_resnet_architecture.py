@@ -20,7 +20,9 @@ from opensoundscape.torch.architectures.resnet_backbone import (
 
 
 class DistRegResNetClassifier(PlainResNetClassifier):
-
+    # TODO: can network and loss fn be separated?
+    # Then we wouldn't need a separate architecture, just specify loss
+    # in the model class
     name = "DistRegResNetClassifier"
 
     def __init__(

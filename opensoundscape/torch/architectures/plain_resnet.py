@@ -108,6 +108,10 @@ class PlainResNetClassifier(BaseArchitecture):
     def update_best(self):
         self.best_weights = copy.deepcopy(self.state_dict())
 
+    def forward(self, batch_tensor):
+        feats = self.feature(batch_tensor)  # feature extraction
+        return self.classifier(feats)  # classification
+
 
 class BCEWithLogitsLoss_hot(nn.BCEWithLogitsLoss):
     """use nn.BCEWithLogitsLoss for one-hot labels

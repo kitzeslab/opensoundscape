@@ -10,6 +10,33 @@ from sklearn.metrics import (
 import numpy as np
 
 
+def predict(scores, single_target=False, threshold=0.5):
+    """convert numeric scores to binary predictions
+
+    return 0/1 for an array of scores: samples (rows) x classes (columns)
+
+    Args:
+        scores:
+            a 2-d list or np.array. row=sample, columns=classes
+        single_target:
+            if True, predict 1 for highest scoring class per sample,
+            0 for other classes. If False, predict 1 for all scores > threshold
+            [default: False]
+        threshold:
+            Predict 1 for score > threshold. only used if single_target = False.
+            [default: 0.5]
+    """
+    scores = np.array(scores)
+    if single_target:  # predict highest scoring class only
+        preds = np.zeros(np.shape(scores)).astype(int)
+        for i, score_row in enumerate(scores):
+            preds[i, np.argmax(score_row)] = 1
+    else:
+        preds = (scores >= threshold).astype(int)
+
+    return preds
+
+
 def multiclass_metrics(targets, preds, class_names):
     """provide a list or np.array of 0,1 targets and predictions"""
     epoch_metrics = {}
