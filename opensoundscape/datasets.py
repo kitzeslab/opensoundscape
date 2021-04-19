@@ -219,7 +219,12 @@ from opensoundscape.preprocess import ParameterRequiredError
 
 class BasePreprocessor(torch.utils.data.Dataset):
     def __init__(self, df, return_labels=True):
-        # TODO: add .sample method
+        # TODO: add .sample method?
+
+        assert Path(df.index[0]).exists(), (
+            "Index of dataframe passed to "
+            f"preprocessor must be a file path. Got {df.index[0]}."
+        )
 
         self.df = df
         self.return_labels = return_labels
