@@ -1,7 +1,7 @@
 # todo: can saving/loading just use torch.load?
 
 # TODO: make architectures 1-for-1 swap with built-in pytorch architectures
-# Problem - can't change last fc layer for correct # classes
+# Problem - each pytorch architecture needs a different mod for chaning final layer
 # 1) move loss function outside of architecture
 # 2) move update_best outside of architecture
 # 3) don't rely on separation of feature/classifier when setting parameters
@@ -29,12 +29,13 @@ from torch.nn.functional import softmax
 import torch.nn.functional as F
 from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore_support
 
-from opensoundscape.torch.architectures.distreg_resnet_architecture import (
-    DistRegResNetClassifier,
-)
+# from opensoundscape.torch.architectures.distreg_resnet_architecture import (
+#     DistRegResNetClassifier,
+# )
 from opensoundscape.torch.architectures.plain_resnet import PlainResNetClassifier
 from opensoundscape.torch.models.utils import BaseModule, get_dataloader
 from opensoundscape.metrics import multiclass_metrics, binary_metrics
+from opensoundscape.torch.loss import BCEWithLogitsLoss_hot, ResampleLoss
 
 
 # NOTE: Turning off all logging for now. may want to use logging module in future
@@ -59,22 +60,26 @@ class PytorchModel(BaseModule):
         self.name = "PytorchModel"
 
         # model characteristics
+        self.current_epoch = 0
         self.classes = classes  # train_dataset.labels
         print(f"created {self.name} model object with {len(self.classes)} classes")
 
-        ### network parameters ###
-        self.weights_init = "ImageNet"
-        self.num_layers = 18  # can use 50 for resnet50
-        self.sampler = None  # can be "imbalanced"
-        self.current_epoch = 0
+        ### data loading parameters ###
+        self.sampler = None  # can be "imbalanced" for ImbalancedDatasetSmpler
 
         ### architecture ###
         # (feature extraction + classifier + loss fn)
+        # can by a pytorch CNN such as Resnet18, or RNN, etc
+        # must have .forward(), .train(), .eval(), .to(), .state_dict()
         self.network = architecture
-        # TODO: move loss fn outside of architecture
+
+        ### loss function ###
+        self.loss_cls = BCEWithLogitsLoss_hot  # class constructor for loss fn
+        # TODO: there are things that won't get picked up from resumed training,
+        # like changed loss fn - can we add into .save()?
 
         ### training parameters ###
-        # defaults partially from https://github.com/zhmiao/BirdMultiLabel/blob/master/configs/XENO/multi_label_reg_10_091620.yaml
+        # defaults partially from  zhmiao's BirdMultiLabel
         # optimizer
         self.opt_net = None  # don't set directly. initialized during training
         self.optimizer_cls = optim.SGD  # or torch.optim.Adam, etc
@@ -105,18 +110,27 @@ class PytorchModel(BaseModule):
         # dictionaries to store accuracy metrics & loss for each epoch
         self.train_metrics = {}
         self.valid_metrics = {}
-        self.loss = {}  # could add TensorBoard tracking
+        self.loss_hist = {}  # could add TensorBoard tracking
 
     def _init_optimizer(self):
         """initialize an instance of self.optimizer
 
-        This function is called at during .train()
+        This function is called during .train() so that the user
+        has a chance to swap/modify the optimizer before training.
 
         To modify the optimizer, change the value of
         self.optimizer_cls and/or self.optimizer_params
         prior to calling .train().
         """
         return self.optimizer_cls(self.optimizer_params.values())
+
+    def _init_loss_fn(self):
+        """initialize an instance of self.loss_cls
+
+        This function is called during .train() so that the user
+        has a chance to change the loss function before training.
+        """
+        self.loss_fn = self.loss_cls()
 
     def _set_train(self, batch_size, num_workers):
         """Prepare network for training on train_dataset
@@ -140,24 +154,25 @@ class PytorchModel(BaseModule):
             self.device = torch.device("cpu")
         self.network.to(self.device)
 
+        ###########################
+        # Setup loss function     #
+        ###########################
+        self._init_loss_fn()
+
         ######################
         # Optimization setup #
         ######################
 
         # Setup optimizer parameters for each network component
+        # we re-create bc the user may have changed self.optimizer_cls
         # If optimizer already exists, keep the same state dict
-        # (for instance, user may be resuming training)
-        # we re-create it bc the user may have changed self.optimizer_cls
+        # (for instance, user may be resuming training w/saved state dict)
         if self.opt_net is not None:
             optim_state_dict = self.opt_net.state_dict()
             self.opt_net = self._init_optimizer()
             self.opt_net.load_state_dict(optim_state_dict)
         else:
             self.opt_net = self._init_optimizer()
-
-        # Update loss function in case it required knowledge of class_freq
-        self.network.class_freq = np.sum(self.train_dataset.df.values, 0)
-        self.network.setup_loss()
 
         # Set up learning rate cooling schedule
         self.scheduler = optim.lr_scheduler.StepLR(
@@ -226,8 +241,8 @@ class PytorchModel(BaseModule):
             total_preds.append(batch_preds.int().detach().cpu().numpy())
 
             # calculate loss #may be able to move loss fn outside of network
-            loss = self.network.criterion_cls(logits, labels)
-            self.loss[self.current_epoch] = float(loss)
+            loss = self.loss_fn(logits, labels)
+            self.loss_hist[self.current_epoch] = loss.detach().numpy()
 
             #############################
             # Backward and optimization #
@@ -238,12 +253,6 @@ class PytorchModel(BaseModule):
             loss.backward()
             # update the network using the gradients*lr
             self.opt_net.step()
-
-            ################
-            # Save weights #
-            ################
-            # if batch_idx % self.save_interval == 0:
-            #     self.save(self.save_path)
 
             ###########
             # Logging #
@@ -315,8 +324,8 @@ class PytorchModel(BaseModule):
             "Train and validation datasets must have same classes"
             "and class order as model object."
         )
-        assert (list(self.classes) == list(train_dataset.df.columns), class_err)
-        assert (list(self.classes) == list(valid_dataset.df.columns), class_err)
+        assert list(self.classes) == list(train_dataset.df.columns), class_err
+        assert list(self.classes) == list(valid_dataset.df.columns), class_err
 
         self.log_interval = log_interval
         self.save_interval = save_interval
@@ -346,7 +355,7 @@ class PytorchModel(BaseModule):
                     num_workers=num_workers,
                     activation_layer="softmax_and_logit"
                     if self.single_target
-                    else "raw",
+                    else None,
                     binary_preds="single_target"
                     if self.single_target
                     else "multi_target",
@@ -404,75 +413,7 @@ class PytorchModel(BaseModule):
 
         print(f"\nBest Model Appears at Epoch {best_epoch} with F1 {best_f1:.3f}.")
 
-    # def evaluate(self, loader, single_target=False, threshold=0.5):
-    #     """Predict on data from DataLoader
-    #
-    #     this function is no longer used
-    #
-    #     Args:
-    #         loader:
-    #             a DataLoader that supplies {"X":tensor,"y":list of labels}
-    #         single_target (bool):
-    #             predict exactly one class per sample
-    #         threshold (float or list):
-    #             prediction threshold for post-sigmoid scores,
-    #             or a list of thresholds, one per class
-    #             (only relevant for single_target=False) [default=0.5]
-    #
-    #     Returns:
-    #         targets, binary predictions, scores
-    #     """
-    #
-    #     if torch.cuda.is_available():
-    #         self.device = torch.device("cuda")
-    #     else:
-    #         self.device = torch.device("cpu")
-    #     self.network.to(self.device)
-    #
-    #     self.network.eval()
-    #
-    #     total_tgts = []
-    #     total_preds = []
-    #     total_scores = []
-    #
-    #     with torch.set_grad_enabled(False):
-    #
-    #         for batch in loader:  # one batch of X,y samples
-    #             # setup data
-    #             data = batch["X"].to(self.device)
-    #             labels = batch["y"].to(self.device)
-    #             data.requires_grad = False
-    #             labels.requires_grad = False
-    #
-    #             # forward
-    #             feats = self.network.feature(data)
-    #             logits = self.network.classifier(feats)
-    #             sigmoids = torch.sigmoid(logits)
-    #
-    #             # Binary predictions
-    #             if single_target:  # predict highest scoring class only
-    #                 batch_preds = np.zeros(np.shape(logits)).astype(int)
-    #                 for i, class_scores in enumerate(logits):
-    #                     batch_preds[i, np.argmax(class_scores)] = 1
-    #             else:  # predict 0 or 1 based on a fixed threshold
-    #                 batch_preds = (sigmoids >= threshold).int().detach().cpu().numpy()
-    #             total_preds.append(batch_preds)
-    #             total_tgts.append(labels.int().detach().cpu().numpy())
-    #             total_scores.append(sigmoids.detach().cpu().numpy())
-    #
-    #     total_tgts = np.concatenate(total_tgts, axis=0)
-    #     total_preds = np.concatenate(total_preds, axis=0)
-    #     total_scores = np.concatenate(total_scores, axis=0)
-    #
-    #     return total_tgts, total_preds, total_scores
-
-    def save(
-        self,
-        path=None,
-        save_weights=True,
-        save_optimizer=True,
-        extras={},
-    ):
+    def save(self, path=None, save_weights=True, save_optimizer=True, extras={}):
         """save model with weights (default location is self.save_path)
 
         if save_weights is False: only save metadata/metrics
@@ -492,7 +433,7 @@ class PytorchModel(BaseModule):
             "epoch": self.current_epoch,
             "valid_metrics": self.valid_metrics,
             "train_metrics": self.valid_metrics,
-            "loss": self.loss,
+            "loss_hist": self.loss_hist,
             "lr_update_interval": self.lr_update_interval,
             "lr_cooling_factor": self.lr_cooling_factor,
             "optimizer_params": self.optimizer_params,
@@ -535,7 +476,7 @@ class PytorchModel(BaseModule):
         self.current_epoch = model_dict["epoch"]
         self.train_metrics = model_dict["train_metrics"]
         self.valid_metrics = model_dict["valid_metrics"]
-        self.loss = model_dict["loss"]
+        self.loss_hist = model_dict["loss_hist"]
         self.lr_update_interval = model_dict["lr_update_interval"]
         self.lr_cooling_factor = model_dict["lr_cooling_factor"]
         self.optimizer_params = model_dict["optimizer_params"]
@@ -741,7 +682,11 @@ class PytorchModel(BaseModule):
 
 class Resnet18Multilabel(PytorchModel):
     def __init__(self, classes):
-        """if you want to change other parameters,
+        """Multi-class, multi-target model with resnet18 architecture
+
+        allows separate parameters for feature & classifier blocks
+
+        if you want to change other parameters,
         simply create the object then modify them
         """
         self.classes = classes
@@ -749,15 +694,26 @@ class Resnet18Multilabel(PytorchModel):
 
         # initialize the model architecture without an optimizer
         # since we dont know the train class counts to give the optimizer
-        architecture = DistRegResNetClassifier(
-            num_cls=len(self.classes),
-            weights_init=self.weights_init,
-            num_layers=18,
-            class_freq=None,
+        architecture = PlainResNetClassifier(  # pass architecture as argument
+            num_cls=len(self.classes), weights_init=self.weights_init, num_layers=18
         )
 
         super(Resnet18Multilabel, self).__init__(architecture, self.classes)
         self.name = "Resnet18Multilabel"
+        self.loss_cls = ResampleLoss
+
+    def _init_loss_fn(self):
+        """initialize an instance of self.loss_cls
+
+        This function is called during .train() so that the user
+        has a chance to change the loss function before training.
+
+        Note: if you change the loss function, you may need to override this
+        to correctly initialize self.loss_cls
+        """
+        class_frequency = np.sum(self.train_dataset.df.values, 0)
+        # initializing ResampleLoss requires us to pass class_frequency
+        self.loss_fn = self.loss_cls(class_frequency)
 
     @classmethod
     def from_checkpoint(cls, path):
@@ -767,10 +723,7 @@ class Resnet18Multilabel(PytorchModel):
         return model_obj
 
 
-class Resnet18Binary(
-    PytorchModel
-):  # TODO: binary model should not make [1,1] prediction (need softmax)
-    # TODO: binary model should only accept train/test dfs w/1 column
+class Resnet18Binary(PytorchModel):
     # TODO: validate that index of df is path and labels are one-hot
     # TODO: make a single-target class, this is just a special case w 2 classes
     def __init__(self):

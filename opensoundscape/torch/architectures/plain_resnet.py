@@ -70,6 +70,10 @@ class PlainResNetClassifier(BaseArchitecture):
     def setup_loss(self):
         self.criterion_cls = BCEWithLogitsLoss_hot()
 
+    def forward(self, batch_tensor):
+        feats = self.feature(batch_tensor)  # feature extraction
+        return self.classifier(feats)  # classification
+
     def load(self, init_path, init_classifier_weights=True, verbose=False):
         """load state dict (weights) of the feature+classifier
         optionally load only feature weights not classifier weights
@@ -102,24 +106,7 @@ class PlainResNetClassifier(BaseArchitecture):
             print("unused_keys: {}".format(sorted(list(unused_keys))))
 
     def save(self, out_path):
-        # we don't use this anymore?
         torch.save(self.best_weights, out_path)
 
     def update_best(self):
         self.best_weights = copy.deepcopy(self.state_dict())
-
-    def forward(self, batch_tensor):
-        feats = self.feature(batch_tensor)  # feature extraction
-        return self.classifier(feats)  # classification
-
-
-class BCEWithLogitsLoss_hot(nn.BCEWithLogitsLoss):
-    """use nn.BCEWithLogitsLoss for one-hot labels
-    by simply converting y from long to float"""
-
-    def __init__(self):
-        super(BCEWithLogitsLoss_hot, self).__init__()
-
-    def forward(self, input, target):
-        target = target.float()
-        return super(BCEWithLogitsLoss_hot, self).forward(input, target)

@@ -1,55 +1,19 @@
-# adapt from Miao's repository github.com/zhmiao/BirdMultiLabel
-# this "model" is a normal resnet model architecture with a custom loss function
-# based on https://github.com/zhmiao/BirdMultiLabel/blob/b31edf022e5c54a5d7ebe994460fec1579e90e96/src/models/distreg_resnet.py
-
-import os
-import copy
-from collections import OrderedDict
+"""various loss function classes"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.hub import load_state_dict_from_url
-
-from opensoundscape.torch.architectures.plain_resnet import PlainResNetClassifier
-from opensoundscape.torch.architectures.resnet_backbone import (
-    ResNetFeature,
-    BasicBlock,
-    Bottleneck,
-    model_urls,
-)
 
 
-class DistRegResNetClassifier(PlainResNetClassifier):
-    # TODO: can network and loss fn be separated?
-    # Then we wouldn't need a separate architecture, just specify loss
-    # in the model class
-    name = "DistRegResNetClassifier"
+class BCEWithLogitsLoss_hot(nn.BCEWithLogitsLoss):
+    """use nn.BCEWithLogitsLoss for one-hot labels
+    by simply converting y from long to float"""
 
-    def __init__(
-        self,
-        num_cls,
-        weights_init="ImageNet",
-        num_layers=18,
-        init_classifier_weights=False,
-        class_freq=None,
-    ):
-        self.class_freq = class_freq
+    def __init__(self):
+        super(BCEWithLogitsLoss_hot, self).__init__()
 
-        super(DistRegResNetClassifier, self).__init__(
-            num_cls,
-            weights_init=weights_init,
-            num_layers=num_layers,
-            init_classifier_weights=init_classifier_weights,
-        )
-
-    def setup_loss(self):
-        if self.class_freq is None:
-            # initializing network without criterion_cls (loss function)
-            # because class_freq was not provided
-            # This allows us to still load weights from disk and run prediction
-            self.criterion_cls = None
-        else:
-            self.criterion_cls = ResampleLoss(class_freq=self.class_freq)
+    def forward(self, input, target):
+        target = target.float()
+        return super(BCEWithLogitsLoss_hot, self).forward(input, target)
 
 
 def reduce_loss(loss, reduction):
