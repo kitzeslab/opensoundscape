@@ -1,6 +1,5 @@
 import torch.nn as nn
-from opensoundscape.torch.class_aware_sampler import ClassAwareSampler
-from opensoundscape.torch.imbalanced_dataset_sampler import ImbalancedDatasetSampler
+from opensoundscape.torch.sampling import ClassAwareSampler, ImbalancedDatasetSampler
 from torch.utils.data import DataLoader
 
 

@@ -8,6 +8,7 @@ class BaseArchitecture(nn.Module):
 
     """
     Base architecture for reference.
+    #TODO: do we still need this? or could architectures subclass nn.Module?
     """
 
     name = None
@@ -16,9 +17,6 @@ class BaseArchitecture(nn.Module):
         super(BaseArchitecture, self).__init__()
 
     def setup_net(self):
-        pass
-
-    def setup_critera(self):
         pass
 
     def load(self, init_path):

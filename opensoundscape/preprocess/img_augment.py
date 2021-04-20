@@ -1,16 +1,13 @@
-#!/usr/bin/env python3
-""" transforms.py: Transforms for spectrograms and images
-"""
-
-import numpy as np
+"""Transforms and augmentations for PIL.Images"""
 from PIL import Image
+import numpy as np
 import random
 
 
 def time_split(img, seed=None):
-    """ Given a PIL.Image, rotate it
+    """Given a PIL.Image, split into left/right parts and swap
 
-    Choose a random new starting point and append the first section to the end.
+    Randomly chooses the slicing location
     For example, if `h` chosen
 
     abcdefghijklmnop

@@ -1,3 +1,5 @@
+"""classes for pytorch machine learning models in opensoundscape"""
+
 # todo: can saving/loading just use torch.load?
 
 # TODO: make architectures 1-for-1 swap with built-in pytorch architectures
@@ -9,8 +11,7 @@
 # Then we can enable other networks like this:
 # https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html
 
-# adapted from zhmiao
-# github.com/zhmiao/BirdMultiLabel/blob/master/src/algorithms/plain_resnet.py
+# adapted from zhmiao's BirdMultiLabel
 
 import os
 import numpy as np
@@ -29,10 +30,7 @@ from torch.nn.functional import softmax
 import torch.nn.functional as F
 from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore_support
 
-# from opensoundscape.torch.architectures.distreg_resnet_architecture import (
-#     DistRegResNetClassifier,
-# )
-from opensoundscape.torch.architectures.plain_resnet import PlainResNetClassifier
+from opensoundscape.torch.architectures.resnet import ResNetArchitecture
 from opensoundscape.torch.models.utils import BaseModule, get_dataloader
 from opensoundscape.metrics import multiclass_metrics, binary_metrics
 from opensoundscape.torch.loss import BCEWithLogitsLoss_hot, ResampleLoss
@@ -48,7 +46,7 @@ class PytorchModel(BaseModule):
 
     flexible architecture, optimizer, loss function, parameters
 
-    for tutorials see []
+    for tutorials see opensoundscape.org
     """
 
     def __init__(self, architecture, classes):
@@ -395,7 +393,7 @@ class PytorchModel(BaseModule):
             # if best model (by F1 score), update & save weights to best.model
             f1 = self.valid_metrics[self.current_epoch]["f1"]
             if f1 > best_f1:
-                self.network.update_best()
+                self.network.update_best()  # TODO - do we need this?
                 best_f1 = f1
                 best_epoch = self.current_epoch
                 print("Updating best model")
@@ -571,7 +569,7 @@ class PytorchModel(BaseModule):
             "and class order as model object, or no classes."
         )
         if len(prediction_dataset.df.columns) > 0:
-            assert (list(self.classes) == list(prediction_dataset.df.columns), err_msg)
+            assert list(self.classes) == list(prediction_dataset.df.columns), err_msg
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -680,11 +678,13 @@ class PytorchModel(BaseModule):
         return model_obj
 
 
-class Resnet18Multilabel(PytorchModel):
+class Resnet18Multiclass(PytorchModel):
+    # TODO: separate single and multi-target models? Which default loss fns?
     def __init__(self, classes):
-        """Multi-class, multi-target model with resnet18 architecture
+        """Multi-class model with resnet18 architecture
 
-        allows separate parameters for feature & classifier blocks
+        Can be single or multi-target.
+        Allows separate parameters for feature & classifier blocks.
 
         if you want to change other parameters,
         simply create the object then modify them
@@ -694,12 +694,12 @@ class Resnet18Multilabel(PytorchModel):
 
         # initialize the model architecture without an optimizer
         # since we dont know the train class counts to give the optimizer
-        architecture = PlainResNetClassifier(  # pass architecture as argument
+        architecture = ResNetArchitecture(  # pass architecture as argument
             num_cls=len(self.classes), weights_init=self.weights_init, num_layers=18
         )
 
-        super(Resnet18Multilabel, self).__init__(architecture, self.classes)
-        self.name = "Resnet18Multilabel"
+        super(Resnet18Multiclass, self).__init__(architecture, self.classes)
+        self.name = "Resnet18Multiclass"
         self.loss_cls = ResampleLoss
 
     def _init_loss_fn(self):
@@ -724,14 +724,13 @@ class Resnet18Multilabel(PytorchModel):
 
 
 class Resnet18Binary(PytorchModel):
-    # TODO: validate that index of df is path and labels are one-hot
-    # TODO: make a single-target class, this is just a special case w 2 classes
+    # TODO: which classes should we include? SingleTarget?
     def __init__(self):
         """if you want to change parameters, create the object then modify them"""
         self.weights_init = "ImageNet"
         self.classes = ["negative", "positive"]
 
-        architecture = PlainResNetClassifier(  # pass architecture as argument
+        architecture = ResNetArchitecture(  # pass architecture as argument
             num_cls=2, weights_init=self.weights_init, num_layers=18
         )
 

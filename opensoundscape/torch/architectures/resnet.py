@@ -1,9 +1,108 @@
-# Official ResNet Implementation
+"""defines feature extractor and Architecture class for ResNet CNN"""
+import os
+import copy
+from collections import OrderedDict
+
 import torch
 import torch.nn as nn
+from torch.hub import load_state_dict_from_url
 from torchvision.models.resnet import conv1x1, BasicBlock, Bottleneck, model_urls
 
+from opensoundscape.torch.architectures.utils import BaseArchitecture
 
+
+class ResNetArchitecture(BaseArchitecture):
+
+    name = "ResNetArchitecture"
+
+    def __init__(
+        self,
+        num_cls,
+        weights_init="ImageNet",
+        num_layers=18,
+        init_classifier_weights=False,
+    ):
+
+        super(ResNetArchitecture, self).__init__()
+        self.num_cls = num_cls
+        self.num_layers = num_layers
+        self.feature = None
+        self.classifier = None
+        self.best_weights = None
+
+        # Model setup and weights initialization
+        # if init_classifier_weights=False: copy feature weights but not classifier weights
+        # ie if we want to re-use trained feature extractor w/ different classifier
+        self.setup_net()
+        if weights_init == "ImageNet":
+            self.load(
+                model_urls["resnet{}".format(num_layers)],
+                init_classifier_weights=init_classifier_weights,
+            )
+        elif os.path.exists(weights_init):  # load weights from disk
+            self.load(weights_init, init_classifier_weights=init_classifier_weights)
+        else:
+            raise NameError("Initial weights do not exist: {}.".format(weights_init))
+
+    def setup_net(self):
+
+        kwargs = {}
+
+        if self.num_layers == 18:
+            block = BasicBlock
+            layers = [2, 2, 2, 2]
+        elif self.num_layers == 50:
+            block = Bottleneck
+            layers = [3, 4, 6, 3]
+        else:
+            raise Exception("ResNet Type not supported.")
+
+        self.feature = ResNetFeature(block, layers, **kwargs)
+        self.classifier = nn.Linear(512 * block.expansion, self.num_cls)
+
+    def forward(self, batch_tensor):
+        feats = self.feature(batch_tensor)  # feature extraction
+        return self.classifier(feats)  # classification
+
+    def load(self, init_path, init_classifier_weights=True, verbose=False):
+        """load state dict (weights) of the feature+classifier
+        optionally load only feature weights not classifier weights
+
+        if verbose==True: print missing/unused keys
+        """
+
+        if "http" in init_path:
+            init_weights = load_state_dict_from_url(init_path, progress=True)
+        else:
+            init_weights = torch.load(init_path)
+
+        if init_classifier_weights:  # load all weights
+            self.load_state_dict(init_weights, strict=False)
+            load_keys = set(init_weights.keys())
+            self_keys = set(self.state_dict().keys())
+        else:  # only load feature weights not classifier weights
+            init_weights = OrderedDict(
+                {k.replace("feature.", ""): init_weights[k] for k in init_weights}
+            )  # remove prefix
+            self.feature.load_state_dict(init_weights, strict=False)
+            load_keys = set(init_weights.keys())
+            self_keys = set(self.feature.state_dict().keys())
+
+        if verbose:
+            # check if some weight_dict keys were missing or unused
+            missing_keys = self_keys - load_keys
+            unused_keys = load_keys - self_keys
+            print("missing keys: {}".format(sorted(list(missing_keys))))
+            print("unused_keys: {}".format(sorted(list(unused_keys))))
+
+    def save(self, out_path):
+        torch.save(self.best_weights, out_path)
+
+    def update_best(self):  # TODO: necessary? not in default pytorch models
+        self.best_weights = copy.deepcopy(self.state_dict())
+
+
+# Official ResNet Implementation
 class ResNetFeature(nn.Module):
     def __init__(
         self,

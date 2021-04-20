@@ -1,5 +1,6 @@
 """preprocess.py: utilities for augmentation and preprocessing pipelines"""
 # todo: add parameters into docstrings for easy access using "?"
+# TODO: documentation for actions should include parameters or reference to docs
 import numpy as np
 from PIL import Image
 import random
@@ -12,17 +13,41 @@ from torchvision.utils import save_image
 
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
+from opensoundscape.preprocess import tensor_augment as tensaug
 
 
 class ParameterRequiredError(Exception):
     """Raised if action.go(x) called when action.go(x,x_labels) is required"""
 
 
-# TODO: documentation for actions should include parameters or reference to docs
+class ActionContainer:
+    """this is a container object which holds instances of Action child-classes
+
+    the Actions it contains each have .go(), .on(), .off(), .set(), .get()
+
+    The actions are un-ordered and may not all be used. In preprocessor objects
+    such as AudioToSpectrogramPreprocessor, Actions from the action
+    container are listed in a pipeline(list), which defines their order of use.
+
+    To add actions to the container: action_container.loader = AudioLoader()
+    To set parameters of actions: action_container.loader.set(param=value,...)
+
+    Methods: list_actions()
+    """
+
+    def __init__(self):
+        pass
+
+    def list_actions(self):
+        return list(vars(self).keys())
+
 
 ### Audio transforms ###
 class BaseAction:
-    """Parent class for all Pipeline Elements"""
+    """Parent class for all Pipeline Elements
+
+    New actions should subclass this class.
+    """
 
     def __init__(self, **kwargs):
         # pass any parameters as kwargs
@@ -46,80 +71,85 @@ class BaseAction:
         self.bypass = False
 
 
-class ActionContainer:
-    """this is an empty object which holds instances of Action child-classes
-
-    the instances each has a go() method. Set parameters with set(param=value,...)
-    """
-
-    def __init__(self):
-        pass
-
-    def list_actions(self):
-        return list(vars(self).keys())
-
-
 class AudioLoader(BaseAction):
-    """Action child class for Audio.from_file()
+    """Action child class for Audio.from_file() (path -> Audio)
 
-    default sample_rate is None (use file's sample rate)
+    Loads an audio file, see Audio.from_file() for parameters.
+    (sample_rate=None, resample_type="kaiser_fast", max_duration=None)
+
+    Note: default sample_rate=None means use file's sample rate, don't resample
     """
-
-    def __init__(self, **kwargs):
-        super(AudioLoader, self).__init__(**kwargs)
-        # default parameters
-        self.params["sample_rate"] = None
-
-        # add parameters passed to __init__
-        self.params.update(kwargs)
 
     def go(self, path):
         return Audio.from_file(path, **self.params)
 
 
 class AudioTrimmer(BaseAction):
-    """Action child class for trimming audio"""
+    """Action child class for trimming audio (Audio -> Audio)
+
+    Trims an audio file to desired length, from start or random segment
+
+    Params:
+        audio_length: desired final length (sec); if None, no trim is performed
+        extend_short_clips: if True, clips shorter than audio_length are
+            extended by looping
+        random_trim: if True, a random segment of length audio_length is chosen
+            from the input audio. If False, the file is trimmed from 0 seconds
+            to audio_length seconds.
+    """
 
     def __init__(self, **kwargs):
         super(AudioTrimmer, self).__init__(**kwargs)
         # default parameters
         self.params["extend_short_clips"] = False
         self.params["random_trim"] = False
-        self.params["audio_length"] = None  # trim all audio to fixed length
+        self.params["audio_length"] = None  # can trim all audio to fixed length
 
         # add parameters passed to __init__
         self.params.update(kwargs)
 
     def go(self, audio):
         if self.params["audio_length"] is not None:
+            # TODO: might want to move this functionality to Audio.random_trim
+
+            if audio.duration() <= self.params["audio_length"]:
+                # input audio is not as long as desired length
+                if self.params["extend_short_clips"]:  # extend clip by looping
+                    audio = audio.extend(self.params["audio_length"])
+                else:
+                    raise ValueError(
+                        f"the length of the original file ({audio.duration()} sec) was less than the length to extract ({self.params['audio_length']} sec). To extend short clips, use extend_short_clips=True"
+                    )
             if self.params["random_trim"]:
-                # from opensoundscape.preprocess import random_audio_trim
-                # we don't have default
-                audio = random_audio_trim(
-                    audio,
-                    self.params["audio_length"],
-                    self.params["extend_short_clips"],
-                )
+                extra_time = input_duration - duration
+                start_time = np.random.uniform() * extra_time
             else:
-                audio = audio.trim(0, self.params["audio_length"])
+                start_time = 0
+
+            end_time = start_time + self.params["audio_length"]
+            audio = audio.trim(start_time, end_time)
 
         return audio
 
 
 class AudioToSpectrogram(BaseAction):
-    """Action child class for Audio.from_file()"""
+    """Action child class for Audio.from_file() (Audio -> Spectrogram)
+
+    see spectrogram.Spectrogram for parameters/docs
+    ()
+    """
 
     def go(self, audio):
         return Spectrogram.from_audio(audio, **self.params)
 
 
 class SpectrogramBandpass(BaseAction):
-    """Action child class for Spectrogram.bandpass()
+    """Action class for Spectrogram.bandpass() (Spectrogram -> Spectrogram)
 
-    initialize like: SpectrogramBandpass(1000,5000)
-    to bandpass the spectrogram from 1kHz to 5Khz
+    To bandpass the spectrogram from 1kHz to 5Khz:
+    action = SpectrogramBandpass(1000,5000)
 
-    parmas: min_f, max_f
+    Args: min_f, max_f
     see opensoundscape.spectrogram.Spectrogram.bandpass() for documentation
 
     Spectrogram in, Spectrogram out
@@ -130,7 +160,7 @@ class SpectrogramBandpass(BaseAction):
 
 
 class SpecToImg(BaseAction):
-    """Action child class for spec to image
+    """Action child class for spec to image (Spectrogram -> PIL Image)
 
     Spectrogram in, PIL.Image out"""
 
@@ -140,7 +170,7 @@ class SpecToImg(BaseAction):
 
 
 class SaveTensorToDisk(BaseAction):
-    """save a torch Tensor to disk"""
+    """save a torch Tensor to disk (Tensor -> Tensor)"""
 
     def __init__(self, save_path, **kwargs):
         super(SaveTensorToDisk, self).__init__(**kwargs)
@@ -160,7 +190,10 @@ class SaveTensorToDisk(BaseAction):
 
 
 class TorchColorJitter(BaseAction):
-    """Action child class for torchvision.transforms.ColorJitter"""
+    """Action class for torchvision.transforms.ColorJitter
+
+    (Tensor -> Tensor) or (PIL Img -> PIL Img)
+    """
 
     def __init__(self, **kwargs):
         super(TorchColorJitter, self).__init__(**kwargs)
@@ -180,12 +213,12 @@ class TorchColorJitter(BaseAction):
 
 
 class TorchRandomAffine(BaseAction):
-    """Action child class with torchvision.transforms.RandomAffine
+    """Action class with torchvision.transforms.RandomAffine
 
-    can act on PIL image or torch Tensor
+    (Tensor -> Tensor) or (PIL Img -> PIL Img)
 
     note: we recommend applying RandomAffine after image
-    normalization. In this case, an intermediate grey value is 0.
+    normalization. In this case, an intermediate gray value is ~0.
     If normalization is applied after RandomAffine on a PIL image, use an
     intermediate fill color such as (122,122,122).
     """
@@ -207,7 +240,11 @@ class TorchRandomAffine(BaseAction):
 
 
 class ImgToTensor(BaseAction):
-    """convert PIL.Image w/range [0,255] to torch Tensor w/range [0,1]"""
+    """(PIL.Image -> Tensor)
+
+    convert PIL.Image w/range [0,255] to torch Tensor w/range [0,1]
+    converts image to RGB (3 channels)
+    """
 
     def go(self, x):
         x = x.convert("RGB")
@@ -215,8 +252,28 @@ class ImgToTensor(BaseAction):
         return transform(x)
 
 
+class ImgToTensorGrayscale(BaseAction):
+    """(PIL.Image -> Tensor)
+
+    convert PIL.Image w/range [0,255] to torch Tensor w/range [0,1]
+    converts image to grayscale (1 channel)
+    """
+
+    def go(self, x):
+        x = x.convert("L")
+        transform = transforms.Compose([transforms.ToTensor()])
+        return transform(x)
+
+
 class TensorNormalize(BaseAction):
-    """torchvision.transforms.Normalize """
+    """torchvision.transforms.Normalize (WARNING: FIXED shift and scale)
+
+    (Tensor->Tensor)
+
+    WARNING: This does not perform per-image normalization. Instead,
+    it takes as arguments a fixed u and s, ie for the entire dataset,
+    and performs X=(X-u)/s.
+    """
 
     def __init__(self, **kwargs):
         super(TensorNormalize, self).__init__(**kwargs)
@@ -225,7 +282,7 @@ class TensorNormalize(BaseAction):
         self.params["mean"] = 0.5
         self.params["std"] = 0.5
         # these are NOT the target mu and sd, but the assumed mu and sd of img->
-        # callibrates to mu=0, sd=1 by shift and scale
+        # performs X= (X-mu)/sd
 
         # add parameters passed to __init__
         self.params.update(kwargs)
@@ -240,8 +297,8 @@ class TimeWarp(BaseAction):
     """perform tensor augmentations
 
     such as time warp, time mask, and frequency mask
-    for now, parameters are hard-coded.
-
+    Args:
+        warp_amount: use higher values for more skew and offset (experimental)
     """
 
     def __init__(self, **kwargs):
@@ -254,8 +311,6 @@ class TimeWarp(BaseAction):
         self.params.update(kwargs)
 
     def go(self, x):
-        """torch Tensor in, torch Tensor out"""
-        from opensoundscape.torch import tensor_augment as tensaug
 
         # add "batch" dimension to tensor and use just first channel
         x = x[0, :, :].unsqueeze(0).unsqueeze(0)
@@ -269,7 +324,12 @@ class TimeWarp(BaseAction):
 
 
 class TimeMask(BaseAction):
-    """add random vertical bars over image"""
+    """add random vertical bars over image (Tensor -> Tensor)
+
+    Args:
+        max_masks: maximum number of bars [default: 3]
+        max_width_px: maximum width of bars in pixels [default: 40]
+    """
 
     def __init__(self, **kwargs):
         super(TimeMask, self).__init__(**kwargs)
@@ -282,8 +342,6 @@ class TimeMask(BaseAction):
         self.params.update(kwargs)
 
     def go(self, x):
-        """torch Tensor in, torch Tensor out"""
-        from opensoundscape.torch import tensor_augment as tensaug
 
         # add "batch" dimension to tensor and use just first channel
         x = x[0, :, :].unsqueeze(0).unsqueeze(0)
@@ -300,14 +358,14 @@ class TimeMask(BaseAction):
 
 class FrequencyMask(BaseAction):
     """add random horizontal bars over image
+    #TODO: should it use fraction of img instead of pixels?
 
     initialize with **kwargs parameters, or
     use .set(**kwargs) to update parameters
 
     Parameters:
         max_masks: max number of horizontal bars [default: 3]
-        max_width_px: maximum height of horizontal bars in image pixel units
-        #TODO: should it use fraction of img instead of pixels?
+        max_width_px: maximum height of horizontal bars in pixels [default: 40]
     """
 
     def __init__(self, **kwargs):
@@ -322,7 +380,6 @@ class FrequencyMask(BaseAction):
 
     def go(self, x):
         """torch Tensor in, torch Tensor out"""
-        from opensoundscape.torch import tensor_augment as tensaug
 
         # add "batch" dimension to tensor and use just first channel
         x = x[0, :, :].unsqueeze(0).unsqueeze(0)
@@ -341,6 +398,8 @@ class TensorAugment(BaseAction):
     """combination of 3 augmentations with hard-coded parameters
 
     time warp, time mask, and frequency mask
+
+    use (bool) time_warp, time_mask, freq_mask to turn each on/off
     """
 
     def __init__(self, **kwargs):
@@ -355,8 +414,6 @@ class TensorAugment(BaseAction):
         self.params.update(kwargs)
 
     def go(self, x):
-        from opensoundscape.torch import tensor_augment as tensaug
-
         """torch Tensor in, torch Tensor out"""
         # add "batch" dimension to tensor and keep just first channel
         x = x[0, :, :].unsqueeze(0).unsqueeze(0)  # was: X = X[:,0].unsqueeze(1)
@@ -372,7 +429,14 @@ class TensorAugment(BaseAction):
 
 
 class TensorAddNoise(BaseAction):
-    """random white noise added to sample"""
+    """Add gaussian noise to sample (Tensor -> Tensor)
+
+    Args:
+        std: standard deviation for Gaussian noise [default: 1]
+
+    Note: be aware that scaling before/after this action will change the
+    effect of a fixed stdev Gaussian noise
+    """
 
     def __init__(self, **kwargs):
         super(TensorAddNoise, self).__init__(**kwargs)
@@ -389,7 +453,31 @@ class TensorAddNoise(BaseAction):
 
 
 class ImgOverlay(BaseAction):
-    # iteratively overlay images with overlay_prob until stopping condition
+    """iteratively overlay images on top of eachother
+
+    Overlays images from overlay_df on top of the sample with probability
+    overlay_prob until stopping condition.
+    If necessary, trims overlay audio to the length of the input audio.
+    Overlays the images on top of each other with a weight.
+
+    Args:
+        overlay_df: a labels dataframe with audio files as the index and
+            classes as columns
+        overlay_class: how to choose files from overlay_df to overlay
+            Options [default: "different"]:
+            None - Randomly select any file from overlay_df
+            "different" - Select a random file from overlay_df containing none
+                of the classes this file contains
+            specific class name - always choose files from this class
+        overlay_weight: can be a float between 0-1 or range of floats (chooses
+            randomly from within range) such as [0.1,0.7].
+            An overlay_weight <0.5 means more emphasis on original image.
+        update_labels: if True, add labels of overlayed class to returned labels
+
+    #TODO: raise warning for class name "different"
+
+    """
+
     def __init__(
         self, overlay_df, audio_length, loader_pipeline, update_labels, **kwargs
     ):
@@ -414,25 +502,25 @@ class ImgOverlay(BaseAction):
         self.params.update(kwargs)
 
     def go(self, x, x_labels=None):
-        """Overlay an image from overlay_df
+        """Overlay images from overlay_df"""
 
-        if overlay_class is None: select any file from overlay_df
-        if overlay_class is different
-        Select a random file from a different class. Trim if necessary to the
-        same length as the given image. Overlay the images on top of each other
-        with a weight.
+        assert overlay_class in ["different", None] + df.columns, (
+            "overlay_class must be 'different' or None or in df.columns"
+            f"got {overlay_class}"
+        )
+        assert (overlay_prob <= 1) and (overlay_prob >= 0), (
+            "overlay_prob" f"should be in range (0,1), was {overlay_weight}"
+        )
+        assert overlay_weight < 1 and overlay_weight > 0, (
+            "overlay_weight" f"should be between 0 and 1, was {overlay_weight}"
+        )
 
-        overlay_weight: can be a float in (0,1) or range of floats (chooses
-        randomly from within range) such as [0.1,0.7].
-        An overlay_weight <0.5 means more emphasis on original image.
-
-        update_labels: if True, add labels of overlayed class to returned labels
-        """
         overlay_class = self.params["overlay_class"]
         df = self.params["overlay_df"]
 
         # (always) enforce requirement of x_label
         if x_labels is None:  # and overlay_class is not None:
+            # TODO: this way of doing it makes error handling ugly
             raise ParameterRequiredError("ImgOverlay requires x_labels")
 
         overlays_performed = 0
@@ -505,60 +593,27 @@ class ImgOverlay(BaseAction):
         return x, x_labels
 
 
-def random_audio_trim(audio, duration, extend_short_clips=False):
-    """randomly select a subsegment of Audio of fixed length
-
-    randomly chooses a time segment of the entire Audio object to cut out,
-    from the set of all possible start times that allow a complete extraction
-
-    Args:
-        Audio: input Audio object
-        length: duration in seconds of the trimmed Audio output
-
-    Returns:
-        Audio object trimmed from original
-    """
-    input_duration = len(audio.samples) / audio.sample_rate
-    if duration > input_duration:
-        if not extend_short_clips:
-            raise ValueError(
-                f"the length of the original file ({input_duration} sec) was less than the length to extract ({duration} sec). To extend short clips, use extend_short_clips=True"
-            )
-        else:
-            return audio.extend(duration)
-    extra_time = input_duration - duration
-    start_time = np.random.uniform() * extra_time
-    return audio.trim(start_time, start_time + duration)
-
-
-### PIL.Image transforms ###
-
-
-def time_split(img, seed=None):
-    """Given a PIL.Image, rotate it
-
-    Choose a random new starting point and append the first section to the end.
-    For example, if `h` chosen
-
-    abcdefghijklmnop
-           ^
-    hijklmnop + abcdefg
-
-    Args:
-        img: A PIL.Image
-
-    Returns:
-        A PIL.Image
-    """
-
-    if not isinstance(img, Image.Image):
-        raise TypeError("Expects PIL.Image as input")
-
-    if seed:
-        random.seed(seed)
-
-    width, _ = img.size
-    idx = random.randint(0, width)
-    arr = np.array(img)
-    rotated = np.hstack([arr[:, idx:, :], arr[:, 0:idx, :]])
-    return Image.fromarray(rotated)
+# def random_audio_trim(audio, duration, extend_short_clips=False):
+#     """randomly select a subsegment of Audio of fixed length
+#
+#     randomly chooses a time segment of the entire Audio object to cut out,
+#     from the set of all possible start times that allow a complete extraction
+#
+#     Args:
+#         Audio: input Audio object
+#         length: duration in seconds of the trimmed Audio output
+#
+#     Returns:
+#         Audio object trimmed from original
+#     """
+#     input_duration = len(audio.samples) / audio.sample_rate
+#     if duration > input_duration:
+#         if not extend_short_clips:
+#             raise ValueError(
+#                 f"the length of the original file ({input_duration} sec) was less than the length to extract ({duration} sec). To extend short clips, use extend_short_clips=True"
+#             )
+#         else:
+#             return audio.extend(duration)
+#     extra_time = input_duration - duration
+#     start_time = np.random.uniform() * extra_time
+#     return audio.trim(start_time, start_time + duration)
