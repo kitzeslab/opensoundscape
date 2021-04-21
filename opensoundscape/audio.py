@@ -31,7 +31,7 @@ class Audio:
     sample rate. Use `Audio.from_file` or `Audio.from_bytesio` with
     `sample_rate=None` to use a native sampling rate.
 
-    Arguments:
+    Args:
         samples (np.array):     The audio samples
         sample_rate (integer):  The sampling rate for the audio samples
         resample_type (str):    The resampling method to use [default: "kaiser_fast"]
@@ -118,7 +118,7 @@ class Audio:
         TODO:
             Describe how to initialize an Audio file as a BytesIO object
 
-        Arguments:
+        Args:
             bytesio: Contents of WAV file as BytesIO
             sample_rate: The final sampling rate of Audio object [default: None]
             max_duration: The maximum duration of the audio file [default: None]
@@ -137,8 +137,36 @@ class Audio:
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
 
+    def resample(self, sample_rate, resample_type=None):
+        """ Resample Audio object
+
+        Args:
+            sample_rate (scalar):   the new sample rate
+            resample_type (str):    resampling algorithm to use [default: None
+                                    (uses self.resample_type of instance)]
+
+        Returns:
+            a new Audio object of the desired sample rate
+        """
+        if resample_type is None:
+            resample_type = self.resample_type
+
+        samples_resampled = librosa.resample(
+            self.samples,
+            orig_sr=self.sample_rate,
+            target_sr=sample_rate,
+            res_type=resample_type,
+        )
+
+        return Audio(
+            samples_resampled,
+            sample_rate,
+            resample_type=resample_type,
+            max_duration=self.max_duration,
+        )
+
     def trim(self, start_time, end_time):
-        """ trim Audio object in time
+        """ Trim Audio object in time
 
         Args:
             start_time: time in seconds for start of extracted clip
@@ -161,6 +189,7 @@ class Audio:
 
         Args:
             length: the final length in seconds of the extended file
+
         Returns:
             a new Audio object of the desired length
         """
@@ -179,15 +208,16 @@ class Audio:
 
         Args:
             time: The time to multiply with the sample_rate
+
         Returns:
             sample: The rounded sample
         """
         return int(time * self.sample_rate)
 
     def bandpass(self, low_f, high_f, order):
-        """ bandpass audio signal frequencies
+        """ Bandpass audio signal frequencies
 
-        uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
+        Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
 
         Args:
             low_f: low frequency cutoff (-3 dB)  in Hz of bandpass filter
@@ -215,7 +245,7 @@ class Audio:
 
     # can act on an audio file and be moved into Audio class
     def spectrum(self):
-        """create frequency spectrum from an Audio object using fft
+        """ Create frequency spectrum from an Audio object using fft
 
         Args:
             self
@@ -240,7 +270,7 @@ class Audio:
         return fft, frequencies
 
     def save(self, path):
-        """save Audio to file
+        """ Save Audio to file
 
         Args:
             path: destination for output
@@ -252,7 +282,7 @@ class Audio:
     def duration(self):
         """ Return duration of Audio
 
-        Output:
+        Returns:
             duration (float): The duration of the Audio
         """
 
@@ -263,79 +293,71 @@ class Audio:
 
         The Audio object is split into clips of a specified duration and overlap
 
-        Arguments:
-            clip_duration:  The duration in seconds of the clips
-            clip_overlap:   The overlap of the clips in seconds [default: 0]
-            final_clip:     Possible options (any other input will ignore the final clip entirely),
-                                - "remainder":          Include the remainder of the Audio
-                                                            (clip will not have clip_duration length)
-                                - "full":               Increase the overlap to yield a clip with clip_duration
-                                - "extend":             Similar to remainder but extend the clip to clip_duration
-        Results:
+        Args:
+            clip_duration (float):  The duration in seconds of the clips
+            clip_overlap (float):   The overlap of the clips in seconds [default: 0]
+            final_clip (str):       Behavior if final_clip is less than clip_duration seconds long. [default: None]
+                By default, ignores final clip entirely.
+                Possible options (any other input will ignore the final clip entirely),
+                    - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
+                    - "full":       Increase the overlap to yield a clip with clip_duration length
+                    - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+        Returns:
             A list of dictionaries with keys: ["audio", "begin_time", "end_time"]
         """
 
         duration = self.duration()
-        if clip_duration > duration:
-            if final_clip == "remainder":
-                return_clip = Audio(
-                    self.samples,
-                    self.sample_rate,
-                    resample_type=self.resample_type,
-                    max_duration=self.max_duration,
-                )
-                return [
-                    {
-                        "clip": return_clip,
-                        "clip_duration": return_clip.duration(),
-                        "begin_time": 0,
-                        "end_time": duration,
-                    }
-                ]
-            elif final_clip in ["full", "extend"]:
-                return_clip = self.extend(clip_duration)
-                return [
-                    {
-                        "clip": return_clip,
-                        "clip_duration": return_clip.duration(),
-                        "begin_time": 0,
-                        "end_time": duration,
-                    }
-                ]
-            else:
-                warnings.warn(
-                    f"Given Audio object with duration of `{duration}` seconds and `clip_duration={clip_duration}` but `final_clip={final_clip}` produces no clips. Returning empty list."
-                )
-                return []
 
-        num_clips = ceil((duration - clip_overlap) / (clip_duration - clip_overlap))
-        to_return = [None] * num_clips
-        for idx in range(num_clips):
-            if idx == num_clips - 1:
+        # Lists of start and end times for clips
+        increment = clip_duration - clip_overlap
+        starts = np.arange(0, duration, increment)
+        ends = starts + clip_duration
+
+        # Remove final_clip if needed
+        if final_clip not in ["remainder", "full", "extend"]:
+            # Throw away any clips with end times beyond the duration
+            keeps = ends <= duration
+            ends = ends[keeps]
+            starts = starts[keeps]
+
+        # Now we have the starts and ends
+        final_idx = len(ends) - 1
+        to_return = [None] * (final_idx + 1)
+        for idx, (start, end) in enumerate(zip(starts, ends)):
+            # By default
+            begin_time = start
+            end_time = end
+
+            # Change defaults to handle final clip
+            if idx >= final_idx:
                 if final_clip in ["remainder", "extend"]:
-                    begin_time = clip_duration * idx - clip_overlap * idx
+                    begin_time = start
                     end_time = duration
                 elif final_clip == "full":
-                    begin_time = int(duration - clip_duration)
+                    begin_time = duration - clip_duration
                     end_time = duration
-                else:
-                    begin_time = clip_duration * idx - clip_overlap * idx
-                    end_time = begin_time + clip_duration
-                    if end_time > duration:
-                        return to_return[:-1]
-            else:
-                begin_time = clip_duration * idx - clip_overlap * idx
-                end_time = begin_time + clip_duration
+                # If final_clip not one of the above, nothing will change
 
+            # Trim the clip as needed
             audio_clip = self.trim(begin_time, end_time)
-            if final_clip == "extend":
+
+            # Extend the final clip if needed
+            if (idx >= final_idx) & (final_clip == "extend"):
                 audio_clip = audio_clip.extend(clip_duration)
+
+            # Add one clip to list
             to_return[idx] = {
                 "clip": audio_clip,
                 "clip_duration": audio_clip.duration(),
                 "begin_time": begin_time,
                 "end_time": end_time,
             }
+
+        if len(to_return) == 0:
+            warnings.warn(
+                f"Given Audio object with duration of `{duration}` seconds and `clip_duration={clip_duration}` but `final_clip={final_clip}` produces no clips. Returning empty list."
+            )
+            return []
 
         return to_return
 
@@ -351,19 +373,20 @@ def split_and_save(
 ):
     """ Split audio into clips and save them to a folder
 
-    Arguments:
-        audio:          The input Audio to split
-        destination:    A folder to write clips to
-        prefix:         A name to prepend to the written clips
-        clip_duration:  The duration of each clip in seconds
-        clip_overlap:   The overlap of each clip in seconds [default: 0]
-        final_clip:     Possible options (any other input will ignore the final clip entirely) [default: None]
-                            - "remainder":          Include the remainder of the Audio
-                                                        (clip will not have clip_duration length)
-                            - "full":               Increase the overlap to yield a clip with clip_duration
-                            - "extend":             Similar to remainder but extend the clip to clip_duration
-        dry_run:        If True, skip writing audio and just return clip DataFrame [default: False]
-    
+    Args:
+        audio:              The input Audio to split
+        destination:        A folder to write clips to
+        prefix:             A name to prepend to the written clips
+        clip_duration:      The duration of each clip in seconds
+        clip_overlap:       The overlap of each clip in seconds [default: 0]
+        final_clip (str):   Behavior if final_clip is less than clip_duration seconds long. [default: None]
+            By default, ignores final clip entirely.
+            Possible options (any other input will ignore the final clip entirely),
+                - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
+                - "full":       Increase the overlap to yield a clip with clip_duration length
+                - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+        dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
+
     Returns:
         pandas.DataFrame containing begin and end times for each clip from the source audio
     """
@@ -371,14 +394,21 @@ def split_and_save(
     clips = audio.split(
         clip_duration=clip_duration, clip_overlap=clip_overlap, final_clip=final_clip
     )
+    clip_names = []
     for clip in clips:
         clip_name = (
             f"{destination}/{prefix}_{clip['begin_time']}s_{clip['end_time']}s.wav"
         )
+        clip_names.append(clip_name)
         if not dry_run:
             clip["clip"].save(clip_name)
 
     # Convert [{k: v}] -> {k: [v]}
     return pd.DataFrame(
-        {key: [clip[key] for clip in clips] for key in clips[0].keys() if key != "clip"}
+        {
+            key: [clip[key] for clip in clips]
+            for key in clips[0].keys()
+            if key != "clip"
+        },
+        index=clip_names,
     )

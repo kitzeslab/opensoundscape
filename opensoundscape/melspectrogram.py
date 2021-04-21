@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" melspectrogram.py: Utilities for dealing with spectrograms
+""" melspectrogram.py: Utilities for dealing with mel spectrograms
 """
 
 from opensoundscape.audio import Audio

@@ -105,10 +105,10 @@ SCHEMA = Schema(
 def validate(config):
     """ Validate a configuration string
 
-    Input:
+    Args:
         config: A string containing an Opensoundscape configuration
 
-    Output:
+    Returns:
         dict: A dictionary of the validated Opensoundscape configuration
     """
     with StringIO(config) as f:
@@ -119,10 +119,10 @@ def validate(config):
 def validate_file(fname):
     """ Validate a configuration file
 
-    Input:
+    Args:
         fname: A filename containing an Opensoundscape configuration
 
-    Output:
+    Returns:
         dict: A dictionary of the validated Opensoundscape configuration
     """
     with open(fname, "r") as f:
@@ -133,7 +133,7 @@ def validate_file(fname):
 def get_default_config():
     """ Get the default configuration file as a dictionary
 
-    Output:
+    Returns:
         dict: A dictionary containing the default Opensoundscape configuration
 
     """

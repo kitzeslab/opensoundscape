@@ -1,0 +1,21 @@
+/* Side header on desktop and mobile */
+.wy-side-nav-search, .wy-nav-top {background: #1d9a5a}
+.wy-side-nav-search {border-color:#34784a}
+
+/* Header text on menu and index TOC */
+span.caption-text {color: #1d9a5a}
+
+/* Links */
+a:visited{color:#1d6985}
+a:hover{color:#1d8579}
+
+/* Keep menu links uncolorful */
+.wy-menu-vertical a{color: #d9d9d9}
+.wy-side-nav-search>a,.wy-side-nav-search .wy-dropdown>a{color:#fcfcfc}
+
+/* `Code` Colors */
+code,.rst-content tt,.rst-content code{
+    background:#fff;
+    border:solid 1px #e1e4e5;
+    color:#E74C3C;
+}

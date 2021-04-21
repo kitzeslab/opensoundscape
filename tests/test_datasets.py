@@ -14,54 +14,42 @@ tmp_path = "tests/_tmp_split"
 def temporary_split_storage(request):
     path = Path(tmp_path)
     path.mkdir()
-
-    def fin():
-        path.rmdir()
-
-    request.addfinalizer(fin)
-    return path
+    yield path
+    path.rmdir()
 
 
 @pytest.fixture()
 def splitter_results_default(request):
-    split0 = Path(f"{tmp_path}/5c5f4b5484945db37725533cd6a530f7.wav")
-    split1 = Path(f"{tmp_path}/d174a640f6b3ed0cb42ca686576f663b.wav")
-
-    def fin():
-        split0.unlink()
-        split1.unlink()
-
-    request.addfinalizer(fin)
-    return split0, split1
+    split0 = Path(f"{tmp_path}/a1f220f1640c2e35de106c930e5cd20f.wav")
+    split1 = Path(f"{tmp_path}/f7ed400e5093fbafc09df578ff9c5425.wav")
+    yield split0, split1
+    split0.unlink()
+    split1.unlink()
 
 
 @pytest.fixture()
 def splitter_results_last(request):
-    split0 = Path(f"{tmp_path}/27f99f7d921cc464de465411f075e933.wav")
-    split1 = Path(f"{tmp_path}/4202e0f72c56cb0763db165ffbbc8bc6.wav")
-
-    def fin():
-        split0.unlink()
-        split1.unlink()
-
-    request.addfinalizer(fin)
-    return split0, split1
+    split0 = Path(f"{tmp_path}/36fec9935a0d1c38da05004e5d096f6d.wav")
+    split1 = Path(f"{tmp_path}/200c78d44bf9b3985d464e06f7cb395b.wav")
+    yield split0, split1
+    split0.unlink()
+    split1.unlink()
 
 
 @pytest.fixture()
 def one_min_audio_list():
-    return [Path("tests/1min.wav")]
+    return [Path("tests/audio/1min.wav")]
 
 
 @pytest.fixture()
 def single_target_audio_dataset_df():
-    return pd.read_csv("tests/input.csv")
+    return pd.read_csv("tests/csvs/input.csv")
 
 
 @pytest.fixture()
 def single_target_audio_dataset_long_audio_df():
     return pd.DataFrame(
-        {"Destination": ["tests/great_plains_toad.wav"], "NumericLabels": [1]}
+        {"Destination": ["tests/audio/great_plains_toad.wav"], "NumericLabels": [1]}
     )
 
 

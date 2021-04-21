@@ -1,0 +1,2 @@
+Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	class	number	distance	type
+1	Spectrogram 1	1	358.702741743	386.285527528	243.6	1737.4	hello	5	mid	chorus pup
