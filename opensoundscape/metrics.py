@@ -41,6 +41,10 @@ def multiclass_metrics(targets, preds, class_names):
     """provide a list or np.array of 0,1 targets and predictions"""
     epoch_metrics = {}
 
+    # remove all samples with NaN for a prediction
+    targets = targets[~np.isnan(preds).any(axis=1), :]
+    preds = preds[~np.isnan(preds).any(axis=1), :]
+
     # Confusion matrix if not multi-label
     if max(np.sum(targets, 1)) <= 1 and max(np.sum(preds, 1)) <= 1:
         # requires class labels not one-hot
@@ -83,6 +87,10 @@ def binary_metrics(targets, preds, class_names=[0, 1]):
         )
 
     epoch_metrics = {}
+
+    # remove all samples with NaN for a prediction
+    targets = targets[~np.isnan(preds).any(axis=1), :]
+    preds = preds[~np.isnan(preds).any(axis=1), :]
 
     # Confusion matrix requires numeric not one-hot labels
     t = np.argmax(targets, 1)

@@ -34,7 +34,7 @@ from opensoundscape.torch.architectures.resnet import ResNetArchitecture
 from opensoundscape.torch.models.utils import BaseModule, get_dataloader
 from opensoundscape.metrics import multiclass_metrics, binary_metrics
 from opensoundscape.torch.loss import BCEWithLogitsLoss_hot, ResampleLoss
-
+from opensoundscape.torch.safe_dataset import SafeDataset
 
 # NOTE: Turning off all logging for now. may want to use logging module in future
 
@@ -184,23 +184,17 @@ class PytorchModel(BaseModule):
         # Dataloader setup #
         ######################
 
+        # SafeDataset loads a new sample if loading a sample throws an error
+        safe_dataset = SafeDataset(self.train_dataset)
+
         # train_loader samples batches of images + labels from train_dataset
         self.train_loader = get_dataloader(
-            self.train_dataset,
+            safe_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
             shuffle=True,
             sampler=self.sampler,
         )
-
-        # valid_loader samples batches of images + labels from valid_dataset
-        # self.valid_loader = get_dataloader(
-        #     self.valid_dataset,
-        #     batch_size=batch_size,
-        #     num_workers=num_workers,
-        #     shuffle=False,
-        #     sampler=None,
-        # )
 
     def train_epoch(self):
         """perform forward pass, loss, backpropagation for one epoch
@@ -319,7 +313,7 @@ class PytorchModel(BaseModule):
         #TODO: verbose switch
         """
         class_err = (
-            "Train and validation datasets must have same classes"
+            "Train and validation datasets must have same classes "
             "and class order as model object."
         )
         assert list(self.classes) == list(train_dataset.df.columns), class_err
@@ -518,6 +512,7 @@ class PytorchModel(BaseModule):
         activation_layer=None,  # softmax','sigmoid','softmax_and_logit', None
         binary_preds=None,  #'single_target','multi_target', None
         threshold=0.5,
+        error_log=None,
     ):
         """Generate predictions on a dataset
 
@@ -555,11 +550,17 @@ class PytorchModel(BaseModule):
             threshold:
                 prediction threshold for sigmoid scores. Only relevant when
                 binary_preds == 'multi_target'
+            error_log:
+                if not None, saves a list of files that raised errors to
+                the specified file location [default: None]
 
         Returns: 3 DataFrames (or Nones), w/index matching prediciton_dataset.df
             scores: post-activation_layer scores
             predictions: 0/1 preds for each class
             labels: labels from dataset (if available)
+
+        Note: if loading an audio file raises a PreprocessingError, the scores
+            and predictions will be np.nan
 
         Note: if no return type selected for labels/scores/preds, returns None
         instead of a DataFrame
@@ -579,19 +580,28 @@ class PytorchModel(BaseModule):
 
         self.network.eval()
 
+        # SafeDataset will not fail on bad files,
+        # but will provide a different sample! Later we go back and replace scores
+        # with np.nan for the bad samples (using safe_dataset._unsafe_indices)
+        # TODO: this approach to error handling feels hacky
+        safe_dataset = SafeDataset(prediction_dataset)
+
         dataloader = torch.utils.data.DataLoader(
-            prediction_dataset,
+            safe_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
             shuffle=False,
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=torch.cuda.is_available(),
         )
+        print(len(dataloader))
 
         ### Prediction ###
         total_scores = []
         total_preds = []
         total_tgts = []
+
+        failed_files = []  # keep list of any samples that raise errors
 
         has_labels = False
 
@@ -645,13 +655,22 @@ class PytorchModel(BaseModule):
                 # and updates via optimizer/backprop. detach() returns
                 # just numeric values.
                 total_scores.append(scores.detach().cpu().numpy())
-                total_preds.append(batch_preds.int().detach().cpu().numpy())
+                total_preds.append(batch_preds.float().detach().cpu().numpy())
                 total_tgts.append(batch_targets.int().detach().cpu().numpy())
 
         # aggregate across all batches
         total_tgts = np.concatenate(total_tgts, axis=0)
         total_scores = np.concatenate(total_scores, axis=0)
         total_preds = np.concatenate(total_preds, axis=0)
+
+        print(np.shape(total_scores))
+
+        # replace scores/preds with nan for samples that failed in preprocessing
+        # TODO: this feels hacky (we predicted on substitute-samples rather than
+        # skipping the samples that failed preprocessing)
+        total_scores[safe_dataset._unsafe_indices, :] = np.nan
+        if binary_preds is not None:
+            total_preds[safe_dataset._unsafe_indices, :] = np.nan
 
         # return 3 DataFrames with same index/columns as prediction_dataset's df
         # use None for placeholder if no preds / labels

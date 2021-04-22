@@ -2,8 +2,13 @@ import pandas as pd
 import numpy as np
 import torch
 from opensoundscape.preprocess import actions
-from opensoundscape.preprocess.actions import ParameterRequiredError
 from pathlib import Path
+
+
+class PreprocessingError(Exception):
+    """Custom exception indicating that a Preprocessor pipeline failed"""
+
+    pass
 
 
 class BasePreprocessor(torch.utils.data.Dataset):
@@ -11,8 +16,13 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
     Custom Preprocessor classes should subclass this class or its children
 
-    df must have audio paths as index and class names as columns
-    - if no labels, df will have no columns
+    Args:
+        df must have audio paths as index and class names as columns
+        - if no labels, df will have no columns
+        return_labels
+
+    Raises:
+        PreprocessingError if exception is raised during __getitem__
     """
 
     def __init__(self, df, return_labels=True):
@@ -40,24 +50,30 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
     def __getitem__(self, item_idx):
 
-        df_row = self.df.iloc[item_idx]
-        x = Path(df_row.name)  # the index contains a path to a file
+        try:
+            df_row = self.df.iloc[item_idx]
+            x = Path(df_row.name)  # the index contains a path to a file
 
-        for pipeline_element in self.pipeline:
-            if pipeline_element.bypass:
-                continue
-            try:
-                x = pipeline_element.go(x)
-            except ParameterRequiredError:  # need to pass labels
-                x, df_row = pipeline_element.go(x, df_row)
+            # perform each action in the pipeline if action.bypass==False
+            for action in self.pipeline:
+                if action.bypass:
+                    continue
+                if action.requires_labels:
+                    x, df_row = action.go(x, df_row)
+                else:
+                    x = action.go(x)
 
-        # Return sample & label pairs (training/validation)
-        if self.return_labels:
-            labels = torch.from_numpy(df_row.values)
-            return {"X": x, "y": labels}
+            # Return sample & label pairs (training/validation)
+            if self.return_labels:
+                labels = torch.from_numpy(df_row.values)
+                return {"X": x, "y": labels}
 
-        # Return sample only (prediction)
-        return {"X": x}
+            # Return sample only (prediction)
+            return {"X": x}
+        except:
+            raise PreprocessingError(
+                f"failed to preprocess sample: {self.df.index[item_idx]}"
+            )
 
     def class_counts_cal(self):
         """count number of each label"""
@@ -69,11 +85,28 @@ class BasePreprocessor(torch.utils.data.Dataset):
 class AudioLoadingPreprocessor(BasePreprocessor):
     """creates Audio objects from file paths
 
-    df must have audio paths as index and class names as columns
-    - if no labels, df will have no columns
+    Args:
+        df:
+            labels dataframe for audio samples
+            - must have audio paths as index and class names as columns
+            - if no labels, df should have no columns
+        return_labels:
+            if True, __getitem__ returns {"X":batch_tensors,"y":labels}
+            if False, __getitem__ returns {"X":batch_tensors}
+            [default: True]
+        audio_length:
+            length in seconds of audio to return
+            - None: do not trim the original audio
+            - seconds (float): trim longer audio to this length. Shorter
+            audio input will raise a ValueError.
     """
 
-    def __init__(self, df, return_labels=True):
+    def __init__(
+        self,
+        df,
+        return_labels=True,
+        audio_length=None,
+    ):
 
         super(AudioLoadingPreprocessor, self).__init__(df, return_labels=return_labels)
 
@@ -84,7 +117,9 @@ class AudioLoadingPreprocessor(BasePreprocessor):
         self.pipeline.append(self.actions.load_audio)
 
         # add a second action for trimming audio (default is no trimming)
-        self.actions.trim_audio = actions.AudioTrimmer()
+        self.actions.trim_audio = actions.AudioTrimmer(
+            extend_short_clips=False, random_trim=False, audio_length=audio_length
+        )
         self.pipeline.append(self.actions.trim_audio)
 
 
@@ -111,7 +146,7 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
         self.actions.load_audio = actions.AudioLoader(sample_rate=22050)
         self.pipeline.append(self.actions.load_audio)
 
-        self.actions.trim_audio = actions.AudioTrimmer()
+        self.actions.trim_audio = actions.AudioTrimmer()  # TODO
         self.pipeline.append(self.actions.trim_audio)
 
         self.actions.to_spec = actions.AudioToSpectrogram()
@@ -239,7 +274,7 @@ class ResnetMultilabelPreprocessor(BasePreprocessor):
         self.actions.load_audio = actions.AudioLoader()
         self.pipeline.append(self.actions.load_audio)
 
-        self.actions.trim_audio = actions.AudioTrimmer()
+        self.actions.trim_audio = actions.AudioTrimmer()  # TODO
         self.pipeline.append(self.actions.trim_audio)
 
         self.actions.to_spec = actions.AudioToSpectrogram()

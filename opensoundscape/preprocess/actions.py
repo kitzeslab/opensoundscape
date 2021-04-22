@@ -16,10 +16,6 @@ from opensoundscape.spectrogram import Spectrogram
 from opensoundscape.preprocess import tensor_augment as tensaug
 
 
-class ParameterRequiredError(Exception):
-    """Raised if action.go(x) called when action.go(x,x_labels) is required"""
-
-
 class ActionContainer:
     """this is a container object which holds instances of Action child-classes
 
@@ -54,6 +50,7 @@ class BaseAction:
         self.params = {}
         self.params.update(kwargs)
         self.bypass = False  # if off, no action is performed
+        self.requires_labels = False
 
     def go(self, x, **kwargs):
         return x
@@ -118,7 +115,10 @@ class AudioTrimmer(BaseAction):
                     audio = audio.extend(self.params["audio_length"])
                 else:
                     raise ValueError(
-                        f"the length of the original file ({audio.duration()} sec) was less than the length to extract ({self.params['audio_length']} sec). To extend short clips, use extend_short_clips=True"
+                        f"the length of the original file ({audio.duration()} "
+                        f"sec) was less than the length to extract "
+                        f"({self.params['audio_length']} sec). To extend short "
+                        f"clips, use extend_short_clips=True"
                     )
             if self.params["random_trim"]:
                 extra_time = input_duration - duration
@@ -174,15 +174,13 @@ class SaveTensorToDisk(BaseAction):
 
     def __init__(self, save_path, **kwargs):
         super(SaveTensorToDisk, self).__init__(**kwargs)
+        self.requires_labels = True
         # make this directory if it doesnt exist yet
         self.save_path = Path(save_path)
         self.save_path.mkdir(parents=True, exist_ok=True)
 
-    def go(self, x, x_labels=None):
+    def go(self, x, x_labels):
         """we require x_labels because the .name gives origin file name"""
-        if x_labels is None:
-            raise ParameterRequiredError("Pass x_labels to SaveImgToDisk.go()")
-
         filename = os.path.basename(x_labels.name) + f"_{time()}.png"
         path = Path.joinpath(self.save_path, filename)
         save_image(x, path)
@@ -483,8 +481,7 @@ class ImgOverlay(BaseAction):
     ):
         super(ImgOverlay, self).__init__()
 
-        if overlay_df is None:
-            raise ParameterRequiredError("ImgOverlay requires overlay_df")
+        self.requires_labels = True
 
         # required arguments
         self.params["overlay_df"] = overlay_df
@@ -501,7 +498,7 @@ class ImgOverlay(BaseAction):
         # parameters from **kwargs
         self.params.update(kwargs)
 
-    def go(self, x, x_labels=None):
+    def go(self, x, x_labels):
         """Overlay images from overlay_df"""
 
         assert overlay_class in ["different", None] + df.columns, (
@@ -517,11 +514,6 @@ class ImgOverlay(BaseAction):
 
         overlay_class = self.params["overlay_class"]
         df = self.params["overlay_df"]
-
-        # (always) enforce requirement of x_label
-        if x_labels is None:  # and overlay_class is not None:
-            # TODO: this way of doing it makes error handling ugly
-            raise ParameterRequiredError("ImgOverlay requires x_labels")
 
         overlays_performed = 0
         while (
