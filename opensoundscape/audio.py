@@ -11,21 +11,19 @@ from math import ceil
 
 
 class OpsoLoadAudioInputError(Exception):
-    """ Custom exception indicating we can't load input
-    """
+    """Custom exception indicating we can't load input"""
 
     pass
 
 
 class OpsoLoadAudioInputTooLong(Exception):
-    """ Custom exception indicating length of audio is too long
-    """
+    """Custom exception indicating length of audio is too long"""
 
     pass
 
 
 class Audio:
-    """ Container for audio samples
+    """Container for audio samples
 
     Initializing an `Audio` object directly requires the specification of the
     sample rate. Use `Audio.from_file` or `Audio.from_bytesio` with
@@ -77,7 +75,7 @@ class Audio:
     def from_file(
         cls, path, sample_rate=None, resample_type="kaiser_fast", max_duration=None
     ):
-        """ Load audio from files
+        """Load audio from files
 
         Deal with the various possible input types to load an audio
         file and generate a spectrogram
@@ -110,7 +108,7 @@ class Audio:
     def from_bytesio(
         cls, bytesio, sample_rate=None, max_duration=None, resample_type="kaiser_fast"
     ):
-        """ Read from bytesio object
+        """Read from bytesio object
 
         Read an Audio object from a BytesIO object. This is primarily used for
         passing Audio over HTTP.
@@ -138,7 +136,7 @@ class Audio:
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
 
     def resample(self, sample_rate, resample_type=None):
-        """ Resample Audio object
+        """Resample Audio object
 
         Args:
             sample_rate (scalar):   the new sample rate
@@ -166,7 +164,7 @@ class Audio:
         )
 
     def trim(self, start_time, end_time):
-        """ Trim Audio object in time
+        """Trim Audio object in time
 
         Args:
             start_time: time in seconds for start of extracted clip
@@ -184,8 +182,39 @@ class Audio:
             max_duration=self.max_duration,
         )
 
+    def loop(self, length=None, n=None):
+        """Extend audio file by looping it
+
+        Args:
+            length:
+                the final length in seconds of the looped file
+                (cannot be used with n)[default: None]
+            n:
+                the number of times to repeat the audio sample
+                (cannot be used with length) [default: None]
+
+        Returns:
+            a new Audio object of the desired length or repetitions
+        """
+        if (length is None) + (n is None) != 1:
+            raise ValueError("Please enter a value for 'length' OR " "'n', not both")
+
+        if length is not None:
+            # loop the audio until it reaches a duration of `length` seconds
+            total_samples_needed = round(length * self.sample_rate)
+            samples_extended = np.resize(self.samples, total_samples_needed)
+
+        else:  # loop the audio n times
+            samples_extended = np.tile(self.samples, n)
+        return Audio(
+            samples_extended,
+            self.sample_rate,
+            resample_type=self.resample_type,
+            max_duration=self.max_duration,
+        )
+
     def extend(self, length):
-        """ Extend audio file by looping it
+        """Extend audio file by adding silence to the end
 
         Args:
             length: the final length in seconds of the extended file
@@ -195,7 +224,9 @@ class Audio:
         """
 
         total_samples_needed = round(length * self.sample_rate)
-        samples_extended = np.resize(self.samples, total_samples_needed)
+        samples_extended = np.pad(
+            self.samples, pad_width=(0, total_samples_needed - len(self.samples))
+        )
         return Audio(
             samples_extended,
             self.sample_rate,
@@ -204,7 +235,7 @@ class Audio:
         )
 
     def time_to_sample(self, time):
-        """ Given a time, convert it to the corresponding sample
+        """Given a time, convert it to the corresponding sample
 
         Args:
             time: The time to multiply with the sample_rate
@@ -215,7 +246,7 @@ class Audio:
         return int(time * self.sample_rate)
 
     def bandpass(self, low_f, high_f, order):
-        """ Bandpass audio signal frequencies
+        """Bandpass audio signal frequencies
 
         Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
 
@@ -245,7 +276,7 @@ class Audio:
 
     # can act on an audio file and be moved into Audio class
     def spectrum(self):
-        """ Create frequency spectrum from an Audio object using fft
+        """Create frequency spectrum from an Audio object using fft
 
         Args:
             self
@@ -270,7 +301,7 @@ class Audio:
         return fft, frequencies
 
     def save(self, path):
-        """ Save Audio to file
+        """Save Audio to file
 
         Args:
             path: destination for output
@@ -280,7 +311,7 @@ class Audio:
         write(path, self.samples, self.sample_rate)
 
     def duration(self):
-        """ Return duration of Audio
+        """Return duration of Audio
 
         Returns:
             duration (float): The duration of the Audio
@@ -289,7 +320,7 @@ class Audio:
         return len(self.samples) / self.sample_rate
 
     def split(self, clip_duration, clip_overlap=0, final_clip=None):
-        """ Split Audio into clips
+        """Split Audio into clips
 
         The Audio object is split into clips of a specified duration and overlap
 
@@ -371,7 +402,7 @@ def split_and_save(
     final_clip=None,
     dry_run=False,
 ):
-    """ Split audio into clips and save them to a folder
+    """Split audio into clips and save them to a folder
 
     Args:
         audio:              The input Audio to split
