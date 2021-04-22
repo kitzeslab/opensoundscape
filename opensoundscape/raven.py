@@ -257,7 +257,7 @@ def split_single_annotation(
         total_len_s (float):            length of original file (e.g. for 5-minute file: 300)
                                         If not provided, estimates length based on end time of last annotation [default: None]
         keep_final (string):            whether to keep annotations from the final clip if the final
-                                        clip is less than split_len_s long. If using "remainder", "full", or "extend"
+                                        clip is less than split_len_s long. If using "remainder", "full", "extend", or "loop"
                                         with split_and_save, make this True. Else, make it False. [default: False]
         species (str, list, or None):   species or list of species annotations to look for [default: None]
         min_label_len (float):          the minimum amount a label must overlap with the split to be considered a label.
@@ -433,9 +433,10 @@ def raven_audio_split_and_save(
         final_clip (str or None):               Behavior if final_clip is less than clip_duration seconds long. [default: None]
             By default, ignores final clip entirely.
             Possible options (any other input will ignore the final clip entirely),
-                - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
-                - "full":       Increase the overlap to yield a clip with clip_duration length
-                - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+                - "full":       Increase the overlap with previous audio to yield a clip with clip_duration length
+                - "remainder":  Include the remainder of the Audio (clip will NOT have clip_duration length)
+                - "extend":     Similar to remainder but extend the clip with silence to reach clip_duration length
+                - "loop":       Similar to remainder but loop (repeat) the clip to reach clip_duration length
         extensions (list):                      List of audio filename extensions to look for. [default: `['wav', 'WAV', 'mp3']`]
         csv_name (str):                         Filename of the output csv, to be saved in the specified destination [default: 'labels.csv']
         min_label_len (float):                  the minimum amount a label must overlap with the split to be considered a label.
@@ -542,8 +543,11 @@ def raven_audio_split_and_save(
                 seg_start = clip_info["seg_start"]
                 seg_end = clip_info["seg_end"]
                 trimmed = a.trim(seg_start, seg_end)
-                if (seg_end > total_duration) & (final_clip == "extend"):
-                    trimmed.extend(clip_duration)
+                if seg_end > total_duration:
+                    if final_clip == "extend":
+                        trimmed.extend(clip_duration)
+                    elif final_clip == "loop":
+                        trimmed.loop(clip_duration)
                 if not dry_run:
                     trimmed.save(clip_name)
 
