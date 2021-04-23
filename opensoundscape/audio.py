@@ -113,9 +113,6 @@ class Audio:
         Read an Audio object from a BytesIO object. This is primarily used for
         passing Audio over HTTP.
 
-        TODO:
-            Describe how to initialize an Audio file as a BytesIO object
-
         Args:
             bytesio: Contents of WAV file as BytesIO
             sample_rate: The final sampling rate of Audio object [default: None]

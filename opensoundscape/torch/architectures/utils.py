@@ -8,7 +8,6 @@ class BaseArchitecture(nn.Module):
 
     """
     Base architecture for reference.
-    #TODO: do we still need this? or could architectures subclass nn.Module?
     """
 
     name = None

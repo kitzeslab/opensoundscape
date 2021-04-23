@@ -709,7 +709,7 @@ class PytorchModel(BaseModule):
     def from_checkpoint(cls, path):
         """create model instance from saved model"""
         model_obj = cls()
-        model_obj.load(path)  # TODO: handle GPU-saved loading
+        model_obj.load(path)
         return model_obj
 
 

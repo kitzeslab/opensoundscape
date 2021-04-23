@@ -1,4 +1,5 @@
-"""various loss function classes"""
+"""various loss function classes
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

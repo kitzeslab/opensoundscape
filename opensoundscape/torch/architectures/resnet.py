@@ -98,7 +98,7 @@ class ResNetArchitecture(BaseArchitecture):
     def save(self, out_path):
         torch.save(self.best_weights, out_path)
 
-    def update_best(self):  # TODO: necessary? not in default pytorch models
+    def update_best(self):
         self.best_weights = copy.deepcopy(self.state_dict())
 
 
