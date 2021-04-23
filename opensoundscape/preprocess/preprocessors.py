@@ -146,7 +146,9 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
         self.actions.load_audio = actions.AudioLoader(sample_rate=22050)
         self.pipeline.append(self.actions.load_audio)
 
-        self.actions.trim_audio = actions.AudioTrimmer()  # TODO
+        self.actions.trim_audio = actions.AudioTrimmer(
+            extend_short_clips=False, random_trim=False, audio_length=audio_length
+        )
         self.pipeline.append(self.actions.trim_audio)
 
         self.actions.to_spec = actions.AudioToSpectrogram()
@@ -189,16 +191,19 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
         self.debug = debug
 
         # extra Actions for augmentation steps
-        # TODO: should be able to create object without overlay_df
-        self.actions.overlay = actions.ImgOverlay(
-            overlay_df=overlay_df,
-            audio_length=self.audio_length,
-            overlay_prob=1,
-            max_overlay_num=1,
-            overlay_class=None,
-            # TODO: check - overlay pipeline might not update with changes?
-            loader_pipeline=self.pipeline[0:5],  # all actions before overlay
-            update_labels=False,
+        self.actions.overlay = (
+            actions.ImgOverlay(
+                overlay_df=overlay_df,
+                audio_length=self.audio_length,
+                overlay_prob=1,
+                max_overlay_num=1,
+                overlay_class=None,
+                # TODO: check - overlay pipeline might not update with changes?
+                loader_pipeline=self.pipeline[0:5],  # all actions before overlay
+                update_labels=False,
+            )
+            if overlay_df is not None
+            else actions.BaseAction()
         )
 
         self.actions.color_jitter = actions.TorchColorJitter()
@@ -235,89 +240,16 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
             self.actions.normalize,
         ]
 
+        self.pipeline = self.augmentation_pipeline
+
         if self.debug is not None:
             self.actions.save_img = actions.SaveTensorToDisk(self.debug)
             self.pipeline.append(self.actions.save_img)
 
-    def augmentation_on():
+    def augmentation_on(self):
         """use pipeline containing all actions including augmentations"""
         self.pipeline = self.augmentation_pipeline
 
-    def augmentation_off():
+    def augmentation_off(self):
         """use pipeline that skips all augmentations"""
         self.pipeline = self.no_augmentation_pipeline
-
-
-class ResnetMultilabelPreprocessor(BasePreprocessor):
-    """loads audio paths, performs various augmentations, returns tensor"""
-
-    def __init__(
-        self,
-        df,
-        audio_length=None,
-        return_labels=True,
-        augmentation=True,
-        debug=None,
-        overlay_df=None,
-    ):
-
-        super(ResnetMultilabelPreprocessor, self).__init__(
-            df, return_labels=return_labels
-        )
-
-        self.audio_length = audio_length
-        self.augmentation = augmentation
-        self.return_labels = return_labels
-        self.debug = debug
-
-        # add each action to our tool kit, then to pipeline
-        self.actions.load_audio = actions.AudioLoader()
-        self.pipeline.append(self.actions.load_audio)
-
-        self.actions.trim_audio = actions.AudioTrimmer()  # TODO
-        self.pipeline.append(self.actions.trim_audio)
-
-        self.actions.to_spec = actions.AudioToSpectrogram()
-        self.pipeline.append(self.actions.to_spec)
-
-        self.actions.to_img = actions.SpecToImg()
-        self.pipeline.append(self.actions.to_img)
-
-        # should make one without overlay, then subclass and add overlay
-        if self.augmentation:
-            self.actions.overlay = actions.ImgOverlay(
-                overlay_df=overlay_df,
-                audio_length=self.audio_length,
-                overlay_prob=0.5,
-                max_overlay_num=2,
-                overlay_weight=[0.2, 0.5],
-                # this pipeline might not update with changes to preprocessor?
-                loader_pipeline=self.pipeline[0:4],
-                update_labels=False,
-            )
-            self.pipeline.append(self.actions.overlay)
-
-            # color jitter and affine can be applied to img or tensor
-            # here, we choose to apply them to the PIL.Image
-            self.actions.color_jitter = actions.TorchColorJitter()
-            self.pipeline.append(self.actions.color_jitter)
-
-            self.actions.random_affine = actions.TorchRandomAffine()
-            self.pipeline.append(self.actions.random_affine)
-
-        self.actions.to_tensor = actions.ImgToTensor()
-        self.pipeline.append(self.actions.to_tensor)
-
-        if self.augmentation:
-            self.actions.tensor_aug = actions.TensorAugment()
-            self.pipeline.append(self.actions.tensor_aug)
-
-            self.actions.add_noise = actions.TensorAddNoise(std=1.0)
-            self.pipeline.append(self.actions.add_noise)
-
-        self.actions.normalize = actions.TensorNormalize()
-        self.pipeline.append(self.actions.normalize)
-
-        if self.debug is not None:
-            self.actions.save_img = actions.SaveTensorToDisk(self.debug)
-            self.pipeline.append(self.actions.save_img)
