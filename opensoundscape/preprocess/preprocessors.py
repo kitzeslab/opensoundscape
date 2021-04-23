@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from opensoundscape.preprocess import actions
 from pathlib import Path
+import copy
 
 
 class PreprocessingError(Exception):
@@ -26,7 +27,6 @@ class BasePreprocessor(torch.utils.data.Dataset):
     """
 
     def __init__(self, df, return_labels=True):
-        # TODO: add .sample method?
 
         assert Path(df.index[0]).exists(), (
             "Index of dataframe passed to "
@@ -81,6 +81,36 @@ class BasePreprocessor(torch.utils.data.Dataset):
         counts = np.sum(self.df.values, 0)
         return labels, counts
 
+    def sample(self, **kwargs):
+        """out-of-place random sample
+
+        creates copy of object with n rows randomly sampled from dataframe
+
+        Args: see pandas.DataFrame.sample()
+
+        Returns:
+            a new dataset object
+        """
+        new_ds = copy.deepcopy(self)
+        new_ds.df = new_ds.df.sample(**kwargs)
+        return new_ds
+
+    def head(self, n=5):
+        """out-of-place copy of first n samples
+
+        performs df.head(n) on self.df
+
+        Args:
+            n: number of first samples to return, see pandas.DataFrame.head()
+            [default: 5]
+
+        Returns:
+            a new dataset object
+        """
+        new_ds = copy.deepcopy(self)
+        new_ds.df = new_ds.df.head(n)
+        return new_ds
+
 
 class AudioLoadingPreprocessor(BasePreprocessor):
     """creates Audio objects from file paths
@@ -101,12 +131,7 @@ class AudioLoadingPreprocessor(BasePreprocessor):
             audio input will raise a ValueError.
     """
 
-    def __init__(
-        self,
-        df,
-        return_labels=True,
-        audio_length=None,
-    ):
+    def __init__(self, df, return_labels=True, audio_length=None):
 
         super(AudioLoadingPreprocessor, self).__init__(df, return_labels=return_labels)
 
@@ -198,8 +223,7 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
                 overlay_prob=1,
                 max_overlay_num=1,
                 overlay_class=None,
-                # TODO: check - overlay pipeline might not update with changes?
-                loader_pipeline=self.pipeline[0:5],  # all actions before overlay
+                loader_pipeline=self.pipeline[0:5],  # all actions up to overlay
                 update_labels=False,
             )
             if overlay_df is not None
