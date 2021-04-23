@@ -1,6 +1,4 @@
 """preprocess.py: utilities for augmentation and preprocessing pipelines"""
-# todo: add parameters into docstrings for easy access using "?"
-# TODO: documentation for actions should include parameters or reference to docs
 import numpy as np
 from PIL import Image
 import random
@@ -10,6 +8,7 @@ import os
 from torchvision import transforms
 import torch
 from torchvision.utils import save_image
+import warnings
 
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
@@ -43,6 +42,9 @@ class BaseAction:
     """Parent class for all Pipeline Elements
 
     New actions should subclass this class.
+    Subclasses should set `self.requires_labels = True` if go() expects (X,y)
+    instead of (X). y is a row of a dataframe (a pd.Series) with index (.name)
+    = original file path, columns=class names, values=labels (0,1).
     """
 
     def __init__(self, **kwargs):
@@ -71,8 +73,14 @@ class BaseAction:
 class AudioLoader(BaseAction):
     """Action child class for Audio.from_file() (path -> Audio)
 
-    Loads an audio file, see Audio.from_file() for parameters.
-    (sample_rate=None, resample_type="kaiser_fast", max_duration=None)
+    Loads an audio file, see Audio.from_file() for documentation.
+
+    Args:
+        sample_rate (int, None): resample audio with value and resample_type,
+            if None use source sample_rate (default: None)
+        resample_type: method used to resample_type (default: kaiser_fast)
+        max_duration: the maximum length of an input file,
+            None is no maximum (default: None)
 
     Note: default sample_rate=None means use file's sample rate, don't resample
     """
@@ -86,7 +94,7 @@ class AudioTrimmer(BaseAction):
 
     Trims an audio file to desired length, from start or random segment
 
-    Params:
+    Args:
         audio_length: desired final length (sec); if None, no trim is performed
         extend: if True, clips shorter than audio_length are
             extended with silence to required length
@@ -107,8 +115,6 @@ class AudioTrimmer(BaseAction):
 
     def go(self, audio):
         if self.params["audio_length"] is not None:
-            # TODO: might want to move this functionality to Audio.random_trim
-
             if audio.duration() <= self.params["audio_length"]:
                 # input audio is not as long as desired length
                 if self.params["extend"]:  # extend clip by looping
@@ -135,8 +141,18 @@ class AudioTrimmer(BaseAction):
 class AudioToSpectrogram(BaseAction):
     """Action child class for Audio.from_file() (Audio -> Spectrogram)
 
-    see spectrogram.Spectrogram for parameters/docs
-    ()
+    see spectrogram.Spectrogram.from_audio for documentation
+
+    Args:
+        window_type="hann":
+            see scipy.signal.spectrogram docs for description of window parameter
+        window_samples=512:
+            number of audio samples per spectrogram window (pixel)
+        overlap_samples=256:
+            number of samples shared by consecutive windows
+        decibel_limits = (-100,-20) :
+        limit the dB values to (min,max)
+        (lower values set to min, higher values set to max)
     """
 
     def go(self, audio):
@@ -146,13 +162,15 @@ class AudioToSpectrogram(BaseAction):
 class SpectrogramBandpass(BaseAction):
     """Action class for Spectrogram.bandpass() (Spectrogram -> Spectrogram)
 
+    see opensoundscape.spectrogram.Spectrogram.bandpass() for documentation
+
     To bandpass the spectrogram from 1kHz to 5Khz:
     action = SpectrogramBandpass(1000,5000)
 
-    Args: min_f, max_f
-    see opensoundscape.spectrogram.Spectrogram.bandpass() for documentation
+    Args:
+        min_f: low frequency in Hz for bandpass
+        max_f: high frequency in Hz for bandpass
 
-    Spectrogram in, Spectrogram out
     """
 
     def go(self, spectrogram):
@@ -160,9 +178,14 @@ class SpectrogramBandpass(BaseAction):
 
 
 class SpecToImg(BaseAction):
-    """Action child class for spec to image (Spectrogram -> PIL Image)
+    """Action child class for spec to image (Spectrogram -> PIL.Image)
 
-    Spectrogram in, PIL.Image out"""
+    Args:
+        destination: a file path (string)
+        shape=None: tuple of image dimensions for 1 channel, eg (224,224)
+        mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
+        spec_range=[-100,-20]: the lowest and highest possible values in the spectrogram
+    """
 
     # shape=(self.width, self.height), mode="L" during construction
     def go(self, spectrogram):
@@ -170,7 +193,16 @@ class SpecToImg(BaseAction):
 
 
 class SaveTensorToDisk(BaseAction):
-    """save a torch Tensor to disk (Tensor -> Tensor)"""
+    """save a torch Tensor to disk (Tensor -> Tensor)
+
+    Requires x_labels because the index of the label-row (.name)
+    gives the original file name for this sample.
+
+    Uses torchvision.utils.save_image. Creates save_path dir if it doesn't exist
+
+    Args:
+        save_path: a directory where tensor will be saved
+    """
 
     def __init__(self, save_path, **kwargs):
         super(SaveTensorToDisk, self).__init__(**kwargs)
@@ -190,6 +222,11 @@ class SaveTensorToDisk(BaseAction):
 class TorchColorJitter(BaseAction):
     """Action class for torchvision.transforms.ColorJitter
 
+    Args:
+        brightness=0.3
+        contrast=0.3
+        saturation=0.3
+        hue=0
     (Tensor -> Tensor) or (PIL Img -> PIL Img)
     """
 
@@ -215,10 +252,15 @@ class TorchRandomAffine(BaseAction):
 
     (Tensor -> Tensor) or (PIL Img -> PIL Img)
 
-    note: we recommend applying RandomAffine after image
-    normalization. In this case, an intermediate gray value is ~0.
-    If normalization is applied after RandomAffine on a PIL image, use an
-    intermediate fill color such as (122,122,122).
+    Args:
+        degrees = 0
+        translate = (0.3, 0.1)
+        fill = (0, 0, 0)  # 0-255
+
+    Note: If applying per-image normalization, we recommend applying
+    RandomAffine after image normalization. In this case, an intermediate gray
+    value is ~0. If normalization is applied after RandomAffine on a PIL image,
+    use an intermediate fill color such as (122,122,122).
     """
 
     def __init__(self, **kwargs):
@@ -272,7 +314,9 @@ class TensorNormalize(BaseAction):
     it takes as arguments a fixed u and s, ie for the entire dataset,
     and performs X=(X-u)/s.
 
-    Params: mean, std
+    Params:
+        mean=0.5
+        std=0.5
     """
 
     def __init__(self, **kwargs):
@@ -297,6 +341,7 @@ class TimeWarp(BaseAction):
     """perform tensor augmentations
 
     such as time warp, time mask, and frequency mask
+
     Args:
         warp_amount: use higher values for more skew and offset (experimental)
     """
@@ -328,7 +373,8 @@ class TimeMask(BaseAction):
 
     Args:
         max_masks: maximum number of bars [default: 3]
-        max_width_px: maximum width of bars in pixels [default: 40]
+        max_width: maximum width of horizontal bars as fraction of image width
+        [default: 0.2]
     """
 
     def __init__(self, **kwargs):
@@ -336,21 +382,25 @@ class TimeMask(BaseAction):
 
         # default parameters
         self.params["max_masks"] = 3
-        self.params["max_width_px"] = 40
+        self.params["max_width"] = 0.2
 
         # add parameters passed to __init__
         self.params.update(kwargs)
 
     def go(self, x):
 
+        # convert max_width from fraction of image to pixels
+        max_width_px = int(x.shape[-1] * self.params["max_width"])
+
         # add "batch" dimension to tensor and use just first channel
         x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+
         # perform transform
-        x = tensaug.time_mask(
-            x, T=self.params["max_width_px"], max_masks=self.params["max_masks"]
-        )
+        x = tensaug.time_mask(x, T=max_width_px, max_masks=self.params["max_masks"])
+
         # remove "batch" dimension
         x = x[0, :]
+
         # Copy 1 channel to 3 RGB channels
         x = torch.cat([x] * 3, dim=0)
         return x
@@ -358,14 +408,10 @@ class TimeMask(BaseAction):
 
 class FrequencyMask(BaseAction):
     """add random horizontal bars over image
-    #TODO: should it use fraction of img instead of pixels?
 
-    initialize with **kwargs parameters, or
-    use .set(**kwargs) to update parameters
-
-    Parameters:
+    Args:
         max_masks: max number of horizontal bars [default: 3]
-        max_width_px: maximum height of horizontal bars in pixels [default: 40]
+        max_width: maximum size of horizontal bars as fraction of image height
     """
 
     def __init__(self, **kwargs):
@@ -373,7 +419,7 @@ class FrequencyMask(BaseAction):
 
         # default parameters
         self.params["max_masks"] = 3
-        self.params["max_width_px"] = 40
+        self.params["max_width"] = 0.2
 
         # add parameters passed to __init__
         self.params.update(kwargs)
@@ -381,14 +427,18 @@ class FrequencyMask(BaseAction):
     def go(self, x):
         """torch Tensor in, torch Tensor out"""
 
+        # convert max_width from fraction of image to pixels
+        max_width_px = int(x.shape[-2] * self.params["max_width"])
+
         # add "batch" dimension to tensor and use just first channel
         x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+
         # perform transform
-        x = tensaug.freq_mask(
-            x, F=self.params["max_width_px"], max_masks=self.params["max_masks"]
-        )
+        x = tensaug.freq_mask(x, F=max_width_px, max_masks=self.params["max_masks"])
+
         # remove "batch" dimension
         x = x[0, :]
+
         # Copy 1 channel to 3 RGB channels
         x = torch.cat([x] * 3, dim=0)
         return x
@@ -460,6 +510,13 @@ class ImgOverlay(BaseAction):
     If necessary, trims overlay audio to the length of the input audio.
     Overlays the images on top of each other with a weight.
 
+    Overlays can be used in a few general ways:
+        1. a separate df where any file can be overlayed (overlay_class=None)
+        2. same df as training, where the overlay class is "different" ie,
+            does not contain overlapping labels with the original sample
+        3. same df as training, where samples from a specific class are used
+            for overlays
+
     Args:
         overlay_df: a labels dataframe with audio files as the index and
             classes as columns
@@ -473,8 +530,6 @@ class ImgOverlay(BaseAction):
             randomly from within range) such as [0.1,0.7].
             An overlay_weight <0.5 means more emphasis on original image.
         update_labels: if True, add labels of overlayed class to returned labels
-
-    #TODO: raise warning for class name "different"
 
     """
 
@@ -500,12 +555,20 @@ class ImgOverlay(BaseAction):
         # parameters from **kwargs
         self.params.update(kwargs)
 
+        if "different" in overlay_df.columns:
+            warnings.warn(
+                "class name `different` was in columns, but using "
+                "kwarg overlay_class='different' has specific behavior and will "
+                "not specifically choose files from the `different` class."
+            )
+
     def go(self, x, x_labels):
         """Overlay images from overlay_df"""
 
         overlay_class = self.params["overlay_class"]
         df = self.params["overlay_df"]
 
+        # input validation
         assert overlay_class in ["different", None] or overlay_class in df.columns, (
             "overlay_class must be 'different' or None or in df.columns"
             f"got {overlay_class}"
@@ -513,10 +576,28 @@ class ImgOverlay(BaseAction):
         assert (self.params["overlay_prob"] <= 1) and (
             self.params["overlay_prob"] >= 0
         ), ("overlay_prob" f"should be in range (0,1), was {overlay_weight}")
+
         assert (
             self.params["overlay_weight"] < 1 and self.params["overlay_weight"] > 0
         ), ("overlay_weight" f"should be between 0 and 1, was {overlay_weight}")
 
+        if overlay_class is not None:
+            assert (
+                len(df.columns) > 0
+            ), "overlay_df must have labels if overlay_class is specified"
+            if overlay_class != "different":  # user specified a single class
+                assert (
+                    np.sum(df[overlay_class]) > 0
+                ), "overlay_df did not contain positive labels for overlay_class"
+
+        if len(df.columns) > 0:
+            assert list(df.columns) == list(
+                x_labels.index
+            ), "overlay_df mast have same columns as x_labels or no columns"
+
+        # iteratively perform overlays until stopping condition
+        # each time, there is an overlay_prob probability of another overlay
+        # up to a max number of max_overlay_num overlays
         overlays_performed = 0
         while (
             self.params["overlay_prob"] > np.random.uniform()
@@ -524,29 +605,29 @@ class ImgOverlay(BaseAction):
         ):
             overlays_performed += 1
 
-            # we want to overlay an image. lets pick one based on rules
+            # lets pick a sample based on rules
             if overlay_class is None:
                 # choose any file from the overlay_df
                 overlay_path = random.choice(df.index)
 
             elif overlay_class == "different":
                 # Select a random file containing none of the classes this file contains
-                good_choice = (
-                    False  # keep picking random ones until we satisfy criteria
-                )
+                # because the df might be huge and sparse, we randomly
+                # choose row until one fits criterea rather than filtering df
+                good_choice = False
                 while not good_choice:
                     candidate_idx = random.randint(0, len(df) - 1)
-                    # check if this choice meets criteria
-                    labels_overlap = sum(df.values[candidate_idx, :] * x_labels.values)
-                    good_choice = int(labels_overlap) == 0
+                    # check if this choice has zero overlapping labels
+                    labels_overlap = sum(
+                        np.logical_and(df.values[candidate_idx, :], x_labels.values)
+                    )
 
-                # TODO: check that this is working as expected
                 overlay_path = df.index[candidate_idx]
 
             else:
-                # Select a random file from a class of choice (may be slow)
-                # However, in the case of a fixed overlay class, we could
-                # pass an overlay_df containing only that class
+                # Select a random file from a class of choice (may be slow -
+                # however, in the case of a fixed overlay class, we could
+                # pass an overlay_df containing only that class)
                 choose_from = df[df[overlay_class] == 1]
                 overlay_path = np.random.choice(choose_from.index.values)
 
@@ -555,20 +636,21 @@ class ImgOverlay(BaseAction):
             overlay_labels = df.loc[overlay_path].values
 
             # update the labels with new classes
-            if self.params["update_labels"]:
+            if self.params["update_labels"] and len(overlay_labels) > 0:
                 # update labels as union of both files' labels
-                new_labels = iter(x_labels.values + overlay_labels)
-                x_labels = x_labels.apply(lambda x: min(1, int(next(new_labels))))
+                x_labels.values[:] = np.logical_or(
+                    x_labels.values, overlay_labels
+                ).astype(int)
 
             # now we need to run the pipeline to get from audio path -> image
             x2 = overlay_path
-            for pipeline_element in self.loader_pipeline:
-                x2 = pipeline_element.go(x2)
-            overlay_image = x2
-
-            # removed Miao's blur code:
-            # blur_r = np.random.randint(0, 8) / 10
-            # overlay_image = overlay_image.filter(ImageFilter.GaussianBlur(radius=blur_r))
+            for action in self.loader_pipeline:
+                if action.bypass:
+                    continue
+                if action.requires_labels:  # this never happens
+                    x2, _ = action.go(x2, overlay_labels)
+                else:
+                    x2 = action.go(x2)
 
             # now we blend the two images together
             # Select weight of overlay; <0.5 means more emphasis on original image
@@ -582,7 +664,7 @@ class ImgOverlay(BaseAction):
                 weight = self.params["overlay_weight"]
 
             # use a weighted sum to overlay (blend) the images
-            x = Image.blend(x, overlay_image, weight)
+            x = Image.blend(x, x2, weight)
 
         return x, x_labels
 
