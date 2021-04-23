@@ -20,6 +20,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from collections import OrderedDict
+import warnings
 
 # from tqdm import tqdm
 import random
@@ -162,7 +163,7 @@ class PytorchModel(BaseModule):
         ######################
 
         # Setup optimizer parameters for each network component
-        # we re-create bc the user may have changed self.optimizer_cls
+        # Note: we re-create bc the user may have changed self.optimizer_cls
         # If optimizer already exists, keep the same state dict
         # (for instance, user may be resuming training w/saved state dict)
         if self.opt_net is not None:
@@ -185,11 +186,12 @@ class PytorchModel(BaseModule):
         ######################
 
         # SafeDataset loads a new sample if loading a sample throws an error
-        safe_dataset = SafeDataset(self.train_dataset)
+        # indices of bad samples are appended to ._unsafe_indices
+        self.train_safe_dataset = SafeDataset(self.train_dataset)
 
         # train_loader samples batches of images + labels from train_dataset
         self.train_loader = get_dataloader(
-            safe_dataset,
+            self.train_safe_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
             shuffle=True,
@@ -286,6 +288,7 @@ class PytorchModel(BaseModule):
         save_path=".",
         save_interval=1,  # save weights every n epochs
         log_interval=10,  # print metrics every n batches
+        unsafe_sample_log="./unsafe_samples.log",
     ):
         """train the model on samples from train_dataset
 
@@ -293,24 +296,35 @@ class PytorchModel(BaseModule):
         are desired, modify the respective attributes before calling .train().
 
         Args:
-            train_dataset: a Preprocessor that loads sample (audio file + label)
-                           to Tensor in batches (see docs/tutorials for details)
-            valid_dataset: a Preprocessor for evaluating performance
-            epochs: number of epochs to train for [default=1]
-                    (1 epoch constitutes 1 view of each training sample)
-            batch_size: number of training files to load/process before
-                        re-calculating the loss function and backpropagation
-            num_workers: parallelization (ie, cores or cpus)
-                        Note: use 0 for single (root) process (not 1)
-            save_path: location to save intermediate and best model objects
-                        [default=".", ie current location of script]
-            save_interval: interval in epochs to save model object with weights
-                            [default:1] Note: the best model is always saved to
-                            best.model in addition to other saved epochs.
-            log_interval: interval in epochs to evaluate model with validation
-                          dataset and print metrics to the log
+            train_dataset:
+                a Preprocessor that loads sample (audio file + label)
+                to Tensor in batches (see docs/tutorials for details)
+            valid_dataset:
+                a Preprocessor for evaluating performance
+            epochs:
+                number of epochs to train for [default=1]
+                (1 epoch constitutes 1 view of each training sample)
+            batch_size:
+                number of training files to load/process before
+                re-calculating the loss function and backpropagation
+            num_workers:
+                parallelization (ie, cores or cpus)
+                Note: use 0 for single (root) process (not 1)
+            save_path:
+                location to save intermediate and best model objects
+                [default=".", ie current location of script]
+            save_interval:
+                interval in epochs to save model object with weights [default:1]
+                Note: the best model is always saved to best.model
+                in addition to other saved epochs.
+            log_interval:
+                interval in epochs to evaluate model with validation
+                dataset and print metrics to the log
+            unsafe_sample_log:
+                file path: log all samples that failed in preprocessing
+                (file written when training completes)
+                - if None,  does not write a file
 
-        #TODO: verbose switch
         """
         class_err = (
             "Train and validation datasets must have same classes "
@@ -404,6 +418,21 @@ class PytorchModel(BaseModule):
             self.current_epoch += 1
 
         print(f"\nBest Model Appears at Epoch {best_epoch} with F1 {best_f1:.3f}.")
+
+        # warn the user if there were unsafe samples (failed to preprocess)
+        if len(self.train_safe_dataset._unsafe_indices) > 0:
+            bad_paths = self.train_safe_dataset.df.index[
+                self.train_safe_dataset._unsafe_indices
+            ].values
+            msg = (
+                f"There were {len(bad_paths)} "
+                "samples that raised errors during preprocessing. "
+            )
+            if unsafe_sample_log is not None:
+                msg += f"Their file paths are logged in {unsafe_sample_log}"
+                with open(unsafe_sample_log, "w") as f:
+                    [f.write(p + "\n") for p in bad_paths]
+            warnings.warn(msg)
 
     def save(self, path=None, save_weights=True, save_optimizer=True, extras={}):
         """save model with weights (default location is self.save_path)
@@ -666,7 +695,7 @@ class PytorchModel(BaseModule):
         print(np.shape(total_scores))
 
         # replace scores/preds with nan for samples that failed in preprocessing
-        # TODO: this feels hacky (we predicted on substitute-samples rather than
+        # this feels hacky (we predicted on substitute-samples rather than
         # skipping the samples that failed preprocessing)
         total_scores[safe_dataset._unsafe_indices, :] = np.nan
         if binary_preds is not None:
@@ -698,7 +727,6 @@ class PytorchModel(BaseModule):
 
 
 class Resnet18Multiclass(PytorchModel):
-    # TODO: separate single and multi-target models? Which default loss fns?
     def __init__(self, classes):
         """Multi-class model with resnet18 architecture
 
