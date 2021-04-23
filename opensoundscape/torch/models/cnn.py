@@ -1,16 +1,5 @@
 """classes for pytorch machine learning models in opensoundscape"""
 
-# todo: can saving/loading just use torch.load?
-
-# TODO: make architectures 1-for-1 swap with built-in pytorch architectures
-# Problem - each pytorch architecture needs a different mod for chaning final layer
-# 1) move loss function outside of architecture
-# 2) move update_best outside of architecture
-# 3) don't rely on separation of feature/classifier when setting parameters
-# 4) custom models have forward pass in 1 step (added .forward)
-# Then we can enable other networks like this:
-# https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html
-
 # adapted from zhmiao's BirdMultiLabel
 
 import os
@@ -74,8 +63,6 @@ class PytorchModel(BaseModule):
 
         ### loss function ###
         self.loss_cls = BCEWithLogitsLoss_hot  # class constructor for loss fn
-        # TODO: there are things that won't get picked up from resumed training,
-        # like changed loss fn - can we add into .save()?
 
         ### training parameters ###
         # defaults partially from  zhmiao's BirdMultiLabel
@@ -401,7 +388,7 @@ class PytorchModel(BaseModule):
             # if best model (by F1 score), update & save weights to best.model
             f1 = self.valid_metrics[self.current_epoch]["f1"]
             if f1 > best_f1:
-                self.network.update_best()  # TODO - do we need this?
+                self.network.update_best()
                 best_f1 = f1
                 best_epoch = self.current_epoch
                 print("Updating best model")
@@ -612,7 +599,7 @@ class PytorchModel(BaseModule):
         # SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
         # with np.nan for the bad samples (using safe_dataset._unsafe_indices)
-        # TODO: this approach to error handling feels hacky
+        # this approach to error handling feels hacky
         safe_dataset = SafeDataset(prediction_dataset)
 
         dataloader = torch.utils.data.DataLoader(
@@ -764,14 +751,17 @@ class Resnet18Multiclass(PytorchModel):
 
     @classmethod
     def from_checkpoint(cls, path):
-        classes = torch.load(path)["classes"]
+        # need to get classes first to initialize the model object
+        try:
+            classes = torch.load(path)["classes"]
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
         return model_obj
 
 
 class Resnet18Binary(PytorchModel):
-    # TODO: which classes should we include? SingleTarget?
     def __init__(self):
         """if you want to change parameters, create the object then modify them"""
         self.weights_init = "ImageNet"
