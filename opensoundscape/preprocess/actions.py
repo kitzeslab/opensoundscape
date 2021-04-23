@@ -88,8 +88,8 @@ class AudioTrimmer(BaseAction):
 
     Params:
         audio_length: desired final length (sec); if None, no trim is performed
-        extend_short_clips: if True, clips shorter than audio_length are
-            extended by looping
+        extend: if True, clips shorter than audio_length are
+            extended with silence to required length
         random_trim: if True, a random segment of length audio_length is chosen
             from the input audio. If False, the file is trimmed from 0 seconds
             to audio_length seconds.
@@ -98,7 +98,7 @@ class AudioTrimmer(BaseAction):
     def __init__(self, **kwargs):
         super(AudioTrimmer, self).__init__(**kwargs)
         # default parameters
-        self.params["extend_short_clips"] = False
+        self.params["extend"] = False
         self.params["random_trim"] = False
         self.params["audio_length"] = None  # can trim all audio to fixed length
 
@@ -111,14 +111,14 @@ class AudioTrimmer(BaseAction):
 
             if audio.duration() <= self.params["audio_length"]:
                 # input audio is not as long as desired length
-                if self.params["extend_short_clips"]:  # extend clip by looping
+                if self.params["extend"]:  # extend clip by looping
                     audio = audio.extend(self.params["audio_length"])
                 else:
                     raise ValueError(
                         f"the length of the original file ({audio.duration()} "
                         f"sec) was less than the length to extract "
                         f"({self.params['audio_length']} sec). To extend short "
-                        f"clips, use extend_short_clips=True"
+                        f"clips, use extend=True"
                     )
             if self.params["random_trim"]:
                 extra_time = input_duration - duration
@@ -226,7 +226,7 @@ class TorchRandomAffine(BaseAction):
 
         # default parameters
         self.params["degrees"] = 0
-        self.params["translate"] = (0.2, 0.03)
+        self.params["translate"] = (0.3, 0.1)
         self.params["fill"] = (0, 0, 0)  # 0-255
 
         # add parameters passed to __init__
@@ -271,6 +271,8 @@ class TensorNormalize(BaseAction):
     WARNING: This does not perform per-image normalization. Instead,
     it takes as arguments a fixed u and s, ie for the entire dataset,
     and performs X=(X-u)/s.
+
+    Params: mean, std
     """
 
     def __init__(self, **kwargs):
@@ -501,19 +503,19 @@ class ImgOverlay(BaseAction):
     def go(self, x, x_labels):
         """Overlay images from overlay_df"""
 
-        assert overlay_class in ["different", None] + df.columns, (
+        overlay_class = self.params["overlay_class"]
+        df = self.params["overlay_df"]
+
+        assert overlay_class in ["different", None] or overlay_class in df.columns, (
             "overlay_class must be 'different' or None or in df.columns"
             f"got {overlay_class}"
         )
-        assert (overlay_prob <= 1) and (overlay_prob >= 0), (
-            "overlay_prob" f"should be in range (0,1), was {overlay_weight}"
-        )
-        assert overlay_weight < 1 and overlay_weight > 0, (
-            "overlay_weight" f"should be between 0 and 1, was {overlay_weight}"
-        )
-
-        overlay_class = self.params["overlay_class"]
-        df = self.params["overlay_df"]
+        assert (self.params["overlay_prob"] <= 1) and (
+            self.params["overlay_prob"] >= 0
+        ), ("overlay_prob" f"should be in range (0,1), was {overlay_weight}")
+        assert (
+            self.params["overlay_weight"] < 1 and self.params["overlay_weight"] > 0
+        ), ("overlay_weight" f"should be between 0 and 1, was {overlay_weight}")
 
         overlays_performed = 0
         while (
