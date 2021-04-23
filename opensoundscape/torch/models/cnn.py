@@ -223,7 +223,7 @@ class PytorchModel(BaseModule):
 
             # calculate loss #may be able to move loss fn outside of network
             loss = self.loss_fn(logits, labels)
-            self.loss_hist[self.current_epoch] = loss.detach().numpy()
+            self.loss_hist[self.current_epoch] = loss.detach().cpu().numpy()
 
             #############################
             # Backward and optimization #
