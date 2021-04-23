@@ -424,9 +424,11 @@ class PytorchModel(BaseModule):
     def save(self, path=None, save_weights=True, save_optimizer=True, extras={}):
         """save model with weights (default location is self.save_path)
 
-        if save_weights is False: only save metadata/metrics
-        if save_optimizer is False: don't save self.optim.state_dict()
-        extras: arbitrary dictionary of things to save, eg valid-preds
+        Args:
+            path: destination for saved model. if None, uses self.save_path
+            save_weights: if False, only save metadata/metrics [default: True]
+            save_optimizer: if False, don't save self.optim.state_dict()
+            extras: arbitrary dictionary of things to save, eg valid-preds
         """
 
         if path is None:
@@ -473,7 +475,15 @@ class PytorchModel(BaseModule):
         the object should be saved with model.save()
         which uses torch.save with keys for 'model_state_dict' and 'optimizer_state_dict'
 
-        verbose: if True, print missing/unused keys for model weights
+        Args:
+            path: where the file is saved
+            load_weights: if False, ignore network weights [default:True]
+            load_classifier_weights: if False, ignore classifier layer weights
+                Use False to only load feature weights, eg to re-use
+                trained cnn's feature extractor for new class [default: True]
+            load_optimizer_state_dict: if False, ignore saved parameters
+                for optimizer's state [default: True]
+            verbose: if True, print missing and unused keys for model weights
         """
         try:
             model_dict = torch.load(path)
