@@ -62,7 +62,7 @@ def hex_to_time(s):
     from datetime import datetime
 
     sec = int(s, 16)
-    timestamp = datetime.utcfromtimestamp(sec)
+    timestamp = datetime.utcfromtimestamp(sec).replace(tzinfo=pytz.utc)
     return timestamp
 
 
