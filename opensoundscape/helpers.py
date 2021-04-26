@@ -60,6 +60,7 @@ def file_name(path):
 def hex_to_time(s):
     """convert a hexidecimal, Unix time string to a datetime timestamp"""
     from datetime import datetime
+    import pytz
 
     sec = int(s, 16)
     timestamp = datetime.utcfromtimestamp(sec).replace(tzinfo=pytz.utc)
