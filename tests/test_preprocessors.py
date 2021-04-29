@@ -49,9 +49,7 @@ def test_cnn_preprocessor(dataset_df):
     assert dataset[0]["y"].numpy().shape == (2,)
 
 
-def test_cnn_preprocessor_augment_off(
-    dataset_df,
-):
+def test_cnn_preprocessor_augment_off(dataset_df):
     """should return same image each time"""
     dataset = CnnPreprocessor(dataset_df)
     dataset.augmentation_off()
