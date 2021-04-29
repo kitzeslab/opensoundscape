@@ -6,19 +6,29 @@ implemented by @msamogh in nonechucks
 import torch
 import torch.utils.data
 
-# from nonechucks.utils import memoize
-
 
 class SafeDataset(torch.utils.data.Dataset):
-    """A wrapper around a torch.utils.data.Dataset that allows dropping
-    samples dynamically.
+    """A wrapper for a Dataset that handles errors when loading samples
 
-    WARNING: When iterating, will skip the sample, but when using within
-    a DataLoader, (see __getitem__) finds the next good sample and uses it for
-    the current index.
+    WARNING: When iterating, will skip the failed sample, but when using within
+    a DataLoader, finds the next good sample and uses it for
+    the current index (see __getitem__).
 
-    Attributes _safe_indices and _unsafe_indices can be accessed later to check
+    Args:
+        dataset: a torch Dataset instance or child such as a Preprocessor
+        eager_eval: If True, checks if every file is able to be loaded during
+            initialization (logs _safe_indices and _unsafe_indices)
+
+    Attributes: _safe_indices and _unsafe_indices can be accessed later to check
     which samples threw errors.
+
+    Methods:
+        _build_index():
+            tries to load each sample, logs _safe_indices and _unsafe_indices
+        __getitem__(index):
+            If loading an index fails, keeps trying the next index until success
+        _safe_get_item():
+            Tries to load a sample, returns None if error occurs
     """
 
     def __init__(self, dataset, eager_eval=False):
@@ -27,11 +37,11 @@ class SafeDataset(torch.utils.data.Dataset):
         self.eager_eval = eager_eval
         # These will contain indices over the original dataset. The indices of
         # the safe samples will go into _safe_indices and similarly for unsafe
-        # samples.
+        # samples in _unsafe_samples
         self._safe_indices = []
         self._unsafe_indices = []
 
-        # If eager_eval is True, we can simply go ahead and build the index
+        # If eager_eval is True, we build the full index of safe/unsafe samples
         # by attempting to access every sample in self.dataset.
         if self.eager_eval is True:
             self._build_index()
@@ -96,9 +106,7 @@ class SafeDataset(torch.utils.data.Dataset):
         )
 
     def __getitem__(self, idx):
-        """Behaves like the standard __getitem__ for Dataset when the index
-        has been built.
-        """
+        """If loading an index fails, keeps trying the next index until success"""
         while idx < len(self.dataset):
             sample = self._safe_get_item(idx)
             if sample is not None:
