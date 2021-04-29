@@ -17,10 +17,7 @@ import shutil
 @pytest.fixture()
 def train_dataset():
     df = pd.DataFrame(
-        index=[
-            "tests/audio/great_plains_toad.wav",
-            "tests/audio/1min.wav",
-        ],
+        index=["tests/audio/great_plains_toad.wav", "tests/audio/1min.wav"],
         data=[[0, 1], [1, 0]],
         columns=["negative", "positive"],
     )
