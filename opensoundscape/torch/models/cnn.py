@@ -1,6 +1,5 @@
 """classes for pytorch machine learning models in opensoundscape"""
-
-# adapted from zhmiao's BirdMultiLabel
+# originally based on zhmiao's BirdMultiLabel
 
 import os
 import numpy as np
@@ -586,10 +585,10 @@ class PytorchModel(BaseModule):
             labels: labels from dataset (if available)
 
         Note: if loading an audio file raises a PreprocessingError, the scores
-            and predictions will be np.nan
+            and predictions for that sample will be np.nan
 
         Note: if no return type selected for labels/scores/preds, returns None
-        instead of a DataFrame
+        instead of a DataFrame in the returned tuple
         """
         err_msg = (
             "Prediction dataset must have same classes"
@@ -620,7 +619,6 @@ class PytorchModel(BaseModule):
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=torch.cuda.is_available(),
         )
-        print(len(dataloader))
 
         ### Prediction ###
         total_scores = []
