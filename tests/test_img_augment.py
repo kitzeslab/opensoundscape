@@ -1,6 +1,6 @@
 import numpy as np
 from PIL import Image
-from opensoundscape.transforms import time_split
+from opensoundscape.preprocess.img_augment import time_split
 
 
 def test_basic_split():
