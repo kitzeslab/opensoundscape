@@ -40,6 +40,7 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
    api/localization
    api/machine_learning
    api/miscellaneous
+   api/preprocessing
    api/ribbit
    api/spectrogram
 
