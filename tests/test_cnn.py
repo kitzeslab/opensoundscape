@@ -40,8 +40,9 @@ def test_train(train_dataset):
         num_workers=0,
     )
     model_path = Path("tests/models/binary/best.model")
+    binary.save(model_path)
     assert model_path.exists()
-    shutil.rmtree("tests/models/binary/")
+    shutil.rmtree("tests/models/binary")
 
 
 def test_train_multiclass(train_dataset):
@@ -56,6 +57,7 @@ def test_train_multiclass(train_dataset):
         num_workers=0,
     )
     model_path = Path("tests/models/multiclass/best.model")
+    model.save(model_path)
     assert model_path.exists()
     shutil.rmtree("tests/models/multiclass/")
 
@@ -71,4 +73,4 @@ def test_multi_target_prediction(train_dataset):
     _, preds, _ = binary.predict(
         train_dataset, binary_preds="multi_target", threshold=0.1
     )
-    assert np.sum(preds.iloc[0].values) == 2
+    assert int(np.sum(preds.iloc[0].values)) == 2
