@@ -637,7 +637,7 @@ class PytorchModel(BaseModule):
                 batch_tensors = batch["X"].to(self.device)
                 batch_tensors.requires_grad = False
                 # get batch's labels if available
-                batch_targets = []
+                batch_targets = torch.Tensor([]).to(self.device)
                 if "y" in batch.keys():
                     batch_targets = batch["y"].to(self.device)
                     batch_targets.requires_grad = False
