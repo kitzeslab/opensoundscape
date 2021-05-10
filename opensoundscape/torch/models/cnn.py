@@ -669,7 +669,7 @@ class PytorchModel(BaseModule):
                     batch_preds = F.one_hot(logits.argmax(1), len(logits[0]))
                 elif binary_preds == "multi_target":
                     # predict 0 or 1 based on a fixed threshold
-                    batch_preds = torch.sigmoid(logits) >= self.prediction_threshold
+                    batch_preds = torch.sigmoid(logits) >= threshold
                 elif binary_preds is None:
                     batch_preds = torch.Tensor([])
                 else:
