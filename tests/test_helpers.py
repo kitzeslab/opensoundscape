@@ -44,8 +44,20 @@ def test_file_name():
 
 def test_hex_to_time():
     from datetime import datetime
+    import pytz
 
-    assert isinstance(helpers.hex_to_time("6EF223"), datetime)
+    t = helpers.hex_to_time("5F16A04E")
+    assert t == datetime(2020, 7, 21, 7, 59, 10, tzinfo=pytz.utc)
+
+
+def test_hex_to_time_convert_est():
+    from datetime import datetime
+    import pytz
+
+    t = helpers.hex_to_time("5F16A04E")
+    t = t.astimezone(pytz.timezone("US/Eastern"))
+    f = pytz.timezone("US/Eastern").localize(datetime(2020, 7, 21, 3, 59, 10))
+    assert t == f
 
 
 def test_min_max_scale():
