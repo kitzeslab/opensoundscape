@@ -13,7 +13,7 @@ import warnings
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 from opensoundscape.preprocess import tensor_augment as tensaug
-from opensoundscape.preprocess.preprocessors import PreprocessingError
+from opensoundscape.preprocess.utils import PreprocessingError
 
 
 class ActionContainer:
