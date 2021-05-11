@@ -27,8 +27,9 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
 
    tutorials/audio_and_spectrogram
    tutorials/raven
-   tutorials/train
-   tutorials/predict
+   tutorials/cnn
+   tutorials/preprocessors
+   tutorials/cnn_training_advanced
    tutorials/RIBBIT_pulse_rate_demo
 
 .. toctree::
