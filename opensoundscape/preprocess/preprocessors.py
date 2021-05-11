@@ -4,13 +4,7 @@ import torch
 from opensoundscape.preprocess import actions
 from pathlib import Path
 import copy
-
-
-class PreprocessingError(Exception):
-    """Custom exception indicating that a Preprocessor pipeline failed"""
-
-    pass
-
+from opensoundscape.preprocess.utils import PreprocessingError
 
 class BasePreprocessor(torch.utils.data.Dataset):
     """Base class for Preprocessing pipelines (use in place of torch Dataset)
