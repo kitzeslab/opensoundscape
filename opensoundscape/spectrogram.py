@@ -15,7 +15,7 @@ class Spectrogram:
 
     __slots__ = ("frequencies", "times", "spectrogram", "decibel_limits")
 
-    def __init__(self, spectrogram, frequencies, times):
+    def __init__(self, spectrogram, frequencies, times, decibel_limits):
         if not isinstance(spectrogram, np.ndarray):
             raise TypeError(
                 f"Spectrogram.spectrogram should be a np.ndarray [shape=(n, m)]. Got {spectrogram.__class__}"
@@ -27,6 +27,10 @@ class Spectrogram:
         if not isinstance(times, np.ndarray):
             raise TypeError(
                 f"Spectrogram.times should be an np.ndarray [shape=(m,)]. Got {times.__class__}"
+            )
+        if not isinstance(decibel_limits, tuple):
+            raise TypeError(
+                f"Spectrogram.times should be a tuple [length=2]. Got {decibel_limits.__class__}"
             )
 
         if spectrogram.ndim != 2:
@@ -41,6 +45,10 @@ class Spectrogram:
             raise TypeError(
                 f"times should be an np.ndarray [shape=(m,)]. Got {times.shape}"
             )
+        if len(decibel_limits) != 2:
+            raise TypeError(
+                f"decibel_limits should be a tuple [length=2]. Got {len(decibel_limits)}"
+            )
 
         if spectrogram.shape != (frequencies.shape[0], times.shape[0]):
             raise TypeError(
@@ -50,7 +58,7 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("frequencies", frequencies)
         super(Spectrogram, self).__setattr__("times", times)
         super(Spectrogram, self).__setattr__("spectrogram", spectrogram)
-        super(Spectrogram, self).__setattr__("decibel_limits", (-100, -20))
+        super(Spectrogram, self).__setattr__("decibel_limits", decibel_limits)
 
     @classmethod
     def from_audio(
@@ -97,8 +105,7 @@ class Spectrogram:
         spectrogram[spectrogram > max_db] = max_db
         spectrogram[spectrogram < min_db] = min_db
 
-        new_obj = cls(spectrogram, frequencies, times)
-        super(Spectrogram, new_obj).__setattr__("decibel_limits", decibel_limits)
+        new_obj = cls(spectrogram, frequencies, times, decibel_limits)
         return new_obj
 
     @classmethod
@@ -147,6 +154,7 @@ class Spectrogram:
             min_max_scale(self.spectrogram, feature_range=feature_range),
             self.frequencies,
             self.times,
+            self.decibel_limits,
         )
 
     def linear_scale(self, feature_range=(0, 1)):
@@ -175,6 +183,7 @@ class Spectrogram:
             ),
             self.frequencies,
             self.times,
+            self.decibel_limits,
         )
 
     def limit_db_range(self, min_db=-100, max_db=-20):
@@ -196,7 +205,7 @@ class Spectrogram:
         _spec[_spec > max_db] = max_db
         _spec[_spec < min_db] = min_db
 
-        return Spectrogram(_spec, self.frequencies, self.times)
+        return Spectrogram(_spec, self.frequencies, self.times, self.decibel_limits)
 
     def bandpass(self, min_f, max_f):
         """ extract a frequency band from a spectrogram
@@ -226,6 +235,7 @@ class Spectrogram:
             self.spectrogram[lowest_index : highest_index + 1, :],
             self.frequencies[lowest_index : highest_index + 1],
             self.times,
+            self.decibel_limits,
         )
 
     def trim(self, start_time, end_time):
@@ -249,6 +259,7 @@ class Spectrogram:
             self.spectrogram[:, lowest_index : highest_index + 1],
             self.frequencies,
             self.times[lowest_index : highest_index + 1],
+            self.decibel_limits,
         )
 
     def plot(self, inline=True, fname=None, show_colorbar=False):
@@ -347,10 +358,10 @@ class Spectrogram:
 
     def to_image(self, shape=None, mode="RGB"):
         """Create a Pillow Image from spectrogram
-        
-        Linearly rescales values in the spectrogram from 
+
+        Linearly rescales values in the spectrogram from
         self.decibel_limits to [255,0]
-        
+
         Default of self.decibel_limits on load is [-100, -20], so, e.g.,
         -20 db is loudest -> black, -100 db is quietest -> white
 
