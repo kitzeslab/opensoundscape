@@ -54,7 +54,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
                 if action.bypass:
                     continue
                 if action.requires_labels:
-                    x, df_row = action.go(x, df_row)
+                    x, df_row = action.go(x, copy.deepcopy(df_row))
                 else:
                     x = action.go(x)
 
