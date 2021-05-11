@@ -6,6 +6,7 @@ from pathlib import Path
 import copy
 from opensoundscape.preprocess.utils import PreprocessingError
 
+
 class BasePreprocessor(torch.utils.data.Dataset):
     """Base class for Preprocessing pipelines (use in place of torch Dataset)
 
