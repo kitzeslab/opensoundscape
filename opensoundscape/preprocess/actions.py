@@ -13,6 +13,7 @@ import warnings
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 from opensoundscape.preprocess import tensor_augment as tensaug
+from opensoundscape.preprocess.preprocessors import PreprocessingError
 
 
 class ActionContainer:
@@ -39,19 +40,20 @@ class ActionContainer:
 
 ### Audio transforms ###
 class BaseAction:
-    """Parent class for all Pipeline Elements
+    """Parent class for all Actions (used in Preprocessor pipelines)
 
     New actions should subclass this class.
     Subclasses should set `self.requires_labels = True` if go() expects (X,y)
     instead of (X). y is a row of a dataframe (a pd.Series) with index (.name)
-    = original file path, columns=class names, values=labels (0,1).
+    = original file path, columns=class names, values=labels (0,1). X is the
+    sample, and can be of various types (path, Audio, Spectrogram, Tensor, etc).
     """
 
     def __init__(self, **kwargs):
         # pass any parameters as kwargs
         self.params = {}
         self.params.update(kwargs)
-        self.bypass = False  # if off, no action is performed
+        self.bypass = False  # if True, no action is performed
         self.requires_labels = False
 
     def go(self, x, **kwargs):
@@ -520,16 +522,23 @@ class ImgOverlay(BaseAction):
     Args:
         overlay_df: a labels dataframe with audio files as the index and
             classes as columns
+        audio_length: length in seconds of original audio sample
+        loader_pipeline: the preprocessing pipeline to load audio -> spec
+        update_labels: if True, add overlayed sample's labels to original sample
         overlay_class: how to choose files from overlay_df to overlay
             Options [default: "different"]:
             None - Randomly select any file from overlay_df
             "different" - Select a random file from overlay_df containing none
                 of the classes this file contains
             specific class name - always choose files from this class
+        overlay_prob: the probability of applying each subsequent overlay
+        max_overlay_num: the maximum number of samples to overlay on original
+            - for example, if overlay_prob = 0.5 and max_overlay_num=2,
+                1/2 of images will recieve 1 overlay and 1/4 will recieve an
+                additional second overlay
         overlay_weight: can be a float between 0-1 or range of floats (chooses
             randomly from within range) such as [0.1,0.7].
             An overlay_weight <0.5 means more emphasis on original image.
-        update_labels: if True, add labels of overlayed class to returned labels
 
     """
 
@@ -615,11 +624,23 @@ class ImgOverlay(BaseAction):
                 # because the df might be huge and sparse, we randomly
                 # choose row until one fits criterea rather than filtering df
                 good_choice = False
-                while not good_choice:
+                attempt_counter = 0
+                max_attempts = 100  # if we try this many times, raise error
+                while (not good_choice) and (attempt_counter < max_attempts):
+                    attempt_counter += 1
+
+                    # choose a random sample from the overlay df
                     candidate_idx = random.randint(0, len(df) - 1)
-                    # check if this choice has zero overlapping labels
-                    labels_overlap = sum(
-                        np.logical_and(df.values[candidate_idx, :], x_labels.values)
+
+                    # check if this candidate sample has zero overlapping labels
+                    label_intersection = np.logical_and(
+                        df.values[candidate_idx, :], x_labels.values
+                    )
+                    good_choice = sum(label_intersection) == 0
+
+                if not good_choice:  # we tried all the samples and none worked
+                    raise PreprocessingError(
+                        "No samples found with " "non-overlapping labels"
                     )
 
                 overlay_path = df.index[candidate_idx]

@@ -22,8 +22,15 @@ def dataset_df():
 
 @pytest.fixture()
 def overlay_df():
+    paths = ["tests/audio/1min.wav", "tests/audio/great_plains_toad.wav"]
+    labels = [[1, 0], [0, 1]]
+    return pd.DataFrame(index=paths, data=labels, columns=[0, 1])
+
+
+@pytest.fixture()
+def overlay_df_all_positive():
     paths = ["tests/audio/great_plains_toad.wav"]
-    labels = [[1, 0]]
+    labels = [[1, 1]]
     return pd.DataFrame(index=paths, data=labels, columns=[0, 1])
 
 
@@ -67,7 +74,6 @@ def test_cnn_preprocessor_augent_on(dataset_df):
 
 
 def test_cnn_preprocessor_overlay(dataset_df, overlay_df):
-    """should return different images each time"""
     dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
     sample1 = dataset[0]["X"]
     dataset.actions.overlay.off()
@@ -75,12 +81,36 @@ def test_cnn_preprocessor_overlay(dataset_df, overlay_df):
     assert not np.array_equal(sample1, sample2)
 
 
+def test_overlay_different_class(dataset_df, overlay_df):
+    """just make sure it runs and doesn't hang"""
+    dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
+    dataset.actions.overlay.set(overlay_class="different")
+    sample1 = dataset[0]["X"]
+
+
+def test_overlay_different_class_error(dataset_df, overlay_df_all_positive):
+    """if no samples work, should give preprocessing error"""
+    dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df_all_positive)
+    dataset.actions.overlay.set(overlay_class="different")
+
+    with pytest.raises(PreprocessingError):
+        sample1 = dataset[0]["X"]
+
+
+def test_overlay_specific_class(dataset_df, overlay_df):
+    """just make sure it runs and doesn't hang"""
+    dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
+    dataset.actions.overlay.set(overlay_class=0)
+    sample1 = dataset[0]["X"]
+
+
 def test_overlay_update_labels(dataset_df, overlay_df):
     """should return different images each time"""
     dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
+    dataset.actions.overlay.set(overlay_class="different")
     dataset.actions.overlay.set(update_labels=True)
-    print(dataset[0]["y"])
-    assert np.array_equal(dataset[0]["y"].numpy(), [1, 1])
+    sample = dataset[0]
+    assert np.array_equal(sample["y"].numpy(), [1, 1])
 
 
 def test_cnn_preprocessor_fails_on_short_file(dataset_df):
