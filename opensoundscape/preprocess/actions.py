@@ -638,10 +638,9 @@ class ImgOverlay(BaseAction):
                     )
                     good_choice = sum(label_intersection) == 0
 
-                if not good_choice:  # we tried all the samples and none worked
-                    raise PreprocessingError(
-                        "No samples found with " "non-overlapping labels"
-                    )
+                if not good_choice:  # tried max_attempts samples, none worked
+                    warnings.warn("No samples found with non-overlapping labels")
+                    continue
 
                 overlay_path = df.index[candidate_idx]
 
