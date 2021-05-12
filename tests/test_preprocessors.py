@@ -11,6 +11,7 @@ from opensoundscape.preprocess.preprocessors import (
     PreprocessingError,
 )
 from PIL import Image
+import warnings
 
 
 @pytest.fixture()
@@ -88,13 +89,14 @@ def test_overlay_different_class(dataset_df, overlay_df):
     sample1 = dataset[0]["X"]
 
 
-def test_overlay_different_class_error(dataset_df, overlay_df_all_positive):
+def test_overlay_different_class_warning(dataset_df, overlay_df_all_positive):
     """if no samples work, should give preprocessing error"""
     dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df_all_positive)
     dataset.actions.overlay.set(overlay_class="different")
-
-    with pytest.raises(PreprocessingError):
-        sample1 = dataset[0]["X"]
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        sample1 = dataset[0]["X"]  # raises a warning
+        assert len(w) == 1
 
 
 def test_overlay_specific_class(dataset_df, overlay_df):
