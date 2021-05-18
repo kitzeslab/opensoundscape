@@ -29,6 +29,7 @@ jupyterlab = "^2.1.4"
 scikit-image = "^0.17.2"
 numba = "0.48.0"
 scikit-learn = ">=0.14.0,<0.19.0||>0.19.0,!=0.24.0"
+Jinja2 = "<3.0"
 
 [tool.poetry.dev-dependencies]
 black = "=19.3b0"
