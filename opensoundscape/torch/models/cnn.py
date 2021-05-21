@@ -319,8 +319,8 @@ class PytorchModel(BaseModule):
 
         self._set_train(batch_size, num_workers)
 
-        best_f1 = 0.0
-        best_epoch = 0
+        self.best_f1 = 0.0
+        self.best_epoch = 0
 
         for epoch in range(epochs):
             # 1 epoch = 1 view of each training file
@@ -378,9 +378,9 @@ class PytorchModel(BaseModule):
 
             # if best model (by F1 score), update & save weights to best.model
             f1 = self.valid_metrics[self.current_epoch]["f1"]
-            if f1 > best_f1:
-                best_f1 = f1
-                best_epoch = self.current_epoch
+            if f1 > self.best_f1:
+                self.best_f1 = f1
+                self.best_epoch = self.current_epoch
                 print("Updating best model")
                 self.save(
                     f"{self.save_path}/best.model",
@@ -394,7 +394,9 @@ class PytorchModel(BaseModule):
 
             self.current_epoch += 1
 
-        print(f"\nBest Model Appears at Epoch {best_epoch} with F1 {best_f1:.3f}.")
+        print(
+            f"\nBest Model Appears at Epoch {self.best_epoch} with F1 {self.best_f1:.3f}."
+        )
 
         # warn the user if there were unsafe samples (failed to preprocess)
         if len(self.train_safe_dataset._unsafe_indices) > 0:
