@@ -9,8 +9,6 @@ import numpy as np
 from pathlib import Path
 from collections import OrderedDict
 import warnings
-
-# from tqdm import tqdm
 import random
 
 import torch
@@ -25,8 +23,6 @@ from opensoundscape.metrics import multiclass_metrics, binary_metrics
 from opensoundscape.torch.loss import BCEWithLogitsLoss_hot, ResampleLoss
 from opensoundscape.torch.safe_dataset import SafeDataset
 
-# NOTE: Turning off all logging for now. may want to use logging module in future
-
 
 class PytorchModel(BaseModule):
 
@@ -35,7 +31,9 @@ class PytorchModel(BaseModule):
 
     flexible architecture, optimizer, loss function, parameters
 
-    for tutorials see opensoundscape.org
+    for tutorials and examples see opensoundscape.org
+
+    methods include train(), predict(), save(), and load()
     """
 
     def __init__(self, architecture, classes):
@@ -715,20 +713,20 @@ class PytorchModel(BaseModule):
 
 class Resnet18Multiclass(PytorchModel):
     def __init__(self, classes):
-        """Multi-class model with resnet18 architecture
+        """Multi-class model with resnet18 architecture and ResampleLoss.
+
         Can be single or multi-target.
 
-        Allows separate parameters for feature & classifier blocks.
-
-        if you want to change other parameters,
-        simply create the object then modify them
+        Allows separate parameters for feature & classifier blocks. Unlike
+        default model, uses ResampleLoss which requires class counts as an
+        input.
         """
         self.classes = classes
         self.weights_init = "ImageNet"
 
         # initialize the model architecture without an optimizer
         # since we dont know the train class counts to give the optimizer
-        architecture = ResNetArchitecture(  # pass architecture as argument
+        architecture = ResNetArchitecture(
             num_cls=len(self.classes), weights_init=self.weights_init, num_layers=18
         )
 
@@ -758,8 +756,8 @@ class Resnet18Multiclass(PytorchModel):
 
         We override the parent method because we need to pass a list of
         separate optimizer_params for different parts of the network
-        (TODO: maybe can just pass whole dict?) - ie we now have a dictionary of
-        param dictionaries instead of just a param dictionary.
+        - ie we now have a dictionary of param dictionaries instead of just a
+        param dictionary.
 
         This function is called during .train() so that the user
         has a chance to swap/modify the optimizer before training.
@@ -800,11 +798,13 @@ class Resnet18Multiclass(PytorchModel):
 
 class Resnet18Binary(PytorchModel):
     def __init__(self):
-        """if you want to change parameters, create the object then modify them"""
+        """This subclass uses Resnet18 and allows separate training parameters
+        for the feature extractor and classifier"""
+
         self.weights_init = "ImageNet"
         self.classes = ["negative", "positive"]
 
-        architecture = ResNetArchitecture(  # pass architecture as argument
+        architecture = ResNetArchitecture(
             num_cls=2, weights_init=self.weights_init, num_layers=18
         )
 
@@ -814,16 +814,57 @@ class Resnet18Binary(PytorchModel):
         self.metrics_fn = binary_metrics
         self.single_target = True
 
+        # optimization parameters for parts of the networks - see
+        # https://pytorch.org/docs/stable/optim.html#per-parameter-options
+        self.optimizer_params = {
+            "feature": {  # optimizer parameters for feature extraction layers
+                "params": self.network.feature.parameters(),
+                "lr": 0.001,
+                "momentum": 0.9,
+                "weight_decay": 0.0005,
+            },
+            "classifier": {  # optimizer parameters for classification layers
+                "params": self.network.classifier.parameters(),
+                "lr": 0.01,
+                "momentum": 0.9,
+                "weight_decay": 0.0005,
+            },
+        }
+
+    def _init_optimizer(self):
+        """initialize an instance of self.optimizer
+
+        We override the parent method because we need to pass a list of
+        separate optimizer_params for different parts of the network
+         - ie we now have a dictionary of param dictionaries instead of just a
+         param dictionary.
+
+        This function is called during .train() so that the user
+        has a chance to swap/modify the optimizer before training.
+
+        To modify the optimizer, change the value of
+        self.optimizer_cls and/or self.optimizer_params
+        prior to calling .train().
+        """
+        return self.optimizer_cls(self.optimizer_params.values())
+
 
 class InceptionV3(PytorchModel):
     def __init__(self, classes, freeze_feature_extractor=False, use_pretrained=True):
+        """Model object for InceptionV3 architecture.
+
+        See opensoundscape.org for exaple use.
+
+        Args:
+            classes: list of output classes (usually strings)
+
+        """
         from opensoundscape.torch.architectures.cnn_architectures import inception_v3
 
-        """if you want to change parameters, create the object then modify them"""
         self.weights_init = "ImageNet"
         self.classes = classes
 
-        architecture = inception_v3(  # pass architecture as argument
+        architecture = inception_v3(
             len(self.classes),
             freeze_feature_extractor=freeze_feature_extractor,
             use_pretrained=use_pretrained,
