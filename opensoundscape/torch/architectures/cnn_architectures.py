@@ -34,6 +34,71 @@ def resnet18(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     return model_ft
 
 
+def resnet18(num_classes, freeze_feature_extractor=False, use_pretrained=True):
+    """input_size = 224
+
+    use feature_block_requires_grad=False if we want to freeze the feature block
+    and only train the classification block of the network
+    """
+    model_ft = models.resnet18(pretrained=use_pretrained)
+    set_parameter_requires_grad(model_ft, freeze_feature_extractor)
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_ftrs, num_classes)
+    return model_ft
+
+
+def resnet34(num_classes, freeze_feature_extractor=False, use_pretrained=True):
+    """input_size = 224
+
+    use feature_block_requires_grad=False if we want to freeze the feature block
+    and only train the classification block of the network
+    """
+    model_ft = models.resnet34(pretrained=use_pretrained)
+    set_parameter_requires_grad(model_ft, freeze_feature_extractor)
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_ftrs, num_classes)
+    return model_ft
+
+
+def resnet50(num_classes, freeze_feature_extractor=False, use_pretrained=True):
+    """input_size = 224
+
+    use feature_block_requires_grad=False if we want to freeze the feature block
+    and only train the classification block of the network
+    """
+    model_ft = models.resnet50(pretrained=use_pretrained)
+    set_parameter_requires_grad(model_ft, freeze_feature_extractor)
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_ftrs, num_classes)
+    return model_ft
+
+
+def resnet101(num_classes, freeze_feature_extractor=False, use_pretrained=True):
+    """input_size = 224
+
+    use feature_block_requires_grad=False if we want to freeze the feature block
+    and only train the classification block of the network
+    """
+    model_ft = models.resnet101(pretrained=use_pretrained)
+    set_parameter_requires_grad(model_ft, freeze_feature_extractor)
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_ftrs, num_classes)
+    return model_ft
+
+
+def resnet152(num_classes, freeze_feature_extractor=False, use_pretrained=True):
+    """input_size = 224
+
+    use feature_block_requires_grad=False if we want to freeze the feature block
+    and only train the classification block of the network
+    """
+    model_ft = models.resnet152(pretrained=use_pretrained)
+    set_parameter_requires_grad(model_ft, freeze_feature_extractor)
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_ftrs, num_classes)
+    return model_ft
+
+
 def alexnet(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """input size = 224"""
     model_ft = models.alexnet(pretrained=use_pretrained)
