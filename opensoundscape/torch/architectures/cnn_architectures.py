@@ -32,26 +32,6 @@ def set_parameter_requires_grad(model, freeze_feature_extractor):
 
 
 def resnet18(num_classes, freeze_feature_extractor=False, use_pretrained=True):
-    """input_size = 224
-
-    Args:
-        num_classes:
-            number of output nodes for the final layer
-        freeze_feature_extractor:
-            if False (default), entire network will have gradients and can train
-            if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
-    """
-    model_ft = models.resnet18(pretrained=use_pretrained)
-    set_parameter_requires_grad(model_ft, freeze_feature_extractor)
-    num_ftrs = model_ft.fc.in_features
-    model_ft.fc = nn.Linear(num_ftrs, num_classes)
-    return model_ft
-
-
-def resnet18(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for ResNet18 architecture
 
     input_size = 224
@@ -281,8 +261,7 @@ def inception_v3(num_classes, freeze_feature_extractor=False, use_pretrained=Tru
     return model_ft
 
 
-# TODO: add other architectures
-# import torchvision.models as models
+# list of PyTorch models:
 # resnet18 = models.resnet18()
 # alexnet = models.alexnet()
 # vgg16 = models.vgg16()
