@@ -28,7 +28,6 @@ class ResNetArchitecture(BaseArchitecture):
         self.num_layers = num_layers
         self.feature = None
         self.classifier = None
-        self.best_weights = None
 
         # Model setup and weights initialization
         # if init_classifier_weights=False: copy feature weights but not classifier weights
@@ -94,12 +93,6 @@ class ResNetArchitecture(BaseArchitecture):
             unused_keys = load_keys - self_keys
             print("missing keys: {}".format(sorted(list(missing_keys))))
             print("unused_keys: {}".format(sorted(list(unused_keys))))
-
-    def save(self, out_path):
-        torch.save(self.best_weights, out_path)
-
-    def update_best(self):
-        self.best_weights = copy.deepcopy(self.state_dict())
 
 
 # Official ResNet Implementation

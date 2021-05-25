@@ -9,8 +9,6 @@ import numpy as np
 from pathlib import Path
 from collections import OrderedDict
 import warnings
-
-# from tqdm import tqdm
 import random
 
 import torch
@@ -25,8 +23,6 @@ from opensoundscape.metrics import multiclass_metrics, binary_metrics
 from opensoundscape.torch.loss import BCEWithLogitsLoss_hot, ResampleLoss
 from opensoundscape.torch.safe_dataset import SafeDataset
 
-# NOTE: Turning off all logging for now. may want to use logging module in future
-
 
 class PytorchModel(BaseModule):
 
@@ -35,7 +31,9 @@ class PytorchModel(BaseModule):
 
     flexible architecture, optimizer, loss function, parameters
 
-    for tutorials see opensoundscape.org
+    for tutorials and examples see opensoundscape.org
+
+    methods include train(), predict(), save(), and load()
     """
 
     def __init__(self, architecture, classes):
@@ -68,22 +66,14 @@ class PytorchModel(BaseModule):
         # optimizer
         self.opt_net = None  # don't set directly. initialized during training
         self.optimizer_cls = optim.SGD  # or torch.optim.Adam, etc
-        self.optimizer_params = {
-            # optimization parameters for parts of the networks - see
-            # https://pytorch.org/docs/stable/optim.html#per-parameter-options
-            "feature": {  # optimizer parameters for feature extraction layers
-                "params": self.network.feature.parameters(),
-                "lr": 0.001,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-            "classifier": {  # optimizer parameters for classification layers
-                "params": self.network.classifier.parameters(),
-                "lr": 0.01,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
+
+        self.optimizer_params = {  # optimizer parameters for classification layers
+            "params": self.network.parameters(),
+            "lr": 0.01,
+            "momentum": 0.9,
+            "weight_decay": 0.0005,
         }
+
         # lr_scheduler
         self.lr_update_interval = 10  # update learning rates every # epochs
         self.lr_cooling_factor = 0.7  # multiply learning rates by # on each update
@@ -107,7 +97,7 @@ class PytorchModel(BaseModule):
         self.optimizer_cls and/or self.optimizer_params
         prior to calling .train().
         """
-        return self.optimizer_cls(self.optimizer_params.values())
+        return self.optimizer_cls([self.optimizer_params])
 
     def _init_loss_fn(self):
         """initialize an instance of self.loss_cls
@@ -195,23 +185,23 @@ class PytorchModel(BaseModule):
         total_preds = []
         total_scores = []
 
-        for batch_idx, item in enumerate(self.train_loader):
+        for batch_idx, batch_data in enumerate(self.train_loader):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
-            data, labels = item["X"].to(self.device), item["y"].to(self.device)
-            labels = labels.squeeze(1)
+            batch_tensors = batch_data["X"].to(self.device)
+            batch_labels = batch_data["y"].to(self.device)
+            batch_labels = batch_labels.squeeze(1)
 
             ####################
             # Forward and loss #
             ####################
 
             # forward pass: feature extractor and classifier
-            feats = self.network.feature(data)  # feature extraction
-            logits = self.network.classifier(feats)  # classification
+            logits = self.network.forward(batch_tensors)
 
             # save targets and predictions
             total_scores.append(logits.detach().cpu().numpy())
-            total_tgts.append(labels.detach().cpu().numpy())
+            total_tgts.append(batch_labels.detach().cpu().numpy())
 
             # generate binary predictions
             if self.single_target:  # predict highest scoring class only
@@ -220,8 +210,8 @@ class PytorchModel(BaseModule):
                 batch_preds = torch.sigmoid(logits) >= self.prediction_threshold
             total_preds.append(batch_preds.int().detach().cpu().numpy())
 
-            # calculate loss #may be able to move loss fn outside of network
-            loss = self.loss_fn(logits, labels)
+            # calculate loss
+            loss = self.loss_fn(logits, batch_labels)
             self.loss_hist[self.current_epoch] = loss.detach().cpu().numpy()
 
             #############################
@@ -248,7 +238,7 @@ class PytorchModel(BaseModule):
                 )
 
                 # Log the Jaccard score and Hamming loss
-                tgts = labels.int().detach().cpu().numpy()
+                tgts = batch_labels.int().detach().cpu().numpy()
                 preds = batch_preds.int().detach().cpu().numpy()
                 jac = jaccard_score(tgts, preds, average="macro")
                 ham = hamming_loss(tgts, preds)
@@ -327,8 +317,8 @@ class PytorchModel(BaseModule):
 
         self._set_train(batch_size, num_workers)
 
-        best_f1 = 0.0
-        best_epoch = 0
+        self.best_f1 = 0.0
+        self.best_epoch = 0
 
         for epoch in range(epochs):
             # 1 epoch = 1 view of each training file
@@ -386,10 +376,9 @@ class PytorchModel(BaseModule):
 
             # if best model (by F1 score), update & save weights to best.model
             f1 = self.valid_metrics[self.current_epoch]["f1"]
-            if f1 > best_f1:
-                self.network.update_best()
-                best_f1 = f1
-                best_epoch = self.current_epoch
+            if f1 > self.best_f1:
+                self.best_f1 = f1
+                self.best_epoch = self.current_epoch
                 print("Updating best model")
                 self.save(
                     f"{self.save_path}/best.model",
@@ -403,7 +392,9 @@ class PytorchModel(BaseModule):
 
             self.current_epoch += 1
 
-        print(f"\nBest Model Appears at Epoch {best_epoch} with F1 {best_f1:.3f}.")
+        print(
+            f"\nBest Model Appears at Epoch {self.best_epoch} with F1 {self.best_f1:.3f}."
+        )
 
         # warn the user if there were unsafe samples (failed to preprocess)
         if len(self.train_safe_dataset._unsafe_indices) > 0:
@@ -644,8 +635,7 @@ class PytorchModel(BaseModule):
                     has_labels = True
 
                 # forward pass of network: feature extractor + classifier
-                feats = self.network.feature(batch_tensors)
-                logits = self.network.classifier(feats)
+                logits = self.network.forward(batch_tensors)
 
                 ### Activation layer ###
                 if activation_layer == None:  # scores [-inf,inf]
@@ -723,20 +713,20 @@ class PytorchModel(BaseModule):
 
 class Resnet18Multiclass(PytorchModel):
     def __init__(self, classes):
-        """Multi-class model with resnet18 architecture
+        """Multi-class model with resnet18 architecture and ResampleLoss.
 
         Can be single or multi-target.
-        Allows separate parameters for feature & classifier blocks.
 
-        if you want to change other parameters,
-        simply create the object then modify them
+        Allows separate parameters for feature & classifier blocks. Unlike
+        default model, uses ResampleLoss which requires class counts as an
+        input.
         """
         self.classes = classes
         self.weights_init = "ImageNet"
 
         # initialize the model architecture without an optimizer
         # since we dont know the train class counts to give the optimizer
-        architecture = ResNetArchitecture(  # pass architecture as argument
+        architecture = ResNetArchitecture(
             num_cls=len(self.classes), weights_init=self.weights_init, num_layers=18
         )
 
@@ -744,8 +734,45 @@ class Resnet18Multiclass(PytorchModel):
         self.name = "Resnet18Multiclass"
         self.loss_cls = ResampleLoss
 
+        # optimization parameters for parts of the networks - see
+        # https://pytorch.org/docs/stable/optim.html#per-parameter-options
+        self.optimizer_params = {
+            "feature": {  # optimizer parameters for feature extraction layers
+                "params": self.network.feature.parameters(),
+                "lr": 0.001,
+                "momentum": 0.9,
+                "weight_decay": 0.0005,
+            },
+            "classifier": {  # optimizer parameters for classification layers
+                "params": self.network.classifier.parameters(),
+                "lr": 0.01,
+                "momentum": 0.9,
+                "weight_decay": 0.0005,
+            },
+        }
+
+    def _init_optimizer(self):
+        """initialize an instance of self.optimizer
+
+        We override the parent method because we need to pass a list of
+        separate optimizer_params for different parts of the network
+        - ie we now have a dictionary of param dictionaries instead of just a
+        param dictionary.
+
+        This function is called during .train() so that the user
+        has a chance to swap/modify the optimizer before training.
+
+        To modify the optimizer, change the value of
+        self.optimizer_cls and/or self.optimizer_params
+        prior to calling .train().
+        """
+        return self.optimizer_cls(self.optimizer_params.values())
+
     def _init_loss_fn(self):
         """initialize an instance of self.loss_cls
+
+        We override the parent method because we need to pass class frequency
+        to the ResampleLoss constructor
 
         This function is called during .train() so that the user
         has a chance to change the loss function before training.
@@ -771,11 +798,13 @@ class Resnet18Multiclass(PytorchModel):
 
 class Resnet18Binary(PytorchModel):
     def __init__(self):
-        """if you want to change parameters, create the object then modify them"""
+        """This subclass uses Resnet18 and allows separate training parameters
+        for the feature extractor and classifier"""
+
         self.weights_init = "ImageNet"
         self.classes = ["negative", "positive"]
 
-        architecture = ResNetArchitecture(  # pass architecture as argument
+        architecture = ResNetArchitecture(
             num_cls=2, weights_init=self.weights_init, num_layers=18
         )
 
@@ -784,3 +813,150 @@ class Resnet18Binary(PytorchModel):
 
         self.metrics_fn = binary_metrics
         self.single_target = True
+
+        # optimization parameters for parts of the networks - see
+        # https://pytorch.org/docs/stable/optim.html#per-parameter-options
+        self.optimizer_params = {
+            "feature": {  # optimizer parameters for feature extraction layers
+                "params": self.network.feature.parameters(),
+                "lr": 0.001,
+                "momentum": 0.9,
+                "weight_decay": 0.0005,
+            },
+            "classifier": {  # optimizer parameters for classification layers
+                "params": self.network.classifier.parameters(),
+                "lr": 0.01,
+                "momentum": 0.9,
+                "weight_decay": 0.0005,
+            },
+        }
+
+    def _init_optimizer(self):
+        """initialize an instance of self.optimizer
+
+        We override the parent method because we need to pass a list of
+        separate optimizer_params for different parts of the network
+         - ie we now have a dictionary of param dictionaries instead of just a
+         param dictionary.
+
+        This function is called during .train() so that the user
+        has a chance to swap/modify the optimizer before training.
+
+        To modify the optimizer, change the value of
+        self.optimizer_cls and/or self.optimizer_params
+        prior to calling .train().
+        """
+        return self.optimizer_cls(self.optimizer_params.values())
+
+
+class InceptionV3(PytorchModel):
+    def __init__(self, classes, freeze_feature_extractor=False, use_pretrained=True):
+        """Model object for InceptionV3 architecture.
+
+        See opensoundscape.org for exaple use.
+
+        Args:
+            classes: list of output classes (usually strings)
+
+        """
+        from opensoundscape.torch.architectures.cnn_architectures import inception_v3
+
+        self.weights_init = "ImageNet"
+        self.classes = classes
+
+        architecture = inception_v3(
+            len(self.classes),
+            freeze_feature_extractor=freeze_feature_extractor,
+            use_pretrained=use_pretrained,
+        )
+
+        super(InceptionV3, self).__init__(architecture, self.classes)
+        self.name = "InceptionV3"
+
+    def train_epoch(self):
+        """perform forward pass, loss, backpropagation for one epoch
+
+        need to override parent because Inception returns different outputs
+        from the forward pass (final and auxiliary layers)
+
+        Returns: (targets, predictions, scores) on training files
+        """
+        self.network.train()
+
+        total_tgts = []
+        total_preds = []
+        total_scores = []
+
+        for batch_idx, batch_data in enumerate(self.train_loader):
+            # load a batch of images and labels from the train loader
+            # all augmentation occurs in the Preprocessor (train_loader)
+            batch_tensors = batch_data["X"].to(self.device)
+            batch_labels = batch_data["y"].to(self.device)
+            batch_labels = batch_labels.squeeze(1)
+
+            ####################
+            # Forward and loss #
+            ####################
+
+            # forward pass: feature extractor and classifier
+            # inception returns two sets of outputs
+            inception_outputs = self.network.forward(batch_tensors)
+            logits = inception_outputs.logits
+            aux_logits = inception_outputs.aux_logits
+
+            # save targets and predictions
+            total_scores.append(logits.detach().cpu().numpy())
+            total_tgts.append(batch_labels.detach().cpu().numpy())
+
+            # generate binary predictions
+            if self.single_target:  # predict highest scoring class only
+                batch_preds = F.one_hot(logits.argmax(1), len(logits[0]))
+            else:  # multi-target: predict 0 or 1 based on a fixed threshold
+                batch_preds = torch.sigmoid(logits) >= self.prediction_threshold
+            total_preds.append(batch_preds.int().detach().cpu().numpy())
+
+            # calculate loss
+            loss1 = self.loss_fn(logits, batch_labels)
+            loss2 = self.loss_fn(aux_logits, batch_labels)
+            loss = loss1 + 0.4 * loss2
+            self.loss_hist[self.current_epoch] = loss.detach().cpu().numpy()
+
+            #############################
+            # Backward and optimization #
+            #############################
+            # zero gradients for optimizer
+            self.opt_net.zero_grad()
+            # backward pass: calculate the gradients
+            loss.backward()
+            # update the network using the gradients*lr
+            self.opt_net.step()
+
+            ###########
+            # Logging #
+            ###########
+            # log basic train info
+            if batch_idx % self.log_interval == 0:
+                """show some basic progress metrics during the epoch"""
+                N = len(self.train_loader)
+                print(
+                    "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
+                        self.current_epoch, batch_idx, N, 100 * batch_idx / N
+                    )
+                )
+
+                # Log the Jaccard score and Hamming loss
+                tgts = batch_labels.int().detach().cpu().numpy()
+                preds = batch_preds.int().detach().cpu().numpy()
+                jac = jaccard_score(tgts, preds, average="macro")
+                ham = hamming_loss(tgts, preds)
+                print(f"\tJacc: {jac:0.3f} Hamm: {ham:0.3f} DistLoss: {loss:.3f}")
+
+        # update learning parameters each epoch
+        self.scheduler.step()
+
+        # return targets, preds, scores
+        total_tgts = np.concatenate(total_tgts, axis=0)
+        total_preds = np.concatenate(total_preds, axis=0)
+        total_scores = np.concatenate(total_scores, axis=0)
+
+        return total_tgts, total_preds, total_scores
