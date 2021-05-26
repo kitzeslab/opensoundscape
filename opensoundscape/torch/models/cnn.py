@@ -836,7 +836,9 @@ class Resnet18Binary(PytorchModel):
             num_cls=2, weights_init=self.weights_init, num_layers=18
         )
 
-        super(Resnet18Binary, self).__init__(architecture, self.classes)
+        super(Resnet18Binary, self).__init__(
+            architecture, self.classes, single_target=True
+        )
         self.name = "Resnet18Binary"
 
         self.metrics_fn = binary_metrics
@@ -878,18 +880,31 @@ class Resnet18Binary(PytorchModel):
 
 
 class InceptionV3(PytorchModel):
-    def __init__(self, classes, freeze_feature_extractor=False, use_pretrained=True):
+    def __init__(
+        self,
+        classes,
+        freeze_feature_extractor=False,
+        use_pretrained=True,
+        single_target=False,
+    ):
         """Model object for InceptionV3 architecture.
 
         See opensoundscape.org for exaple use.
 
         Args:
-            classes: list of output classes (usually strings)
+            classes:
+                list of output classes (usually strings)
+            freeze-feature_extractor:
+                if True, feature weights don't have
+                gradient, and only final classification layer is trained
+            use_pretrained:
+                if True, use pre-trained InceptionV3 Imagenet weights
+            single_target:
+                if True, predict exactly one class per sample
 
         """
         from opensoundscape.torch.architectures.cnn_architectures import inception_v3
 
-        self.weights_init = "ImageNet"
         self.classes = classes
 
         architecture = inception_v3(
@@ -898,7 +913,7 @@ class InceptionV3(PytorchModel):
             use_pretrained=use_pretrained,
         )
 
-        super(InceptionV3, self).__init__(architecture, self.classes)
+        super(InceptionV3, self).__init__(architecture, self.classes, single_target)
         self.name = "InceptionV3"
 
     def train_epoch(self):
@@ -988,3 +1003,54 @@ class InceptionV3(PytorchModel):
         total_scores = np.concatenate(total_scores, axis=0)
 
         return total_tgts, total_preds, total_scores
+
+
+class InceptionV3ResampleLoss(InceptionV3):
+    def __init__(
+        self,
+        classes,
+        freeze_feature_extractor=False,
+        use_pretrained=True,
+        single_target=False,
+    ):
+        """Subclass of InceptionV3 with ResampleLoss.
+
+        May perform better than BCE for multitarget problems.
+        """
+        self.classes = classes
+
+        super(InceptionV3ResampleLoss, self).__init__(
+            classes,
+            freeze_feature_extractor=False,
+            use_pretrained=True,
+            single_target=single_target,
+        )
+        self.name = "InceptionV3ResampleLoss"
+        self.loss_cls = ResampleLoss
+
+    def _init_loss_fn(self):
+        """initialize an instance of self.loss_cls
+
+        We override the parent method because we need to pass class frequency
+        to the ResampleLoss constructor
+
+        This function is called during .train() so that the user
+        has a chance to change the loss function before training.
+
+        Note: if you change the loss function, you may need to override this
+        to correctly initialize self.loss_cls
+        """
+        class_frequency = np.sum(self.train_dataset.df.values, 0)
+        # initializing ResampleLoss requires us to pass class_frequency
+        self.loss_fn = self.loss_cls(class_frequency)
+
+    @classmethod
+    def from_checkpoint(cls, path):
+        # need to get classes first to initialize the model object
+        try:
+            classes = torch.load(path)["classes"]
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        model_obj = cls(classes)
+        model_obj.load(path)
+        return model_obj
