@@ -27,7 +27,11 @@ class BasePreprocessor(torch.utils.data.Dataset):
             "Index of dataframe passed to "
             f"preprocessor must be a file path. Got {df.index[0]}."
         )
-        assert df.values[0, 0] in (0, 1)
+        if return_labels:
+            assert df.values[0, 0] in (
+                0,
+                1,
+            ), "if return_labels=True, df must have labels that take values of 0 and 1"
 
         self.df = df
         self.return_labels = return_labels
