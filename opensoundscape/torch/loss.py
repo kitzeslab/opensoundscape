@@ -28,7 +28,7 @@ class CrossEntropyLoss_hot(nn.CrossEntropyLoss):
         super(CrossEntropyLoss_hot, self).__init__()
 
     def forward(self, input, target):
-        if not (x.sum(1).all() and x.sum(1).max() == 1):
+        if not (target.sum(1).all() and target.sum(1).max() == 1):
             raise ValueError("labels must be single-target for CrossEntropyLoss")
         target = target.argmax(1)
         return super(CrossEntropyLoss_hot, self).forward(input, target)
