@@ -10,11 +10,49 @@ import warnings
 
 
 class Spectrogram:
-    """Immutable spectrogram container"""
+    """Immutable spectrogram container
 
-    __slots__ = ("frequencies", "times", "spectrogram", "decibel_limits")
+    Can be initialized directly from spectrogram, frequency, and time values
+    or created from an Audio object using the .from_audio() method.
 
-    def __init__(self, spectrogram, frequencies, times, decibel_limits):
+    Attributes:
+        frequencies: (list) discrete frequency bins genereated by fft
+        times: (list) time from beginning of file to the center of each window
+        spectrogram: a 2d array containing 10*log10(fft) for each time window
+        decibel_limits: minimum and maximum decibel values in .spectrogram
+        window_samples: number of samples per window when spec was created
+            [default: none]
+        overlap_samples: number of samples overlapped in consecutive windows
+            when spec was created
+            [default: none]
+        window_type: window fn used to make spectrogram, eg 'hann'
+            [default: none]
+        audio_sample_rate: sample rate of audio from which spec was created
+            [default: none]
+    """
+
+    __slots__ = (
+        "frequencies",
+        "times",
+        "spectrogram",
+        "decibel_limits",
+        "window_samples",
+        "overlap_samples",
+        "window_type",
+        "audio_sample_rate",
+    )
+
+    def __init__(
+        self,
+        spectrogram,
+        frequencies,
+        times,
+        decibel_limits,
+        window_samples=None,
+        overlap_samples=None,
+        window_type=None,
+        audio_sample_rate=None,
+    ):
         if not isinstance(spectrogram, np.ndarray):
             raise TypeError(
                 f"Spectrogram.spectrogram should be a np.ndarray [shape=(n, m)]. Got {spectrogram.__class__}"
@@ -58,6 +96,10 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("times", times)
         super(Spectrogram, self).__setattr__("spectrogram", spectrogram)
         super(Spectrogram, self).__setattr__("decibel_limits", decibel_limits)
+        super(Spectrogram, self).__setattr__("window_samples", window_samples)
+        super(Spectrogram, self).__setattr__("overlap_samples", overlap_samples)
+        super(Spectrogram, self).__setattr__("window_type", window_type)
+        super(Spectrogram, self).__setattr__("audio_sample_rate", audio_sample_rate)
 
     @classmethod
     def from_audio(
@@ -104,7 +146,16 @@ class Spectrogram:
         spectrogram[spectrogram > max_db] = max_db
         spectrogram[spectrogram < min_db] = min_db
 
-        new_obj = cls(spectrogram, frequencies, times, decibel_limits)
+        new_obj = cls(
+            spectrogram,
+            frequencies,
+            times,
+            decibel_limits,
+            window_samples=window_samples,
+            overlap_samples=overlap_samples,
+            window_type=window_type,
+            audio_sample_rate=audio.sample_rate,
+        )
         return new_obj
 
     @classmethod
@@ -130,6 +181,45 @@ class Spectrogram:
 
     def __repr__(self):
         return f"<Spectrogram(spectrogram={self.spectrogram.shape}, frequencies={self.frequencies.shape}, times={self.times.shape})>"
+
+    def duration(self):
+        """calculate the ammount of time represented in the spectrogram
+
+        Note: time may be shorter than the duration of the audio from which
+        the spectrogram was created, because the windows may align in a way
+        such that some samples from the end of the original audio were
+        discarded
+        """
+        window_length = self.window_length()
+        if window_length is None:
+            warnings.warn(
+                "spectrogram must have window_length attribute to"
+                " accurately calculate duration. Approximating duration."
+            )
+            return self.times[-1]
+        else:
+            return self.times[-1] + window_length / 2
+
+    def window_length(self):
+        """calculate length of a single fft window, in seconds:"""
+        if self.window_samples and self.audio_sample_rate:
+            return float(self.window_samples) / self.audio_sample_rate
+        return None
+
+    def window_step(self):
+        """calculate time difference (sec) between consecutive windows' centers"""
+        if self.window_samples and self.overlap_samples and self.audio_sample_rate:
+            return (
+                float(self.window_samples - self.overlap_samples)
+                / self.audio_sample_rate
+            )
+        return None
+
+    def window_start_times(self):
+        """get start times of each window, rather than midpoint times"""
+        window_length = self.window_length()
+        if window_length is not None:
+            return np.array(self.times) - window_length / 2
 
     def min_max_scale(self, feature_range=(0, 1)):
         """
