@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 
 class BCEWithLogitsLoss_hot(nn.BCEWithLogitsLoss):
-    """use nn.BCEWithLogitsLoss for one-hot labels
+    """use pytorch's nn.BCEWithLogitsLoss for one-hot labels
     by simply converting y from long to float"""
 
     def __init__(self):
@@ -15,6 +15,23 @@ class BCEWithLogitsLoss_hot(nn.BCEWithLogitsLoss):
     def forward(self, input, target):
         target = target.float()
         return super(BCEWithLogitsLoss_hot, self).forward(input, target)
+
+
+class CrossEntropyLoss_hot(nn.CrossEntropyLoss):
+    """use pytorch's nn.CrossEntropyLoss for one-hot labels
+    by converting labels from 1-hot to integer labels
+
+    throws a ValueError if labels are not one-hot
+    """
+
+    def __init__(self):
+        super(CrossEntropyLoss_hot, self).__init__()
+
+    def forward(self, input, target):
+        if not (target.sum(1).all() and target.sum(1).max() == 1):
+            raise ValueError("labels must be single-target for CrossEntropyLoss")
+        target = target.argmax(1)
+        return super(CrossEntropyLoss_hot, self).forward(input, target)
 
 
 def reduce_loss(loss, reduction):
