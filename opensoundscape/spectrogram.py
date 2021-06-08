@@ -14,7 +14,7 @@ class Spectrogram:
 
     __slots__ = ("frequencies", "times", "spectrogram", "decibel_limits")
 
-    def __init__(self, spectrogram, frequencies, times):
+    def __init__(self, spectrogram, frequencies, times, decibel_limits):
         if not isinstance(spectrogram, np.ndarray):
             raise TypeError(
                 f"Spectrogram.spectrogram should be a np.ndarray [shape=(n, m)]. Got {spectrogram.__class__}"
@@ -26,6 +26,10 @@ class Spectrogram:
         if not isinstance(times, np.ndarray):
             raise TypeError(
                 f"Spectrogram.times should be an np.ndarray [shape=(m,)]. Got {times.__class__}"
+            )
+        if not isinstance(decibel_limits, tuple):
+            raise TypeError(
+                f"Spectrogram.times should be a tuple [length=2]. Got {decibel_limits.__class__}"
             )
 
         if spectrogram.ndim != 2:
@@ -40,6 +44,10 @@ class Spectrogram:
             raise TypeError(
                 f"times should be an np.ndarray [shape=(m,)]. Got {times.shape}"
             )
+        if len(decibel_limits) != 2:
+            raise TypeError(
+                f"decibel_limits should be a tuple [length=2]. Got {len(decibel_limits)}"
+            )
 
         if spectrogram.shape != (frequencies.shape[0], times.shape[0]):
             raise TypeError(
@@ -49,7 +57,7 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("frequencies", frequencies)
         super(Spectrogram, self).__setattr__("times", times)
         super(Spectrogram, self).__setattr__("spectrogram", spectrogram)
-        super(Spectrogram, self).__setattr__("decibel_limits", (-100, -20))
+        super(Spectrogram, self).__setattr__("decibel_limits", decibel_limits)
 
     @classmethod
     def from_audio(
@@ -96,8 +104,7 @@ class Spectrogram:
         spectrogram[spectrogram > max_db] = max_db
         spectrogram[spectrogram < min_db] = min_db
 
-        new_obj = cls(spectrogram, frequencies, times)
-        super(Spectrogram, new_obj).__setattr__("decibel_limits", decibel_limits)
+        new_obj = cls(spectrogram, frequencies, times, decibel_limits)
         return new_obj
 
     @classmethod
@@ -148,6 +155,7 @@ class Spectrogram:
             min_max_scale(self.spectrogram, feature_range=feature_range),
             self.frequencies,
             self.times,
+            self.decibel_limits,
         )
 
     def linear_scale(self, feature_range=(0, 1)):
@@ -176,6 +184,7 @@ class Spectrogram:
             ),
             self.frequencies,
             self.times,
+            self.decibel_limits,
         )
 
     def limit_db_range(self, min_db=-100, max_db=-20):
@@ -202,7 +211,7 @@ class Spectrogram:
         _spec[_spec > max_db] = max_db
         _spec[_spec < min_db] = min_db
 
-        return Spectrogram(_spec, self.frequencies, self.times)
+        return Spectrogram(_spec, self.frequencies, self.times, self.decibel_limits)
 
     def bandpass(self, min_f, max_f):
         """extract a frequency band from a spectrogram
@@ -218,6 +227,11 @@ class Spectrogram:
 
         """
 
+        if min_f >= max_f:
+            raise ValueError(
+                f"min_f must be less than max_f (got min_f {min_f}, max_f {max_f}"
+            )
+
         # find indices of the frequencies in spec_freq closest to min_f and max_f
         lowest_index = np.abs(self.frequencies - min_f).argmin()
         highest_index = np.abs(self.frequencies - max_f).argmin()
@@ -227,6 +241,7 @@ class Spectrogram:
             self.spectrogram[lowest_index : highest_index + 1, :],
             self.frequencies[lowest_index : highest_index + 1],
             self.times,
+            self.decibel_limits,
         )
 
     def trim(self, start_time, end_time):
@@ -250,6 +265,7 @@ class Spectrogram:
             self.spectrogram[:, lowest_index : highest_index + 1],
             self.frequencies,
             self.times[lowest_index : highest_index + 1],
+            self.decibel_limits,
         )
 
     def plot(self, inline=True, fname=None, show_colorbar=False):
@@ -346,17 +362,19 @@ class Spectrogram:
     #         with open(destination,'wb') as file:
     #             pickle.dump(self,file)
 
-    def to_image(self, shape=None, mode="RGB", spec_range=[-100, -20]):
-        """
-        create a Pillow Image from spectrogram
-        linearly rescales values from db_range (default [-100, -20]) to [255,0]
-        (ie, -20 db is loudest -> black, -100 db is quietest -> white)
+    def to_image(self, shape=None, mode="RGB"):
+        """Create a Pillow Image from spectrogram
+
+        Linearly rescales values in the spectrogram from
+        self.decibel_limits to [255,0]
+
+        Default of self.decibel_limits on load is [-100, -20], so, e.g.,
+        -20 db is loudest -> black, -100 db is quietest -> white
 
         Args:
             destination: a file path (string)
             shape=None: tuple of image dimensions, eg (224,224)
             mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
-            spec_range=[-100,-20]: the lowest and highest possible values in the spectrogram
 
         Returns:
             Pillow Image object
@@ -364,7 +382,9 @@ class Spectrogram:
         from PIL import Image
 
         # rescale spec_range to [255, 0]
-        array = linear_scale(self.spectrogram, in_range=spec_range, out_range=(255, 0))
+        array = linear_scale(
+            self.spectrogram, in_range=self.decibel_limits, out_range=(255, 0)
+        )
 
         # create and save pillow Image
         # we pass the array upside-down to create right-side-up image
