@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import pytest
 from pathlib import Path
-from opensoundscape.datasets import SplitterDataset, SingleTargetAudioDataset
+from opensoundscape.datasets import SplitterDataset
 from torch.utils.data import DataLoader
 import pandas as pd
 from numpy.testing import assert_array_almost_equal, assert_array_equal
@@ -110,57 +110,3 @@ def test_basic_splitting_operation_with_include_last_segment(
     split0, split1 = splitter_results_last
     assert split0.exists()
     assert split1.exists()
-
-
-def test_single_target_audio_dataset_default(single_target_audio_dataset_df):
-    dataset = SingleTargetAudioDataset(
-        single_target_audio_dataset_df,
-        label_dict={0: "absent", 1: "present"},
-        label_column="NumericLabels",
-        height=225,
-        width=226,
-    )
-    assert dataset[0]["X"].shape == (3, 225, 226)
-    assert dataset[0]["y"].shape == (1,)
-
-
-def test_single_target_audio_dataset_to_image(single_target_audio_dataset_df):
-    dataset = SingleTargetAudioDataset(single_target_audio_dataset_df, label_dict=None)
-
-    pixels = dataset[0]["X"].numpy()
-
-    assert (pixels >= -1).all()
-    assert (pixels <= 1).all()
-    assert pixels.max() > 0.9
-
-
-def test_single_target_audio_dataset_no_noise(
-    single_target_audio_dataset_long_audio_df,
-):
-    dataset = SingleTargetAudioDataset(
-        single_target_audio_dataset_long_audio_df, label_dict=None
-    )
-    rgb_image = dataset[0]["X"]
-    channel_0 = rgb_image[0]
-    channel_1 = rgb_image[1]
-    channel_2 = rgb_image[2]
-    assert_array_almost_equal(channel_0, channel_1)
-    assert_array_almost_equal(channel_0, channel_2)
-    assert_array_almost_equal(channel_1, channel_2)
-
-
-def test_single_target_audio_dataset_with_noise(
-    single_target_audio_dataset_long_audio_df,
-):
-    dataset = SingleTargetAudioDataset(
-        single_target_audio_dataset_long_audio_df,
-        label_dict={0: "hello"},
-        add_noise=True,
-    )
-    rgb_image = dataset[0]["X"]
-    channel_0 = rgb_image[0]
-    channel_1 = rgb_image[1]
-    channel_2 = rgb_image[2]
-    assert_array_equal(channel_0, channel_1)
-    assert_array_equal(channel_0, channel_2)
-    assert_array_equal(channel_1, channel_2)

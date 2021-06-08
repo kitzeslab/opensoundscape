@@ -200,7 +200,12 @@ class Spectrogram:
             Returns:
                 Spectrogram object with db range applied
         """
-        _spec = self.spectrogram
+        if not max_db > min_db:
+            raise ValueError(
+                f"max_db must be greater than min_db (got max_db={max_db} and min_db={min_db})"
+            )
+
+        _spec = self.spectrogram.copy()
 
         _spec[_spec > max_db] = max_db
         _spec[_spec < min_db] = min_db

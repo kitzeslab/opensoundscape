@@ -5,15 +5,15 @@ import warnings
 def calc_speed_of_sound(temperature=20):
     """
     Calculate speed of sound in meters per second
-    
+
     Calculate speed of sound for a given temperature
     in Celsius (Humidity has a negligible
     effect on speed of sound and so this functionality
     is not implemented)
-    
-    Args: 
+
+    Args:
         temperature: ambient temperature in Celsius
-        
+
     Returns:
         the speed of sound in meters per second
     """
@@ -23,22 +23,22 @@ def calc_speed_of_sound(temperature=20):
 def lorentz_ip(u, v=None):
     """
     Compute Lorentz inner product of two vectors
-    
+
     For vectors `u` and `v`, the
     Lorentz inner product for 3-dimensional case is defined as
-    
+
         u[0]*v[0] + u[1]*v[1] + u[2]*v[2] - u[3]*v[3]
-        
+
     Or, for 2-dimensional case as
-        
+
         u[0]*v[0] + u[1]*v[1] - u[2]*v[2]
-    
+
     Args:
-        u: vector with shape either (3,) or (4,) 
+        u: vector with shape either (3,) or (4,)
         v: vector with same shape as x1; if None (default), sets v = u
 
     Returns:
-        float: value of Lorentz IP """
+        float: value of Lorentz IP"""
     if v is None:
         v = u
 
@@ -55,12 +55,12 @@ def lorentz_ip(u, v=None):
 def travel_time(source, receiver, speed_of_sound):
     """
     Calculate time required for sound to travel from a souce to a receiver
-    
+
     Args:
         source: cartesian position [x,y] or [x,y,z] of sound source
         receiver: cartesian position [x,y] or [x,y,z] of sound receiver
         speed_of_sound: speed of sound in m/s
-    
+
     Returns:
         time in seconds for sound to travel from source to receiver
     """
@@ -79,35 +79,35 @@ def localize(
 
     """
     Perform TDOA localization on a sound event
-    
+
     Localize a sound event given relative arrival times at multiple receivers.
     This function implements a localization algorithm from the
     equations described in the class handout ("Global Positioning
     Systems"). Localization can be performed in a global coordinate
     system in meters (i.e., UTM), or relative to recorder positions
     in meters.
-    
+
     Args:
         receiver_positions: a list of [x,y,z] positions for each receiver
           Positions should be in meters, e.g., the UTM coordinate system.
-          
+
         arrival_times: a list of TDOA times (onset times) for each recorder
           The times should be in seconds.
-          
-        temperature: ambient temperature in Celsius 
-          
+
+        temperature: ambient temperature in Celsius
+
         invert_alg: what inversion algorithm to use
-        
+
         center: whether to center recorders before computing localization
           result. Computes localization relative to centered plot, then
-          translates solution back to original recorder locations. 
+          translates solution back to original recorder locations.
           (For behavior of original Sound Finder, use True)
-        
-        pseudo: whether to use the pseudorange error (True) or 
+
+        pseudo: whether to use the pseudorange error (True) or
           sum of squares discrepancy (False) to pick the solution to return
-          (For behavior of original Sound Finder, use False. However, 
+          (For behavior of original Sound Finder, use False. However,
           in initial tests, pseudorange error appears to perform better.)
-          
+
     Returns:
         The solution (x,y,z,b) with the lower sum of squares discrepancy
         b is the error in the pseudorange (distance to mics), b=c*delta_t (delta_t is time error)
