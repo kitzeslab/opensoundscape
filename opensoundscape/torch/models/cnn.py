@@ -20,7 +20,11 @@ from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore
 from opensoundscape.torch.architectures.resnet import ResNetArchitecture
 from opensoundscape.torch.models.utils import BaseModule, get_dataloader
 from opensoundscape.metrics import multiclass_metrics, binary_metrics
-from opensoundscape.torch.loss import BCEWithLogitsLoss_hot, ResampleLoss
+from opensoundscape.torch.loss import (
+    BCEWithLogitsLoss_hot,
+    CrossEntropyLoss_hot,
+    ResampleLoss,
+)
 from opensoundscape.torch.safe_dataset import SafeDataset
 
 
@@ -36,7 +40,7 @@ class PytorchModel(BaseModule):
     methods include train(), predict(), save(), and load()
     """
 
-    def __init__(self, architecture, classes):
+    def __init__(self, architecture, classes, single_target=False):
         """if you want to change parameters,
         first create the object then modify them
         """
@@ -47,6 +51,7 @@ class PytorchModel(BaseModule):
         # model characteristics
         self.current_epoch = 0
         self.classes = classes  # train_dataset.labels
+        self.single_target = single_target  # if True: predict only class w max score
         print(f"created {self.name} model object with {len(self.classes)} classes")
 
         ### data loading parameters ###
@@ -59,7 +64,10 @@ class PytorchModel(BaseModule):
         self.network = architecture
 
         ### loss function ###
-        self.loss_cls = BCEWithLogitsLoss_hot  # class constructor for loss fn
+        if self.single_target:  # use cross entropy loss by default
+            self.loss_cls = CrossEntropyLoss_hot
+        else:  # for multi-target, use binary cross entropy
+            self.loss_cls = BCEWithLogitsLoss_hot
 
         ### training parameters ###
         # defaults partially from  zhmiao's BirdMultiLabel
@@ -80,7 +88,6 @@ class PytorchModel(BaseModule):
 
         ### metrics ###
         self.metrics_fn = multiclass_metrics  # or binary_metrics
-        self.single_target = False  # if True: predict only class w max score
         self.prediction_threshold = 0.25
         # dictionaries to store accuracy metrics & loss for each epoch
         self.train_metrics = {}
@@ -711,15 +718,62 @@ class PytorchModel(BaseModule):
         return model_obj
 
 
-class Resnet18Multiclass(PytorchModel):
-    def __init__(self, classes):
+class CnnResampleLoss(PytorchModel):
+    def __init__(self, architecture, classes, single_target=False):
+        """Subclass of PytorchModel with ResampleLoss.
+
+        May perform better than BCE for multitarget problems.
+        """
+        self.classes = classes
+
+        super(CnnResampleLoss, self).__init__(architecture, self.classes, single_target)
+        self.name = "CnnResampleLoss"
+        self.loss_cls = ResampleLoss
+
+    def _init_loss_fn(self):
+        """initialize an instance of self.loss_cls
+
+        We override the parent method because we need to pass class frequency
+        to the ResampleLoss constructor
+
+        This function is called during .train() so that the user
+        has a chance to change the loss function before training.
+
+        Note: if you change the loss function, you may need to override this
+        to correctly initialize self.loss_cls
+        """
+        class_frequency = np.sum(self.train_dataset.df.values, 0)
+        # initializing ResampleLoss requires us to pass class_frequency
+        self.loss_fn = self.loss_cls(class_frequency)
+
+    @classmethod
+    def from_checkpoint(cls, path):
+        # need to get classes first to initialize the model object
+        try:
+            classes = torch.load(path)["classes"]
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        model_obj = cls(classes)
+        model_obj.load(path)
+        return model_obj
+
+
+class Resnet18Multiclass(CnnResampleLoss):
+    def __init__(self, classes, single_target=False):
         """Multi-class model with resnet18 architecture and ResampleLoss.
 
         Can be single or multi-target.
 
-        Allows separate parameters for feature & classifier blocks. Unlike
-        default model, uses ResampleLoss which requires class counts as an
-        input.
+        Args:
+            classes: list of class names
+            single_target: if True, exactly one positive class per sample
+                [default: False]
+
+        Notes
+        - Allows separate parameters for feature & classifier blocks
+            via self.optimizer_params's keys: "feature" and "classifier"
+            (by using hand-built architecture)
+        - Uses ResampleLoss which requires class counts as an input.
         """
         self.classes = classes
         self.weights_init = "ImageNet"
@@ -730,9 +784,10 @@ class Resnet18Multiclass(PytorchModel):
             num_cls=len(self.classes), weights_init=self.weights_init, num_layers=18
         )
 
-        super(Resnet18Multiclass, self).__init__(architecture, self.classes)
+        super(Resnet18Multiclass, self).__init__(
+            architecture, self.classes, single_target
+        )
         self.name = "Resnet18Multiclass"
-        self.loss_cls = ResampleLoss
 
         # optimization parameters for parts of the networks - see
         # https://pytorch.org/docs/stable/optim.html#per-parameter-options
@@ -768,33 +823,6 @@ class Resnet18Multiclass(PytorchModel):
         """
         return self.optimizer_cls(self.optimizer_params.values())
 
-    def _init_loss_fn(self):
-        """initialize an instance of self.loss_cls
-
-        We override the parent method because we need to pass class frequency
-        to the ResampleLoss constructor
-
-        This function is called during .train() so that the user
-        has a chance to change the loss function before training.
-
-        Note: if you change the loss function, you may need to override this
-        to correctly initialize self.loss_cls
-        """
-        class_frequency = np.sum(self.train_dataset.df.values, 0)
-        # initializing ResampleLoss requires us to pass class_frequency
-        self.loss_fn = self.loss_cls(class_frequency)
-
-    @classmethod
-    def from_checkpoint(cls, path):
-        # need to get classes first to initialize the model object
-        try:
-            classes = torch.load(path)["classes"]
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
-        model_obj = cls(classes)
-        model_obj.load(path)
-        return model_obj
-
 
 class Resnet18Binary(PytorchModel):
     def __init__(self):
@@ -808,7 +836,9 @@ class Resnet18Binary(PytorchModel):
             num_cls=2, weights_init=self.weights_init, num_layers=18
         )
 
-        super(Resnet18Binary, self).__init__(architecture, self.classes)
+        super(Resnet18Binary, self).__init__(
+            architecture, self.classes, single_target=True
+        )
         self.name = "Resnet18Binary"
 
         self.metrics_fn = binary_metrics
@@ -850,18 +880,31 @@ class Resnet18Binary(PytorchModel):
 
 
 class InceptionV3(PytorchModel):
-    def __init__(self, classes, freeze_feature_extractor=False, use_pretrained=True):
+    def __init__(
+        self,
+        classes,
+        freeze_feature_extractor=False,
+        use_pretrained=True,
+        single_target=False,
+    ):
         """Model object for InceptionV3 architecture.
 
         See opensoundscape.org for exaple use.
 
         Args:
-            classes: list of output classes (usually strings)
+            classes:
+                list of output classes (usually strings)
+            freeze-feature_extractor:
+                if True, feature weights don't have
+                gradient, and only final classification layer is trained
+            use_pretrained:
+                if True, use pre-trained InceptionV3 Imagenet weights
+            single_target:
+                if True, predict exactly one class per sample
 
         """
         from opensoundscape.torch.architectures.cnn_architectures import inception_v3
 
-        self.weights_init = "ImageNet"
         self.classes = classes
 
         architecture = inception_v3(
@@ -870,7 +913,7 @@ class InceptionV3(PytorchModel):
             use_pretrained=use_pretrained,
         )
 
-        super(InceptionV3, self).__init__(architecture, self.classes)
+        super(InceptionV3, self).__init__(architecture, self.classes, single_target)
         self.name = "InceptionV3"
 
     def train_epoch(self):
@@ -960,3 +1003,54 @@ class InceptionV3(PytorchModel):
         total_scores = np.concatenate(total_scores, axis=0)
 
         return total_tgts, total_preds, total_scores
+
+
+class InceptionV3ResampleLoss(InceptionV3):
+    def __init__(
+        self,
+        classes,
+        freeze_feature_extractor=False,
+        use_pretrained=True,
+        single_target=False,
+    ):
+        """Subclass of InceptionV3 with ResampleLoss.
+
+        May perform better than BCE for multitarget problems.
+        """
+        self.classes = classes
+
+        super(InceptionV3ResampleLoss, self).__init__(
+            classes,
+            freeze_feature_extractor=False,
+            use_pretrained=True,
+            single_target=single_target,
+        )
+        self.name = "InceptionV3ResampleLoss"
+        self.loss_cls = ResampleLoss
+
+    def _init_loss_fn(self):
+        """initialize an instance of self.loss_cls
+
+        We override the parent method because we need to pass class frequency
+        to the ResampleLoss constructor
+
+        This function is called during .train() so that the user
+        has a chance to change the loss function before training.
+
+        Note: if you change the loss function, you may need to override this
+        to correctly initialize self.loss_cls
+        """
+        class_frequency = np.sum(self.train_dataset.df.values, 0)
+        # initializing ResampleLoss requires us to pass class_frequency
+        self.loss_fn = self.loss_cls(class_frequency)
+
+    @classmethod
+    def from_checkpoint(cls, path):
+        # need to get classes first to initialize the model object
+        try:
+            classes = torch.load(path)["classes"]
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        model_obj = cls(classes)
+        model_obj.load(path)
+        return model_obj
