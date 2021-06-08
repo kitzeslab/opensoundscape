@@ -10,8 +10,7 @@ import warnings
 
 
 class Spectrogram:
-    """ Immutable spectrogram container
-    """
+    """Immutable spectrogram container"""
 
     __slots__ = ("frequencies", "times", "spectrogram", "decibel_limits")
 
@@ -102,7 +101,9 @@ class Spectrogram:
         return new_obj
 
     @classmethod
-    def from_file(file,):
+    def from_file(
+        file,
+    ):
         """
         create a Spectrogram object from a file
 
@@ -178,18 +179,18 @@ class Spectrogram:
         )
 
     def limit_db_range(self, min_db=-100, max_db=-20):
-        """ Limit the decibel values of the spectrogram to range from min_db to max_db
+        """Limit the decibel values of the spectrogram to range from min_db to max_db
 
-            values less than min_db are set to min_db
-            values greater than max_db are set to max_db
+        values less than min_db are set to min_db
+        values greater than max_db are set to max_db
 
-            similar to Audacity's gain and range parameters
+        similar to Audacity's gain and range parameters
 
-            Args:
-                min_db: values lower than this are set to this
-                max_db: values higher than this are set to this
-            Returns:
-                Spectrogram object with db range applied
+        Args:
+            min_db: values lower than this are set to this
+            max_db: values higher than this are set to this
+        Returns:
+            Spectrogram object with db range applied
         """
         if not max_db > min_db:
             raise ValueError(
@@ -204,13 +205,13 @@ class Spectrogram:
         return Spectrogram(_spec, self.frequencies, self.times)
 
     def bandpass(self, min_f, max_f):
-        """ extract a frequency band from a spectrogram
+        """extract a frequency band from a spectrogram
 
         crops the 2-d array of the spectrograms to the desired frequency range
 
         Args:
             min_f: low frequency in Hz for bandpass
-            high_f: high frequency in Hz for bandpass
+            max_f: high frequency in Hz for bandpass
 
         Returns:
             bandpassed spectrogram object
@@ -229,7 +230,7 @@ class Spectrogram:
         )
 
     def trim(self, start_time, end_time):
-        """ extract a time segment from a spectrogram
+        """extract a time segment from a spectrogram
 
         Args:
             start_time: in seconds
@@ -313,7 +314,7 @@ class Spectrogram:
             signal_band: [low,high] frequency range in Hz (positive contribution)
             reject band: list of [low,high] frequency ranges in Hz (negative contribution)
 
-        return: time-series array of net amplitude """
+        return: time-series array of net amplitude"""
 
         # find the amplitude signal for the desired frequency band
         signal_band_amplitude = self.amplitude(signal_band)
