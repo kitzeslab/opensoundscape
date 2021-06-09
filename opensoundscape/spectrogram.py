@@ -159,9 +159,7 @@ class Spectrogram:
         return new_obj
 
     @classmethod
-    def from_file(
-        file,
-    ):
+    def from_file(file,):
         """
         create a Spectrogram object from a file
 
