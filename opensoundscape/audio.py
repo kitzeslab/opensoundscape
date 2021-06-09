@@ -163,13 +163,16 @@ class Audio:
     def trim(self, start_time, end_time):
         """Trim Audio object in time
 
+        If start_time is less than zero, output starts from time 0
+        If end_time is beyond the end of the sample, trims to end of sample
+
         Args:
             start_time: time in seconds for start of extracted clip
             end_time: time in seconds for end of extracted clip
         Returns:
             a new Audio object containing samples from start_time to end_time
         """
-        start_sample = self.time_to_sample(start_time)
+        start_sample = max(0, self.time_to_sample(start_time))
         end_sample = self.time_to_sample(end_time)
         samples_trimmed = self.samples[start_sample:end_sample]
         return Audio(

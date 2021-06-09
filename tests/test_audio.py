@@ -129,6 +129,18 @@ def test_property_trim_length_is_correct(silence_10s_mp3_str):
         )
 
 
+def test_trim_from_negative_time(silence_10s_mp3_str):
+    """correct behavior is to trim from time zero"""
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(-1, 5)
+    assert isclose(audio.duration(), 5, abs_tol=1e-5)
+
+
+def test_trim_past_end_of_clip(silence_10s_mp3_str):
+    """correct behavior is to trim to the end of the clip"""
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(9, 11)
+    assert isclose(audio.duration(), 1, abs_tol=1e-5)
+
+
 def test_resample_veryshort_wav(veryshort_wav_str):
     audio = Audio.from_file(veryshort_wav_str)
     dur = audio.duration()
