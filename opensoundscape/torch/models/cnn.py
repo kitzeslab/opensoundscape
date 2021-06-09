@@ -1,5 +1,7 @@
-"""classes for pytorch machine learning models in opensoundscape"""
-# originally based on zhmiao's BirdMultiLabel
+"""classes for pytorch machine learning models in opensoundscape
+
+originally based on zhmiao's BirdMultiLabel
+"""
 
 import os
 import numpy as np
@@ -710,13 +712,6 @@ class PytorchModel(BaseModule):
 
         return score_df, pred_df, label_df
 
-    @classmethod
-    def from_checkpoint(cls, path):
-        """create model instance from saved model"""
-        model_obj = cls()
-        model_obj.load(path)
-        return model_obj
-
 
 class CnnResampleLoss(PytorchModel):
     def __init__(self, architecture, classes, single_target=False):
@@ -763,6 +758,8 @@ class Resnet18Multiclass(CnnResampleLoss):
         """Multi-class model with resnet18 architecture and ResampleLoss.
 
         Can be single or multi-target.
+
+        See opensoundscape.org for tutorials.
 
         Args:
             classes: list of class names
@@ -825,12 +822,18 @@ class Resnet18Multiclass(CnnResampleLoss):
 
 
 class Resnet18Binary(PytorchModel):
-    def __init__(self):
-        """This subclass uses Resnet18 and allows separate training parameters
-        for the feature extractor and classifier"""
+    def __init__(self, classes):
+        """This subclass of PytorchModel uses Resnet18 and allows separate
+        training parameters for the feature extractor and classifier,
+
+        See opensoundscape.org for tutorials.
+
+        Args:
+            classes: list (len=2) of class names, eg ['negative','positive']
+        """
 
         self.weights_init = "ImageNet"
-        self.classes = ["negative", "positive"]
+        self.classes = classes
 
         architecture = ResNetArchitecture(
             num_cls=2, weights_init=self.weights_init, num_layers=18
@@ -877,6 +880,17 @@ class Resnet18Binary(PytorchModel):
         prior to calling .train().
         """
         return self.optimizer_cls(self.optimizer_params.values())
+
+    @classmethod
+    def from_checkpoint(cls, path):
+        # need to get classes first to initialize the model object
+        try:
+            classes = torch.load(path)["classes"]
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        model_obj = cls(classes)
+        model_obj.load(path)
+        return model_obj
 
 
 class InceptionV3(PytorchModel):
@@ -1004,6 +1018,17 @@ class InceptionV3(PytorchModel):
 
         return total_tgts, total_preds, total_scores
 
+    @classmethod
+    def from_checkpoint(cls, path):
+        # need to get classes first to initialize the model object
+        try:
+            classes = torch.load(path)["classes"]
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        model_obj = cls(classes=classes, use_pretrained=False)
+        model_obj.load(path)
+        return model_obj
+
 
 class InceptionV3ResampleLoss(InceptionV3):
     def __init__(
@@ -1043,14 +1068,3 @@ class InceptionV3ResampleLoss(InceptionV3):
         class_frequency = np.sum(self.train_dataset.df.values, 0)
         # initializing ResampleLoss requires us to pass class_frequency
         self.loss_fn = self.loss_cls(class_frequency)
-
-    @classmethod
-    def from_checkpoint(cls, path):
-        # need to get classes first to initialize the model object
-        try:
-            classes = torch.load(path)["classes"]
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
-        model_obj = cls(classes)
-        model_obj.load(path)
-        return model_obj
