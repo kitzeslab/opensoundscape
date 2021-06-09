@@ -25,12 +25,20 @@ def train_dataset():
     return CnnPreprocessor(df, overlay_df=None)
 
 
+@pytest.fixture()
+def test_dataset():
+    df = pd.DataFrame(
+        index=["tests/audio/great_plains_toad.wav", "tests/audio/1min.wav"]
+    )
+    return CnnPreprocessor(df, overlay_df=None, return_labels=False)
+
+
 def test_multiclass_object_init():
     _ = Resnet18Multiclass([0, 1, 2, 3])
 
 
 def test_train(train_dataset):
-    binary = Resnet18Binary()
+    binary = Resnet18Binary(classes=["negative", "positive"])
     binary.train(
         train_dataset,
         train_dataset,
@@ -64,13 +72,16 @@ def test_train_multiclass(train_dataset):
 
 
 def test_single_target_prediction(train_dataset):
-    binary = Resnet18Binary()
+    binary = Resnet18Binary(classes=["negative", "positive"])
     _, preds, _ = binary.predict(train_dataset, binary_preds="single_target")
     assert np.sum(preds.iloc[0].values) == 1
 
 
-def test_multi_target_prediction(train_dataset):
-    binary = Resnet18Binary()
+def test_multi_target_prediction(train_dataset, test_dataset):
+    binary = Resnet18Binary(classes=["negative", "positive"])
+    _, preds, _ = binary.predict(
+        test_dataset, binary_preds="multi_target", threshold=0.1
+    )
     _, preds, _ = binary.predict(
         train_dataset, binary_preds="multi_target", threshold=0.1
     )
@@ -95,6 +106,8 @@ def test_train_predict_inception(train_dataset):
     model_path = Path("tests/models/multiclass/best.model")
     model.save(model_path)
     assert model_path.exists()
+
+    InceptionV3.from_checkpoint(model_path)
     shutil.rmtree("tests/models/multiclass/")
 
 
