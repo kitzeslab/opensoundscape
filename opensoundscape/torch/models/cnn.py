@@ -725,13 +725,6 @@ class PytorchModel(BaseModule):
 
         return score_df, pred_df, label_df
 
-    @classmethod
-    def from_checkpoint(cls, path):
-        """create model instance from saved model"""
-        model_obj = cls()
-        model_obj.load(path)
-        return model_obj
-
 
 class CnnResampleLoss(PytorchModel):
     """Subclass of PytorchModel with ResampleLoss.
@@ -874,10 +867,10 @@ class Resnet18Binary(PytorchModel):
 
     """
 
-    def __init__(self):
+    def __init__(self, classes):
 
         self.weights_init = "ImageNet"
-        self.classes = ["negative", "positive"]
+        self.classes = classes
 
         architecture = ResNetArchitecture(
             num_cls=2, weights_init=self.weights_init, num_layers=18
@@ -924,6 +917,17 @@ class Resnet18Binary(PytorchModel):
         prior to calling .train().
         """
         return self.optimizer_cls(self.optimizer_params.values())
+
+    @classmethod
+    def from_checkpoint(cls, path):
+        # need to get classes first to initialize the model object
+        try:
+            classes = torch.load(path)["classes"]
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        model_obj = cls(classes)
+        model_obj.load(path)
+        return model_obj
 
 
 class InceptionV3(PytorchModel):
@@ -1051,6 +1055,17 @@ class InceptionV3(PytorchModel):
 
         return total_tgts, total_preds, total_scores
 
+    @classmethod
+    def from_checkpoint(cls, path):
+        # need to get classes first to initialize the model object
+        try:
+            classes = torch.load(path)["classes"]
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        model_obj = cls(classes=classes, use_pretrained=False)
+        model_obj.load(path)
+        return model_obj
+
 
 class InceptionV3ResampleLoss(InceptionV3):
     def __init__(
@@ -1090,14 +1105,3 @@ class InceptionV3ResampleLoss(InceptionV3):
         class_frequency = np.sum(self.train_dataset.df.values, 0)
         # initializing ResampleLoss requires us to pass class_frequency
         self.loss_fn = self.loss_cls(class_frequency)
-
-    @classmethod
-    def from_checkpoint(cls, path):
-        # need to get classes first to initialize the model object
-        try:
-            classes = torch.load(path)["classes"]
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
-        model_obj = cls(classes)
-        model_obj.load(path)
-        return model_obj
