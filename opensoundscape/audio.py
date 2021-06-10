@@ -113,7 +113,7 @@ class Audio:
         Returns:
             Audio: attributes samples and sample_rate
         """
-
+        path = str(path)  # Pathlib path can have dependency issues - use string
         if max_duration:
             if librosa.get_duration(filename=path) > max_duration:
                 raise OpsoLoadAudioInputTooLong()
