@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-""" audio.py: Utilities for dealing with audio files
+""" audio.py: Utilities for loading and modifying Audio objects
+
+
+**Note: Out-of-place operations**
+
+Functions that modify Audio (and Spectrogram) objects are "out of place",
+meaning that they return a new Audio object instead of modifying the
+original object. This means that running a line
+```
+audio_object.resample(22050) # WRONG!
+```
+will **not** change the sample rate of `audio_object`!
+If your goal was to overwrite `audio_object` with the new,
+resampled audio, you would instead write
+```
+audio_object = audio_object.resample(22050)
+```
+
 """
 
 import librosa
@@ -25,6 +42,9 @@ class OpsoLoadAudioInputTooLong(Exception):
 class Audio:
     """Container for audio samples
 
+    Initialization requires sample array. To load audio file, use
+    `Audio.from_file()`
+
     Initializing an `Audio` object directly requires the specification of the
     sample rate. Use `Audio.from_file` or `Audio.from_bytesio` with
     `sample_rate=None` to use a native sampling rate.
@@ -33,7 +53,10 @@ class Audio:
         samples (np.array):     The audio samples
         sample_rate (integer):  The sampling rate for the audio samples
         resample_type (str):    The resampling method to use [default: "kaiser_fast"]
-        max_duration (None or integer): The maximum duration allowed for the audio file [default: None]
+        max_duration (None or integer):
+            The maximum duration in seconds allowed for the audio file
+            (longer files will raise an exception)[default: None]
+            If None, no limit is enforced
 
     Returns:
         An initialized `Audio` object
@@ -44,7 +67,6 @@ class Audio:
     def __init__(
         self, samples, sample_rate, resample_type="kaiser_fast", max_duration=None
     ):
-        # Do not move these lines; it will break Pytorch training
         self.samples = samples
         self.sample_rate = sample_rate
         self.resample_type = resample_type
@@ -190,8 +212,10 @@ class Audio:
                 the final length in seconds of the looped file
                 (cannot be used with n)[default: None]
             n:
-                the number of times to repeat the audio sample
+                the number of occurences of the original audio sample
                 (cannot be used with length) [default: None]
+                For example, n=1 returns the original sample, and
+                n=2 returns two concatenated copies of the original sample
 
         Returns:
             a new Audio object of the desired length or repetitions
@@ -246,7 +270,7 @@ class Audio:
         return int(time * self.sample_rate)
 
     def bandpass(self, low_f, high_f, order):
-        """Bandpass audio signal frequencies
+        """Bandpass audio signal with a butterworth filter
 
         Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
 
@@ -274,7 +298,6 @@ class Audio:
             max_duration=self.max_duration,
         )
 
-    # can act on an audio file and be moved into Audio class
     def spectrum(self):
         """Create frequency spectrum from an Audio object using fft
 
@@ -303,10 +326,18 @@ class Audio:
     def save(self, path):
         """Save Audio to file
 
+        NOTE: currently, only saving to .wav format supported
+
         Args:
             path: destination for output
         """
         from soundfile import write
+
+        if not str(path).split(".")[-1] in ["wav", "WAV"]:
+            raise TypeError(
+                "Only wav file is currently supported by .save()."
+                " File extension must be .wav or .WAV. "
+            )
 
         write(path, self.samples, self.sample_rate)
 
@@ -320,19 +351,21 @@ class Audio:
         return len(self.samples) / self.sample_rate
 
     def split(self, clip_duration, clip_overlap=0, final_clip=None):
-        """Split Audio into clips
+        """Split Audio into even-lengthed clips
 
         The Audio object is split into clips of a specified duration and overlap
 
         Args:
             clip_duration (float):  The duration in seconds of the clips
             clip_overlap (float):   The overlap of the clips in seconds [default: 0]
-            final_clip (str):       Behavior if final_clip is less than clip_duration seconds long. [default: None]
-                By default, ignores final clip entirely.
-                Possible options (any other input will ignore the final clip entirely),
+            final_clip (str):       Behavior if final_clip is less than clip_duration
+                seconds long. By default, discards remaining audio if less than
+                clip_duration seconds long [default: None].
+                Options:
                     - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
                     - "full":       Increase the overlap to yield a clip with clip_duration length
                     - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+                    - None:         Discard the remainder
         Returns:
             A list of dictionaries with keys: ["audio", "begin_time", "end_time"]
         """
@@ -345,11 +378,16 @@ class Audio:
         ends = starts + clip_duration
 
         # Remove final_clip if needed
-        if final_clip not in ["remainder", "full", "extend"]:
+        if final_clip is None:
             # Throw away any clips with end times beyond the duration
             keeps = ends <= duration
             ends = ends[keeps]
             starts = starts[keeps]
+        elif not final_clip in ["remainder", "full", "extend"]:
+            raise ValueError(
+                f"final_clip must be 'remainder', 'full', 'extend',"
+                f"or None. Got {final_clip}."
+            )
 
         # Now we have the starts and ends
         final_idx = len(ends) - 1
@@ -416,6 +454,7 @@ def split_and_save(
                 - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
                 - "full":       Increase the overlap to yield a clip with clip_duration length
                 - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+                - None:         Discard the remainder
         dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
 
     Returns:

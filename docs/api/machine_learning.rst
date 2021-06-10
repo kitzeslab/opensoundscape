@@ -7,19 +7,19 @@ PyTorch CNNs
 
 .. automodule:: opensoundscape.torch.models.cnn
    :members:
-   
+
 .. automodule:: opensoundscape.torch.models.utils
    :members:
-   
-CNN Architectures
-^^^^^^^^^^^^^^^^^
+
+.. automodule:: opensoundscape.torch.architectures.cnn_architectures
+   :members:
 
 .. automodule:: opensoundscape.torch.architectures.resnet
    :members:
-   
+
 .. automodule:: opensoundscape.torch.architectures.utils
    :members:
-   
+
 Loss Functions
 ^^^^^^^^^^^^^^
 
@@ -37,7 +37,7 @@ Sampling
 
 .. automodule:: opensoundscape.torch.sampling
    :members:
-   
+
 Data Selection
 ^^^^^^^^^^^^^^
 
@@ -49,9 +49,9 @@ Performance Metrics
 
 .. automodule:: opensoundscape.metrics
    :members:
-   
+
 Grad Cam
 ^^^^^^^^
 
-.. automodule:: opensoundscape.grad_cam
+.. automodule:: opensoundscape.torch.grad_cam
    :members:

@@ -13,9 +13,16 @@ class BasePreprocessor(torch.utils.data.Dataset):
     Custom Preprocessor classes should subclass this class or its children
 
     Args:
-        df must have audio paths as index and class names as columns
-        - if no labels, df will have no columns
-        return_labels
+        df:
+            dataframe of samples. df must have audio paths in the index.
+            If df has labels, the class names should be the columns, and
+            the values of each row should be 0 or 1.
+            If data does not have labels, df will have no columns
+        return_labels:
+            if True, the __getitem__ method will return {X:sample,y:labels}
+            If False, the __getitem__ method will return {X:sample}
+            If df has no labels (no columns), use return_labels=False
+            [default: True]
 
     Raises:
         PreprocessingError if exception is raised during __getitem__
@@ -116,9 +123,10 @@ class AudioLoadingPreprocessor(BasePreprocessor):
 
     Args:
         df:
-            labels dataframe for audio samples
-            - must have audio paths as index and class names as columns
-            - if no labels, df should have no columns
+            dataframe of samples. df must have audio paths in the index.
+            If df has labels, the class names should be the columns, and
+            the values of each row should be 0 or 1.
+            If data does not have labels, df will have no columns
         return_labels:
             if True, __getitem__ returns {"X":batch_tensors,"y":labels}
             if False, __getitem__ returns {"X":batch_tensors}
@@ -148,13 +156,30 @@ class AudioLoadingPreprocessor(BasePreprocessor):
 
 
 class AudioToSpectrogramPreprocessor(BasePreprocessor):
-    """loads audio paths, creates spectrogram, returns tensor
+    """
+    loads audio paths, creates spectrogram, returns tensor
 
     by default, resamples audio to sr=22050
     can change with .actions.load_audio.set(sample_rate=sr)
 
-    df must have audio paths as index and class names as columns
-    - if no labels, df will have no columns
+    Args:
+        df:
+            dataframe of samples. df must have audio paths in the index.
+            If df has labels, the class names should be the columns, and
+            the values of each row should be 0 or 1.
+            If data does not have labels, df will have no columns
+        audio_length:
+            length in seconds of audio clips [default: None]
+            If provided, longer clips trimmed to this length. By default,
+            shorter clips will not be extended (modify actions.AudioTrimmer
+            to change behavior).
+        out_shape:
+            output shape of tensor in pixels [default: [224,224]]
+        return_labels:
+            if True, the __getitem__ method will return {X:sample,y:labels}
+            If False, the __getitem__ method will return {X:sample}
+            If df has no labels (no columns), use return_labels=False
+            [default: True]
     """
 
     def __init__(self, df, audio_length=None, out_shape=[224, 224], return_labels=True):
@@ -193,7 +218,37 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
 
 
 class CnnPreprocessor(AudioToSpectrogramPreprocessor):
-    """Child of AudioToSpectrogramPreprocessor with full augmentation pipeline"""
+    """Child of AudioToSpectrogramPreprocessor with full augmentation pipeline
+
+    loads audio, creates spectrogram, performs augmentations, returns tensor
+
+    by default, resamples audio to sr=22050
+    can change with .actions.load_audio.set(sample_rate=sr)
+
+    Args:
+        df:
+            dataframe of samples. df must have audio paths in the index.
+            If df has labels, the class names should be the columns, and
+            the values of each row should be 0 or 1.
+            If data does not have labels, df will have no columns
+        audio_length:
+            length in seconds of audio clips [default: None]
+            If provided, longer clips trimmed to this length. By default,
+            shorter clips will not be extended (modify actions.AudioTrimmer
+            to change behavior).
+        out_shape:
+            output shape of tensor in pixels [default: [224,224]]
+        return_labels:
+            if True, the __getitem__ method will return {X:sample,y:labels}
+            If False, the __getitem__ method will return {X:sample}
+            If df has no labels (no columns), use return_labels=False
+            [default: True]
+        debug:
+            If a path is provided, generated samples (after all augmentation)
+            will be saved to the path as an image. This is useful for checking
+            that the sample provided to the model matches expectations.
+            [default: None]
+    """
 
     def __init__(
         self,

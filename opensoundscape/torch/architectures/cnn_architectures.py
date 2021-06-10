@@ -1,13 +1,22 @@
 """Module to initialize PyTorch CNN architectures with custom output shape
 
+This module allows the use of several built-in CNN architectures from PyTorch.
+The architecture refers to the specific layers and layer input/output shapes
+(including convolution sizes and strides, etc) - such as the ResNet18 or
+Inception V3 architecture.
+
 We provide wrappers which modify the output layer to the desired shape
 (to match the number of classes). The way to change the output layer
-shape depends on the architecture, so this should make it easier to swap out
-architectures. This code is based on
+shape depends on the architecture, which is why we need a wrapper for each one.
+This code is based on
 pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html
 
-To use these wrappers, simply write `my_arch=resnet18(10)` for example, if your
-model has 10 output classes. Then you can initialize a model object from
+To use these wrappers, for example, if your
+model has 10 output classes, write
+
+`my_arch=resnet18(10)`
+
+Then you can initialize a model object from
 `opensoundscape.torch.models.cnn` with your architecture:
 
 `model=PytorchModel(classes,my_arch)`
@@ -15,17 +24,24 @@ model has 10 output classes. Then you can initialize a model object from
 or override an existing model's architecture:
 
 `model.network = my_arch`
+
+Note: the InceptionV3 architecture must be used differently than other
+architectures - the easiest way is to simply use the InceptionV3 class in
+opensoundscape.torch.models.cnn.
 """
 from torchvision import models
 from torch import nn
 
 
 def set_parameter_requires_grad(model, freeze_feature_extractor):
-    """if freeze_feature_extractor is True, we set requires_grad=False
+    """if necessary, remove gradients of all model parameters
+
+    if freeze_feature_extractor is True, we set requires_grad=False
     for all features in the feature extraction block. We would do this
     if we have a pre-trained CNN and only want to change the shape of the final
     layer, then train only that final classification layer without modifying
-    the weights of the rest of the network."""
+    the weights of the rest of the network.
+    """
     if freeze_feature_extractor:
         for param in model.parameters():
             param.requires_grad = False
@@ -259,20 +275,3 @@ def inception_v3(num_classes, freeze_feature_extractor=False, use_pretrained=Tru
     num_ftrs = model_ft.fc.in_features
     model_ft.fc = nn.Linear(num_ftrs, num_classes)
     return model_ft
-
-
-# list of PyTorch models:
-# resnet18 = models.resnet18()
-# alexnet = models.alexnet()
-# vgg16 = models.vgg16()
-# squeezenet = models.squeezenet1_0()
-# densenet = models.densenet161()
-# inception = models.inception_v3()
-# googlenet = models.googlenet()
-# shufflenet = models.shufflenet_v2_x1_0()
-# mobilenet_v2 = models.mobilenet_v2()
-# mobilenet_v3_large = models.mobilenet_v3_large()
-# mobilenet_v3_small = models.mobilenet_v3_small()
-# resnext50_32x4d = models.resnext50_32x4d()
-# wide_resnet50_2 = models.wide_resnet50_2()
-# mnasnet = models.mnasnet1_0()

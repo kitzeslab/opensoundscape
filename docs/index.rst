@@ -27,6 +27,7 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
 
    tutorials/audio_and_spectrogram
    tutorials/raven
+   tutorials/predict_with_pretrained_cnn
    tutorials/cnn
    tutorials/preprocessors
    tutorials/cnn_training_advanced

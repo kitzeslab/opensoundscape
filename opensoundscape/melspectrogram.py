@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """ melspectrogram.py: Utilities for dealing with mel spectrograms
+
+WARNING: This module has not been thoroughly tested for compatibility with
+modules and tools in OpenSoundscape.
 """
 
 from opensoundscape.audio import Audio
@@ -11,6 +14,9 @@ from opensoundscape.helpers import linear_scale
 
 class MelSpectrogram:
     """ Immutable spectrogram container
+
+    WARNING: This class has not been thoroughly tested for compatibility with
+    modules and tools in OpenSoundscape.
     """
 
     __slots__ = ("S", "sample_rate", "hop_length", "fmin", "fmax")
