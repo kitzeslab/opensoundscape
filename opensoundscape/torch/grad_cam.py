@@ -1,10 +1,12 @@
-#!/usr/bin/env python
-# coding: utf-8
-#
+"""
+GradCAM is a method of visualizing the activation of the network on parts
+of an image
+
 # Author:   Kazuto Nakashima
 # URL:      http://kazuto1011.github.io
 # Created:  2017-05-26
 
+"""
 from collections import OrderedDict
 
 import torch
