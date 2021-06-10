@@ -326,10 +326,18 @@ class Audio:
     def save(self, path):
         """Save Audio to file
 
+        NOTE: currently, only saving to .wav format supported
+
         Args:
             path: destination for output
         """
         from soundfile import write
+
+        if not str(path).split(".")[-1] in ["wav", "WAV"]:
+            raise TypeError(
+                "Only wav file is currently supported by .save()."
+                " File extension must be .wav or .WAV. "
+            )
 
         write(path, self.samples, self.sample_rate)
 
