@@ -1,4 +1,10 @@
-"""classes for pytorch machine learning models in opensoundscape"""
+"""classes for pytorch machine learning models in opensoundscape
+
+For tutorials, see notebooks on opensoundscape.org, including:
+- Basic Training and Prediction with CNNs
+- Custom Preprocessing
+- Customizing CNN Training
+"""
 # originally based on zhmiao's BirdMultiLabel
 
 import os
@@ -29,7 +35,6 @@ from opensoundscape.torch.safe_dataset import SafeDataset
 
 
 class PytorchModel(BaseModule):
-
     """
     Generic Pytorch Model with .train() and .predict()
 
@@ -38,12 +43,21 @@ class PytorchModel(BaseModule):
     for tutorials and examples see opensoundscape.org
 
     methods include train(), predict(), save(), and load()
+
+    Args:
+        architecture:
+            a model architecture object, for example one generated
+            with the torch.architectures.cnn_architectures module
+        classes:
+            list of class names. Must match with training dataset classes.
+        single_target:
+            - True: model expects exactly one positive class per sample
+            - False: samples can have an number of positive classes
+            [default: False]
     """
 
     def __init__(self, architecture, classes, single_target=False):
-        """if you want to change parameters,
-        first create the object then modify them
-        """
+
         super(PytorchModel, self).__init__()
 
         self.name = "PytorchModel"
@@ -547,12 +561,13 @@ class PytorchModel(BaseModule):
 
         Args:
             prediction_dataset:
-                a pytorch dataset object that returns tensors,
-                such as opensoundscape.datasets.AudioToImagePreprocessor
+                a Preprocessor or DataSset object that returns tensors,
+                such as AudioToSpectrogramPreprocessor (no augmentation)
+                or CnnPreprocessor (w/augmentation) from opensoundscape.datasets
             batch_size:
                 Number of files to load simultaneously [default: 1]
             num_workers:
-                parallelization (ie cpus or cores), use 0 for current proess
+                parallelization (ie cpus or cores), use 0 for current process
                 [default: 0]
             activation_layer:
                 Optionally apply an activation layer such as sigmoid or
@@ -719,11 +734,25 @@ class PytorchModel(BaseModule):
 
 
 class CnnResampleLoss(PytorchModel):
-    def __init__(self, architecture, classes, single_target=False):
-        """Subclass of PytorchModel with ResampleLoss.
+    """Subclass of PytorchModel with ResampleLoss.
 
-        May perform better than BCE for multitarget problems.
-        """
+    ResampleLoss may perform better than BCE Loss for multitarget problems
+    in some scenarios.
+
+    Args:
+        architecture:
+            a model architecture object, for example one generated
+            with the torch.architectures.cnn_architectures module
+        classes:
+            list of class names. Must match with training dataset classes.
+        single_target:
+            - True: model expects exactly one positive class per sample
+            - False: samples can have an number of positive classes
+            [default: False]
+    """
+
+    def __init__(self, architecture, classes, single_target=False):
+
         self.classes = classes
 
         super(CnnResampleLoss, self).__init__(architecture, self.classes, single_target)
@@ -759,22 +788,27 @@ class CnnResampleLoss(PytorchModel):
 
 
 class Resnet18Multiclass(CnnResampleLoss):
+    """Multi-class model with resnet18 architecture and ResampleLoss.
+
+    Can be single or multi-target.
+
+    Args:
+        classes:
+            list of class names. Must match with training dataset classes.
+        single_target:
+            - True: model expects exactly one positive class per sample
+            - False: samples can have an number of positive classes
+            [default: False]
+
+    Notes
+    - Allows separate parameters for feature & classifier blocks
+        via self.optimizer_params's keys: "feature" and "classifier"
+        (by using hand-built architecture)
+    - Uses ResampleLoss which requires class counts as an input.
+    """
+
     def __init__(self, classes, single_target=False):
-        """Multi-class model with resnet18 architecture and ResampleLoss.
 
-        Can be single or multi-target.
-
-        Args:
-            classes: list of class names
-            single_target: if True, exactly one positive class per sample
-                [default: False]
-
-        Notes
-        - Allows separate parameters for feature & classifier blocks
-            via self.optimizer_params's keys: "feature" and "classifier"
-            (by using hand-built architecture)
-        - Uses ResampleLoss which requires class counts as an input.
-        """
         self.classes = classes
         self.weights_init = "ImageNet"
 
@@ -825,9 +859,22 @@ class Resnet18Multiclass(CnnResampleLoss):
 
 
 class Resnet18Binary(PytorchModel):
+    """Subclass of PytorchModel with Resnet18 architecture
+
+    This subclass allows separate training parameters
+    for the feature extractor and classifier
+
+    Args:
+        classes:
+            list of class names. Must match with training dataset classes.
+        single_target:
+            - True: model expects exactly one positive class per sample
+            - False: samples can have an number of positive classes
+            [default: False]
+
+    """
+
     def __init__(self):
-        """This subclass uses Resnet18 and allows separate training parameters
-        for the feature extractor and classifier"""
 
         self.weights_init = "ImageNet"
         self.classes = ["negative", "positive"]

@@ -1,4 +1,4 @@
-"""various loss function classes
+"""loss function classes to use with opensoundscape models
 """
 import torch
 import torch.nn as nn

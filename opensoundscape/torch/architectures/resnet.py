@@ -1,4 +1,13 @@
-"""defines feature extractor and Architecture class for ResNet CNN"""
+"""defines feature extractor and Architecture class for ResNet CNN
+
+This implementation of the ResNet18 architecture allows for separate
+access to the feature extraction and classification blocks. This can be
+useful, for instance, to freeze the feature extractor and only train the
+classifier layer; or to specify different learning rates for the two blocks.
+
+This implementation is used in the Resnet18Binary and Resnet18Multiclass
+classes of opensoundscape.torch.models.cnn.
+"""
 import os
 import copy
 from collections import OrderedDict
@@ -12,6 +21,24 @@ from opensoundscape.torch.architectures.utils import BaseArchitecture
 
 
 class ResNetArchitecture(BaseArchitecture):
+    """ResNet architecture with 18 or 50 layers
+
+    This implementation enables separate access to feature and
+    classification blocks.
+
+    Args:
+        num_cls: number of classes (int)
+        weights_init:
+            - "ImageNet": load the pre-trained weights for ImageNet dataset
+            - path: load weights from a path on your computer or a url
+            - None: initialize with random weights
+        num_layers: 18 for Resnet18 or 50 for Resnet50
+        init_classifier_weights:
+            - if True, load the weights of the classification layer as well as
+            feature extraction layers
+            - if False (default), only load the weights of the feature extraction
+            layers
+    """
 
     name = "ResNetArchitecture"
 
@@ -67,7 +94,17 @@ class ResNetArchitecture(BaseArchitecture):
         """load state dict (weights) of the feature+classifier
         optionally load only feature weights not classifier weights
 
-        if verbose==True: print missing/unused keys
+        Args:
+            init_path:
+                - url containing "http": download weights from web
+                - path: load weights from local path
+            init_classifier_weights:
+                - if True, load the weights of the classification layer as well as
+                feature extraction layers
+                - if False (default), only load the weights of the feature extraction
+                layers
+            verbose:
+                if True, print missing/unused keys [default: False]
         """
 
         if "http" in init_path:

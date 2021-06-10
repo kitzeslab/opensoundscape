@@ -1,4 +1,14 @@
-"""Dataset wrapper to handle errors gracefully
+"""Dataset wrapper to handle errors gracefully in Preprocessor classes
+
+A SafeDataset handles errors in a potentially misleading way: If an error is
+raised while trying to load a sample, the SafeDataset will instead load a
+different sample. The indices of any samples that failed to load will be
+stored in ._unsafe_indices.
+
+The behavior may be desireable for training a model, but could cause silent
+errors when predicting a model (replacing a bad file with a different file),
+and you should always be careful to check for ._unsafe_indices after using
+a SafeDataset.
 
 implemented by @msamogh in nonechucks
 (github.com/msamogh/nonechucks/)

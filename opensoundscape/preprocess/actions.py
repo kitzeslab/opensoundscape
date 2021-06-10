@@ -1,4 +1,13 @@
-"""preprocess.py: utilities for augmentation and preprocessing pipelines"""
+"""Actions for augmentation and preprocessing pipelines
+
+This module contains Action classes which act as the elements in
+Preprocessor pipelines. Action classes have go(), on(), off(), and set()
+methods. They take a single sample of a specific type and return the transformed
+or augmented sample, which may or may not be the same type as the original.
+
+See the preprocessor module and Preprocessing tutorial
+for details on how to use and create your own actions.
+"""
 import numpy as np
 from PIL import Image
 import random
@@ -38,15 +47,16 @@ class ActionContainer:
         return list(vars(self).keys())
 
 
-### Audio transforms ###
 class BaseAction:
     """Parent class for all Actions (used in Preprocessor pipelines)
 
     New actions should subclass this class.
+
     Subclasses should set `self.requires_labels = True` if go() expects (X,y)
     instead of (X). y is a row of a dataframe (a pd.Series) with index (.name)
     = original file path, columns=class names, values=labels (0,1). X is the
     sample, and can be of various types (path, Audio, Spectrogram, Tensor, etc).
+    See ImgOverlay for an example of an Action that uses labels.
     """
 
     def __init__(self, **kwargs):
@@ -94,7 +104,10 @@ class AudioLoader(BaseAction):
 class AudioTrimmer(BaseAction):
     """Action child class for trimming audio (Audio -> Audio)
 
-    Trims an audio file to desired length, from start or random segment
+    Trims an audio file to desired length
+    Allows audio to be trimmed from start or from a random time
+    Optionally extends audio shorter than clip_length with silence
+
 
     Args:
         audio_length: desired final length (sec); if None, no trim is performed
@@ -180,7 +193,9 @@ class SpectrogramBandpass(BaseAction):
 
 
 class SpecToImg(BaseAction):
-    """Action child class for spec to image (Spectrogram -> PIL.Image)
+    """Action class to transform Spectrogram to PIL image
+
+    (Spectrogram -> PIL.Image)
 
     Args:
         destination: a file path (string)
@@ -224,12 +239,13 @@ class SaveTensorToDisk(BaseAction):
 class TorchColorJitter(BaseAction):
     """Action class for torchvision.transforms.ColorJitter
 
+    (Tensor -> Tensor) or (PIL Img -> PIL Img)
+
     Args:
         brightness=0.3
         contrast=0.3
         saturation=0.3
         hue=0
-    (Tensor -> Tensor) or (PIL Img -> PIL Img)
     """
 
     def __init__(self, **kwargs):
@@ -250,7 +266,7 @@ class TorchColorJitter(BaseAction):
 
 
 class TorchRandomAffine(BaseAction):
-    """Action class with torchvision.transforms.RandomAffine
+    """Action class for torchvision.transforms.RandomAffine
 
     (Tensor -> Tensor) or (PIL Img -> PIL Img)
 
@@ -282,7 +298,7 @@ class TorchRandomAffine(BaseAction):
 
 
 class ImgToTensor(BaseAction):
-    """(PIL.Image -> Tensor)
+    """Convert PIL image to RGB Tensor (PIL.Image -> Tensor)
 
     convert PIL.Image w/range [0,255] to torch Tensor w/range [0,1]
     converts image to RGB (3 channels)
@@ -295,7 +311,7 @@ class ImgToTensor(BaseAction):
 
 
 class ImgToTensorGrayscale(BaseAction):
-    """(PIL.Image -> Tensor)
+    """Convert PIL image to greyscale Tensor (PIL.Image -> Tensor)
 
     convert PIL.Image w/range [0,255] to torch Tensor w/range [0,1]
     converts image to grayscale (1 channel)
@@ -340,9 +356,7 @@ class TensorNormalize(BaseAction):
 
 
 class TimeWarp(BaseAction):
-    """perform tensor augmentations
-
-    such as time warp, time mask, and frequency mask
+    """Time warp is an experimental augmentation that creates a tilted image.
 
     Args:
         warp_amount: use higher values for more skew and offset (experimental)
