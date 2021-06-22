@@ -58,11 +58,29 @@ def file_name(path):
 
 
 def hex_to_time(s):
-    """convert a hexidecimal, Unix time string to a datetime timestamp"""
+    """convert a hexidecimal, Unix time string to a datetime timestamp in utc
+
+    Example usage:
+    ```
+    # Get the UTC timestamp
+    t = hex_to_time('5F16A04E')
+
+    # Convert it to a desired timezone
+    my_timezone = pytz.timezone("US/Mountain")
+    t = t.astimezone(my_timezone)
+    ```
+
+    Args:
+        s (string): hexadecimal Unix epoch time string, e.g. '5F16A04E'
+
+    Returns:
+        datetime.datetime object representing the date and time in UTC
+    """
     from datetime import datetime
+    import pytz
 
     sec = int(s, 16)
-    timestamp = datetime.utcfromtimestamp(sec)
+    timestamp = datetime.utcfromtimestamp(sec).replace(tzinfo=pytz.utc)
     return timestamp
 
 

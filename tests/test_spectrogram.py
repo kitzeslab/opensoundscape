@@ -3,6 +3,7 @@ from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 import pytest
 import numpy as np
+from math import isclose
 
 
 @pytest.fixture()
@@ -21,82 +22,108 @@ def test_spectrogram_shape_of_veryshort(veryshort_wav_str):
     assert spec.spectrogram.shape == (257, 21)
     assert spec.frequencies.shape == (257,)
     assert spec.times.shape == (21,)
+    assert isclose(spec.window_length(), 0.02321995465, abs_tol=1e-4)
+    assert isclose(spec.window_step(), 0.005804988662, abs_tol=1e-4)
+    assert isclose(spec.duration(), audio.duration(), abs_tol=1e-2)
+    assert isclose(spec.window_start_times()[0], 0, abs_tol=1e-4)
 
 
 def test_construct_spectrogram_spectrogram_str_raises():
     with pytest.raises(TypeError):
-        Spectrogram("raises", np.zeros((5)), np.zeros((10)))
+        Spectrogram("raises", np.zeros((5)), np.zeros((10)), (-100, -20))
 
 
 def test_construct_spectrogram_frequencies_str_raises():
     with pytest.raises(TypeError):
-        Spectrogram(np.zeros((5, 10)), "raises", np.zeros((10)))
+        Spectrogram(np.zeros((5, 10)), "raises", np.zeros((10)), (-100, -20))
 
 
 def test_construct_spectrogram_times_str_raises():
     with pytest.raises(TypeError):
-        Spectrogram(np.zeros((5, 10)), np.zeros((5)), "raises")
+        Spectrogram(np.zeros((5, 10)), np.zeros((5)), "raises", (-100, -20))
 
 
 def test_construct_spectrogram_spectrogram_1d_raises():
     with pytest.raises(TypeError):
-        Spectrogram(np.zeros((5)), np.zeros((5)), np.zeros((5)))
+        Spectrogram(np.zeros((5)), np.zeros((5)), np.zeros((5)), (-100, -20))
 
 
 def test_construct_spectrogram_frequencies_2d_raises():
     with pytest.raises(TypeError):
-        Spectrogram(np.zeros((5, 5)), np.zeros((5, 5)), np.zeros((5)))
+        Spectrogram(np.zeros((5, 5)), np.zeros((5, 5)), np.zeros((5)), (-100, -20))
 
 
 def test_construct_spectrogram_times_2d_raises():
     with pytest.raises(TypeError):
-        Spectrogram(np.zeros((5, 5)), np.zeros((5)), np.zeros((5, 5)))
+        Spectrogram(np.zeros((5, 5)), np.zeros((5)), np.zeros((5, 5)), (-100, -20))
 
 
 def test_construct_spectrogram_dimensions_mismatch_raises_one():
     with pytest.raises(TypeError):
-        Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((7)))
+        Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((7)), (-100, -20))
 
 
 def test_construct_spectrogram_dimensions_mismatch_raises_two():
     with pytest.raises(TypeError):
-        Spectrogram(np.zeros((5, 10)), np.zeros((3)), np.zeros((10)))
+        Spectrogram(np.zeros((5, 10)), np.zeros((3)), np.zeros((10)), (-100, -20))
+
+
+def test_construct_spectrogram_no_decibel_limits_raises():
+    with pytest.raises(TypeError):
+        Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)))
+
+
+def test_construct_spectrogram_decibel_limits_incorrect_dimensions_raises():
+    with pytest.raises(TypeError):
+        Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100))
 
 
 def test_construct_spectrogram():
-    Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)))
+    Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20))
 
 
 def test_bandpass_spectrogram():
     Spectrogram(
-        np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)
+        np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10), (-100, -20)
     ).bandpass(2, 4)
 
 
+def test_bandpass_spectrogram_bad_limits():
+    with pytest.raises(ValueError):
+        Spectrogram(
+            np.zeros((5, 10)),
+            np.linspace(0, 100, 5),
+            np.linspace(0, 10, 10),
+            (-100, -20),
+        ).bandpass(4, 2)
+
+
 def test_trim_spectrogram():
-    Spectrogram(np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)).trim(
-        2, 4
-    )
+    Spectrogram(
+        np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10), (-100, -20)
+    ).trim(2, 4)
 
 
 def test_limit_db_range():
     s = Spectrogram(
-        np.random.normal(0, 200, [5, 10]), np.zeros((5)), np.zeros((10))
+        np.random.normal(0, 200, [5, 10]), np.zeros((5)), np.zeros((10)), (-100, -20)
     ).limit_db_range(-100, -20)
     assert np.max(s.spectrogram) <= -20 and np.min(s.spectrogram) >= -100
 
 
 def test_plot_spectrogram():
-    Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10))).plot()
+    Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20)).plot()
 
 
 def test_amplitude_spectrogram():
-    Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10))).amplitude()
+    Spectrogram(
+        np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20)
+    ).amplitude()
 
 
 def test_net_amplitude_spectrogram():
     Spectrogram(
-        np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)
+        np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10), (-100, -20)
     ).net_amplitude([50, 100], [[0, 10], [20, 30]])
 
 
@@ -106,13 +133,43 @@ def test_to_image():
     print(
         type(
             Spectrogram(
-                np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)
+                np.zeros((5, 10)),
+                np.linspace(0, 100, 5),
+                np.linspace(0, 10, 10),
+                (-100, -20),
             ).to_image()
         )
     )
     assert isinstance(
         Spectrogram(
-            np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10)
+            np.zeros((5, 10)),
+            np.linspace(0, 100, 5),
+            np.linspace(0, 10, 10),
+            (-100, -20),
+        ).to_image(),
+        Image,
+    )
+
+
+def test_to_image_with_bandpass():
+    from PIL.Image import Image
+
+    print(
+        type(
+            Spectrogram(
+                np.zeros((5, 10)),
+                np.linspace(0, 100, 5),
+                np.linspace(0, 10, 10),
+                (-100, -20),
+            ).to_image()
+        )
+    )
+    assert isinstance(
+        Spectrogram(
+            np.zeros((5, 10)),
+            np.linspace(0, 100, 5),
+            np.linspace(0, 10, 10),
+            (-100, -20),
         ).to_image(),
         Image,
     )

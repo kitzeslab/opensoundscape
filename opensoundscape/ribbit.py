@@ -14,18 +14,18 @@ def calculate_pulse_score(
     amplitude, amplitude_sample_rate, pulse_rate_range, plot=False, nfft=1024
 ):
     """Search for amplitude pulsing in an audio signal in a range of pulse repetition rates (PRR)
-    
+
     scores an audio amplitude signal by highest value of power spectral density in the PRR range
-    
+
     Args:
-        amplitude: a time series of the audio signal's amplitude (for instance a smoothed raw audio signal) 
+        amplitude: a time series of the audio signal's amplitude (for instance a smoothed raw audio signal)
         amplitude_sample_rate: sample rate in Hz of amplitude signal, normally ~20-200 Hz
         pulse_rate_range: [min, max] values for amplitude modulation in Hz
         plot=False: if True, creates a plot visualizing the power spectral density
         nfft=1024: controls the resolution of the power spectral density (see scipy.signal.welch)
-        
-    Returns: 
-        pulse rate score for this audio segment (float) 
+
+    Returns:
+        pulse rate score for this audio segment (float)
     """
 
     # input validation
@@ -72,9 +72,9 @@ def ribbit(
     spectrogram, signal_band, pulse_rate_range, window_len, noise_bands=None, plot=False
 ):
     """Run RIBBIT detector to search for periodic calls in audio
-    
-    This tool searches for periodic energy fluctuations at specific repetition rates and frequencies. 
-    
+
+    This tool searches for periodic energy fluctuations at specific repetition rates and frequencies.
+
     Args:
         spectrogram: opensoundscape.Spectrogram object of an audio file
         signal_band: [min, max] frequency range of the target species, in Hz
@@ -86,27 +86,27 @@ def ribbit(
                     - if `None`, no noise bands are used
                     - default: None
         plot=False : if True, plot the power spectral density for each window
-    
+
     Returns:
         array of pulse_score: pulse score (float) for each time window
         array of time: start time of each window
-        
+
     Notes
     -----
-    
-    __PARAMETERS__ 
+
+    __PARAMETERS__
     RIBBIT requires the user to select a set of parameters that describe the target vocalization. Here is some detailed advice on how to use these parameters.
 
-    **Signal Band:** The signal band is the frequency range where RIBBIT looks for the target species. It is best to pick a narrow signal band if possible, so that the model focuses on a specific part of the spectrogram and has less potential to include erronious sounds. 
+    **Signal Band:** The signal band is the frequency range where RIBBIT looks for the target species. It is best to pick a narrow signal band if possible, so that the model focuses on a specific part of the spectrogram and has less potential to include erronious sounds.
 
-    **Noise Bands:** Optionally, users can specify other frequency ranges called noise bands. Sounds in the `noise_bands` are _subtracted_ from the `signal_band`. Noise bands help the model filter out erronious sounds from the recordings, which could include confusion species, background noise, and popping/clicking of the microphone due to rain, wind, or digital errors. It's usually good to include one noise band for very low frequencies -- this specifically eliminates popping and clicking from being registered as a vocalization. It's also good to specify noise bands that target confusion species. Another approach is to specify two narrow `noise_bands` that are directly above and below the `signal_band`. 
+    **Noise Bands:** Optionally, users can specify other frequency ranges called noise bands. Sounds in the `noise_bands` are _subtracted_ from the `signal_band`. Noise bands help the model filter out erronious sounds from the recordings, which could include confusion species, background noise, and popping/clicking of the microphone due to rain, wind, or digital errors. It's usually good to include one noise band for very low frequencies -- this specifically eliminates popping and clicking from being registered as a vocalization. It's also good to specify noise bands that target confusion species. Another approach is to specify two narrow `noise_bands` that are directly above and below the `signal_band`.
 
-    **Pulse Rate Range:** This parameters specifies the minimum and maximum pulse rate (the number of pulses per second, also known as pulse repetition rate) RIBBIT should look for to find the focal species. For example, choosing `pulse_rate_range = [10, 20]` means that RIBBIT should look for pulses no slower than 10 pulses per second and no faster than 20 pulses per second. 
+    **Pulse Rate Range:** This parameters specifies the minimum and maximum pulse rate (the number of pulses per second, also known as pulse repetition rate) RIBBIT should look for to find the focal species. For example, choosing `pulse_rate_range = [10, 20]` means that RIBBIT should look for pulses no slower than 10 pulses per second and no faster than 20 pulses per second.
 
-    **Window Length:** This parameter tells RIBBIT how many seconds of audio to analyze at one time. Generally, you should choose a `window_length` that is similar to the length of the target species vocalization, or a little bit longer. For very slowly pulsing vocalizations, choose a longer window so that at least 5 pulses can occur in one window (0.5 pulses per second -> 10 second window). Typical values for `window_length` are 1 to 10 seconds. 
+    **Window Length:** This parameter tells RIBBIT how many seconds of audio to analyze at one time. Generally, you should choose a `window_length` that is similar to the length of the target species vocalization, or a little bit longer. For very slowly pulsing vocalizations, choose a longer window so that at least 5 pulses can occur in one window (0.5 pulses per second -> 10 second window). Typical values for `window_length` are 1 to 10 seconds.
 
     **Plot:** We can choose to show the power spectrum of pulse repetition rate for each window by setting `plot=True`. The default is not to show these plots (`plot=False`).
-    
+
     __ALGORITHM__
     This is the procedure RIBBIT follows:
     divide the audio into segments of length window_len
@@ -114,16 +114,16 @@ def ribbit(
         calculate time series of energy in signal band (signal_band) and subtract noise band energies (noise_bands)
         calculate power spectral density of the amplitude time series
         score the file based on the maximum value of power-spectral-density in the pulse rate range
-    
+
     """
 
     # Make a 1d amplitude signal in a frequency range, subtracting energy in noise bands
     amplitude = spectrogram.net_amplitude(signal_band, noise_bands)
 
     # next we split the spec into "windows" to analyze separately: (no overlap for now)
-    sample_frequency_of_spec = (len(spectrogram.times) - 1) / (
-        spectrogram.times[-1] - spectrogram.times[0]
-    )  # in Hz, ie delta-t between consecutive pixels
+    sample_frequency_of_spec = (
+        1.0 / spectrogram.window_length()
+    )  # in Hz, 1/delta-t between consecutive windows
     n_samples_per_window = int(window_len * sample_frequency_of_spec)
     signal_len = len(amplitude)
 
@@ -166,14 +166,14 @@ def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False)
 
     Args:
         spec: opensoundscape.Spectrogram object
-        species_df: a dataframe describing species by their pulsed calls. 
-            columns: species | pulse_rate_low (Hz)| pulse_rate_high (Hz) | low_f (Hz)| high_f (Hz)| reject_low (Hz)| reject_high (Hz) | 
+        species_df: a dataframe describing species by their pulsed calls.
+            columns: species | pulse_rate_low (Hz)| pulse_rate_high (Hz) | low_f (Hz)| high_f (Hz)| reject_low (Hz)| reject_high (Hz) |
                     window_length (sec) (optional) | reject_low2 (opt) | reject_high2 |
-        window_len: length of analysis window, in seconds. 
-                    Or 'from_df' (default): read from dataframe. 
+        window_len: length of analysis window, in seconds.
+                    Or 'from_df' (default): read from dataframe.
                     or 'dynamic': adjust window size based on pulse_rate
-    
-    Returns: 
+
+    Returns:
         the same dataframe with a "score" (max score) column and "time_of_score" column
     """
 
@@ -237,18 +237,18 @@ def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False)
 
 
 def summarize_top_scores(audio_files, list_of_result_dfs, scale_factor=1.0):
-    """ find the highest score for each file and each species, and put them in a dataframe 
-    
-    Note: this function expects that the first column of the results_df contains species names 
-    
+    """ find the highest score for each file and each species, and put them in a dataframe
+
+    Note: this function expects that the first column of the results_df contains species names
+
     Args:
         audio_files: a list of file paths
         list_of_result_dfs: a list of pandas DataFrames generated by ribbit_species_set()
         scale_factor=1.0: optionally multiply all output values by a constant value
-        
-    Returns: 
+
+    Returns:
         a dataframe summarizing the highest score for each species in each file
-        
+
     """
     if len(audio_files) != len(list_of_result_dfs):
         raise ValueError(

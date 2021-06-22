@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-""" audio.py: Utilities for dealing with audio files
+""" audio.py: Utilities for loading and modifying Audio objects
+
+
+**Note: Out-of-place operations**
+
+Functions that modify Audio (and Spectrogram) objects are "out of place",
+meaning that they return a new Audio object instead of modifying the
+original object. This means that running a line
+```
+audio_object.resample(22050) # WRONG!
+```
+will **not** change the sample rate of `audio_object`!
+If your goal was to overwrite `audio_object` with the new,
+resampled audio, you would instead write
+```
+audio_object = audio_object.resample(22050)
+```
+
 """
 
 import librosa
@@ -11,21 +28,22 @@ from math import ceil
 
 
 class OpsoLoadAudioInputError(Exception):
-    """ Custom exception indicating we can't load input
-    """
+    """Custom exception indicating we can't load input"""
 
     pass
 
 
 class OpsoLoadAudioInputTooLong(Exception):
-    """ Custom exception indicating length of audio is too long
-    """
+    """Custom exception indicating length of audio is too long"""
 
     pass
 
 
 class Audio:
-    """ Container for audio samples
+    """Container for audio samples
+
+    Initialization requires sample array. To load audio file, use
+    `Audio.from_file()`
 
     Initializing an `Audio` object directly requires the specification of the
     sample rate. Use `Audio.from_file` or `Audio.from_bytesio` with
@@ -35,7 +53,10 @@ class Audio:
         samples (np.array):     The audio samples
         sample_rate (integer):  The sampling rate for the audio samples
         resample_type (str):    The resampling method to use [default: "kaiser_fast"]
-        max_duration (None or integer): The maximum duration allowed for the audio file [default: None]
+        max_duration (None or integer):
+            The maximum duration in seconds allowed for the audio file
+            (longer files will raise an exception)[default: None]
+            If None, no limit is enforced
 
     Returns:
         An initialized `Audio` object
@@ -46,7 +67,6 @@ class Audio:
     def __init__(
         self, samples, sample_rate, resample_type="kaiser_fast", max_duration=None
     ):
-        # Do not move these lines; it will break Pytorch training
         self.samples = samples
         self.sample_rate = sample_rate
         self.resample_type = resample_type
@@ -77,7 +97,7 @@ class Audio:
     def from_file(
         cls, path, sample_rate=None, resample_type="kaiser_fast", max_duration=None
     ):
-        """ Load audio from files
+        """Load audio from files
 
         Deal with the various possible input types to load an audio
         file and generate a spectrogram
@@ -93,7 +113,7 @@ class Audio:
         Returns:
             Audio: attributes samples and sample_rate
         """
-
+        path = str(path)  # Pathlib path can have dependency issues - use string
         if max_duration:
             if librosa.get_duration(filename=path) > max_duration:
                 raise OpsoLoadAudioInputTooLong()
@@ -110,13 +130,10 @@ class Audio:
     def from_bytesio(
         cls, bytesio, sample_rate=None, max_duration=None, resample_type="kaiser_fast"
     ):
-        """ Read from bytesio object
+        """Read from bytesio object
 
         Read an Audio object from a BytesIO object. This is primarily used for
         passing Audio over HTTP.
-
-        TODO:
-            Describe how to initialize an Audio file as a BytesIO object
 
         Args:
             bytesio: Contents of WAV file as BytesIO
@@ -138,7 +155,7 @@ class Audio:
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
 
     def resample(self, sample_rate, resample_type=None):
-        """ Resample Audio object
+        """Resample Audio object
 
         Args:
             sample_rate (scalar):   the new sample rate
@@ -166,7 +183,10 @@ class Audio:
         )
 
     def trim(self, start_time, end_time):
-        """ Trim Audio object in time
+        """Trim Audio object in time
+
+        If start_time is less than zero, output starts from time 0
+        If end_time is beyond the end of the sample, trims to end of sample
 
         Args:
             start_time: time in seconds for start of extracted clip
@@ -174,7 +194,7 @@ class Audio:
         Returns:
             a new Audio object containing samples from start_time to end_time
         """
-        start_sample = self.time_to_sample(start_time)
+        start_sample = max(0, self.time_to_sample(start_time))
         end_sample = self.time_to_sample(end_time)
         samples_trimmed = self.samples[start_sample:end_sample]
         return Audio(
@@ -184,8 +204,41 @@ class Audio:
             max_duration=self.max_duration,
         )
 
+    def loop(self, length=None, n=None):
+        """Extend audio file by looping it
+
+        Args:
+            length:
+                the final length in seconds of the looped file
+                (cannot be used with n)[default: None]
+            n:
+                the number of occurences of the original audio sample
+                (cannot be used with length) [default: None]
+                For example, n=1 returns the original sample, and
+                n=2 returns two concatenated copies of the original sample
+
+        Returns:
+            a new Audio object of the desired length or repetitions
+        """
+        if (length is None) + (n is None) != 1:
+            raise ValueError("Please enter a value for 'length' OR " "'n', not both")
+
+        if length is not None:
+            # loop the audio until it reaches a duration of `length` seconds
+            total_samples_needed = round(length * self.sample_rate)
+            samples_extended = np.resize(self.samples, total_samples_needed)
+
+        else:  # loop the audio n times
+            samples_extended = np.tile(self.samples, n)
+        return Audio(
+            samples_extended,
+            self.sample_rate,
+            resample_type=self.resample_type,
+            max_duration=self.max_duration,
+        )
+
     def extend(self, length):
-        """ Extend audio file by looping it
+        """Extend audio file by adding silence to the end
 
         Args:
             length: the final length in seconds of the extended file
@@ -195,7 +248,9 @@ class Audio:
         """
 
         total_samples_needed = round(length * self.sample_rate)
-        samples_extended = np.resize(self.samples, total_samples_needed)
+        samples_extended = np.pad(
+            self.samples, pad_width=(0, total_samples_needed - len(self.samples))
+        )
         return Audio(
             samples_extended,
             self.sample_rate,
@@ -204,7 +259,7 @@ class Audio:
         )
 
     def time_to_sample(self, time):
-        """ Given a time, convert it to the corresponding sample
+        """Given a time, convert it to the corresponding sample
 
         Args:
             time: The time to multiply with the sample_rate
@@ -215,7 +270,7 @@ class Audio:
         return int(time * self.sample_rate)
 
     def bandpass(self, low_f, high_f, order):
-        """ Bandpass audio signal frequencies
+        """Bandpass audio signal with a butterworth filter
 
         Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
 
@@ -243,9 +298,8 @@ class Audio:
             max_duration=self.max_duration,
         )
 
-    # can act on an audio file and be moved into Audio class
     def spectrum(self):
-        """ Create frequency spectrum from an Audio object using fft
+        """Create frequency spectrum from an Audio object using fft
 
         Args:
             self
@@ -270,17 +324,25 @@ class Audio:
         return fft, frequencies
 
     def save(self, path):
-        """ Save Audio to file
+        """Save Audio to file
+
+        NOTE: currently, only saving to .wav format supported
 
         Args:
             path: destination for output
         """
         from soundfile import write
 
+        if not str(path).split(".")[-1] in ["wav", "WAV"]:
+            raise TypeError(
+                "Only wav file is currently supported by .save()."
+                " File extension must be .wav or .WAV. "
+            )
+
         write(path, self.samples, self.sample_rate)
 
     def duration(self):
-        """ Return duration of Audio
+        """Return duration of Audio
 
         Returns:
             duration (float): The duration of the Audio
@@ -289,19 +351,21 @@ class Audio:
         return len(self.samples) / self.sample_rate
 
     def split(self, clip_duration, clip_overlap=0, final_clip=None):
-        """ Split Audio into clips
+        """Split Audio into even-lengthed clips
 
         The Audio object is split into clips of a specified duration and overlap
 
         Args:
             clip_duration (float):  The duration in seconds of the clips
             clip_overlap (float):   The overlap of the clips in seconds [default: 0]
-            final_clip (str):       Behavior if final_clip is less than clip_duration seconds long. [default: None]
-                By default, ignores final clip entirely.
-                Possible options (any other input will ignore the final clip entirely),
+            final_clip (str):       Behavior if final_clip is less than clip_duration
+                seconds long. By default, discards remaining audio if less than
+                clip_duration seconds long [default: None].
+                Options:
                     - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
                     - "full":       Increase the overlap to yield a clip with clip_duration length
                     - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+                    - None:         Discard the remainder
         Returns:
             A list of dictionaries with keys: ["audio", "begin_time", "end_time"]
         """
@@ -314,11 +378,16 @@ class Audio:
         ends = starts + clip_duration
 
         # Remove final_clip if needed
-        if final_clip not in ["remainder", "full", "extend"]:
+        if final_clip is None:
             # Throw away any clips with end times beyond the duration
             keeps = ends <= duration
             ends = ends[keeps]
             starts = starts[keeps]
+        elif not final_clip in ["remainder", "full", "extend"]:
+            raise ValueError(
+                f"final_clip must be 'remainder', 'full', 'extend',"
+                f"or None. Got {final_clip}."
+            )
 
         # Now we have the starts and ends
         final_idx = len(ends) - 1
@@ -371,7 +440,7 @@ def split_and_save(
     final_clip=None,
     dry_run=False,
 ):
-    """ Split audio into clips and save them to a folder
+    """Split audio into clips and save them to a folder
 
     Args:
         audio:              The input Audio to split
@@ -385,6 +454,7 @@ def split_and_save(
                 - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
                 - "full":       Increase the overlap to yield a clip with clip_duration length
                 - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+                - None:         Discard the remainder
         dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
 
     Returns:

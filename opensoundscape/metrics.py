@@ -1,117 +1,109 @@
 #!/usr/bin/env python
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import (
+    jaccard_score,
+    hamming_loss,
+    precision_recall_fscore_support,
+    confusion_matrix,
+)
+
+# from scipy.sparse import csr_matrix
 import numpy as np
 
 
-class Metrics:
-    """ Basic Example
+def predict(scores, single_target=False, threshold=0.5):
+    """convert numeric scores to binary predictions
 
-    See opensoundscape.torch.train for an in-depth example
+    return 0/1 for an array of scores: samples (rows) x classes (columns)
 
-    ```
-    dataset = Dataset(...)
-    dataloader = DataLoader(dataset, ...)
-    classes = [0, 1, 2, 3, 4] # An example list of classes
-    for epoch in epochs:
-        metrics = Metrics(classes, len(dataset))
-        for batch in dataloader:
-            X, y = batch["X"], batch["y"]
-            targets = y.squeeze(0) # dim: (batch_size)
-            ...
-            loss = ... # dim: (0)
-            predictions = ... # dim: (batch_size)
-            metrics.accumulate_batch_metrics(
-                loss.item(),
-                targets.cpu(),
-                predictions.cpu()
-            )
-        metrics_dictionary = metrics.compute_epoch_metrics()
-    ```
+    Args:
+        scores:
+            a 2-d list or np.array. row=sample, columns=classes
+        single_target:
+            if True, predict 1 for highest scoring class per sample,
+            0 for other classes. If False, predict 1 for all scores > threshold
+            [default: False]
+        threshold:
+            Predict 1 for score > threshold. only used if single_target = False.
+            [default: 0.5]
     """
+    scores = np.array(scores)
+    if single_target:  # predict highest scoring class only
+        preds = np.zeros(np.shape(scores)).astype(int)
+        for i, score_row in enumerate(scores):
+            preds[i, np.argmax(score_row)] = 1
+    else:
+        preds = (scores >= threshold).astype(int)
 
-    def __init__(self, classes, dataset_len):
-        """ Use confusion matrix to compute metrics during learning
+    return preds
 
-        For each batch in an epoch, compute the confusion matrix using sklearn
-        and accumulate confusion matrices over an epoch.
 
-        Args:
-            classes:        A list of classes, e.g. [0, 1, 2, 3]
-                            - classes must match targets and predictions fed to
-                              Metrics.accumulate_batch_metrics
-            dataset_len:    To compute loss, Metrics needs to know the length of the dataset
-        """
-        self.classes = classes
-        self.num_classes = len(classes)
-        self.dataset_len = dataset_len
-        self.loss = 0.0
-        self.confusion_matrix = np.zeros(
-            (self.num_classes, self.num_classes), dtype=np.int64
+def multiclass_metrics(targets, preds, class_names):
+    """provide a list or np.array of 0,1 targets and predictions"""
+    epoch_metrics = {}
+
+    # remove all samples with NaN for a prediction
+    targets = targets[~np.isnan(preds).any(axis=1), :]
+    preds = preds[~np.isnan(preds).any(axis=1), :]
+
+    # Confusion matrix if not multi-label
+    if max(np.sum(targets, 1)) <= 1 and max(np.sum(preds, 1)) <= 1:
+        # requires class labels not one-hot
+        t = np.argmax(targets, 1)
+        p = np.argmax(preds, 1)
+        epoch_metrics["confusion_matrix"] = confusion_matrix(t, p)
+
+    # Store per-class precision, recall, and f1
+    class_pre, class_rec, class_f1, _ = precision_recall_fscore_support(
+        targets, preds, average=None, zero_division=0
+    )
+    for i, class_i in enumerate(class_names):
+        epoch_metrics.update(
+            {
+                class_i: {
+                    "precision": class_pre[i],
+                    "recall": class_rec[i],
+                    "f1": class_f1[i],
+                }
+            }
         )
 
-    def accumulate_batch_metrics(self, loss, targets, predictions):
-        """ For a batch, accumulate loss and confusion matrix
+    # macro scores are averaged across classes
+    epoch_metrics["precision"] = class_pre.mean()
+    epoch_metrics["recall"] = class_rec.mean()
+    epoch_metrics["f1"] = class_f1.mean()
 
-        For validation pass 0 for loss.
+    epoch_metrics["jaccard"] = jaccard_score(targets, preds, average="macro")
+    epoch_metrics["hamming_loss"] = hamming_loss(targets, preds)
 
-        Args:
-            loss:           The loss for this batch
-            targets:        The correct y labels
-            predictions:    The predicted labels
-        """
-        # len(targets) returns the first dimension of a pytorch tensor i.e. the batch size
-        self.loss += loss * len(targets)
-        self.confusion_matrix += confusion_matrix(
-            targets, predictions, labels=self.classes
+    return epoch_metrics
+
+
+def binary_metrics(targets, preds, class_names=[0, 1]):
+    """labels should be single-target"""
+    if max(np.sum(targets, 1)) > 1:
+        raise ValueError(
+            "Labels must be single-target for binary classification."
+            " Use multi-target classifier if multiple classes can be present."
         )
 
-    def compute_epoch_metrics(self):
-        """ Compute metrics from learning
+    epoch_metrics = {}
 
-        Computes the loss and accuracy, precision, recall, and f1 scores from
-        the confusion matrix and returns dictionary with metric name as keys
-        and their corresponding values
+    # remove all samples with NaN for a prediction
+    targets = targets[~np.isnan(preds).any(axis=1), :]
+    preds = preds[~np.isnan(preds).any(axis=1), :]
 
-        Returns:
-            dictionary with keys:
-                [loss, accuracy, precision, recall, f1, confusion_matrix]
-        """
-        loss = self.loss / self.dataset_len
-        accuracies = [None] * self.num_classes
-        precisions = [None] * self.num_classes
-        recalls = [None] * self.num_classes
-        f1s = [None] * self.num_classes
+    # Confusion matrix requires numeric not one-hot labels
+    t = np.argmax(targets, 1)
+    p = np.argmax(preds, 1)
+    epoch_metrics["confusion_matrix"] = confusion_matrix(t, p)
 
-        total_observations = self.confusion_matrix.sum()
-        for idx, cls in enumerate(self.classes):
-            class_observations = self.confusion_matrix[idx, :].sum()
-            class_predictions = self.confusion_matrix[:, idx].sum()
+    # precision, recall, and f1
+    pre, rec, f1, _ = precision_recall_fscore_support(
+        targets, preds, average=None, zero_division=0
+    )
+    epoch_metrics.update({"precision": pre[1], "recall": rec[1], "f1": f1[1]})
 
-            true_positives = self.confusion_matrix[idx, idx]
-            # row + col observations double subtract true_positives
-            true_negatives = (
-                total_observations
-                - class_observations
-                - class_predictions
-                + true_positives
-            )
-            false_positives = class_predictions - true_positives
-            false_negatives = class_observations - true_positives
+    epoch_metrics["jaccard"] = jaccard_score(targets, preds, average="macro")
+    epoch_metrics["hamming_loss"] = hamming_loss(targets, preds)
 
-            accuracies[idx] = float(true_positives + true_negatives) / (
-                true_positives + true_negatives + false_positives + false_negatives
-            )
-            precisions[idx] = float(true_positives) / (true_positives + false_positives)
-            recalls[idx] = float(true_positives) / (true_positives + false_negatives)
-            f1s[idx] = float(2 * true_positives) / (
-                2 * true_positives + false_positives + false_negatives
-            )
-
-        return {
-            "loss": loss,
-            "accuracy": accuracies,
-            "precision": precisions,
-            "recall": recalls,
-            "f1": f1s,
-            "confusion_matrix": self.confusion_matrix,
-        }
+    return epoch_metrics
