@@ -428,8 +428,8 @@ def raven_audio_split_and_save(
         destination (str or pathlib.Path):      The path at which to save the splits and the one-hot encoded labels file
         col (str):                              The column containing species labels in the Raven files
         sample_rate (int):                      Desired sample rate of split audio clips
-        clip_duration (float):                  Length of each clip
-        clip_overlap (float):                   Amount of overlap between subsequent clips [default: 0]
+        clip_duration (float):                  The duration of each clip in seconds
+        clip_overlap (float):                   The overlap of each clip in seconds [default: 0]
         final_clip (str or None):               Behavior if final_clip is less than clip_duration seconds long. [default: None]
             By default, ignores final clip entirely.
             Possible options (any other input will ignore the final clip entirely),
