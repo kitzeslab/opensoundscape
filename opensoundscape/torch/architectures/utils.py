@@ -26,3 +26,21 @@ class BaseArchitecture(nn.Module):
 
     def update_best(self):
         pass
+
+
+class Identity(nn.Module):
+    """A layer that returns the input without modification
+
+    Used for 'removing' the classification layer of a network
+    (by replacing it with the identity transform X->X)
+    """
+
+    def __init__(self):
+        super(Identity, self).__init__()
+
+    def forward(self, x):
+        return x
+
+
+def get_output_shape(model, image_dim):
+    return model(torch.rand(*(image_dim))).data.shape
