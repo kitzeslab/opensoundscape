@@ -201,7 +201,7 @@ class SpecToImg(BaseAction):
         destination: a file path (string)
         shape=None: tuple of image dimensions for 1 channel, eg (224,224)
         mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
-        spec_range=[-100,-20]: the lowest and highest possible values in the spectrogram
+        colormap=None: (str) Matplotlib color map name (if None, greyscale)
     """
 
     # shape=(self.width, self.height), mode="L" during construction
@@ -360,6 +360,10 @@ class TimeWarp(BaseAction):
 
     Args:
         warp_amount: use higher values for more skew and offset (experimental)
+
+    Note: this augmentation reduces the image to greyscale and duplicates the
+    result across the 3 channels.
+
     """
 
     def __init__(self, **kwargs):
@@ -408,17 +412,15 @@ class TimeMask(BaseAction):
         # convert max_width from fraction of image to pixels
         max_width_px = int(x.shape[-1] * self.params["max_width"])
 
-        # add "batch" dimension to tensor and use just first channel
-        x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+        # add "batch" dimension expected by tensaug
+        x = x.unsqueeze(0)
 
         # perform transform
         x = tensaug.time_mask(x, T=max_width_px, max_masks=self.params["max_masks"])
 
         # remove "batch" dimension
-        x = x[0, :]
+        x = x.squeeze(0)
 
-        # Copy 1 channel to 3 RGB channels
-        x = torch.cat([x] * 3, dim=0)
         return x
 
 
@@ -446,17 +448,15 @@ class FrequencyMask(BaseAction):
         # convert max_width from fraction of image to pixels
         max_width_px = int(x.shape[-2] * self.params["max_width"])
 
-        # add "batch" dimension to tensor and use just first channel
-        x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+        # add "batch" dimension expected by tensaug
+        x = x.unsqueeze(0)
 
         # perform transform
         x = tensaug.freq_mask(x, F=max_width_px, max_masks=self.params["max_masks"])
 
         # remove "batch" dimension
-        x = x[0, :]
+        x = x.squeeze(0)
 
-        # Copy 1 channel to 3 RGB channels
-        x = torch.cat([x] * 3, dim=0)
         return x
 
 
@@ -466,6 +466,9 @@ class TensorAugment(BaseAction):
     time warp, time mask, and frequency mask
 
     use (bool) time_warp, time_mask, freq_mask to turn each on/off
+
+    Note: This function reduces the image to greyscale then duplicates the
+    image across the 3 channels
     """
 
     def __init__(self, **kwargs):
