@@ -31,15 +31,20 @@ class MultiFeatureArchitecture(BaseArchitecture):
 
         super(MultiFeatureArchitecture, self).__init__()
         self.num_cls = num_cls
-        self.feature = None
         self.classifier = None
+        self.feature_extractors = []
 
         # Model setup and weights initialization
         # first check the output size of each feature extractor
         shape = [1] + sample_shape
         out_shapes = [get_output_shape(fe, shape)[1] for fe in feature_extractors]
         self.num_feat = sum(out_shapes)
-        self.feature_extractors = feature_extractors
+
+        # add each feature feature extractor to the model:
+        # we have to do it manually so that it stores all Parameters
+        for i, fe in enumerate(feature_extractors):
+            setattr(self, f"feature_{i}", fe)
+            self.feature_extractors.append(getattr(self, f"feature_{i}"))
         self.classifier = nn.Linear(self.num_feat, self.num_cls)
 
     def forward(self, batch_tensor):
