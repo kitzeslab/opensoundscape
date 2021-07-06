@@ -248,7 +248,8 @@ class Spectrogram:
         if feature_range[1] < feature_range[0]:
             raise AttributeError("Error: `feature_range` isn't increasing?")
 
-        return Spectrogram(
+        # use self.__class__ so that child classes can inherit this method
+        return self.__class__(
             min_max_scale(self.spectrogram, feature_range=feature_range),
             self.frequencies,
             self.times,
@@ -275,7 +276,7 @@ class Spectrogram:
         if feature_range[1] < feature_range[0]:
             raise AttributeError("Error: `feature_range` isn't increasing?")
 
-        return Spectrogram(
+        return self.__class__(
             linear_scale(
                 self.spectrogram, in_range=self.decibel_limits, out_range=feature_range
             ),
@@ -308,7 +309,7 @@ class Spectrogram:
         _spec[_spec > max_db] = max_db
         _spec[_spec < min_db] = min_db
 
-        return Spectrogram(_spec, self.frequencies, self.times, self.decibel_limits)
+        return self.__class__(_spec, self.frequencies, self.times, self.decibel_limits)
 
     def bandpass(self, min_f, max_f):
         """extract a frequency band from a spectrogram
@@ -334,7 +335,7 @@ class Spectrogram:
         highest_index = np.abs(self.frequencies - max_f).argmin()
 
         # take slices of the spectrogram and spec_freq that fall within desired range
-        return Spectrogram(
+        return self.__class__(
             self.spectrogram[lowest_index : highest_index + 1, :],
             self.frequencies[lowest_index : highest_index + 1],
             self.times,
@@ -358,7 +359,7 @@ class Spectrogram:
         highest_index = np.abs(self.times - end_time).argmin()
 
         # take slices of the spectrogram and spec_freq that fall within desired range
-        return Spectrogram(
+        return self.__class__(
             self.spectrogram[:, lowest_index : highest_index + 1],
             self.frequencies,
             self.times[lowest_index : highest_index + 1],
