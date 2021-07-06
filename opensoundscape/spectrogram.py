@@ -515,8 +515,16 @@ class MelSpectrogram(Spectrogram):
     A mel spectrogram is a spectrogram with pseudo-logarithmically spaced
     frequency bins (see literature) rather than linearly spaced bins.
 
-    See Spectrogram class for detailed documentation.
+    See Spectrogram class an Librosa's melspectrogram for detailed documentation.
+
+    NOTE: Here we rely on scipy's spectrogram function (via Spectrogram)
+    rather than on librosa's _spectrogram or melspectrogram, because the
+    amplitude of librosa's spectrograms do not match expectations. We only
+    use the mel frequency bank from Librosa.
     """
+
+    def __repr__(self):
+        return f"<MelSpectrogram(spectrogram={self.spectrogram.shape}, frequencies={self.frequencies.shape}, times={self.times.shape})>"
 
     @classmethod
     def from_audio(
@@ -613,7 +621,7 @@ class MelSpectrogram(Spectrogram):
         """Plot the mel spectrogram with matplotlib.pyplot
 
         We can't use pcolormesh because it will smash pixels to achieve
-        a linear y-axis
+        a linear y-axis, rather than preserving the mel scale.
 
         Args:
             inline=True:
@@ -624,11 +632,15 @@ class MelSpectrogram(Spectrogram):
 
         plt.imshow(self.spectrogram[::-1], cmap="Greys")
 
-        # pick values to show on frequency axis
+        # pick values to show on time and frequency axes
         yvals = self.frequencies.round(-2).astype(int)
+        xvals = self.times.round(2)
         y_idx = [int(ti) for ti in np.linspace(0, len(yvals), 8)]
         y_idx[-1] -= 1
         plt.yticks(len(yvals) - np.array(y_idx), yvals[y_idx])
+        x_idx = [int(ti) for ti in np.linspace(0, len(xvals), 6)]
+        x_idx[-1] -= 1
+        plt.xticks(x_idx, xvals[x_idx])
 
         # add axes labels
         plt.ylabel("frequency (Hz): mel scale")
