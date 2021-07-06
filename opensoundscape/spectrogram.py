@@ -9,7 +9,6 @@ from opensoundscape.helpers import min_max_scale, linear_scale
 import warnings
 from matplotlib.cm import get_cmap
 import librosa.filters
-from librosa import power_to_db
 
 
 class Spectrogram:
@@ -592,7 +591,11 @@ class MelSpectrogram(Spectrogram):
         melspectrogram = np.dot(fb, linear_spec.spectrogram)
 
         if dB_scale:  # convert to decibels
-            melspectrogram = power_to_db(melspectrogram).astype(np.float32)
+            melspectrogram = 10 * np.log10(
+                melspectrogram,
+                where=melspectrogram > 0,
+                out=np.full(melspectrogram.shape, -np.inf),
+            )
 
             # limit the decibel range (-100 to -20 dB by default)
             # values below lower limit set to lower limit,
