@@ -8,6 +8,8 @@ from opensoundscape.audio import Audio
 from opensoundscape.helpers import min_max_scale, linear_scale
 import warnings
 from matplotlib.cm import get_cmap
+import librosa.filters
+from librosa import power_to_db
 
 
 class Spectrogram:
@@ -68,7 +70,7 @@ class Spectrogram:
             )
         if not isinstance(decibel_limits, tuple):
             raise TypeError(
-                f"Spectrogram.times should be a tuple [length=2]. Got {decibel_limits.__class__}"
+                f"Spectrogram.decibel_limits should be a tuple [length=2]. Got {decibel_limits.__class__}"
             )
 
         if spectrogram.ndim != 2:
@@ -110,6 +112,7 @@ class Spectrogram:
         window_samples=512,
         overlap_samples=256,
         decibel_limits=(-100, -20),
+        dB_scale=True,
     ):
         """
         create a Spectrogram object from an Audio object
@@ -119,6 +122,8 @@ class Spectrogram:
             window_samples=512: number of audio samples per spectrogram window (pixel)
             overlap_samples=256: number of samples shared by consecutive windows
             decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
+            dB_scale=True : If True, rescales values to decibels, x=10*log10(x)
+                - if dB_scale is False, decibel_limits is ignored
 
         Returns:
             opensoundscape.spectrogram.Spectrogram object
@@ -137,15 +142,18 @@ class Spectrogram:
 
         # convert to decibels
         # -> avoid RuntimeWarning by setting negative values to -np.inf (mapped to min_db later)
-        spectrogram = 10 * np.log10(
-            spectrogram, where=spectrogram > 0, out=np.full(spectrogram.shape, -np.inf)
-        )
+        if dB_scale:
+            spectrogram = 10 * np.log10(
+                spectrogram,
+                where=spectrogram > 0,
+                out=np.full(spectrogram.shape, -np.inf),
+            )
 
-        # limit the decibel range (-100 to -20 dB by default)
-        # values below lower limit set to lower limit, values above upper limit set to uper limit
-        min_db, max_db = decibel_limits
-        spectrogram[spectrogram > max_db] = max_db
-        spectrogram[spectrogram < min_db] = min_db
+            # limit the decibel range (-100 to -20 dB by default)
+            # values below lower limit set to lower limit, values above upper limit set to uper limit
+            min_db, max_db = decibel_limits
+            spectrogram[spectrogram > max_db] = max_db
+            spectrogram[spectrogram < min_db] = min_db
 
         new_obj = cls(
             spectrogram,
@@ -498,3 +506,178 @@ class Spectrogram:
             image = image.resize(shape)
 
         return image
+
+
+class MelSpectrogram(Spectrogram):
+    """Immutable mel-spectrogram container
+
+    A mel spectrogram is a spectrogram with pseudo-logarithmically spaced
+    frequency bins (see literature) rather than linearly spaced bins.
+
+    See Spectrogram class for detailed documentation.
+    """
+
+    @classmethod
+    def from_audio(
+        cls,
+        audio,
+        n_mels=64,
+        window_samples=512,
+        overlap_samples=256,
+        decibel_limits=(-100, -20),
+        htk=False,
+        norm="slaney",
+        window_type="hann",
+        dB_scale=True,
+    ):
+        """ Create a MelSpectrogram object from an Audio object
+
+        First creates a spectrogram and a mel-frequency filter bank,
+        then computes the dot product of the filter bank with the spectrogram.
+
+        The kwargs for the mel frequency bank are documented at:
+        - https://librosa.org/doc/latest/generated/librosa.feature.melspectrogram.html#librosa.feature.melspectrogram
+        - https://librosa.org/doc/latest/generated/librosa.filters.mel.html?librosa.filters.mel
+
+        Args:
+            n_mels: Number of mel bands to generate [default: 128]
+                Note: n_mels should be chosen for compatibility with the
+                Spectrogram parameter `window_samples`. Choosing a value
+                `> ~ window_samples/10` will result in zero-valued rows while
+                small values blend rows from the original spectrogram.
+            window_type: The windowing function to use [default: "hann"]
+            window_samples: n samples per window [default: 512]
+            overlap_samples: n samples shared by consecutive windows [default: 256]
+            htk: use HTK mel-filter bank instead of Slaney, see Librosa docs [default: False]
+            norm='slanley': mel filter bank normalization, see Librosa docs
+            dB_scale=True: If True, rescales values to decibels, x=10*log10(x)
+                - if dB_scale is False, decibel_limits is ignored
+        Returns:
+            opensoundscape.spectrogram.MelSpectrogram object
+        """
+
+        if not isinstance(audio, Audio):
+            raise TypeError("Class method expects Audio class as input")
+
+        # Generate a linear-frequency spectrogram
+        # with raw stft values rather than decibels
+        linear_spec = Spectrogram.from_audio(
+            audio,
+            window_type=window_type,
+            window_samples=window_samples,
+            overlap_samples=overlap_samples,
+            dB_scale=False,
+        )
+
+        # choose n_fft to ensure filterbank.size[1]==spectrogram.size[0]
+        n_fft = int(linear_spec.spectrogram.shape[0] - 1) * 2
+        # Construct mel filter bank
+        fb = librosa.filters.mel(
+            audio.sample_rate, n_fft, n_mels=n_mels, norm=norm, htk=htk
+        )
+        # normalize filter bank: rows should sum to 1 #TODO: is this correct?
+        fb_constant = np.sum(fb, 1).mean()
+        fb = fb / fb_constant
+
+        # Apply filter bank to spectrogram with matrix multiplication
+        melspectrogram = np.dot(fb, linear_spec.spectrogram)
+
+        if dB_scale:  # convert to decibels
+            melspectrogram = power_to_db(melspectrogram).astype(np.float32)
+
+            # limit the decibel range (-100 to -20 dB by default)
+            # values below lower limit set to lower limit,
+            # values above upper limit set to uper limit
+            min_db, max_db = decibel_limits
+            melspectrogram[melspectrogram > max_db] = max_db
+            melspectrogram[melspectrogram < min_db] = min_db
+
+        # Calculate mel frequency bins
+        frequencies = librosa.filters.mel_frequencies(
+            n_mels=n_mels, fmin=0, fmax=audio.sample_rate / 2, htk=htk
+        )
+
+        return cls(
+            melspectrogram,
+            frequencies,
+            linear_spec.times,
+            decibel_limits,
+            window_samples=window_samples,
+            overlap_samples=overlap_samples,
+            window_type=window_type,
+            audio_sample_rate=audio.sample_rate,
+        )
+
+    def plot(self, inline=True, fname=None, show_colorbar=False):
+        """Plot the mel spectrogram with matplotlib.pyplot
+
+        We can't use pcolormesh because it will smash pixels to achieve
+        a linear y-axis
+
+        Args:
+            inline=True:
+            fname=None: specify a string path to save the plot to (ending in .png/.pdf)
+            show_colorbar: include image legend colorbar from pyplot
+        """
+        from matplotlib import pyplot as plt
+
+        plt.imshow(self.spectrogram[::-1], cmap="Greys")
+
+        # pick values to show on frequency axis
+        yvals = self.frequencies.round(-2).astype(int)
+        y_idx = [int(ti) for ti in np.linspace(0, len(yvals), 8)]
+        y_idx[-1] -= 1
+        plt.yticks(len(yvals) - np.array(y_idx), yvals[y_idx])
+
+        # add axes labels
+        plt.ylabel("frequency (Hz): mel scale")
+        plt.xlabel("time (sec)")
+
+        if show_colorbar:
+            plt.colorbar()
+
+        # if fname is not None, save to file path fname
+        if fname:
+            plt.savefig(fname)
+
+        # if not saving to file, check if a matplotlib backend is available
+        if inline:
+            import os
+
+            if os.environ.get("MPLBACKEND") is None:
+                warnings.warn("MPLBACKEND is 'None' in os.environ. Skipping plot.")
+            else:
+                plt.show()
+
+    # def to_pcen(self, gain=0.8, bias=10.0, power=0.25, time_constant=0.06):
+    #     """ Create PCEN from MelSpectrogram
+    #
+    #     Argument descriptions come from https://librosa.org/doc/latest/generated/librosa.pcen.html?highlight=pcen#librosa-pcen
+    #
+    #     Args:
+    #         gain: The gain factor. Typical values should be slightly less than 1 [default: 0.8]
+    #         bias: The bias point of the nonlinear compression [default: 10.0]
+    #         power: The compression exponent. Typical values should be between 0
+    #             and 0.5. Smaller values of power result in stronger compression. At
+    #             the limit power=0, polynomial compression becomes logarithmic
+    #             [default: 0.25]
+    #         time_constant: The time constant for IIR filtering, measured in seconds [default: 0.06]
+    #
+    #     Returns:
+    #         The per-channel energy normalized version of MelSpectrogram.S
+    #     """
+    #     return MelSpectrogram(
+    #         pcen(
+    #             self.S,
+    #             sr=self.sample_rate,
+    #             hop_length=self.hop_length,
+    #             gain=gain,
+    #             bias=bias,
+    #             power=power,
+    #             time_constant=time_constant,
+    #         ),
+    #         self.sample_rate,
+    #         self.hop_length,
+    #         self.fmin,
+    #         self.fmax,
+    #     )
