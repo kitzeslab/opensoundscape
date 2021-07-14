@@ -142,7 +142,7 @@ class AudioTrimmer(BaseAction):
                         f"clips, use extend=True"
                     )
             if self.params["random_trim"]:
-                extra_time = input_duration - duration
+                extra_time = audio.duration() - self.params["audio_length"]
                 start_time = np.random.uniform() * extra_time
             else:
                 start_time = 0
