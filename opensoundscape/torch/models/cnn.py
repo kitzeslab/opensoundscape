@@ -1,9 +1,6 @@
 """classes for pytorch machine learning models in opensoundscape
 
-For tutorials, see notebooks on opensoundscape.org, including:
-- Basic Training and Prediction with CNNs
-- Custom Preprocessing
-- Customizing CNN Training
+For tutorials, see notebooks on opensoundscape.org
 """
 # originally based on zhmiao's BirdMultiLabel
 
