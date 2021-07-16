@@ -450,7 +450,7 @@ class PytorchModel(BaseModule):
             "classes": self.classes,
             "epoch": self.current_epoch,
             "valid_metrics": self.valid_metrics,
-            "train_metrics": self.valid_metrics,
+            "train_metrics": self.train_metrics,
             "loss_hist": self.loss_hist,
             "lr_update_interval": self.lr_update_interval,
             "lr_cooling_factor": self.lr_cooling_factor,
