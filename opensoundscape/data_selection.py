@@ -2,8 +2,6 @@
 import pandas as pd
 from itertools import repeat
 
-from itertools import repeat
-
 
 def resample(
     df, n_samples_per_class, upsample=True, downsample=True, random_state=None
