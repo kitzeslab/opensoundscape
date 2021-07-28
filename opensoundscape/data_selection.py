@@ -3,6 +3,21 @@ import pandas as pd
 from itertools import repeat
 
 
+def split_df(df, frac, random_state=None):
+    """randomly split rows of a dataframe into train and test dfs
+
+    Args:
+        frac: fraction between 0 and 1 of samples to put in train df
+            (rest go in test df)
+        random_state: passed to DataFrame.sample()
+
+    Returns:
+        train_df, test_df
+    """
+    train_df = df.sample(frac=frac, random_state=random_state)
+    return train_df, df.drop(train_df.index)
+
+
 def resample(
     df, n_samples_per_class, upsample=True, downsample=True, random_state=None
 ):
