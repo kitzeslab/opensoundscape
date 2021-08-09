@@ -781,17 +781,6 @@ class CnnResampleLoss(PytorchModel):
         # initializing ResampleLoss requires us to pass class_frequency
         self.loss_fn = self.loss_cls(class_frequency)
 
-    @classmethod
-    def from_checkpoint(cls, path):
-        # need to get classes first to initialize the model object
-        try:
-            classes = torch.load(path)["classes"]
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
-        model_obj = cls(classes)
-        model_obj.load(path)
-        return model_obj
-
 
 class Resnet18Multiclass(CnnResampleLoss):
     """Multi-class model with resnet18 architecture and ResampleLoss.
