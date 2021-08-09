@@ -270,7 +270,10 @@ class PytorchModel(BaseModule):
                 preds = batch_preds.int().detach().cpu().numpy()
                 jac = jaccard_score(tgts, preds, average="macro")
                 ham = hamming_loss(tgts, preds)
-                print(f"\tJacc: {jac:0.3f} Hamm: {ham:0.3f} DistLoss: {loss:.3f}")
+                epoch_loss_avg = np.mean(batch_loss)
+                print(
+                    f"\tJacc: {jac:0.3f} Hamm: {ham:0.3f} DistLoss: {epoch_loss_avg:.3f}"
+                )
 
         # update learning parameters each epoch
         self.scheduler.step()
