@@ -86,8 +86,12 @@ class PytorchModel(BaseModule):
         self.opt_net = None  # don't set directly. initialized during training
         self.optimizer_cls = optim.SGD  # or torch.optim.Adam, etc
 
+        # instead of putting "params" key here, we only add it during
+        # _init_optimizer, just before initializing the optimizers
+        # this avoids an issue when re-loading a model of
+        # having the wrong .parameters() list
         self.optimizer_params = {  # optimizer parameters for classification layers
-            "params": self.network.parameters(),
+            # "params": self.network.parameters(),
             "lr": 0.01,
             "momentum": 0.9,
             "weight_decay": 0.0005,
@@ -115,7 +119,10 @@ class PytorchModel(BaseModule):
         self.optimizer_cls and/or self.optimizer_params
         prior to calling .train().
         """
-        return self.optimizer_cls([self.optimizer_params])
+        param_dict = self.optimizer_params
+        param_dict["params"] = self.network.parameters()
+        # TODO: make sure this doesn't change self.optimizer_params
+        return self.optimizer_cls([param_dict])
 
     def _init_loss_fn(self):
         """initialize an instance of self.loss_cls
@@ -202,6 +209,7 @@ class PytorchModel(BaseModule):
         total_tgts = []
         total_preds = []
         total_scores = []
+        batch_loss = []
 
         for batch_idx, batch_data in enumerate(self.train_loader):
             # load a batch of images and labels from the train loader
@@ -230,7 +238,9 @@ class PytorchModel(BaseModule):
 
             # calculate loss
             loss = self.loss_fn(logits, batch_labels)
-            self.loss_hist[self.current_epoch] = loss.detach().cpu().numpy()
+
+            # save loss for each batch; later take average for epoch
+            batch_loss.append(loss.detach().cpu().numpy())
 
             #############################
             # Backward and optimization #
@@ -255,15 +265,21 @@ class PytorchModel(BaseModule):
                     )
                 )
 
-                # Log the Jaccard score and Hamming loss
+                # Log the Jaccard score and Hamming loss, and Loss function
                 tgts = batch_labels.int().detach().cpu().numpy()
                 preds = batch_preds.int().detach().cpu().numpy()
                 jac = jaccard_score(tgts, preds, average="macro")
                 ham = hamming_loss(tgts, preds)
-                print(f"\tJacc: {jac:0.3f} Hamm: {ham:0.3f} DistLoss: {loss:.3f}")
+                epoch_loss_avg = np.mean(batch_loss)
+                print(
+                    f"\tJacc: {jac:0.3f} Hamm: {ham:0.3f} DistLoss: {epoch_loss_avg:.3f}"
+                )
 
         # update learning parameters each epoch
         self.scheduler.step()
+
+        # save the loss averaged over all batches
+        self.loss_hist[self.current_epoch] = np.mean(batch_loss)
 
         # return targets, preds, scores
         total_tgts = np.concatenate(total_tgts, axis=0)
@@ -817,13 +833,13 @@ class Resnet18Multiclass(CnnResampleLoss):
         # https://pytorch.org/docs/stable/optim.html#per-parameter-options
         self.optimizer_params = {
             "feature": {  # optimizer parameters for feature extraction layers
-                "params": self.network.feature.parameters(),
+                # "params": self.network.feature.parameters(),
                 "lr": 0.001,
                 "momentum": 0.9,
                 "weight_decay": 0.0005,
             },
             "classifier": {  # optimizer parameters for classification layers
-                "params": self.network.classifier.parameters(),
+                # "params": self.network.classifier.parameters(),
                 "lr": 0.01,
                 "momentum": 0.9,
                 "weight_decay": 0.0005,
@@ -845,7 +861,10 @@ class Resnet18Multiclass(CnnResampleLoss):
         self.optimizer_cls and/or self.optimizer_params
         prior to calling .train().
         """
-        return self.optimizer_cls(self.optimizer_params.values())
+        param_dict = self.optimizer_params
+        param_dict["feature"]["params"] = self.network.feature.parameters()
+        param_dict["classifier"]["params"] = self.network.classifier.parameters()
+        return self.optimizer_cls(param_dict.values())
 
 
 class Resnet18Binary(PytorchModel):
@@ -885,13 +904,13 @@ class Resnet18Binary(PytorchModel):
         # https://pytorch.org/docs/stable/optim.html#per-parameter-options
         self.optimizer_params = {
             "feature": {  # optimizer parameters for feature extraction layers
-                "params": self.network.feature.parameters(),
+                # "params": self.network.feature.parameters(),
                 "lr": 0.001,
                 "momentum": 0.9,
                 "weight_decay": 0.0005,
             },
             "classifier": {  # optimizer parameters for classification layers
-                "params": self.network.classifier.parameters(),
+                # "params": self.network.classifier.parameters(),
                 "lr": 0.01,
                 "momentum": 0.9,
                 "weight_decay": 0.0005,
@@ -913,7 +932,10 @@ class Resnet18Binary(PytorchModel):
         self.optimizer_cls and/or self.optimizer_params
         prior to calling .train().
         """
-        return self.optimizer_cls(self.optimizer_params.values())
+        param_dict = self.optimizer_params
+        param_dict["feature"]["params"] = self.network.feature.parameters()
+        param_dict["classifier"]["params"] = self.network.classifier.parameters()
+        return self.optimizer_cls(param_dict.values())
 
     @classmethod
     def from_checkpoint(cls, path):
