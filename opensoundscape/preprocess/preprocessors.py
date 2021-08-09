@@ -117,6 +117,28 @@ class BasePreprocessor(torch.utils.data.Dataset):
         new_ds.df = new_ds.df.head(n)
         return new_ds
 
+    def pipeline_summary(self):
+        """Generate a DataFrame describing the current pipeline
+
+        The DataFrame has columns for name (corresponds to the attribute
+        name, eg 'to_img' for self.actions.to_img), on (not bypassed) / off
+        (bypassed), and action_reference (a reference to the object)
+        """
+        df = pd.DataFrame(columns=["name", "on/off", "action_reference"])
+        action_dict = {val: key for key, val in vars(self.actions).items()}
+
+        for action in self.pipeline:
+            df = df.append(
+                {
+                    "name": action_dict[action],
+                    "on/off": "off" if action.bypass else "ON",
+                    "action_reference": action,
+                },
+                ignore_index=True,
+            )
+
+        return df
+
 
 class AudioLoadingPreprocessor(BasePreprocessor):
     """creates Audio objects from file paths

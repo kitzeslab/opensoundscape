@@ -20,7 +20,7 @@ from torchvision.utils import save_image
 import warnings
 
 from opensoundscape.audio import Audio
-from opensoundscape.spectrogram import Spectrogram
+from opensoundscape.spectrogram import Spectrogram, MelSpectrogram
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError
 
@@ -142,7 +142,7 @@ class AudioTrimmer(BaseAction):
                         f"clips, use extend=True"
                     )
             if self.params["random_trim"]:
-                extra_time = input_duration - duration
+                extra_time = audio.duration() - self.params["audio_length"]
                 start_time = np.random.uniform() * extra_time
             else:
                 start_time = 0
@@ -154,24 +154,46 @@ class AudioTrimmer(BaseAction):
 
 
 class AudioToSpectrogram(BaseAction):
-    """Action child class for Audio.from_file() (Audio -> Spectrogram)
+    """Action child class for Spectrogram.from_audio() (Audio -> Spectrogram)
 
     see spectrogram.Spectrogram.from_audio for documentation
 
     Args:
-        window_type="hann":
-            see scipy.signal.spectrogram docs for description of window parameter
-        window_samples=512:
-            number of audio samples per spectrogram window (pixel)
-        overlap_samples=256:
-            number of samples shared by consecutive windows
-        decibel_limits = (-100,-20) :
-        limit the dB values to (min,max)
-        (lower values set to min, higher values set to max)
+        window_type="hann": see scipy.signal.spectrogram docs for description of window parameter
+        window_samples=512: number of audio samples per spectrogram window (pixel)
+        overlap_samples=256: number of samples shared by consecutive windows
+        decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
+        dB_scale=True : If True, rescales values to decibels, x=10*log10(x)
+            - if dB_scale is False, decibel_limits is ignored
     """
 
     def go(self, audio):
         return Spectrogram.from_audio(audio, **self.params)
+
+
+class AudioToMelSpectrogram(BaseAction):
+    """Action child class for MelSpectrogram.from_audio()
+    (Audio -> MelSpectrogram)
+
+    see spectrogram.MelSpectrogram.from_audio for documentation
+
+    Args:
+        n_mels: Number of mel bands to generate [default: 128]
+            Note: n_mels should be chosen for compatibility with the
+            Spectrogram parameter `window_samples`. Choosing a value
+            `> ~ window_samples/10` will result in zero-valued rows while
+            small values blend rows from the original spectrogram.
+        window_type: The windowing function to use [default: "hann"]
+        window_samples: n samples per window [default: 512]
+        overlap_samples: n samples shared by consecutive windows [default: 256]
+        htk: use HTK mel-filter bank instead of Slaney, see Librosa docs [default: False]
+        norm='slanley': mel filter bank normalization, see Librosa docs
+        dB_scale=True: If True, rescales values to decibels, x=10*log10(x)
+            - if dB_scale is False, decibel_limits is ignored
+    """
+
+    def go(self, audio):
+        return MelSpectrogram.from_audio(audio, **self.params)
 
 
 class SpectrogramBandpass(BaseAction):
@@ -201,7 +223,7 @@ class SpecToImg(BaseAction):
         destination: a file path (string)
         shape=None: tuple of image dimensions for 1 channel, eg (224,224)
         mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
-        spec_range=[-100,-20]: the lowest and highest possible values in the spectrogram
+        colormap=None: (str) Matplotlib color map name (if None, greyscale)
     """
 
     # shape=(self.width, self.height), mode="L" during construction
@@ -360,6 +382,10 @@ class TimeWarp(BaseAction):
 
     Args:
         warp_amount: use higher values for more skew and offset (experimental)
+
+    Note: this augmentation reduces the image to greyscale and duplicates the
+    result across the 3 channels.
+
     """
 
     def __init__(self, **kwargs):
@@ -408,17 +434,15 @@ class TimeMask(BaseAction):
         # convert max_width from fraction of image to pixels
         max_width_px = int(x.shape[-1] * self.params["max_width"])
 
-        # add "batch" dimension to tensor and use just first channel
-        x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+        # add "batch" dimension expected by tensaug
+        x = x.unsqueeze(0)
 
         # perform transform
         x = tensaug.time_mask(x, T=max_width_px, max_masks=self.params["max_masks"])
 
         # remove "batch" dimension
-        x = x[0, :]
+        x = x.squeeze(0)
 
-        # Copy 1 channel to 3 RGB channels
-        x = torch.cat([x] * 3, dim=0)
         return x
 
 
@@ -446,17 +470,15 @@ class FrequencyMask(BaseAction):
         # convert max_width from fraction of image to pixels
         max_width_px = int(x.shape[-2] * self.params["max_width"])
 
-        # add "batch" dimension to tensor and use just first channel
-        x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+        # add "batch" dimension expected by tensaug
+        x = x.unsqueeze(0)
 
         # perform transform
         x = tensaug.freq_mask(x, F=max_width_px, max_masks=self.params["max_masks"])
 
         # remove "batch" dimension
-        x = x[0, :]
+        x = x.squeeze(0)
 
-        # Copy 1 channel to 3 RGB channels
-        x = torch.cat([x] * 3, dim=0)
         return x
 
 
@@ -466,6 +488,9 @@ class TensorAugment(BaseAction):
     time warp, time mask, and frequency mask
 
     use (bool) time_warp, time_mask, freq_mask to turn each on/off
+
+    Note: This function reduces the image to greyscale then duplicates the
+    image across the 3 channels
     """
 
     def __init__(self, **kwargs):
