@@ -209,6 +209,7 @@ class PytorchModel(BaseModule):
         total_tgts = []
         total_preds = []
         total_scores = []
+        batch_loss = []
 
         for batch_idx, batch_data in enumerate(self.train_loader):
             # load a batch of images and labels from the train loader
@@ -237,7 +238,9 @@ class PytorchModel(BaseModule):
 
             # calculate loss
             loss = self.loss_fn(logits, batch_labels)
-            self.loss_hist[self.current_epoch] = loss.detach().cpu().numpy()
+
+            # save loss for each batch; later take average for epoch
+            batch_loss.append(loss.detach().cpu().numpy())
 
             #############################
             # Backward and optimization #
@@ -262,7 +265,7 @@ class PytorchModel(BaseModule):
                     )
                 )
 
-                # Log the Jaccard score and Hamming loss
+                # Log the Jaccard score and Hamming loss, and Loss function
                 tgts = batch_labels.int().detach().cpu().numpy()
                 preds = batch_preds.int().detach().cpu().numpy()
                 jac = jaccard_score(tgts, preds, average="macro")
@@ -271,6 +274,9 @@ class PytorchModel(BaseModule):
 
         # update learning parameters each epoch
         self.scheduler.step()
+
+        # save the loss averaged over all batches
+        self.loss_hist[self.current_epoch] = np.mean(batch_loss)
 
         # return targets, preds, scores
         total_tgts = np.concatenate(total_tgts, axis=0)
