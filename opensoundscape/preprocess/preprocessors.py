@@ -14,7 +14,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
     Args:
         df:
-            dataframe of samples. df must have audio paths in the index.
+            dataframe of audio clips. df must have audio paths in the index.
             If df has labels, the class names should be the columns, and
             the values of each row should be 0 or 1.
             If data does not have labels, df will have no columns
@@ -145,7 +145,7 @@ class AudioLoadingPreprocessor(BasePreprocessor):
 
     Args:
         df:
-            dataframe of samples. df must have audio paths in the index.
+            dataframe of audio clips. df must have audio paths in the index.
             If df has labels, the class names should be the columns, and
             the values of each row should be 0 or 1.
             If data does not have labels, df will have no columns
@@ -181,12 +181,13 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
     """
     loads audio paths, creates spectrogram, returns tensor
 
-    by default, resamples audio to sr=22050
+    by default, does not resample audio, but bandpasses to 0-10 kHz
+    (to ensure all outputs have same scale in y-axis)
     can change with .actions.load_audio.set(sample_rate=sr)
 
     Args:
         df:
-            dataframe of samples. df must have audio paths in the index.
+            dataframe of audio clips. df must have audio paths in the index.
             If df has labels, the class names should be the columns, and
             the values of each row should be 0 or 1.
             If data does not have labels, df will have no columns
@@ -214,7 +215,7 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
         self.return_labels = return_labels
 
         # add each action to our tool kit, then to pipeline
-        self.actions.load_audio = actions.AudioLoader(sample_rate=22050)
+        self.actions.load_audio = actions.AudioLoader(sample_rate=None)
         self.pipeline.append(self.actions.load_audio)
 
         self.actions.trim_audio = actions.AudioTrimmer(
@@ -225,9 +226,10 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
         self.actions.to_spec = actions.AudioToSpectrogram()
         self.pipeline.append(self.actions.to_spec)
 
-        self.actions.bandpass = actions.SpectrogramBandpass(min_f=0, max_f=20000)
+        self.actions.bandpass = actions.SpectrogramBandpass(
+            min_f=0, max_f=10000, out_of_bounds_ok=False
+        )
         self.pipeline.append(self.actions.bandpass)
-        self.actions.bandpass.off()  # bandpass is off by default
 
         self.actions.to_img = actions.SpecToImg(shape=out_shape)
         self.pipeline.append(self.actions.to_img)
@@ -244,12 +246,13 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
 
     loads audio, creates spectrogram, performs augmentations, returns tensor
 
-    by default, resamples audio to sr=22050
+    by default, does not resample audio, but bandpasses to 0-10 kHz
+    (to ensure all outputs have same scale in y-axis)
     can change with .actions.load_audio.set(sample_rate=sr)
 
     Args:
         df:
-            dataframe of samples. df must have audio paths in the index.
+            dataframe of audio clips. df must have audio paths in the index.
             If df has labels, the class names should be the columns, and
             the values of each row should be 0 or 1.
             If data does not have labels, df will have no columns

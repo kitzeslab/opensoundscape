@@ -207,7 +207,7 @@ class SpectrogramBandpass(BaseAction):
     Args:
         min_f: low frequency in Hz for bandpass
         max_f: high frequency in Hz for bandpass
-
+        out_of_bounds_ok: if False, raises error if min or max beyond spec limits
     """
 
     def go(self, spectrogram):
