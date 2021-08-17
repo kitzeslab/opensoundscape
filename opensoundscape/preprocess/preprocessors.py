@@ -227,7 +227,7 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
         self.pipeline.append(self.actions.to_spec)
 
         self.actions.bandpass = actions.SpectrogramBandpass(
-            min_f=0, max_f=10000, out_of_bounds_ok=False
+            min_f=0, max_f=11025, out_of_bounds_ok=False
         )
         self.pipeline.append(self.actions.bandpass)
 
