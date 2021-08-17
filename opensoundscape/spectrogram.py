@@ -310,7 +310,7 @@ class Spectrogram:
 
         return self.__class__(_spec, self.frequencies, self.times, self.decibel_limits)
 
-    def bandpass(self, min_f, max_f):
+    def bandpass(self, min_f, max_f, out_of_bounds_ok=True):
         """extract a frequency band from a spectrogram
 
         crops the 2-d array of the spectrograms to the desired frequency range
@@ -318,6 +318,9 @@ class Spectrogram:
         Args:
             min_f: low frequency in Hz for bandpass
             max_f: high frequency in Hz for bandpass
+            out_of_bounds_ok: (bool) if False, raises ValueError if min_f or max_f
+                are not within the range of the original spectrogram's frequencies
+                [default: True]
 
         Returns:
             bandpassed spectrogram object
@@ -328,6 +331,14 @@ class Spectrogram:
             raise ValueError(
                 f"min_f must be less than max_f (got min_f {min_f}, max_f {max_f}"
             )
+
+        if not out_of_bounds_ok:
+            # self.frequencies fully coveres the spec's frequency range
+            if min_f < min(self.frequencies) or max_f > max(self.frequencies):
+                raise ValueError(
+                    "with out_of_bounds_ok=False, min_f and max_f must fall"
+                    "inside the range of self.frequencies"
+                )
 
         # find indices of the frequencies in spec_freq closest to min_f and max_f
         lowest_index = np.abs(self.frequencies - min_f).argmin()

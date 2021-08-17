@@ -88,6 +88,22 @@ def test_bandpass_spectrogram():
     ).bandpass(2, 4)
 
 
+def test_bandpass_spectrogram_out_of_bounds():
+    with pytest.raises(ValueError):
+        Spectrogram(
+            np.zeros((5, 10)),
+            np.linspace(0, 10, 5),
+            np.linspace(0, 10, 10),
+            (-100, -20),
+        ).bandpass(0, 11, out_of_bounds_ok=False)
+
+
+def test_bandpass_spectrogram_not_out_of_bounds():
+    Spectrogram(
+        np.zeros((5, 10)), np.linspace(0, 10, 5), np.linspace(0, 10, 10), (-100, -20)
+    ).bandpass(0.0, 10.0, out_of_bounds_ok=False)
+
+
 def test_bandpass_spectrogram_bad_limits():
     with pytest.raises(ValueError):
         Spectrogram(
