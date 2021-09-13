@@ -482,3 +482,52 @@ def split_and_save(
         },
         index=clip_names,
     )
+
+
+def convolve(dry_audio, impulse_response, normalize="same"):
+    """convolution reverb with Audio objects
+
+    Performs a convolution of the input audio signal with an impulse response.
+
+    This has the effect of making the audio sound 'as if it were in the same space'
+    as the space where the impulse response was recorded.
+
+    Args:
+        dry_audio: Audio object for input signal
+        impulse_response: Audio object of impusle reponse
+        normalization: [default: 'same']
+        - 'same' to match peak input and output
+        - 'self' to normalize to 1.0
+        - None for no normalization
+
+    Returns:
+        Audio object resulting from convolution
+
+
+    See Also:
+        opensoundscape.audio.deconvolve(): estimate impulse response from a test
+        signal and a recording of that test signal
+    """
+    import scipy.signal.convolve
+
+    # Ensure that the impulse response has the same sample rate as the dry audio. If not, resample it.
+    if dry_audio.sample_rate != impulse_response.sample_rate:
+        warnings.warn("resampling impulse response to match sampling rate of dry_audio")
+        impulse_response = impulse_response.resample(dry_audio.sample_rate)
+
+    # Convolve the dry signal with the impulse response
+    wet_samples = scipy.signal.convolve(dry_audio.samples, impulse_response.samples)
+
+    # Normalization
+    if normalize is not None:
+        if normalize == "same":  # same wet_samples values for input and output
+            wet_samples = wet_samples / (
+                np.max(wet_samples) / np.max(dry_audio.samples)
+            )
+
+        elif normalize == "self":  # output has max value 1.0
+            wet_samples /= np.max(wet_samples)
+        else:
+            raise ValueError(f"Invalid argument for normalize: {normalize}")
+
+    return Audio(wet_samples, dry_audio.sample_rate)
