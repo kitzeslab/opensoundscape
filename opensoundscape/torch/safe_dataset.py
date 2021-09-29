@@ -116,13 +116,40 @@ class SafeDataset(torch.utils.data.Dataset):
         )
 
     def __getitem__(self, idx):
-        """If loading an index fails, keeps trying the next index until success"""
-        while idx < len(self.dataset):
-            sample = self._safe_get_item(idx)
-            if sample is not None:
+        """If loading an index fails, keeps trying the next index until success
+
+        self.unsafe_behavior = {
+            "substitue": pick another sample,
+            "raise": raise the error
+            "none": return None}
+        """
+        if self.unsafe_behavior == "substitute":
+            attempts = 0
+            while attempts < len(self.dataset):
+                sample = self._safe_get_item(idx)
+                if sample is not None:
+                    return sample
+                idx += 1
+                attempts += 1
+                idx = idx % len(self.dataset)  # loop around end to beginning
+            raise IndexError("Tried all samples, none were safe")
+        elif self.unsafe_behavior == "raise" or self.unsafe_behavior == "none":
+            try:
+                sample = self.dataset[idx]
+                if idx not in self._safe_indices:
+                    self._safe_indices.append(idx)
                 return sample
-            idx += 1
-        raise IndexError
+            except Exception:
+                if idx not in self._unsafe_indices:
+                    self._unsafe_indices.append(idx)
+                if self.unsafe_behavior == "none":
+                    return None
+                else:  # raise the Exception
+                    raise
+        else:
+            raise ValueError(
+                f"unsafe_behavior must be 'substitute','raise', or 'none'. Got {self.unsafe_behavior}"
+            )
 
     def __getattr__(self, key):
         """Delegates to original dataset object if an attribute is not
