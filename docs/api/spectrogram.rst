@@ -1,13 +1,6 @@
 Spectrogram
 =================
 
-Mel Spectrogram
-^^^^^^^
-
-.. automodule:: opensoundscape.melspectrogram
-   :members:
-
-
 Spectrogram
 ^^^^^^^^^^^
 
