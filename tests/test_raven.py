@@ -101,7 +101,7 @@ def raven_annotations_lower_warn(request, raven_warn_dir):
 def raven_annotations_true_annots(request, raven_annots_dir):
     raven.lowercase_annotations(raven_annots_dir)
     path = Path(
-        f"{raven_annots_dir}/MSD-0003_20180427_5minstart00-15.Table.1.selections.txt.lower"
+        f"{raven_annots_dir}/MSD-0003_20180427_2minstart00.Table.1.selections.txt.lower"
     )
 
     def fin():
@@ -301,12 +301,12 @@ def test_raven_audio_split_and_save(
     )
 
     # Correct number of files created
-    assert len(list(temporary_split_storage.glob("*.wav"))) == 60
+    assert len(list(temporary_split_storage.glob("*.wav"))) == 24
 
     # All species found and labeled correctly
     npt.assert_array_equal(result_df.columns, ["eato", "lowa", "woth"])
     pdt.assert_frame_equal(
-        pd.DataFrame([56.0, 2.0, 44.0], index=["eato", "lowa", "woth"]),
+        pd.DataFrame([22.0, 2.0, 24.0], index=["eato", "lowa", "woth"]),
         pd.DataFrame(result_df.sum()),
     )
 
