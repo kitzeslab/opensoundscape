@@ -16,6 +16,11 @@ def bound(x, bounds):
     return min(max(x, bounds[0]), bounds[1])
 
 
+def inrange(x, r):
+    """return true if x is in range [r[0],r1] (inclusive)"""
+    return x >= r[0] and x <= r[1]
+
+
 def binarize(x, threshold):
     """ return a list of 0, 1 by thresholding vector x """
     if len(np.shape(x)) > 2:

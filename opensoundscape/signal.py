@@ -104,10 +104,6 @@ def cwt_peaks(
     return peak_times, peak_levels
 
 
-def inrange(x, r):
-    return x >= r[0] and x <= r[1]
-
-
 def find_accel_sequences(
     t,
     dt_range=[0.05, 0.8],
