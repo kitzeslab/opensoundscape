@@ -1,4 +1,4 @@
-"""Tools for extracting features from audio signals"""
+"""Signal processing tools for feature extraction and more"""
 import numpy as np
 import pandas as pd
 from scipy import signal
@@ -17,9 +17,10 @@ def frequency2scale(frequency, wavelet, sr):
     Returns:
         scale: (float) scale parameter for pywt.ctw() to extract desired frequency
 
-    Note: this function is not exactly an inverse of pywt.scale2frequency(), because that
-    function returns frequency in sample-units (cycles/sample) than frequency in Hz (cycles/second)
-    In other words, freuquency_hz = pywt.scale2frequency(w,scale)*sr.
+    Note: this function is not exactly an inverse of pywt.scale2frequency(),
+    because that function returns frequency in sample-units (cycles/sample)
+    rather than frequency in Hz (cycles/second). In other words,
+    freuquency_hz = pywt.scale2frequency(w,scale)*sr.
     """
     from pywt import central_frequency
 
@@ -40,11 +41,11 @@ def cwt_peaks(
 ):
     """compute a cwt, post-process, then extract peaks
 
-    This function performs a continuous wavelet transform on an audio signal
-    at a single frequency. It then squares, max_skips and normalizes the signal.
+    Performs a continuous wavelet transform (cwt) on an audio signal
+    at a single frequency. It then squares, smooths, and normalizes the signal.
     Finally, it detects peaks in the resulting signal and returns the times
     and magnitudes of detected peaks. It is used as a feature extractor for
-    Ruffed Grouse detection.
+    Ruffed Grouse drumming detection.
 
     Args:
         audio: an Audio object
@@ -64,14 +65,16 @@ def cwt_peaks(
         have sample rate of at least 2x target frequency.
     """
 
-    # create cwt feature
+    ## create cwt feature ##
+
     cwt_scale = frequency2scale(center_frequency, wavelet, audio.sample_rate)
     x, _ = pywt.cwt(
         audio.samples, cwt_scale, wavelet, sampling_period=1 / audio.sample_rate
     )
-    x = x[0]  # we only used one frequency, so it's the first of the returned list
+    x = x[0]  # only used one frequency, so it's the first of the returned list
 
-    # process the cwt signal:
+    ## process the cwt signal ##
+
     # normalize, square, hilbert envelope, normalize
     x = x / np.max(x)
     x = x ** 2
@@ -81,20 +84,25 @@ def cwt_peaks(
     # calcualte time vector for each point in cwt signal
     t = np.linspace(0, audio.duration(), len(x))
 
+    ## find peaks in cwt signal ##
+
     # convert minimum time between peaks to minimum distance in points
     min_d = np.round(peak_separation * audio.sample_rate)
-    print(min_d)
-
-    # find peaks in cwt signal
+    # locate peaks
     peak_idx, _ = signal.find_peaks(x, height=peak_threshold, distance=min_d)
     peak_times = [t[i] for i in peak_idx]
     peak_levels = [x[i] for i in peak_idx]
 
+    ## plotting ##
+
     if plot:
+
+        # plot cwt signal and detected peaks
         plt.plot(t, x)
         plt.scatter(peak_times, peak_levels, c="red")
         plt.show()
 
+        # plot a graph of delta-t (forward dif) vs t for all peaks
         peak_delta_ts = [
             peak_times[i] - peak_times[i - 1] for i in range(1, len(peak_times))
         ]
@@ -120,20 +128,26 @@ def find_accel_sequences(
     extracted from cwt signal
 
     The algorithm computes the forward difference of t, y(t). It iterates through
-    the y(t), t points searching for sequences of points that meet a set of
+    the [y(t), t] points searching for sequences of points that meet a set of
     conditions. It begins with an empty candidate sequence.
 
-    Conditions for dt, dy, and d2y are applied to each subsequent point and are
-    based on previous points in the candidate sequence. If
-    they are met, the point is added to the candidate sequence.
+    "Point-to-point criterea": Valid ranges for dt, dy, and d2y are checked for
+    each subsequent point and are based on previous points in the candidate
+    sequence. If they are met, the point is added to the candidate sequence.
 
-    Conditions for max_skip and the upper bound of dt are used to determine
-    when a sequence should be terminated.
+    "Continuation criterea": Conditions for max_skip and the upper bound of dt
+    are used to determine when a sequence should be terminated.
+        - max_skip: max number of sequential invalid points before terminating
+        - dt<=dt_range[1]: if dt is long, sequence should be broken
 
-    When a sequence is terminated, it is evaluated on conditions for duration_range and
-    points_range. If it meets these conditions, it is saved as a detected sequence.
+    "Sequence criterea": When a sequence is terminated, it is evaluated on
+    conditions for duration_range and points_range. If it meets these
+    conditions, it is saved as a detected sequence.
+        - duration_range: length of sequence in seconds from first to last point
+        - points_range: number of points included in sequence
 
-    The search continues with the next point and an empty sequence.
+    When a sequence is terminated, the search continues with the next point and
+    an empty sequence.
 
     Args:
         t: times of all detected peaks (seconds)
@@ -159,20 +173,22 @@ def find_accel_sequences(
     sequences_t = []
     sequences_y = []
 
-    # start from second point
+    # initialize sequence and variables
     last_used_y_val = y[0]
     last_used_t_val = t[0]
     last_used_dy_val = None
     last_used_index = -1
+    # since the first point is used for initializing y and t "last used" values,
+    # we start iterating from the second point
     y = y[1:]
     t = t[1:]
-
     # temporary vars for building sequences
     current_sequence_y = []
     current_sequence_t = []
     building_sequence = False
 
-    # loop through points (note that y is one shorter than t)
+    # loop through all (y, t) points
+    # (note: y is one shorter than t. we won't use the last t value)
     for i, yi in enumerate(y):
         ti = t[i]
         # calculate dt, the time since last point in candidate sequence
@@ -188,7 +204,7 @@ def find_accel_sequences(
             and inrange(dy, dy_range)
             and (inrange(d2y, d2y_range) if d2y is not None else True)
         ):
-            # valid point. add to candidate sequence
+            # valid point. add to current sequence
             last_used_index = i
             last_used_y_val = yi
             last_used_t_val = ti
@@ -196,19 +212,22 @@ def find_accel_sequences(
             building_sequence = True
             current_sequence_y.append(yi)
             current_sequence_t.append(ti)
-        else:  # invalid point
-            # check: should we break the sequence or continue?
+        else:
+            # invalid point
+
             if building_sequence:
-                if i - last_used_index > max_skip or not inrange(
-                    dt, dt_range
-                ):  # break sequence
+
+                # check: should we break the sequence or continue?
+                if i - last_used_index > max_skip or not inrange(dt, dt_range):
+                    # one of the two continuation criterea was broken.
+                    # break sequence.
 
                     # check if current sequence meets sequence criterea
                     sequence_length_sec = current_sequence_t[-1] - current_sequence_t[0]
                     if inrange(len(current_sequence_y), points_range) and inrange(
                         sequence_length_sec, duration_range
                     ):
-                        # this sequence meets the criterea. save it.
+                        # this sequence meets the sequence criterea. save it.
                         sequences_y.append(current_sequence_y)
                         sequences_t.append(current_sequence_t)
 
@@ -218,21 +237,23 @@ def find_accel_sequences(
                     building_sequence = False
 
                 else:
-                    # allow sequence to continue past this noisy point
+                    # continuation criterea were not violated
+                    # allow sequence to continue past this invalid point
                     pass
 
-            else:  # we are not building a sequence, so update reference x and t values
+            else:  # we are not building a sequence, so update reference values
                 last_used_y_val = yi
                 last_used_t_val = ti
                 last_used_dy_val = None
 
+    # we have finished iterating through all of the points
     # finally, save current sequence if valid
     if len(current_sequence_y) > 1:
         sequence_length_sec = current_sequence_t[-1] - current_sequence_t[0]
         if inrange(len(current_sequence_y), points_range) and inrange(
             sequence_length_sec, duration_range
         ):
-            # this sequence meets the criterea. save it.
+            # this sequence meets the sequence criterea. save it.
             sequences.append(current_sequence_y)
             sequence_times.append(current_sequence_t)
 
