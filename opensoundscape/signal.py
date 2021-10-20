@@ -4,6 +4,7 @@ import pandas as pd
 from scipy import signal
 import pywt
 import matplotlib.pyplot as plt
+from opensoundscape.helpers import inrange
 
 
 def frequency2scale(frequency, wavelet, sr):
