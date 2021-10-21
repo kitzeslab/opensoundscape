@@ -52,8 +52,10 @@ def cwt_peaks(
         audio: an Audio object
         center_frequency: the target frequency to extract peaks from
         wavelet: (str) name of a pywt wavelet, eg 'morl' (see pywt docs)
-        peak_threshold: "height" argument to scipy.signal.find_peaks
-        peak_distance: minimum time between detected peaks, in seconds
+        peak_threshold: minimum height of peaks
+            - if None, no minimum peak height
+            - see "height" argument to scipy.signal.find_peaks
+        peak_separation: minimum time between detected peaks, in seconds
             - if None, no minimum distance
             - see "distance" argument to scipy.signal.find_peaks
 
@@ -88,7 +90,12 @@ def cwt_peaks(
     ## find peaks in cwt signal ##
 
     # convert minimum time between peaks to minimum distance in points
-    min_d = np.round(peak_separation * audio.sample_rate)
+    min_d = (
+        None
+        if peak_separation is None
+        else np.round(peak_separation * audio.sample_rate)
+    )
+
     # locate peaks
     peak_idx, _ = signal.find_peaks(x, height=peak_threshold, distance=min_d)
     peak_times = [t[i] for i in peak_idx]
@@ -151,20 +158,22 @@ def find_accel_sequences(
     an empty sequence.
 
     Args:
-        t: times of all detected peaks (seconds)
-        dt_range = [0.05,0.8]: valid values for t(i) - t(i-1)
+        t: (list or np.array) times of all detected peaks (seconds)
+        dt_range=[0.05,0.8]: valid values for t(i) - t(i-1)
         dy_range=[-0.2,0]: valid values for change in y
             (grouse: difference in time between consecutive beats should decrease)
-        d2y_range = [-.05,.15]: limit change in dy: should not show large decrease
+        d2y_range=[-.05,.15]: limit change in dy: should not show large decrease
             (sharp curve downward on y vs t plot)
         max_skip=3: max invalid points between valid points for a sequence
             (grouse: should not have many noisy points between beats)
-        duration_range=[1,15]: total duration of sequence
-        points_range=[9,100]: total num points in sequence
+        duration_range=[1,15]: total duration of sequence (sec)
+        points_range=[9,100]: total number of points in sequence
 
     Returns:
         sequences_t, sequences_y: lists of t and y for each detected sequence
     """
+    t = np.array(t)
+
     # calculate y(t), the forward-difference
     y = [t[i + 1] - t[i] for i in range(len(t) - 1)]
     if len(y) < 2:  # not long enough to do anything
