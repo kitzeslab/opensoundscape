@@ -41,9 +41,23 @@ class SafeDataset(torch.utils.data.Dataset):
             Tries to load a sample, returns None if error occurs
     """
 
-    def __init__(self, dataset, eager_eval=False):
-        """Creates a `SafeDataset` wrapper around `dataset`."""
+    def __init__(self, dataset, unsafe_behavior, eager_eval=False):
+        """Creates a `SafeDataset` wrapper on `dataset` to handle bad samples
+
+        Args:
+            dataset: a Pytorch DataSet object
+            eager_eval=False: try to load all samples when object is created
+            unsafe_behavior: what to do when loading a sample results in an error
+                - "substitute": pick another sample to load
+                - "raise": raise the error
+                - "none": return None
+
+        Returns:
+            `SafeDataset` wrapper around `dataset`
+        """
+
         self.dataset = dataset
+        self.unsafe_behavior = unsafe_behavior
         self.eager_eval = eager_eval
         # These will contain indices over the original dataset. The indices of
         # the safe samples will go into _safe_indices and similarly for unsafe
@@ -116,12 +130,12 @@ class SafeDataset(torch.utils.data.Dataset):
         )
 
     def __getitem__(self, idx):
-        """If loading an index fails, keeps trying the next index until success
+        """If loading an index fails, behavior depends on self.unsafe_behavior
 
         self.unsafe_behavior = {
-            "substitue": pick another sample,
+            "substitute": pick another sample,
             "raise": raise the error
-            "none": return None}
+            "none": return None
         """
         if self.unsafe_behavior == "substitute":
             attempts = 0

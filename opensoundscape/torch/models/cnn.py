@@ -188,7 +188,9 @@ class PytorchModel(BaseModule):
 
         # SafeDataset loads a new sample if loading a sample throws an error
         # indices of bad samples are appended to ._unsafe_indices
-        self.train_safe_dataset = SafeDataset(self.train_dataset)
+        self.train_safe_dataset = SafeDataset(
+            self.train_dataset, unsafe_behavior="substitute"
+        )
 
         # train_loader samples batches of images + labels from train_dataset
         self.train_loader = get_dataloader(
@@ -635,7 +637,7 @@ class PytorchModel(BaseModule):
         # but will provide a different sample! Later we go back and replace scores
         # with np.nan for the bad samples (using safe_dataset._unsafe_indices)
         # this approach to error handling feels hacky
-        safe_dataset = SafeDataset(prediction_dataset)
+        safe_dataset = SafeDataset(prediction_dataset, unsafe_behavior="substitute")
 
         dataloader = torch.utils.data.DataLoader(
             safe_dataset,
