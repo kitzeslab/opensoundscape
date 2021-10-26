@@ -264,7 +264,7 @@ def find_accel_sequences(
             sequence_length_sec, duration_range
         ):
             # this sequence meets the sequence criterea. save it.
-            sequences.append(current_sequence_y)
-            sequence_times.append(current_sequence_t)
+            sequences_y.append(current_sequence_y)
+            sequences_t.append(current_sequence_t)
 
     return sequences_t, sequences_y
