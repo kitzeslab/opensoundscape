@@ -201,29 +201,22 @@ class LongAudioPreprocessor(BasePreprocessor):
             see Audio.split() for final clip behavior and options
         out_shape:
             output shape of tensor in pixels [default: [224,224]]
-        return_labels:
-            if True, the __getitem__ method will return {X:sample,y:labels}
-            If False, the __getitem__ method will return {X:sample}
-            If df has no labels (no columns), use return_labels=False
-            [default: True]
+
+        Note: returning labels is not implemented
+
+    Returns: DataSet object
     """
 
     def __init__(
-        self,
-        df,
-        audio_length,
-        clip_overlap=0,
-        final_clip=None,
-        out_shape=[224, 224],
-        return_labels=True,
+        self, df, audio_length, clip_overlap=0, final_clip=None, out_shape=[224, 224]
     ):
 
-        super(LongAudioPreprocessor, self).__init__(df, return_labels=return_labels)
+        super(LongAudioPreprocessor, self).__init__(df, return_labels=False)
 
         self.audio_length = audio_length
         self.clip_overlap = clip_overlap
         self.final_clip = final_clip
-        self.return_labels = return_labels
+        # self.return_labels = return_labels
 
         # create separate pipeline for any actions that happen before audio splitting
         # running the actions of pre_split_pipeline should result in a single audio object
