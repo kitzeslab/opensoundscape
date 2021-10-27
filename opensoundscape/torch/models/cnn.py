@@ -16,12 +16,19 @@ import random
 
 import torch
 import torch.optim as optim
-from torch.nn.functional import softmax
 import torch.nn.functional as F
 from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore_support
 
 from opensoundscape.torch.architectures.resnet import ResNetArchitecture
-from opensoundscape.torch.models.utils import BaseModule, get_dataloader
+from opensoundscape.torch.models.utils import (
+    BaseModule,
+    get_dataloader,
+    get_batch,
+    apply_activation_layer,
+    tensor_binary_predictions,
+    collate_lists_of_audio_clips,
+)
+
 from opensoundscape.metrics import multiclass_metrics, binary_metrics
 from opensoundscape.torch.loss import (
     BCEWithLogitsLoss_hot,
@@ -675,32 +682,13 @@ class PytorchModel(BaseModule):
                 logits = self.network.forward(batch_tensors)
 
                 ### Activation layer ###
-                if activation_layer == None:  # scores [-inf,inf]
-                    scores = logits
-                elif activation_layer == "softmax":
-                    # "softmax" activation: preds across all classes sum to 1
-                    scores = softmax(logits, 1)
-                elif activation_layer == "sigmoid":  # map [-inf,inf] to [0,1]
-                    scores = torch.sigmoid(logits)
-                elif activation_layer == "softmax_and_logit":  # scores [-inf,inf]
-                    scores = torch.logit(softmax(logits, 1))
-                else:
-                    raise ValueError(
-                        f"invalid option for activation_layer: {activation_layer}"
-                    )
+                scores = apply_activation_layer(logits, activation_layer)
 
                 ### Binary predictions ###
                 # generate binary predictions
-                if binary_preds == "single_target":
-                    # predict highest scoring class only
-                    batch_preds = F.one_hot(logits.argmax(1), len(logits[0]))
-                elif binary_preds == "multi_target":
-                    # predict 0 or 1 based on a fixed threshold
-                    batch_preds = torch.sigmoid(logits) >= threshold
-                elif binary_preds is None:
-                    batch_preds = torch.Tensor([])
-                else:
-                    raise ValueError(f"invalid option for binary_preds: {binary_preds}")
+                batch_preds = tensor_binary_predictions(
+                    scores=logits, mode=binary_preds, threshold=threshold
+                )
 
                 # detach the returned values: currently tethered to gradients
                 # and updates via optimizer/backprop. detach() returns
@@ -739,6 +727,200 @@ class PytorchModel(BaseModule):
         )
 
         return score_df, pred_df, label_df
+
+    def split_and_predict(
+        self,
+        prediction_dataset,
+        file_batch_size=1,
+        num_workers=0,
+        activation_layer=None,
+        binary_preds=None,
+        threshold=0.5,
+        error_log=None,
+        clip_batch_size=None,
+    ):
+        """Generate predictions on long audio files
+
+            This function integrates in-pipline splitting of audio files into
+            shorter clips with clip-level prediction.
+
+            The input dataset should be a LongAudioPreprocessor object
+
+            Choose to return any combination of scores, labels, and single-target or
+            multi-target binary predictions. Also choose activation layer for scores
+            (softmax, sigmoid, softmax then logit, or None).
+
+            Args:
+                prediction_dataset:
+                    a LongAudioPreprocessor object
+                file_batch_size:
+                    Number of audio files to load simultaneously [default: 1]
+                num_workers:
+                    parallelization (ie cpus or cores), use 0 for current process
+                    [default: 0]
+                activation_layer:
+                    Optionally apply an activation layer such as sigmoid or
+                    softmax to the raw outputs of the model.
+                    options:
+                    - None: no activation, return raw scores (ie logit, [-inf:inf])
+                    - 'softmax': scores all classes sum to 1
+                    - 'sigmoid': all scores in [0,1] but don't sum to 1
+                    - 'softmax_and_logit': applies softmax first then logit
+                    [default: None]
+                binary_preds:
+                    Optionally return binary (thresholded 0/1) predictions
+                    options:
+                    - 'single_target': max scoring class = 1, others = 0
+                    - 'multi_target': scores above threshold = 1, others = 0
+                    - None: do not create or return binary predictions
+                    [default: None]
+                threshold:
+                    prediction threshold for sigmoid scores. Only relevant when
+                    binary_preds == 'multi_target'
+                clip_batch_size:
+                    batch size of preprocessed samples for CNN prediction
+                error_log:
+                    if not None, saves a list of files that raised errors to
+                    the specified file location [default: None]
+
+            Returns: DataFrames with multi-index: path, clip start & end times
+                scores: post-`activation_layer` scores
+                predictions: 0/1 preds for each class, if `binary_preds` given
+                unsafe_samples: list of samples that failed to preprocess
+
+            Note: if loading an audio file raises a PreprocessingError, the scores
+                and predictions for that sample will be np.nan
+
+            Note: if no return type selected for scores/preds, returns None
+            instead of a DataFrame for predictions
+
+            Note: currently does not support passing labels. Meaning of a label
+            is ambiguous since the original files are split into clips during
+            prediction (output values are for clips, not entire file)
+            """
+        err_msg = "Prediction dataset should only contain file paths (index)" ""
+        if len(prediction_dataset.df.columns) > 0:
+            assert False, err_msg
+
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+        self.network.to(self.device)
+
+        self.network.eval()
+
+        # SafeDataset will not fail on bad files,
+        # with unsafe_behavior=None, returns None on bad sample
+        safe_dataset = SafeDataset(prediction_dataset, unsafe_behavior="none")
+
+        dataloader = torch.utils.data.DataLoader(
+            safe_dataset,
+            batch_size=file_batch_size,
+            num_workers=num_workers,
+            shuffle=False,
+            # use pin_memory=True when loading files on CPU and training on GPU
+            pin_memory=torch.cuda.is_available(),
+            collate_fn=collate_lists_of_audio_clips,  # custom collate function for reshaping inputs from dataset
+        )
+
+        ### Prediction ###
+        total_scores = []
+        total_preds = []
+        total_tgts = []
+        total_dfs = []
+
+        failed_files = []  # keep list of any samples that raise errors
+
+        has_labels = False
+
+        # disable gradient updates during inference
+        with torch.set_grad_enabled(False):
+
+            for superbatch in dataloader:
+                # a "superbatch" comprises samples from >=1
+                # long audio files. For instance, if file_batch_size=2,
+                # a superbatch will produce all of the clips for those 2
+                # unsplit audio files.
+                # Superbatch has keys "X": samples and "df": DataFrame
+                # with multi-index: sample file paths, clip start, clip end
+
+                # bs = num samples passed to network simultaneously
+                # i.e., the traditional "batch" or "minibatch" size
+                bs = (
+                    len(superbatch["X"]) if clip_batch_size is None else clip_batch_size
+                )
+                n_batches_in_superbatch = int(np.ceil(len(superbatch["X"]) / bs))
+
+                for batch_idx in range(n_batches_in_superbatch):
+                    # this batch is the traditional CNN batch: a set of
+                    # [bs] Tensors for inference
+
+                    # get batch of Tensors
+                    batch_tensors = get_batch(superbatch["X"], bs, batch_idx)
+                    batch_tensors = batch_tensors.to(self.device)
+                    batch_tensors.requires_grad = False
+                    # get batch's labels if available
+                    # as of now, passing targets is not supported
+                    # (assume global label during in-pipline splitting?)
+                    # batch_targets = torch.Tensor([]).to(self.device)
+                    # if "y" in superbatch.keys():
+                    #     batch_targets = get_batch(superbatch["y"],bs,batch_idx)
+                    #     batch_targets = batch_targets.to(self.device)
+                    #     batch_targets.requires_grad = False
+                    #     has_labels = True
+
+                    # forward pass of network: feature extractor + classifier
+                    logits = self.network.forward(batch_tensors)
+
+                    ### Activation layer ###
+                    scores = apply_activation_layer(logits, activation_layer)
+
+                    ### Binary predictions ###
+                    batch_preds = tensor_binary_predictions(
+                        scores=logits, mode=binary_preds, threshold=threshold
+                    )
+
+                    # detach the returned values: currently tethered to gradients
+                    # and updates via optimizer/backprop. detach() returns
+                    # just numeric values.
+                    total_scores.append(scores.detach().cpu().numpy())
+                    total_preds.append(batch_preds.float().detach().cpu().numpy())
+                    # total_tgts.append(batch_targets.int().detach().cpu().numpy())
+
+                # we don't need to split the df into smaller batches
+                # instead we can just append entire dfs from superbatches
+                total_dfs.append(superbatch["df"])
+
+        # aggregate across all batches
+        # total_tgts = np.concatenate(total_tgts, axis=0)
+        total_scores = np.concatenate(total_scores, axis=0)
+        total_preds = np.concatenate(total_preds, axis=0)
+        total_dfs = pd.concat(total_dfs)
+
+        unsafe_samples = [
+            safe_dataset.df.index.values[i] for i in safe_dataset._unsafe_indices
+        ]
+
+        score_df = pd.DataFrame(
+            index=total_dfs.index, data=total_scores, columns=self.classes
+        )
+
+        pred_df = (
+            None
+            if binary_preds is None
+            else pd.DataFrame(
+                index=total_dfs.index, data=total_preds, columns=self.classes
+            )
+        )
+        # labels don't make sense here unless we copy them across all clips from a file
+        #         label_df = (
+        #             None
+        #             if not has_labels
+        #             else pd.DataFrame(index=total_dfs.index, data=total_tgts, columns=self.classes)
+        #         )
+
+        return score_df, pred_df, unsafe_samples  # ._unsafe_indices#, label_df
 
 
 class CnnResampleLoss(PytorchModel):
