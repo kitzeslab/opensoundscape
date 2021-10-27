@@ -127,6 +127,9 @@ def collate_lists_of_audio_clips(batch):
     # first, we remove all None elements: these failed to preprocess
     batch = [x for x in batch if x is not None]
 
+    if len(batch) == 0:
+        return {"X": torch.Tensor(), "y": torch.Tensor(), "df": None}
+
     has_labels = "y" in batch[0].keys()
     if has_labels:
         labels = [d["y"] for d in batch]
