@@ -177,6 +177,135 @@ class AudioLoadingPreprocessor(BasePreprocessor):
         self.pipeline.append(self.actions.trim_audio)
 
 
+class LongAudioPreprocessor(BasePreprocessor):
+    """
+    loads audio paths, splits into segments, and runs pipeline on each segment
+
+    by default, resamples audio to sr=22050
+    can change with .actions.load_audio.set(sample_rate=sr)
+
+    Args:
+        df:
+            dataframe of samples. df must have audio paths in the index.
+            If df has labels, the class names should be the columns, and
+            the values of each row should be 0 or 1.
+            If data does not have labels, df will have no columns
+        audio_length:
+            length in seconds of audio clips [default: None]
+            If provided, longer clips trimmed to this length. By default,
+            shorter clips will not be extended (modify actions.AudioTrimmer
+            to change behavior).
+        clip_overlap:
+            overlap in seconds between adjascent clips
+        final_clip=None:
+            see Audio.split() for final clip behavior and options
+        out_shape:
+            output shape of tensor in pixels [default: [224,224]]
+
+        Note: returning labels is not implemented
+
+    Returns: DataSet object
+    """
+
+    def __init__(
+        self, df, audio_length, clip_overlap=0, final_clip=None, out_shape=[224, 224]
+    ):
+
+        super(LongAudioPreprocessor, self).__init__(df, return_labels=False)
+
+        self.audio_length = audio_length
+        self.clip_overlap = clip_overlap
+        self.final_clip = final_clip
+        # self.return_labels = return_labels
+
+        # create separate pipeline for any actions that happen before audio splitting
+        # running the actions of pre_split_pipeline should result in a single audio object
+        self.pre_split_pipeline = []
+        self.actions.load_audio = actions.AudioLoader(sample_rate=None)
+        self.pre_split_pipeline.append(self.actions.load_audio)
+
+        # add each action to our tool kit, then to pipeline
+        self.actions.trim_audio = actions.AudioTrimmer(
+            extend=True, random_trim=False, audio_length=audio_length
+        )
+        self.pipeline.append(self.actions.trim_audio)
+
+        self.actions.to_spec = actions.AudioToSpectrogram()
+        self.pipeline.append(self.actions.to_spec)
+
+        # bandpass since we don't resample audio to guarantee equivalence
+        self.actions.bandpass = actions.SpectrogramBandpass(min_f=0, max_f=11025)
+        self.pipeline.append(self.actions.bandpass)
+
+        self.actions.to_img = actions.SpecToImg(shape=out_shape)
+        self.pipeline.append(self.actions.to_img)
+
+        self.actions.to_tensor = actions.ImgToTensor()
+        self.pipeline.append(self.actions.to_tensor)
+
+        self.actions.normalize = actions.TensorNormalize()
+        self.pipeline.append(self.actions.normalize)
+
+    def __getitem__(self, item_idx):
+
+        try:
+            df_row = self.df.iloc[item_idx]
+            x = Path(df_row.name)  # the index contains a path to a file
+
+            # First, run the pre_split_pipeline to get an audio object
+            for action in self.pre_split_pipeline:
+                if action.bypass:
+                    continue
+                if action.requires_labels:
+                    x, df_row = action.go(x, copy.deepcopy(df_row))
+                else:
+                    x = action.go(x)
+
+            # Second, split the audio
+            clip_dicts = x.split(
+                clip_duration=self.audio_length,
+                clip_overlap=self.clip_overlap,
+                final_clip=self.final_clip,
+            )
+            if len(clip_dicts) < 1:
+                raise ValueError(f"File produced no samples: {Path(df_row.name)}")
+            audio_clips = [d["clip"] for d in clip_dicts]
+            start_times = [d["begin_time"] for d in clip_dicts]
+            end_times = [d["end_time"] for d in clip_dicts]
+            clip_df = pd.DataFrame(
+                index=[[df_row.name] * len(audio_clips), start_times, end_times]
+            )
+            clip_df.index.names = ["file", "start_t", "end_t"]
+
+            # Third, for each audio segment, run the rest of the pipeline and store the output
+            outputs = [None for _ in range(len(audio_clips))]
+            for i, x in enumerate(audio_clips):
+                for action in self.pipeline:
+                    if action.bypass:
+                        continue
+                    if action.requires_labels:
+                        x, df_row = action.go(x, copy.deepcopy(df_row))
+                    else:
+                        x = action.go(x)
+                outputs[i] = x
+
+            # concatenate the outputs into a single tensor
+            if type(outputs[0]) == torch.Tensor:
+                outputs = torch.Tensor(np.stack(outputs))
+
+            # Return sample & label pairs (training/validation)
+            if self.return_labels:
+                labels = torch.from_numpy(df_row.values)
+                return {"X": outputs, "y": labels, "df": clip_df}
+
+            # Return sample only (prediction)
+            return {"X": outputs, "df": clip_df}
+        except:
+            raise PreprocessingError(
+                f"failed to preprocess sample: {self.df.index[item_idx]}"
+            )
+
+
 class AudioToSpectrogramPreprocessor(BasePreprocessor):
     """
     loads audio paths, creates spectrogram, returns tensor
