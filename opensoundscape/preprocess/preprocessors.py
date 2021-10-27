@@ -227,9 +227,8 @@ class LongAudioPreprocessor(BasePreprocessor):
 
         # create separate pipeline for any actions that happen before audio splitting
         # running the actions of pre_split_pipeline should result in a single audio object
-        # for now, the only action in the pre_split_pipeline is load_audio
         self.pre_split_pipeline = []
-        self.actions.load_audio = actions.AudioLoader(sample_rate=22050)
+        self.actions.load_audio = actions.AudioLoader(sample_rate=None)
         self.pre_split_pipeline.append(self.actions.load_audio)
 
         # add each action to our tool kit, then to pipeline
@@ -241,9 +240,9 @@ class LongAudioPreprocessor(BasePreprocessor):
         self.actions.to_spec = actions.AudioToSpectrogram()
         self.pipeline.append(self.actions.to_spec)
 
-        self.actions.bandpass = actions.SpectrogramBandpass(min_f=0, max_f=20000)
+        # bandpass since we don't resample audio to guarantee equivalence
+        self.actions.bandpass = actions.SpectrogramBandpass(min_f=0, max_f=11025)
         self.pipeline.append(self.actions.bandpass)
-        self.actions.bandpass.off()  # bandpass is off by default
 
         self.actions.to_img = actions.SpecToImg(shape=out_shape)
         self.pipeline.append(self.actions.to_img)
@@ -260,7 +259,7 @@ class LongAudioPreprocessor(BasePreprocessor):
             df_row = self.df.iloc[item_idx]
             x = Path(df_row.name)  # the index contains a path to a file
 
-            # Run the pre_split_pipeline to get an Audio object
+            # First, run the pre_split_pipeline to get an audio object
             for action in self.pre_split_pipeline:
                 if action.bypass:
                     continue
@@ -269,15 +268,23 @@ class LongAudioPreprocessor(BasePreprocessor):
                 else:
                     x = action.go(x)
 
-            # Split the audio into clips
-            audio_clips = x.split(
+            # Second, split the audio
+            clip_dicts = x.split(
                 clip_duration=self.audio_length,
                 clip_overlap=self.clip_overlap,
                 final_clip=self.final_clip,
             )
-            audio_clips = [d["clip"] for d in audio_clips]
+            if len(clip_dicts) < 1:
+                raise ValueError(f"File produced no samples: {Path(df_row.name)}")
+            audio_clips = [d["clip"] for d in clip_dicts]
+            start_times = [d["begin_time"] for d in clip_dicts]
+            end_times = [d["end_time"] for d in clip_dicts]
+            clip_df = pd.DataFrame(
+                index=[[df_row.name] * len(audio_clips), start_times, end_times]
+            )
+            clip_df.index.names = ["file", "start_t", "end_t"]
 
-            # For each audio segment, run the rest of the pipeline and store the output
+            # Third, for each audio segment, run the rest of the pipeline and store the output
             outputs = [None for _ in range(len(audio_clips))]
             for i, x in enumerate(audio_clips):
                 for action in self.pipeline:
@@ -289,17 +296,17 @@ class LongAudioPreprocessor(BasePreprocessor):
                         x = action.go(x)
                 outputs[i] = x
 
-            # Concatenate the outputs into a single tensor
+            # concatenate the outputs into a single tensor
             if type(outputs[0]) == torch.Tensor:
-                outputs = Tensor(np.stack(outputs))
+                outputs = torch.Tensor(np.stack(outputs))
 
             # Return sample & label pairs (training/validation)
             if self.return_labels:
                 labels = torch.from_numpy(df_row.values)
-                return {"X": outputs, "y": labels}
+                return {"X": outputs, "y": labels, "df": clip_df}
 
             # Return sample only (prediction)
-            return {"X": outputs}
+            return {"X": outputs, "df": clip_df}
         except:
             raise PreprocessingError(
                 f"failed to preprocess sample: {self.df.index[item_idx]}"
