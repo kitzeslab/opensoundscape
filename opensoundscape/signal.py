@@ -268,3 +268,137 @@ def find_accel_sequences(
             sequences_t.append(current_sequence_t)
 
     return sequences_t, sequences_y
+
+
+def detect_peak_sequence_cwt(
+    audio,
+    sr=400,
+    window_len=60,
+    center_frequency=50,
+    wavelet="morl",
+    peak_threshold=0.2,
+    peak_separation=15 / 400,
+    dt_range=[0.05, 0.8],
+    dy_range=[-0.2, 0],
+    d2y_range=[-0.05, 0.15],
+    max_skip=3,
+    duration_range=[1, 15],
+    points_range=[9, 100],
+    plot=False,
+):
+    """Use a continuous wavelet transform to detect accellerating sequences
+
+    This function creates a continuous wavelet transform (cwt) feature and
+    searches for accelerating sequences of peaks in the feature. It was developed
+    to detect Ruffed Grouse drumming events in audio signals. Default parameters
+    are tuned for Ruffed Grouse drumming detection.
+
+    Analysis is performed on analysis windows of fixed length without overlap.
+    Detections from each analysis window across the audio file are aggregated.
+
+    Args:
+        audio: Audio object
+        sr=400: resample audio to this sample rate (Hz)
+        window_len=60: length of analysis window (sec)
+        center_frequency=50: target audio frequency of cwt
+        wavelet='morl': (str) pywt wavelet name (see pywavelets docs)
+        peak_threshold=0.2: height threhsold (0-1) for peaks in normalized signal
+        peak_separation=15/400: min separation (sec) for peak finding
+        dt_range=[0.05, 0.8]: sequence detection point-to-point criterion 1
+            - Note: the upper limit is also used as sequence termination criterion 2
+        dy_range=[-0.2, 0]: sequence detection point-to-point criterion 2
+        d2y_range=[-0.05, 0.15]: sequence detection point-to-point criterion 3
+        max_skip=3: sequence termination criterion 1: max sequential invalid points
+        duration_range=[1, 15]: sequence criterion 1: length (sec) of sequence
+        points_range=[9, 100]: sequence criterion 2: num points in sequence
+        plot=False: if True, plot peaks and detected sequences with pyplot
+
+    Returns:
+        dataframe summarizing detected sequences
+
+    Note: for Ruffed Grouse drumming, which is very low pitched, audio is resampled
+    to 400 Hz. This greatly increases the efficiency of the cwt, but will only
+    detect frequencies up to 400/2=200Hz. Generally, choose a resample frequency
+    as low as possible but >=2x the target frequency
+
+    Note: the cwt signal is normalized on each analysis window, so changing the
+    analysis window size can change the detection results.
+
+    Note: if there is an incomplete window remaining at the end of the audio
+    file, it is discarded (not analyzed).
+    """
+
+    # resample audio
+    audio = audio.resample(sr)
+
+    # save detection dfs from each window in a list (aggregate later)
+    dfs = []
+
+    # analyze the audio in analysis windows of length winidow_len seconds
+    for window_idx in range(int(audio.duration() / window_len)):
+        window_start_t = window_idx * window_len
+
+        # trim audio to an analysis window
+        audio_window = audio.trim(window_start_t, window_start_t + window_len)
+
+        # perform continuous wavelet transform on audio and extract peaks
+        peak_t, _ = cwt_peaks(
+            audio_window,
+            center_frequency,
+            wavelet,
+            peak_threshold=peak_threshold,
+            peak_separation=peak_separation,
+        )
+
+        # search the set of detected peaks for accelerating sequences
+        seq_t, seq_y = find_accel_sequences(
+            peak_t,
+            dt_range=dt_range,
+            dy_range=dy_range,
+            d2y_range=d2y_range,
+            max_skip=max_skip,
+            duration_range=duration_range,
+            points_range=points_range,
+        )
+
+        if plot:
+            print(f"detected peaks and sequences for window {window_idx+1}")
+            y = [peak_t[i + 1] - peak_t[i] for i in range(len(peak_t) - 1)]
+            plt.scatter(peak_t[:-1], y)
+            for yi, ti in zip(seq_y, seq_t):
+                plt.scatter(ti, yi)
+            plt.xlabel("time (sec)")
+            plt.ylabel("y")
+            plt.xlim(0, window_len)
+            plt.show()
+
+        # convert seq_t to time since beginning of audio file
+        seq_t = list(np.array(seq_t) + window_start_t)
+
+        # save df of detected sequences in list
+        dfs.append(
+            pd.DataFrame(
+                data={
+                    "sequence_y": seq_y,
+                    "sequence_t": seq_t,
+                    "window_start_t": [window_start_t] * len(seq_y),
+                }
+            )
+        )
+
+    # create a dataframe summarizing all detections
+    detection_df = pd.concat(dfs).reset_index(drop=True)
+    detection_df["seq_len"] = [len(seq_y) for seq_y in detection_df.sequence_y]
+    detection_df["seq_midpoint_time"] = (
+        np.array([(t[0] + t[-1]) / 2 for t in detection_df.sequence_t])
+        + detection_df.window_start_t
+    )
+    detection_df["seq_start_time"] = (
+        np.array([t[0] for t in detection_df.sequence_t]) + detection_df.window_start_t
+    )
+    detection_df["seq_end_time"] = (
+        np.array([t[-1] for t in detection_df.sequence_t]) + detection_df.window_start_t
+    )
+
+    # return the detection table
+    return detection_df
