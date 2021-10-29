@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" raven.py: Utilities for dealing with Raven files
+""" raven.py: Utilities for loading labels from Raven files into dataframes
 """
 
 from warnings import warn

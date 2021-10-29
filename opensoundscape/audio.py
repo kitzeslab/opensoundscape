@@ -362,13 +362,19 @@ class Audio:
                 seconds long. By default, discards remaining audio if less than
                 clip_duration seconds long [default: None].
                 Options:
-                    - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
-                    - "full":       Increase the overlap to yield a clip with clip_duration length
-                    - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
-                    - None:         Discard the remainder
+                    - None:         Discard the remainder (do not make a clip)
+                    - "extend":     Extend the final clip with silence to reach clip_duration length
+                    - "remainder":  Use only remainder of Audio (final clip will be shorter than clip_duration)
+                    - "full":       Increase overlap with previous clip to yield a clip with clip_duration length
         Returns:
-            A list of dictionaries with keys: ["audio", "begin_time", "end_time"]
+            - audio_clips: list of audio objects
+            - dataframe w/columns for start_time and end_time of each clip
         """
+        if not final_clip in ["remainder", "full", "extend", None]:
+            raise ValueError(
+                f"final_clip must be 'remainder', 'full', 'extend',"
+                f"or None. Got {final_clip}."
+            )
 
         duration = self.duration()
 
@@ -383,52 +389,48 @@ class Audio:
             keeps = ends <= duration
             ends = ends[keeps]
             starts = starts[keeps]
-        elif not final_clip in ["remainder", "full", "extend"]:
-            raise ValueError(
-                f"final_clip must be 'remainder', 'full', 'extend',"
-                f"or None. Got {final_clip}."
-            )
 
         # Now we have the starts and ends
         final_idx = len(ends) - 1
-        to_return = [None] * (final_idx + 1)
+        clips = [None] * len(ends)
+        df = pd.DataFrame(columns=["start_time", "end_time"], data=[starts, ends])
+
         for idx, (start, end) in enumerate(zip(starts, ends)):
-            # By default
-            begin_time = start
-            end_time = end
 
             # Change defaults to handle final clip
             if idx >= final_idx:
                 if final_clip in ["remainder", "extend"]:
-                    begin_time = start
-                    end_time = duration
+                    end = duration
                 elif final_clip == "full":
-                    begin_time = duration - clip_duration
-                    end_time = duration
-                # If final_clip not one of the above, nothing will change
+                    # extract a full clip that ends at the end of the audio file
+                    # this can result in up to ~100% overlap with previous clip
+                    start = duration - clip_duration
+                    end = duration
 
-            # Trim the clip as needed
-            audio_clip = self.trim(begin_time, end_time)
+            # Trim the clip to desired range
+            audio_clip = self.trim(start, end)
 
             # Extend the final clip if needed
             if (idx >= final_idx) & (final_clip == "extend"):
                 audio_clip = audio_clip.extend(clip_duration)
 
-            # Add one clip to list
-            to_return[idx] = {
-                "clip": audio_clip,
+            # Add one clip to list of clips
+            clips[idx] = audio_clip
+            df.loc[idx] = {
+                "start_time": start,
+                "end_time": end,
                 "clip_duration": audio_clip.duration(),
-                "begin_time": begin_time,
-                "end_time": end_time,
             }
 
-        if len(to_return) == 0:
+        if len(clips) == 0:
             warnings.warn(
-                f"Given Audio object with duration of `{duration}` seconds and `clip_duration={clip_duration}` but `final_clip={final_clip}` produces no clips. Returning empty list."
+                f"Given Audio object with duration of `{duration}` "
+                f"seconds and `clip_duration={clip_duration}` but "
+                f" `final_clip={final_clip}` produces no clips. "
+                f"Returning empty list."
             )
-            return []
 
-        return to_return
+        return clips
 
 
 def split_and_save(
@@ -458,27 +460,20 @@ def split_and_save(
         dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
 
     Returns:
-        pandas.DataFrame containing begin and end times for each clip from the source audio
+        pandas.DataFrame containing paths and begin and end times for each clip
     """
 
-    clips = audio.split(
+    clips, df = audio.split(
         clip_duration=clip_duration, clip_overlap=clip_overlap, final_clip=final_clip
     )
     clip_names = []
-    for clip in clips:
-        clip_name = (
-            f"{destination}/{prefix}_{clip['begin_time']}s_{clip['end_time']}s.wav"
-        )
+    for i, clip in enumerate(clips):
+        start_t = df.at[i, "begin_time"]
+        end_t = df.at[i, "end_time"]
+        clip_name = f"{destination}/{prefix}_{start_t}s_{end_t}s.wav"
         clip_names.append(clip_name)
         if not dry_run:
-            clip["clip"].save(clip_name)
+            clip.save(clip_name)
 
-    # Convert [{k: v}] -> {k: [v]}
-    return pd.DataFrame(
-        {
-            key: [clip[key] for clip in clips]
-            for key in clips[0].keys()
-            if key != "clip"
-        },
-        index=clip_names,
-    )
+    df.index = clip_names
+    return df
