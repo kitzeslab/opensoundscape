@@ -389,16 +389,11 @@ def detect_peak_sequence_cwt(
     # create a dataframe summarizing all detections
     detection_df = pd.concat(dfs).reset_index(drop=True)
     detection_df["seq_len"] = [len(seq_y) for seq_y in detection_df.sequence_y]
+    detection_df["seq_start_time"] = [t[0] for t in detection_df.sequence_t]
+    detection_df["seq_end_time"] = [t[-1] for t in detection_df.sequence_t]
     detection_df["seq_midpoint_time"] = (
-        np.array([(t[0] + t[-1]) / 2 for t in detection_df.sequence_t])
-        + detection_df.window_start_t
-    )
-    detection_df["seq_start_time"] = (
-        np.array([t[0] for t in detection_df.sequence_t]) + detection_df.window_start_t
-    )
-    detection_df["seq_end_time"] = (
-        np.array([t[-1] for t in detection_df.sequence_t]) + detection_df.window_start_t
-    )
+        detection_df.seq_start_time + detection_df.seq_end_time
+    ) / 2
 
     # return the detection table
     return detection_df
