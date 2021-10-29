@@ -364,12 +364,13 @@ def detect_peak_sequence_cwt(
         if plot:
             print(f"detected peaks and sequences for window {window_idx+1}")
             y = [peak_t[i + 1] - peak_t[i] for i in range(len(peak_t) - 1)]
-            plt.scatter(peak_t[:-1], y)
-            for yi, ti in zip(seq_y, seq_t):
-                plt.scatter(ti, yi)
+            plt.scatter(peak_t[:-1], y, label="all detected peaks")
+            for j, (yi, ti) in enumerate(zip(seq_y, seq_t)):
+                plt.scatter(ti, yi, label=f"detected sequence {j+1}")
             plt.xlabel("time (sec)")
             plt.ylabel("y")
             plt.xlim(0, window_len)
+            plt.legend()
             plt.show()
 
         # convert seq_t to time since beginning of audio file
