@@ -15,6 +15,11 @@ def silence_10s_mp3_str():
     return "tests/audio/silence_10s.mp3"
 
 
+@pytest.fixture()
+def rugr_wav_str():
+    return "tests/audio/rugr_drum.wav"
+
+
 def test_frequency2scale():
     """test conversion from scale -> frequency -> scale"""
     import pywt
@@ -88,3 +93,30 @@ def test_find_accel_sequences():
         points_range=[5, 100],
     )
     assert np.shape(seq_t) == (1, 19)
+
+
+def test_detect_peak_sequence_cwt(rugr_wav_str):
+    """test detection of ruffed grouse drumming
+
+    the default parameters might change, but this should always return
+    the same detection.
+    """
+    rugr_audio = Audio.from_file(rugr_wav_str)
+    detections = sig.detect_peak_sequence_cwt(
+        rugr_audio,
+        sr=400,
+        window_len=10,
+        center_frequency=50,
+        wavelet="morl",
+        peak_threshold=0.2,
+        peak_separation=15 / 400,
+        dt_range=[0.05, 0.8],
+        dy_range=[-0.2, 0],
+        d2y_range=[-0.05, 0.15],
+        max_skip=3,
+        duration_range=[1, 15],
+        points_range=[9, 100],
+        plot=False,
+    )
+    assert len(detections) == 1
+    assert detections.iloc[0].seq_len == 24
