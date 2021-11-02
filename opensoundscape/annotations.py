@@ -33,11 +33,6 @@ class BoxedAnnotations:
                 - "end_time": right bound, sec since beginning of audio
                 - "low_f": upper frequency bound (can be None/nan)
                 - "high_f": upper frequency bound (can be None/nan)
-            corrections_dict: optionally provide a dictionary mapping
-                { wrong (accidental) label : corrected label }
-
-                TODO: should it be applied on creation of the object?
-
             audio_file: optionally include the name or path of corresponding
 
         Returns:
@@ -48,24 +43,17 @@ class BoxedAnnotations:
                 col in df.columns
             ), 'df columns must include all of these: ["annotation","start_time","end_time","low_f","high_f"]'
         self.df = df
-        # self.corrections_dict = corrections_dict
-        self.audio_path = audio_file
+        self.audio_file = audio_file
 
     @classmethod
     def from_raven_file(
-        cls,
-        path,
-        annotation_column,
-        keep_extra_columns=True,
-        audio_file=None,
-        # corrections_dict=None,
+        cls, path, annotation_column, keep_extra_columns=True, audio_file=None
     ):
         """load annotations from Raven txt file
 
         Args:
             keep_extra_columns: True (all), False (none), or iterable of specific columns to keep
             - always includes start_time, end_time, low_f, high_f, annotation
-            corrections_dict: optionally include a dictionary of
         """
         df = pd.read_csv(path, delimiter="\t")
         df = df.rename(
@@ -90,27 +78,112 @@ class BoxedAnnotations:
             # keep all columns
             pass
 
-        return cls(
-            df=df,
-            audio_file=audio_file,
-            # corrections_dict=corrections_dict,
-        )
+        return cls(df=df, audio_file=audio_file)
 
-    def to_raven_file(self):
+    def to_raven_file(self, path):
         """save annotations in Raven-style tab-separated text file"""
         raise NotImplementedError
 
-    def to_csv(self):
-        """save annotations in Raven-style tab-separated text file"""
+    def to_csv(self, path):
+        """save annotations in csv file"""
         raise NotImplementedError
 
-    def trim(self, start_t, end_t, edge_mode="trim"):
-        """edge_mode: 'trim','keep','remove'"""
-        raise NotImplementedError
+    def trim(self, start_time, end_time, edge_mode="trim"):
+        """Trim a set of annotations, analogous to Audio/Spectrogram.trim()
 
-    def bandpass(self, low_f, high_f, edge_mode):
-        """edge_mode: 'trim','keep','remove'"""
-        raise NotImplementedError
+        Out-of-place operation: does not modify itself, returns new object
+
+        Args:
+            start_time: time (seconds) since beginning for left bound
+            end_time: time (seconds) since beginning for right bound
+            edge_mode: what to do when boxes overlap with edges of trim region
+                - 'trim': trim boxes to bounds
+                - 'keep': allow boxes to extend beyond bounds
+                - 'remove': completely remove boxes that extend beyond bounds
+        Returns:
+            a copy of the BoxedAnnotations object on the trimmed region.
+            - note that, like Audio.trim(), there is a new reference point for
+            0.0 seconds (located at start_time in the original object)
+
+        """
+        assert edge_mode in [
+            "trim",
+            "keep",
+            "remove",
+        ], f"invalid edge_mode argument: {edge_mode} (must be 'trim','keep', or 'remove')"
+        assert start_time >= 0, "start time must be non-negative"
+        assert end_time > start_time, "end time_must be > start_time"
+
+        df = self.df.copy()
+
+        # remove annotations that don't overlap with window
+        df = df[
+            [
+                overlap([start_time, end_time], [t0, t1]) > 0
+                for t0, t1 in zip(df["start_time"], df["end_time"])
+            ]
+        ]
+
+        if edge_mode == "trim":  # trim boxes to start and end times
+            df["start_time"] = [max(start_time, x) for x in df["start_time"]]
+            df["end_time"] = [min(end_time, x) for x in df["end_time"]]
+        elif edge_mode == "remove":  # remove boxes that extend beyond edges
+            df = df[df["start_time"] >= start_time]
+            df = df[df["end_time"] <= end_time]
+        else:  #'keep': leave boxes hanging over the edges
+            pass
+
+        # as in Audio.trim, the new object's labels should be relative to the
+        # new start time; so we need to offset the old values.
+        df["start_time"] = df["start_time"] - start_time
+        df["end_time"] = df["end_time"] - start_time
+
+        return BoxedAnnotations(df, self.audio_file)
+
+    def bandpass(self, low_f, high_f, edge_mode="trim"):
+        """Bandpass a set of annotations, analogous to Spectrogram.bandpass()
+
+        Out-of-place operation: does not modify itself, returns new object
+
+        Args:
+            low_f: low frequency (Hz) bound
+            high_f: high frequench (Hz) bound
+            edge_mode: what to do when boxes overlap with edges of trim region
+                - 'trim': trim boxes to bounds
+                - 'keep': allow boxes to extend beyond bounds
+                - 'remove': completely remove boxes that extend beyond bounds
+        Returns:
+            a copy of the BoxedAnnotations object on the bandpassed region
+        """
+        assert edge_mode in [
+            "trim",
+            "keep",
+            "remove",
+        ], f"invalid edge_mode argument: {edge_mode} (must be 'trim','keep', or 'remove')"
+        assert low_f >= 0, "low_f must be non-negative"
+        assert high_f > low_f, "high_f be > low_f"
+
+        df = self.df.copy()
+
+        # remove annotations that don't overlap with bandpass range
+        df = df[
+            [
+                overlap([low_f, high_f], [f0, f1]) > 0
+                for f0, f1 in zip(df["low_f"], df["high_f"])
+            ]
+        ]
+
+        # handle edges
+        if edge_mode == "trim":  # trim boxes to start and end times
+            df["low_f"] = [max(low_f, x) for x in df["low_f"]]
+            df["high_f"] = [min(high_f, x) for x in df["high_f"]]
+        elif edge_mode == "remove":  # remove boxes that extend beyond edges
+            df = df[df["low_f"] >= low_f]
+            df = df[df["high_f"] <= high_f]
+        else:  #'keep': leave boxes hanging over the edges
+            pass
+
+        return BoxedAnnotations(df, self.audio_file)
 
     def one_hot_labels_dict(classes=None):
         """get a dictionary of one-hot labels for entire duration
@@ -156,7 +229,7 @@ class BoxedAnnotations:
 
         for (start, end), _ in clip_df.iterrows():
             clip_df.loc[(start, end), :] = one_hot_labels_on_time_interval(
-                self.df,
+                df,
                 start_time=start,
                 end_time=end,
                 min_label_overlap=min_label_overlap,
@@ -195,8 +268,57 @@ class BoxedAnnotations:
             clip_df, min_label_overlap, classes, max_ignored_label_fraction
         )
 
-    def apply_corrections(self):  # out of place
-        raise NotImplementedError
+    def apply_corrections(self, correction_table):
+        """modify annotations according to a correction table
+
+        Changes the values of 'annotation' column of dataframe.
+
+        Returns a new BoxedAnnotations object, does not modify itself
+        (out-of-place operation). So use could look like:
+        `my_annotations = my_annotations.apply_corrections(table)`
+
+        Args:
+            correction_table: current values -> new values. can be either
+                - pd.DataFrame with 2 columns [current value, new values] or
+                - dictionary {current values: new values}
+        Returns:
+            new BoxedAnnotations object
+        """
+        df = self.df.copy()
+
+        ## handle two input types for correction_table ##
+        if (
+            type(correction_table) == pd.DataFrame
+            and len(correction_table.columns) == 2
+        ):
+            # check that keys are unique
+            keys = correction_table.values[:, 0]
+            assert len(set(keys)) == len(
+                keys
+            ), "keys of correction table must be unique"
+            # convert df to dictionary
+            correction_table = {a: b for a, b in correction_table.values}
+        elif type(correction_table) != dict:
+            raise TypeError(
+                "correction table must be dict or pd.DataFrame with 2 columns."
+            )
+
+        ## input validation ##
+        # keys and values should not overlap
+        keys_in_values = set(correction_table).intersection(
+            set(correction_table.values())
+        )
+        assert (
+            len(keys_in_values) == 0
+        ), f"These correction table keys and values overlap: {keys_in_values}"
+
+        ## apply corrections ##
+        df["annotation"] = [
+            correction_table[k] if k in correction_table else k
+            for k in df["annotation"]
+        ]
+
+        return BoxedAnnotations(df, self.audio_file)
 
 
 def combine(list_of_annotation_objects):
