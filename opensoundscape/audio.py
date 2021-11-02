@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 import warnings
 from math import ceil
+from opensoundscape.helpers import generate_clip_times_df
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -99,8 +100,7 @@ class Audio:
     ):
         """Load audio from files
 
-        Deal with the various possible input types to load an audio
-        file and generate a spectrogram
+        Deal with the various possible input types to load an audio file
 
         Args:
             path (str, Path): path to an audio file
@@ -241,10 +241,10 @@ class Audio:
         """Extend audio file by adding silence to the end
 
         Args:
-            length: the final length in seconds of the extended file
+            length: the final duration in seconds of the extended audio object
 
         Returns:
-            a new Audio object of the desired length
+            a new Audio object of the desired duration
         """
 
         total_samples_needed = round(length * self.sample_rate)
@@ -377,50 +377,27 @@ class Audio:
             )
 
         duration = self.duration()
+        clip_df = generate_clip_times_df(
+            full_duration=duration,
+            clip_duration=clip_duration,
+            clip_overlap=clip_overlap,
+            final_clip=final_clip,
+        )
 
-        # Lists of start and end times for clips
-        increment = clip_duration - clip_overlap
-        starts = np.arange(0, duration, increment)
-        ends = starts + clip_duration
-
-        # Remove final_clip if needed
-        if final_clip is None:
-            # Throw away any clips with end times beyond the duration
-            keeps = ends <= duration
-            ends = ends[keeps]
-            starts = starts[keeps]
-
-        # Now we have the starts and ends
-        final_idx = len(ends) - 1
-        clips = [None] * len(ends)
-        df = pd.DataFrame(columns=["start_time", "end_time"], data=[starts, ends])
-
-        for idx, (start, end) in enumerate(zip(starts, ends)):
-
-            # Change defaults to handle final clip
-            if idx >= final_idx:
-                if final_clip in ["remainder", "extend"]:
-                    end = duration
-                elif final_clip == "full":
-                    # extract a full clip that ends at the end of the audio file
-                    # this can result in up to ~100% overlap with previous clip
-                    start = duration - clip_duration
-                    end = duration
+        clips = [None] * len(clip_df)
+        for idx, (start, end) in enumerate(
+            zip(clip_df["start_time"], clip_df["end_time"])
+        ):
 
             # Trim the clip to desired range
             audio_clip = self.trim(start, end)
 
-            # Extend the final clip if needed
-            if (idx >= final_idx) & (final_clip == "extend"):
+            # Extend the final clip if necessary
+            if end > duration and final_clip == "extend":
                 audio_clip = audio_clip.extend(clip_duration)
 
-            # Add one clip to list of clips
+            # Add clip to list of clips
             clips[idx] = audio_clip
-            df.loc[idx] = {
-                "start_time": start,
-                "end_time": end,
-                "clip_duration": audio_clip.duration(),
-            }
 
         if len(clips) == 0:
             warnings.warn(
@@ -430,7 +407,7 @@ class Audio:
                 f"Returning empty list."
             )
 
-        return clips
+        return clips, clip_df
 
 
 def split_and_save(

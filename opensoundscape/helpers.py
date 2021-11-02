@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 
 def isNan(x):
@@ -14,6 +15,21 @@ def sigmoid(x):
 def bound(x, bounds):
     """ restrict x to a range of bounds = [min, max]"""
     return min(max(x, bounds[0]), bounds[1])
+
+
+def overlap(r1, r2):
+    """"calculate the amount of overlap between two real-numbered ranges"""
+    assert r1[1] > r1[0]
+    assert r2[1] > r2[0]
+    lower_bound = max(r1[0], r2[0])
+    upper_bound = min(r1[1], r2[1])
+    return max(0, upper_bound - lower_bound)
+
+
+def overlap_fraction(r1, r2):
+    """"calculate the fraction of r1 (low, high range) that overlaps with r2"""
+    ol = overlap(r1, r2)
+    return ol / (r1[1] - r1[0])
 
 
 def binarize(x, threshold):
@@ -127,3 +143,68 @@ def jitter(x, width, distribution="gaussian"):
     raise ValueError(
         f"distribution must be 'gaussian' or 'uniform'. Got {distribution}."
     )
+
+
+def generate_clip_times_df(
+    full_duration, clip_duration, clip_overlap=0, final_clip=None
+):
+    """generate start and end times for even-lengthed clips
+
+    The behavior for incomplete final clips at the end of the full_duration
+    depends on the final_clip parameter.
+
+    This function only creates a dataframe with start and end times, it does
+    not perform any actual trimming of audio or other objects.
+
+    Args:
+        full_duration: The amount of time (seconds) to split into clips
+        clip_duration (float):  The duration in seconds of the clips
+        clip_overlap (float):   The overlap of the clips in seconds [default: 0]
+        final_clip (str):       Behavior if final_clip is less than clip_duration
+            seconds long. By default, discards remaining time if less than
+            clip_duration seconds long [default: None].
+            Options:
+                - None:         Discard the remainder (do not make a clip)
+                - "extend":     Extend the final clip beyond full_duration to reach clip_duration length
+                - "remainder":  Use only remainder of full_duration (final clip will be shorter than clip_duration)
+                - "full":       Increase overlap with previous clip to yield a clip with clip_duration length
+    Returns:
+        clip_df: DataFrame with columns for 'start_time', 'end_time', and
+        'clip_duration' of each clip (which may differ from `clip_duration`
+        argument for final clip only)
+
+    Note: using "remainder" or "full" with clip_overlap>0 is not recommended.
+    This combination may result in several duplications of the same final clip.
+    """
+    if not final_clip in ["remainder", "full", "extend", None]:
+        raise ValueError(
+            f"final_clip must be 'remainder', 'full', 'extend',"
+            f"or None. Got {final_clip}."
+        )
+
+    # Lists of start and end times for clips
+    increment = clip_duration - clip_overlap
+    starts = np.arange(0, full_duration, increment)
+    ends = starts + clip_duration
+
+    # Handle the final_clip
+    if final_clip is None:
+        # Throw away any clips with end times beyond full_duration
+        keeps = ends <= full_duration
+        ends = ends[keeps]
+        starts = starts[keeps]
+    elif final_clip == "remainder":
+        # Trim clips with end times beyond full_duration to full_duration
+        ends[ends > full_duration] = full_duration
+    elif final_clip == "full":
+        # Increase the overlap of any clips with end_time past full_duration
+        # so that they end at full_duration
+        # can result in duplicates of the same final_clip
+        clip_idxs_to_shift = ends > full_duration
+        starts[clip_idxs_to_shift] -= ends[clip_idxs_to_shift] - full_duration
+        ends[clip_idxs_to_shift] = full_duration
+    elif final_clip == "extend":
+        # Keep the end values that extend beyond full_duration
+        pass
+
+    return pd.DataFrame({"start_time": starts, "end_time": ends})
