@@ -9,9 +9,11 @@ from opensoundscape.preprocess.preprocessors import (
     CnnPreprocessor,
     AudioLoadingPreprocessor,
     PreprocessingError,
+    LongAudioPreprocessor,
 )
 from PIL import Image
 import warnings
+import torch
 
 
 @pytest.fixture()
@@ -120,3 +122,21 @@ def test_cnn_preprocessor_fails_on_short_file(dataset_df):
     dataset = CnnPreprocessor(dataset_df, audio_length=5.0)
     with pytest.raises(PreprocessingError):
         sample = dataset[1]["X"]
+
+
+def test_long_audio_dataset():
+    df = pd.DataFrame(index=["tests/audio/1min.wav"])
+    ds = LongAudioPreprocessor(
+        df, audio_length=5.0, clip_overlap=0.0, out_shape=[224, 224]
+    )
+    superbatch = ds[0]
+    assert superbatch["X"].shape == torch.Size([12, 3, 224, 224])
+
+
+def test_long_audio_dataset_fails_on_short_audio():
+    df = pd.DataFrame(index=["tests/audio/veryshort.wav"])
+    ds = LongAudioPreprocessor(
+        df, audio_length=5.0, clip_overlap=3, out_shape=[224, 224]
+    )
+    with pytest.raises(PreprocessingError):
+        superbatch = ds[0]

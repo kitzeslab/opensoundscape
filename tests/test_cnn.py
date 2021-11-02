@@ -1,4 +1,7 @@
-from opensoundscape.preprocess.preprocessors import CnnPreprocessor
+from opensoundscape.preprocess.preprocessors import (
+    CnnPreprocessor,
+    LongAudioPreprocessor,
+)
 from opensoundscape.torch.models.cnn import (
     PytorchModel,
     Resnet18Multiclass,
@@ -23,6 +26,14 @@ def train_dataset():
         columns=["negative", "positive"],
     )
     return CnnPreprocessor(df, overlay_df=None)
+
+
+@pytest.fixture()
+def long_audio_dataset():
+    df = pd.DataFrame(index=["tests/audio/1min.wav"])
+    return LongAudioPreprocessor(
+        df, audio_length=5.0, clip_overlap=0.0, out_shape=[224, 224]
+    )
 
 
 @pytest.fixture()
@@ -129,3 +140,12 @@ def test_train_predict_architecture(train_dataset):
     model.save(model_path)
     assert model_path.exists()
     shutil.rmtree("tests/models/multiclass/")
+
+
+def test_split_and_predict(long_audio_dataset):
+    binary = Resnet18Binary(classes=["negative", "positive"])
+    scores, preds, _ = binary.split_and_predict(
+        long_audio_dataset, binary_preds="single_target"
+    )
+    assert len(scores) == 12
+    assert len(preds) == 12
