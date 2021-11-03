@@ -9,18 +9,18 @@ import numpy as np
 
 
 class BoxedAnnotations:
-    """ container for frequency-time annotations of audio
+    """ container for "boxed" (frequency-time) annotations of audio
 
-    for instance, those created in Raven software
+    (for instance, annotations created in Raven software)
     includes functionality to load annotations from Raven txt files,
     output one-hot labels for specific clip lengths or clip start/end times,
-    apply corrections to annotations, and more.
+    apply corrections/conversions to annotations, and more.
 
     Contains some analogous functions to Audio and Spectrogram, such as
     trim() [limit time range] and bandpass() [limit frequency range]
     """
 
-    def __init__(self, df, audio_file=None):  # ,corrections_dict=None):
+    def __init__(self, df, audio_file=None):
         """
         create object directly from DataFrame of frequency-time annotations
 
@@ -31,17 +31,18 @@ class BoxedAnnotations:
                 - "annotation": string or numeric labels (can be None/nan)
                 - "start_time": left bound, sec since beginning of audio
                 - "end_time": right bound, sec since beginning of audio
-                - "low_f": upper frequency bound (can be None/nan)
-                - "high_f": upper frequency bound (can be None/nan)
+                - "low_f": upper frequency bound (values can be None/nan)
+                - "high_f": upper frequency bound (values can be None/nan)
             audio_file: optionally include the name or path of corresponding
 
         Returns:
             BoxedAnnotations object
         """
         for col in ["annotation", "start_time", "end_time", "low_f", "high_f"]:
-            assert (
-                col in df.columns
-            ), 'df columns must include all of these: ["annotation","start_time","end_time","low_f","high_f"]'
+            assert col in df.columns, (
+                "df columns must include all of these:"
+                ' ["annotation","start_time","end_time","low_f","high_f"]'
+            )
         self.df = df
         self.audio_file = audio_file
 
@@ -52,8 +53,19 @@ class BoxedAnnotations:
         """load annotations from Raven txt file
 
         Args:
-            keep_extra_columns: True (all), False (none), or iterable of specific columns to keep
-            - always includes start_time, end_time, low_f, high_f, annotation
+            path: location of raven .txt file
+            annotation_column: (str) column containing annotations
+            keep_extra_columns: keep or discard extra Raven file columns
+                (always keeps start_time, end_time, low_f, high_f, annotation
+                audio_file). [default: True]
+                - True: keep all
+                - False: keep none
+                - or iterable of specific columns to keep
+            audio_file: optionally specify the name or path of a corresponding
+                audio file.
+
+        Returns:
+            BoxedAnnotations object containing annotaitons from the Raven file
         """
         df = pd.read_csv(path, delimiter="\t")
         df = df.rename(
@@ -81,11 +93,35 @@ class BoxedAnnotations:
         return cls(df=df, audio_file=audio_file)
 
     def to_raven_file(self, path):
-        """save annotations in Raven-style tab-separated text file"""
-        raise NotImplementedError
+        """save annotations to a Raven-compatible tab-separated text file
+
+        Args:
+            path: path for saved test file (extension must be ".tsv")
+
+        Outcomes:
+            creates a file containing the annotations in a format compatible
+            with Raven Pro/Lite.
+
+        Note: Raven Lite does not support additional columns beyond a single
+        annotation column. Additional columns will not be shown in the Raven
+        Lite interface.
+        """
+        assert path[-4:] == ".txt", "file extension must be .txt"
+
+        df = self.df.copy().rename(
+            columns={
+                "start_time": "Begin Time (s)",
+                "end_time": "End Time (s)",
+                "low_f": "Low Freq (Hz)",
+                "high_f": "High Freq (Hz)",
+            }
+        )
+        df.to_csv(path, sep="\t", index=False)
 
     def to_csv(self, path):
-        """save annotations in csv file"""
+        """save annotations in csv file
+        Not Implemented
+        """
         raise NotImplementedError
 
     def trim(self, start_time, end_time, edge_mode="trim"):
@@ -155,11 +191,10 @@ class BoxedAnnotations:
         Returns:
             a copy of the BoxedAnnotations object on the bandpassed region
         """
-        assert edge_mode in [
-            "trim",
-            "keep",
-            "remove",
-        ], f"invalid edge_mode argument: {edge_mode} (must be 'trim','keep', or 'remove')"
+        assert edge_mode in ["trim", "keep", "remove"], (
+            f"invalid edge_mode"
+            f"argument: {edge_mode} (must be 'trim','keep', or 'remove')"
+        )
         assert low_f >= 0, "low_f must be non-negative"
         assert high_f > low_f, "high_f be > low_f"
 
@@ -185,15 +220,23 @@ class BoxedAnnotations:
 
         return BoxedAnnotations(df, self.audio_file)
 
-    def one_hot_labels_dict(classes=None):
-        """get a dictionary of one-hot labels for entire duration
+    def unique_labels(self):
+        """get list of all unique (non-Falsy) labels"""
+        return np.unique(self.df.dropna(subset=["annotation"])["annotation"])
 
-        classes=None: keep all classes (or: iterable of classes to keep)
+    def one_hot_labels(self, classes):
+        """get a dictionary of one-hot labels for entire duration
+        Args:
+            classes: iterable of class names to give 0/1 labels)
+
+        Returns:
+            list of 0/1 labels for each class
         """
-        raise NotImplementedError
+        all_labels = self.unique_labels()
+        return [int(c in all_labels) for c in classes]
 
     def one_hot_labels_like(
-        self, clip_df, min_label_overlap, classes=None, max_ignored_label_fraction=1
+        self, clip_df, min_label_overlap, min_label_fraction=None, classes=None
     ):
         """create a dataframe of one-hot clip labels based on given starts/ends
 
@@ -205,13 +248,30 @@ class BoxedAnnotations:
 
         clip_df can be created using opensoundscap.helpers.generate_clip_times_df
 
+        Args:
+            clip_df: dataframe with 'start_time' and 'end_time' columns
+                specifying the temporal bounds of each clip
+            min_label_overlap: minimum duration (seconds) of annotation within the
+                time interval for it to count as a label. Note that any annotation
+                of length less than this value will be discarded.
+                We recommend a value of 0.25 for typical bird songs, or shorter
+                values for very short-duration events such as chip calls or
+                nocturnal flight calls.
+            min_label_fraction: [default: None] if >= this fraction of an annotation
+                overlaps with the time window, it counts as a label regardless of
+                its duration. Note that *if either* of the two
+                criterea (overlap and fraction) is met, the label is 1.
+                if None (default), this criterion is not used (i.e., only min_label_overlap
+                is used). A value of 0.5 for ths parameter would ensure that all
+                annotations result in at least one clip being labeled 1
+                (if there are no gaps between clips).
+            classes: list of classes for one-hot labels. If None (default),
+                creates one-hot labels for unique values of self.df['annotation']
 
-        min_label_overlap, #seconds, required
-        max_ignored_label_fraction=1, #fraction of label that overlaps with clip
-        #if >= this fraction of label is on this clip, will be included even
-        #if the min_label_overlap length (seconds) is not met. <=0.5 will
-        #ensure that all of the original labels end up on at least one clip.
-        classes=None,#None->keep all (or, provide list):
+        Returns:
+            DataFrame of one-hot labels (multi-index of (start_time, end_time),
+            columns for each class, values 0=absent or 1=present)
+
         """
         # drop nan annotations
         df = self.df.dropna(subset=["annotation"])
@@ -233,7 +293,7 @@ class BoxedAnnotations:
                 start_time=start,
                 end_time=end,
                 min_label_overlap=min_label_overlap,
-                max_ignored_label_fraction=max_ignored_label_fraction,
+                min_label_fraction=min_label_fraction,
                 classes=classes,
             )
         return clip_df
@@ -246,7 +306,7 @@ class BoxedAnnotations:
         final_clip,
         min_label_overlap,
         classes=None,
-        max_ignored_label_fraction=1,
+        min_label_fraction=1,
     ):
         """Generate one-hot labels for clips of fixed duration
 
@@ -265,56 +325,59 @@ class BoxedAnnotations:
         )
         # then create 0/1 labels for each clip and each class
         return self.one_hot_labels_like(
-            clip_df, min_label_overlap, classes, max_ignored_label_fraction
+            clip_df, min_label_overlap, classes, min_label_fraction
         )
 
-    def apply_corrections(self, correction_table):
-        """modify annotations according to a correction table
+    def convert_labels(self, conversion_table):
+        """modify annotations according to a conversion table
 
         Changes the values of 'annotation' column of dataframe.
+        Any labels that do not have specified conversions are left unchanged.
 
         Returns a new BoxedAnnotations object, does not modify itself
         (out-of-place operation). So use could look like:
-        `my_annotations = my_annotations.apply_corrections(table)`
+        `my_annotations = my_annotations.convert_labels(table)`
 
         Args:
-            correction_table: current values -> new values. can be either
+            conversion_table: current values -> new values. can be either
                 - pd.DataFrame with 2 columns [current value, new values] or
                 - dictionary {current values: new values}
         Returns:
-            new BoxedAnnotations object
+            new BoxedAnnotations object with converted annotation labels
+
         """
         df = self.df.copy()
 
-        ## handle two input types for correction_table ##
+        ## handle two input types for conversion_table ##
         if (
-            type(correction_table) == pd.DataFrame
-            and len(correction_table.columns) == 2
+            type(conversion_table) == pd.DataFrame
+            and len(conversion_table.columns) == 2
         ):
             # check that keys are unique
-            keys = correction_table.values[:, 0]
+            keys = conversion_table.values[:, 0]
             assert len(set(keys)) == len(
                 keys
-            ), "keys of correction table must be unique"
+            ), "keys of conversion_table must be unique"
             # convert df to dictionary
-            correction_table = {a: b for a, b in correction_table.values}
-        elif type(correction_table) != dict:
+            conversion_table = {a: b for a, b in conversion_table.values}
+        elif type(conversion_table) != dict:
             raise TypeError(
-                "correction table must be dict or pd.DataFrame with 2 columns."
+                "conversion_table must be dict or pd.DataFrame with 2 columns."
             )
 
         ## input validation ##
         # keys and values should not overlap
-        keys_in_values = set(correction_table).intersection(
-            set(correction_table.values())
+        keys_in_values = set(conversion_table).intersection(
+            set(conversion_table.values())
         )
-        assert (
-            len(keys_in_values) == 0
-        ), f"These correction table keys and values overlap: {keys_in_values}"
+        assert len(keys_in_values) == 0, (
+            f"conversion_table keys and values"
+            f"should not overlap. Overlapping values: {keys_in_values}"
+        )
 
-        ## apply corrections ##
+        ## apply conversions ##
         df["annotation"] = [
-            correction_table[k] if k in correction_table else k
+            conversion_table[k] if k in conversion_table else k
             for k in df["annotation"]
         ]
 
@@ -322,32 +385,57 @@ class BoxedAnnotations:
 
 
 def combine(list_of_annotation_objects):
-    """combine annotations with user specified preferences"""
+    """combine annotations with user-specified preferences
+    Not Implemented.
+    """
 
     raise NotImplementedError
 
 
 def diff(base_annotations, comparison_annotations):
     """ look at differences between two BoxedAnnotations objects
+    Not Implemented.
+
+    Compare different labels of the same boxes
+    (Assumes that a second annotator used the same boxes as the first,
+    but applied new labels to the boxes)
     """
     raise NotImplementedError
 
 
 def one_hot_labels_on_time_interval(
     df,  # annotations df with columns: start_time, end_time, annotation
-    start_time,  # sec since beginning of audio
-    end_time,  # sec since beginning of audio
-    min_label_overlap,  # seconds, required
-    max_ignored_label_fraction=0.5,  # fraction of label that overlaps with clip
-    # if >= this fraction of label is on this clip, will be included even
-    # if the min_label_overlap length (seconds) is not met. <=0.5 will
-    # ensure that all of the original labels end up on at least one clip.
-    classes=None,  # None->keep all (or, provide list):
+    start_time,
+    end_time,
+    min_label_overlap,
+    min_label_fraction=None,
+    classes=None,
 ):
     """generate a dictionary of one-hot labels for given time-interval
 
-    TODO: definitly sub-optimal computationally (keeps filtering the df
-    over and over for each clip). Worth optimizing?
+    Each class is labeled 1 if any annotation overlaps sufficiently with the
+    time interval. Otherwise the class is labeled 0.
+
+    Args:
+        df: DataFrame with columns 'start_time', 'end_time' and 'annotation'
+        start_time: beginning of time interval (seconds)
+        end_time: end of time interval (seconds)
+        min_label_overlap: minimum duration (seconds) of annotation within the
+            time interval for it to count as a label. Note that any annotation
+            of length less than this value will be discarded.
+            We recommend a value of 0.25 for typical bird songs, or shorter
+            values for very short-duration events such as chip calls or
+            nocturnal flight calls.
+        min_label_fraction: [default: None] if >= this fraction of an annotation
+            overlaps with the time window, it counts as a label regardless of
+            its duration. Note that *if either* of the two
+            criterea (overlap and fraction) is met, the label is 1.
+            if None (default), the criterion is not used (only min_label_overlap
+            is used). A value of 0.5 would ensure that all annotations result
+            in at least one clip being labeled 1 (if no gaps between clips).
+
+    Returns:
+        dictionary of {class:label 0/1} for all classes
     """
 
     # calculate amount of overlap of each clip with this time window
@@ -357,6 +445,7 @@ def one_hot_labels_on_time_interval(
     ]
     # discard annotations that do not overlap with the time window
     df = df[df["overlap"] > 0]
+
     # calculate the fraction of each annotation that overlaps with this time window
     df["overlap_fraction"] = [
         overlap_fraction([t0, t1], [start_time, end_time])
@@ -371,14 +460,17 @@ def one_hot_labels_on_time_interval(
         if len(df_cls) == 0:
             continue  # no annotations, leave it as zero
 
-        # if any annotation overlaps by >= max_ignored_label_fraction
-        # with the time interval, clip is labeled 1
-        if max(df_cls.overlap_fraction) >= max_ignored_label_fraction:
+        # add label=1 if any annotation overlaps with the clip by >= min_overlap
+        if max(df_cls.overlap) >= min_label_overlap:
             one_hot_labels[i] = 1
-        # or if any annotation overlaps with the clip by >= min_overlap, label=1
-        elif max(df_cls.overlap) >= min_label_overlap:
+
+        elif (  # add label=1 if annotation's overlap exceeds minimum fraction
+            min_label_fraction is not None
+            and max(df_cls.overlap_fraction) >= min_label_fraction
+        ):
             one_hot_labels[i] = 1
-        # otherwise, we leave the label as 0
+        else:  # otherwise, we leave the label as 0
+            pass
 
     # return a dictionary mapping classes to 0/1 labels
     return {c: l for c, l in zip(classes, one_hot_labels)}
