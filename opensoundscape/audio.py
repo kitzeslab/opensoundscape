@@ -437,7 +437,7 @@ def split_and_save(
         dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
 
     Returns:
-        pandas.DataFrame containing paths and begin and end times for each clip
+        pandas.DataFrame containing paths and start and end times for each clip
     """
 
     clips, df = audio.split(
@@ -445,7 +445,7 @@ def split_and_save(
     )
     clip_names = []
     for i, clip in enumerate(clips):
-        start_t = df.at[i, "begin_time"]
+        start_t = df.at[i, "start_time"]
         end_t = df.at[i, "end_time"]
         clip_name = f"{destination}/{prefix}_{start_t}s_{end_t}s.wav"
         clip_names.append(clip_name)
@@ -453,4 +453,5 @@ def split_and_save(
             clip.save(clip_name)
 
     df.index = clip_names
+    df.index.name = "file"
     return df
