@@ -275,7 +275,7 @@ class LongAudioPreprocessor(BasePreprocessor):
             clip_df = pd.DataFrame(
                 index=[[df_row.name] * len(audio_clips), start_times, end_times]
             )
-            clip_df.index.names = ["file", "start_t", "end_t"]
+            clip_df.index.names = ["file", "start_time", "end_time"]
 
             # Third, for each audio segment, run the rest of the pipeline and store the output
             outputs = [None for _ in range(len(audio_clips))]
