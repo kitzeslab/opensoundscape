@@ -320,7 +320,6 @@ def test_non_integer_source_split_and_save_full(silence_10s_mp3_pathlib):
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert abs(clip_df.iloc[1]["start_time"] - 3.2) < 0.1
     assert abs(clip_df.iloc[1]["end_time"] - 8.2) < 0.1
-    assert clip_df.iloc[1]["clip_duration"] == 5.0
 
 
 def test_non_integer_source_split_and_save_extend(silence_10s_mp3_pathlib):
@@ -332,7 +331,7 @@ def test_non_integer_source_split_and_save_extend(silence_10s_mp3_pathlib):
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert clip_df.iloc[1]["start_time"] == 5.0
-    assert (clip_df.iloc[1]["end_time"] - 8.2) < 0.1
+    assert (clip_df.iloc[1]["end_time"] - 10.0) < 0.1
 
 
 def test_non_integer_cliplen_split_and_save(silence_10s_mp3_pathlib):
