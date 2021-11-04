@@ -46,6 +46,9 @@ class BoxedAnnotations:
         self.df = df
         self.audio_file = audio_file
 
+    def __repr__(self):
+        return f"<opensoundscape.annotations.BoxedAnnotation object with audio_file={self.audio_file}.>"
+
     @classmethod
     def from_raven_file(
         cls, path, annotation_column, keep_extra_columns=True, audio_file=None
@@ -227,7 +230,7 @@ class BoxedAnnotations:
     def one_hot_labels(self, classes):
         """get a dictionary of one-hot labels for entire duration
         Args:
-            classes: iterable of class names to give 0/1 labels)
+            classes: iterable of class names to give 0/1 labels
 
         Returns:
             list of 0/1 labels for each class
@@ -236,7 +239,12 @@ class BoxedAnnotations:
         return [int(c in all_labels) for c in classes]
 
     def one_hot_labels_like(
-        self, clip_df, min_label_overlap, min_label_fraction=None, classes=None
+        self,
+        clip_df,
+        classes,
+        min_label_overlap,
+        min_label_fraction=None,
+        keep_index=False,
     ):
         """create a dataframe of one-hot clip labels based on given starts/ends
 
@@ -265,13 +273,14 @@ class BoxedAnnotations:
                 is used). A value of 0.5 for ths parameter would ensure that all
                 annotations result in at least one clip being labeled 1
                 (if there are no gaps between clips).
-            classes: list of classes for one-hot labels. If None (default),
-                creates one-hot labels for unique values of self.df['annotation']
+            classes: list of classes for one-hot labels. If None, classes will
+                be all unique values of self.df['annotation']
+            keep_index: if True, keeps the index of clip_df as an index
+                in the returned DataFrame. [default:False]
 
         Returns:
             DataFrame of one-hot labels (multi-index of (start_time, end_time),
             columns for each class, values 0=absent or 1=present)
-
         """
         # drop nan annotations
         df = self.df.dropna(subset=["annotation"])
@@ -281,6 +290,11 @@ class BoxedAnnotations:
         else:  # the user specified a list of classes
             # subset annotations to user-specified classes
             df = df[df["annotation"].apply(lambda x: x in classes)]
+
+        # if we want to keep the original index, the best way is
+        # to store it and add again later
+        if keep_index:
+            og_idx = clip_df.index
 
         # the clip_df should have ['start_time','end_time'] in columns
         clip_df = clip_df.set_index(["start_time", "end_time"])
@@ -296,6 +310,13 @@ class BoxedAnnotations:
                 min_label_fraction=min_label_fraction,
                 classes=classes,
             )
+
+        # re-add the original index, if desired
+        if keep_index:
+            old_idx = clip_df.index.to_frame()
+            old_idx.insert(0, og_idx.name, og_idx.values)
+            clip_df.index = pd.MultiIndex.from_frame(old_idx)
+
         return clip_df
 
     def one_hot_clip_labels(
@@ -303,29 +324,62 @@ class BoxedAnnotations:
         full_duration,
         clip_duration,
         clip_overlap,
-        final_clip,
+        classes,
         min_label_overlap,
-        classes=None,
         min_label_fraction=1,
+        final_clip=None,
     ):
         """Generate one-hot labels for clips of fixed duration
 
-        wraps generate_clip_times_df() with self.one_hot_labels_like():
-        - Clips are created in the same way as audio.split()
-        - Labels are applied based on overlap, as in self.one_hot_labels_like()
+        wraps helpers.generate_clip_times_df() with self.one_hot_labels_like()
+        - Clips are created in the same way as Audio.split()
+        - Labels are applied based on overlap, using self.one_hot_labels_like()
 
         Args:
-
+            full_duration: The amount of time (seconds) to split into clips
+            clip_duration (float):  The duration in seconds of the clips
+            clip_overlap (float):   The overlap of the clips in seconds [default: 0]            classes: list of classes for one-hot labels. If None, classes will
+                be all unique values of self.df['annotation']
+            classes: list of classes for one-hot labels. If None, classes will
+                be all unique values of self.df['annotation']
+            min_label_overlap: minimum duration (seconds) of annotation within the
+                time interval for it to count as a label. Note that any annotation
+                of length less than this value will be discarded.
+                We recommend a value of 0.25 for typical bird songs, or shorter
+                values for very short-duration events such as chip calls or
+                nocturnal flight calls.
+            min_label_fraction: [default: None] if >= this fraction of an annotation
+                overlaps with the time window, it counts as a label regardless of
+                its duration. Note that *if either* of the two
+                criterea (overlap and fraction) is met, the label is 1.
+                if None (default), this criterion is not used (i.e., only min_label_overlap
+                is used). A value of 0.5 for ths parameter would ensure that all
+                annotations result in at least one clip being labeled 1
+                (if there are no gaps between clips).
+            final_clip (str):       Behavior if final_clip is less than clip_duration
+                seconds long. By default, discards remaining time if less than
+                clip_duration seconds long [default: None].
+                Options:
+                    - None:         Discard the remainder (do not make a clip)
+                    - "extend":     Extend the final clip beyond full_duration to reach clip_duration length
+                    - "remainder":  Use only remainder of full_duration (final clip will be shorter than clip_duration)
+                    - "full":       Increase overlap with previous clip to yield a clip with clip_duration length
         Returns:
             dataframe with index ['start_time','end_time'] and columns=classes
         """
         # generate list of start and end times for each clip
         clip_df = generate_clip_times_df(
-            full_duration, clip_duration, clip_overlap, final_clip
+            full_duration=full_duration,
+            clip_duration=clip_duration,
+            clip_overlap=clip_overlap,
+            final_clip=final_clip,
         )
         # then create 0/1 labels for each clip and each class
         return self.one_hot_labels_like(
-            clip_df, min_label_overlap, classes, min_label_fraction
+            clip_df=clip_df,
+            classes=classes,
+            min_label_overlap=min_label_overlap,
+            min_label_fraction=min_label_fraction,
         )
 
     def convert_labels(self, conversion_table):
@@ -404,12 +458,7 @@ def diff(base_annotations, comparison_annotations):
 
 
 def one_hot_labels_on_time_interval(
-    df,  # annotations df with columns: start_time, end_time, annotation
-    start_time,
-    end_time,
-    min_label_overlap,
-    min_label_fraction=None,
-    classes=None,
+    df, classes, start_time, end_time, min_label_overlap, min_label_fraction=None
 ):
     """generate a dictionary of one-hot labels for given time-interval
 
@@ -418,6 +467,8 @@ def one_hot_labels_on_time_interval(
 
     Args:
         df: DataFrame with columns 'start_time', 'end_time' and 'annotation'
+        classes: list of classes for one-hot labels. If None, classes will
+            be all unique values of self.df['annotation']
         start_time: beginning of time interval (seconds)
         end_time: end of time interval (seconds)
         min_label_overlap: minimum duration (seconds) of annotation within the
@@ -439,23 +490,24 @@ def one_hot_labels_on_time_interval(
     """
 
     # calculate amount of overlap of each clip with this time window
-    df["overlap"] = [
+    df.loc[:, "overlap"] = [
         overlap([start_time, end_time], [t0, t1])
-        for t0, t1 in zip(df.start_time, df.end_time)
+        for t0, t1 in zip(df["start_time"], df["end_time"])
     ]
+
     # discard annotations that do not overlap with the time window
-    df = df[df["overlap"] > 0]
+    df = df[df["overlap"] > 0].reset_index()
 
     # calculate the fraction of each annotation that overlaps with this time window
-    df["overlap_fraction"] = [
+    df.loc[:, "overlap_fraction"] = [
         overlap_fraction([t0, t1], [start_time, end_time])
-        for t0, t1 in zip(df.start_time, df.end_time)
+        for t0, t1 in zip(df["start_time"], df["end_time"])
     ]
 
     one_hot_labels = [0] * len(classes)
     for i, c in enumerate(classes):
         # subset annotations to those of this class
-        df_cls = df[df.annotation == c]
+        df_cls = df[df["annotation"] == c]
 
         if len(df_cls) == 0:
             continue  # no annotations, leave it as zero
