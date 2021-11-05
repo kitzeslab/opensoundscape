@@ -7,7 +7,7 @@ from scipy import signal
 import numpy as np
 
 # local imports
-from opensoundscape.helpers import isNan, bound
+from opensoundscape.helpers import isNan, bound, generate_clip_times_df
 
 
 def calculate_pulse_score(
@@ -69,27 +69,45 @@ def calculate_pulse_score(
 
 
 def ribbit(
-    spectrogram, signal_band, pulse_rate_range, window_len, noise_bands=None, plot=False
+    spectrogram,
+    signal_band,
+    pulse_rate_range,
+    clip_duration,
+    clip_overlap=0,
+    final_clip=None,
+    noise_bands=None,
+    plot=False,
 ):
     """Run RIBBIT detector to search for periodic calls in audio
 
     This tool searches for periodic energy fluctuations at specific repetition rates and frequencies.
 
+
     Args:
         spectrogram: opensoundscape.Spectrogram object of an audio file
         signal_band: [min, max] frequency range of the target species, in Hz
         pulse_rate_range: [min,max] pulses per second for the target species
-        windo_len: the length of audio (in seconds) to analyze at one time
-                    - one RIBBIT score is produced for each window
-        noise_bands: list of frequency bands to subtract from the desired signal_band
-                    For instance: [ [min1,max1] , [min2,max2] ]
-                    - if `None`, no noise bands are used
-                    - default: None
-        plot=False : if True, plot the power spectral density for each window
+        clip_duration: the length of audio (in seconds) to analyze at one time
+            - each clip is analyzed independently and recieves a ribbit score
+        clip_overlap (float):   overlap between consecutive clips (sec)
+        final_clip (str):       behavior if final clip is less than clip_duration
+            seconds long. By default, discards remaining audio if less than
+            clip_duration seconds long [default: None].
+            Options:
+            - None:         Discard the remainder (do not make a clip)
+            - "remainder":  Use only remainder of Audio (final clip will be shorter than clip_duration)
+            - "full":       Increase overlap with previous clip to yield a clip with clip_duration length
+            Note that the "extend" option is not supported for RIBBIT.
+
+        noise_bands: list of frequency ranges to subtract from the signal_band
+            For instance: [ [min1,max1] , [min2,max2] ]
+            - if `None`, no noise bands are used
+            - default: None
+        plot=False: if True, plot the power spectral density for each clip
 
     Returns:
-        array of pulse_score: pulse score (float) for each time window
-        array of time: start time of each window
+        DataFrame of index=('start_time','end_time'), columns=['score'],
+        with a row for each clip.
 
     Notes
     -----
@@ -103,171 +121,59 @@ def ribbit(
 
     **Pulse Rate Range:** This parameters specifies the minimum and maximum pulse rate (the number of pulses per second, also known as pulse repetition rate) RIBBIT should look for to find the focal species. For example, choosing `pulse_rate_range = [10, 20]` means that RIBBIT should look for pulses no slower than 10 pulses per second and no faster than 20 pulses per second.
 
-    **Window Length:** This parameter tells RIBBIT how many seconds of audio to analyze at one time. Generally, you should choose a `window_length` that is similar to the length of the target species vocalization, or a little bit longer. For very slowly pulsing vocalizations, choose a longer window so that at least 5 pulses can occur in one window (0.5 pulses per second -> 10 second window). Typical values for `window_length` are 1 to 10 seconds.
+    **Clip Duration:** The `clip_duration` parameter tells RIBBIT how many seconds of audio to analyze at one time. Generally, you should choose a `clip_length` that is similar to the length of the target species vocalization, or a little bit longer. For very slowly pulsing vocalizations, choose a longer window so that at least 5 pulses can occur in one window (0.5 pulses per second -> 10 second window). Typical values for are 0.3 to 10 seconds.
+    Also, `clip_overlap` can be used for overlap between sequential clips. This
+    is more computationally expensive but will be more likely to center a target
+    sound in the clip (with zero overlap, the target sound may be split up between
+    adjascent clips).
 
     **Plot:** We can choose to show the power spectrum of pulse repetition rate for each window by setting `plot=True`. The default is not to show these plots (`plot=False`).
 
     __ALGORITHM__
     This is the procedure RIBBIT follows:
-    divide the audio into segments of length window_len
+    divide the audio into segments of length clip_duration
     for each clip:
         calculate time series of energy in signal band (signal_band) and subtract noise band energies (noise_bands)
         calculate power spectral density of the amplitude time series
-        score the file based on the maximum value of power-spectral-density in the pulse rate range
+        score the file based on the maximum value of power spectral density in the pulse rate range
 
     """
-
-    # Make a 1d amplitude signal in a frequency range, subtracting energy in noise bands
-    amplitude = spectrogram.net_amplitude(signal_band, noise_bands)
-
-    # next we split the spec into "windows" to analyze separately: (no overlap for now)
-    sample_frequency_of_spec = (
-        1.0 / spectrogram.window_length()
-    )  # in Hz, 1/delta-t between consecutive windows
-    n_samples_per_window = int(window_len * sample_frequency_of_spec)
-    signal_len = len(amplitude)
-
-    start_sample = 0
-    pulse_scores = []
-    window_start_times = []
-
-    # step through the file, analyzing in pieces that are window_len long, saving scores and start times for each window
-    while start_sample + n_samples_per_window < signal_len - 1:
-        end_sample = start_sample + n_samples_per_window
-        if end_sample < signal_len:
-            window = amplitude[start_sample:end_sample]
-        else:
-            final_start_sample = max(0, signal_len - n_samples_per_window)
-            window = amplitude[final_start_sample:signal_len]
-
-        if plot:
-            print(
-                f"window: {'{:.4f}'.format(start_sample/sample_frequency_of_spec)} sec to {'{:.4f}'.format(end_sample/sample_frequency_of_spec)} sec"
-            )
-        # Make psd (Power spectral density or power spectrum of x) and find max
-        pulse_score = calculate_pulse_score(
-            window, sample_frequency_of_spec, pulse_rate_range, plot
+    if final_clip == "extend":
+        raise ValuseError(
+            "final_clip='extend' is not supported for RIBBIT. "
+            "consider using 'remainder'."
         )
 
-        # save results
-        pulse_scores.append(pulse_score)
-        window_start_times.append(start_sample / sample_frequency_of_spec)
+    # Make a 1d amplitude signal from signal_band & subtract amplitude from noise bands
+    amplitude = np.array(spectrogram.net_amplitude(signal_band, noise_bands))
+    time = spectrogram.times
+    # we calculate the sample rate of the amplitude signal using the difference
+    # in time between columns of the Spectrogram
+    sample_rate = 1 / spectrogram.window_step()
 
-        # update start_sample
-        start_sample = (
-            end_sample
-        )  # end sample was excluded so use it as first sample in next window
-
-    return pulse_scores, window_start_times
-
-
-def pulse_finder_species_set(spec, species_df, window_len="from_df", plot=False):
-    """ perform windowed pulse finding (ribbit) on one file for each species in a set
-
-    Args:
-        spec: opensoundscape.Spectrogram object
-        species_df: a dataframe describing species by their pulsed calls.
-            columns: species | pulse_rate_low (Hz)| pulse_rate_high (Hz) | low_f (Hz)| high_f (Hz)| reject_low (Hz)| reject_high (Hz) |
-                    window_length (sec) (optional) | reject_low2 (opt) | reject_high2 |
-        window_len: length of analysis window, in seconds.
-                    Or 'from_df' (default): read from dataframe.
-                    or 'dynamic': adjust window size based on pulse_rate
-
-    Returns:
-        the same dataframe with a "score" (max score) column and "time_of_score" column
-    """
-
-    species_df = species_df.copy()
-    species_df = species_df.set_index(species_df.columns[0], drop=True)
-
-    species_df["score"] = [[] for i in range(len(species_df))]
-    species_df["t"] = [[] for i in range(len(species_df))]
-    species_df["max_score"] = [np.nan for i in range(len(species_df))]
-
-    for i, row in species_df.iterrows():
-
-        # we can't analyze pulse rates of 0 or NaN
-        if isNan(row.pulse_rate_low) or row.pulse_rate_low == 0:
-            # cannot analyze
-            continue
-
-        pulse_rate_range = [row.pulse_rate_low, row.pulse_rate_high]
-
-        if window_len == "from_df":
-            window_len = row.window_length
-        elif window_len == "dynamic":
-            # dynamically choose the window length based on the species pulse-rate
-            # try to capture ~4-10 pulses
-            min_len = 0.5  # sec
-            max_len = 10  # sec
-            target_n_pulses = 5
-            window_len = bound(
-                target_n_pulses / pulse_rate_range[0], [min_len, max_len]
-            )
-        # otherwise, use the numerical value provided for window length
-
-        signal_band = [row.low_f, row.high_f]  # changed from low_f, high_f
-
-        noise_bands = None
-        if not isNan(row.reject_low):
-            noise_bands = [[row.reject_low, row.reject_high]]
-            if "reject_low2" in species_df.columns and not isNan(row.reject_low2):
-                noise_bands.append([row.reject_low2, row.reject_high2])
-
-        # score this species for each window using ribbit
-        if plot:
-            print(f"{row.name}")
-        pulse_scores, window_start_times = ribbit(
-            spec, signal_band, pulse_rate_range, window_len, noise_bands, plot
-        )
-
-        # add the scores to the species df
-        species_df.at[i, "score"] = pulse_scores
-        species_df.at[i, "t"] = window_start_times
-        species_df.at[i, "max_score"] = (
-            max(pulse_scores) if len(pulse_scores) > 0 else np.nan
-        )
-        species_df.at[i, "time_of_max_score"] = (
-            window_start_times[np.argmax(pulse_scores)]
-            if len(pulse_scores) > 0
-            else np.nan
-        )
-
-    return species_df
-
-
-def summarize_top_scores(audio_files, list_of_result_dfs, scale_factor=1.0):
-    """ find the highest score for each file and each species, and put them in a dataframe
-
-    Note: this function expects that the first column of the results_df contains species names
-
-    Args:
-        audio_files: a list of file paths
-        list_of_result_dfs: a list of pandas DataFrames generated by ribbit_species_set()
-        scale_factor=1.0: optionally multiply all output values by a constant value
-
-    Returns:
-        a dataframe summarizing the highest score for each species in each file
-
-    """
-    if len(audio_files) != len(list_of_result_dfs):
-        raise ValueError(
-            "The length of audio_files must match the length of list_of_results_dfs"
-        )
-
-    import pandas as pd
-
-    top_species_scores_df = pd.DataFrame(
-        index=audio_files, columns=list_of_result_dfs[0].iloc[:, 0]
+    # determine the start and end times of each clip to analyze
+    clip_df = generate_clip_times_df(
+        full_duration=spectrogram.duration(),
+        clip_duration=clip_duration,
+        clip_overlap=clip_overlap,
+        final_clip=final_clip,
     )
-    top_species_scores_df.index.name = "file"
+    clip_df["score"] = np.nan
 
-    for i, f in enumerate(audio_files):
-        results_df = list_of_result_dfs[i]
-        results_df = results_df.set_index(results_df.columns[0])
-        for sp in results_df.index:
-            top_species_scores_df.at[f, sp] = (
-                results_df.at[sp, "max_score"] * scale_factor
-            )
+    # analyze each clip and save scores in the clip_df
+    for i, row in clip_df.iterrows():
 
-    return top_species_scores_df
+        # extract the amplitude signal for this clip
+        window = amplitude[(time >= row["start_time"]) & (time < row["end_time"])]
+
+        if plot:
+            print(f"window: {row['start_time']} to {row['end_time']} sec")
+
+        # calculate score for this clip:
+        # - make psd (Power spectral density or power spectrum of amplitude)
+        # - find max value in the pulse_rate_range
+        clip_df.at[i, "score"] = calculate_pulse_score(
+            window, sample_rate, pulse_rate_range, plot=plot
+        )
+
+    return clip_df

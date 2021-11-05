@@ -44,7 +44,7 @@ def test_ribbit():
     audio = Audio.from_file(path, sample_rate=22050)
     spec = Spectrogram.from_audio(audio)
 
-    scores, times = ribbit.ribbit(
+    df = ribbit.ribbit(
         spec,
         pulse_rate_range=[5, 10],
         signal_band=[1000, 2000],
@@ -52,7 +52,7 @@ def test_ribbit():
         noise_bands=[[0, 200]],
         plot=True,
     )
-    assert len(scores) > 0
+    assert len(df) > 0
 
 
 def test_pulsefinder_species_set(gpt_path):
