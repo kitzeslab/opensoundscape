@@ -47,7 +47,7 @@ class BoxedAnnotations:
         self.audio_file = audio_file
 
     def __repr__(self):
-        return f"<opensoundscape.annotations.BoxedAnnotation object with audio_file={self.audio_file}.>"
+        return f"<opensoundscape.annotations.BoxedAnnotations object with audio_file={self.audio_file}.>"
 
     @classmethod
     def from_raven_file(
@@ -126,6 +126,21 @@ class BoxedAnnotations:
         Not Implemented
         """
         raise NotImplementedError
+
+    def subset(self, classes):
+        """subset annotations to those from a list of classes
+
+        out-of-place operation (returns new filtered BoxedAnnotations object)
+
+        Args:
+            classes: list of classes to retain (all others are discarded)
+            - the list can include `np.nan` or `None` if you want to keep them
+
+        Returns:
+            new BoxedAnnotations object containing only annotations in `classes`
+        """
+        df = self.df[self.df["annotation"].apply(lambda x: x in classes)]
+        return BoxedAnnotations(df, self.audio_file)
 
     def trim(self, start_time, end_time, edge_mode="trim"):
         """Trim a set of annotations, analogous to Audio/Spectrogram.trim()
@@ -338,8 +353,7 @@ class BoxedAnnotations:
         Args:
             full_duration: The amount of time (seconds) to split into clips
             clip_duration (float):  The duration in seconds of the clips
-            clip_overlap (float):   The overlap of the clips in seconds [default: 0]            classes: list of classes for one-hot labels. If None, classes will
-                be all unique values of self.df['annotation']
+            clip_overlap (float):   The overlap of the clips in seconds [default: 0]
             classes: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
             min_label_overlap: minimum duration (seconds) of annotation within the
