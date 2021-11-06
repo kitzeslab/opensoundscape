@@ -1,115 +1,115 @@
 #!/usr/bin/env python3
-import pytest
-import opensoundscape.raven as raven
-from pathlib import Path
-import shutil
-import pandas as pd
-import numpy as np
-import numpy.testing as npt
-import pandas.testing as pdt
+# import pytest
+# import opensoundscape.raven as raven
+# from pathlib import Path
+# import shutil
+# import pandas as pd
+# import numpy as np
+# import numpy.testing as npt
+# import pandas.testing as pdt
 
-tmp_path = "tests/_tmp_raven"
-
-
-@pytest.fixture()
-def temporary_split_storage(request):
-    path = Path(tmp_path)
-    path.mkdir()
-    yield path
-    shutil.rmtree(path)
-
-
-@pytest.fixture()
-def raven_warn_dir():
-    return "./tests/raven/raven_warn"
-
-
-@pytest.fixture()
-def raven_short_okay_dir():
-    return "./tests/raven/raven_okay_short"
-
-
-@pytest.fixture()
-def raven_long_okay_dir():
-    return "./tests/raven/raven_okay_long"
-
-
-@pytest.fixture()
-def raven_empty_okay_dir():
-    return "./tests/raven/raven_okay_empty"
-
-
-@pytest.fixture()
-def raven_annots_dir():
-    return "./tests/raven/raven_annots"
-
-
-@pytest.fixture()
-def audio_dir():
-    return "./tests/audio"
-
-
-@pytest.fixture()
-def raven_annotations_empty(request, raven_empty_okay_dir):
-    raven.lowercase_annotations(raven_empty_okay_dir)
-    path = Path(f"{raven_empty_okay_dir}/EmptyExample.Table.1.selections.txt.lower")
-
-    def fin():
-        path.unlink()
-
-    request.addfinalizer(fin)
-    return path
-
-
-@pytest.fixture()
-def raven_annotations_lower_okay_short(request, raven_short_okay_dir):
-    raven.lowercase_annotations(raven_short_okay_dir)
-    path = Path(f"{raven_short_okay_dir}/ShortExample.Table.1.selections.txt.lower")
-
-    def fin():
-        path.unlink()
-
-    request.addfinalizer(fin)
-    return path
-
-
-@pytest.fixture()
-def raven_annotations_lower_okay_long(request, raven_long_okay_dir):
-    raven.lowercase_annotations(raven_long_okay_dir)
-    path = Path(f"{raven_long_okay_dir}/LongExample.Table.1.selections.txt.lower")
-
-    def fin():
-        path.unlink()
-
-    request.addfinalizer(fin)
-    return path
-
-
-@pytest.fixture()
-def raven_annotations_lower_warn(request, raven_warn_dir):
-    raven.lowercase_annotations(raven_warn_dir)
-    path = Path(f"{raven_warn_dir}/Example.Table.1.selections.txt.lower")
-
-    def fin():
-        path.unlink()
-
-    request.addfinalizer(fin)
-    return path
-
-
-@pytest.fixture()
-def raven_annotations_true_annots(request, raven_annots_dir):
-    raven.lowercase_annotations(raven_annots_dir)
-    path = Path(
-        f"{raven_annots_dir}/MSD-0003_20180427_2minstart00.Table.1.selections.txt.lower"
-    )
-
-    def fin():
-        path.unlink()
-
-    request.addfinalizer(fin)
-    return path
-
+# tmp_path = "tests/_tmp_raven"
+#
+#
+# @pytest.fixture()
+# def temporary_split_storage(request):
+#     path = Path(tmp_path)
+#     path.mkdir()
+#     yield path
+#     shutil.rmtree(path)
+#
+#
+# @pytest.fixture()
+# def raven_warn_dir():
+#     return "./tests/raven/raven_warn"
+#
+#
+# @pytest.fixture()
+# def raven_short_okay_dir():
+#     return "./tests/raven/raven_okay_short"
+#
+#
+# @pytest.fixture()
+# def raven_long_okay_dir():
+#     return "./tests/raven/raven_okay_long"
+#
+#
+# @pytest.fixture()
+# def raven_empty_okay_dir():
+#     return "./tests/raven/raven_okay_empty"
+#
+#
+# @pytest.fixture()
+# def raven_annots_dir():
+#     return "./tests/raven/raven_annots"
+#
+#
+# @pytest.fixture()
+# def audio_dir():
+#     return "./tests/audio"
+#
+#
+# @pytest.fixture()
+# def raven_annotations_empty(request, raven_empty_okay_dir):
+#     raven.lowercase_annotations(raven_empty_okay_dir)
+#     path = Path(f"{raven_empty_okay_dir}/EmptyExample.Table.1.selections.txt.lower")
+#
+#     def fin():
+#         path.unlink()
+#
+#     request.addfinalizer(fin)
+#     return path
+#
+#
+# @pytest.fixture()
+# def raven_annotations_lower_okay_short(request, raven_short_okay_dir):
+#     raven.lowercase_annotations(raven_short_okay_dir)
+#     path = Path(f"{raven_short_okay_dir}/ShortExample.Table.1.selections.txt.lower")
+#
+#     def fin():
+#         path.unlink()
+#
+#     request.addfinalizer(fin)
+#     return path
+#
+#
+# @pytest.fixture()
+# def raven_annotations_lower_okay_long(request, raven_long_okay_dir):
+#     raven.lowercase_annotations(raven_long_okay_dir)
+#     path = Path(f"{raven_long_okay_dir}/LongExample.Table.1.selections.txt.lower")
+#
+#     def fin():
+#         path.unlink()
+#
+#     request.addfinalizer(fin)
+#     return path
+#
+#
+# @pytest.fixture()
+# def raven_annotations_lower_warn(request, raven_warn_dir):
+#     raven.lowercase_annotations(raven_warn_dir)
+#     path = Path(f"{raven_warn_dir}/Example.Table.1.selections.txt.lower")
+#
+#     def fin():
+#         path.unlink()
+#
+#     request.addfinalizer(fin)
+#     return path
+#
+#
+# @pytest.fixture()
+# def raven_annotations_true_annots(request, raven_annots_dir):
+#     raven.lowercase_annotations(raven_annots_dir)
+#     path = Path(
+#         f"{raven_annots_dir}/MSD-0003_20180427_2minstart00.Table.1.selections.txt.lower"
+#     )
+#
+#     def fin():
+#         path.unlink()
+#
+#     request.addfinalizer(fin)
+#     return path
+#
 
 #
 # def test_raven_annotation_check_on_okay(raven_short_okay_dir):
