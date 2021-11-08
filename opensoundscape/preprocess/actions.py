@@ -625,9 +625,20 @@ class ImgOverlay(BaseAction):
             self.params["overlay_prob"] >= 0
         ), ("overlay_prob" f"should be in range (0,1), was {overlay_weight}")
 
-        assert (
-            self.params["overlay_weight"] < 1 and self.params["overlay_weight"] > 0
-        ), ("overlay_weight" f"should be between 0 and 1, was {overlay_weight}")
+        wts = self.params["overlay_weight"]
+        weight_error = f"overlay_weight should be between 0 and 1, was {wts}"
+
+        if hasattr(wts, "__iter__"):
+            assert (
+                len(wts) == 2
+            ), "must provide a float or a range of min,max values for overlay_weight"
+            assert (
+                wts[1] > wts[0]
+            ), "second value must be greater than first for overlay_weight"
+            for w in wts:
+                assert w < 1 and w > 0, weight_error
+        else:
+            assert wts < 1 and wts > 0, weight_error
 
         if overlay_class is not None:
             assert (
@@ -715,12 +726,11 @@ class ImgOverlay(BaseAction):
             # Select weight of overlay; <0.5 means more emphasis on original image
             # allows random selection from a range of weights eg [0.1,0.7]
             weight = self.params["overlay_weight"]
-            if type(weight) in (list, tuple, np.ndarray):
-                if len(weight) != 2:
-                    raise ValueError("Weight must be float or have length 2")
+            if hasattr(weight, "__iter__"):
                 weight = random.uniform(weight[0], weight[1])
+                print(type(weight))
             else:
-                weight = self.params["overlay_weight"]
+                print(type(weight))
 
             # use a weighted sum to overlay (blend) the images
             x = Image.blend(x, x2, weight)

@@ -108,6 +108,24 @@ def test_overlay_specific_class(dataset_df, overlay_df):
     sample1 = dataset[0]["X"]
 
 
+def test_overlay_with_weight_range(dataset_df, overlay_df):
+    """overlay should allow range [min,max] for overlay_weight"""
+    dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
+    dataset.actions.overlay.set(overlay_weight=[0.3, 0.7])
+    sample1 = dataset[0]["X"]
+
+
+def test_overlay_with_invalid_weight_range(dataset_df, overlay_df):
+    """overlay should allow range [min,max] for overlay_weight"""
+    dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
+    with pytest.raises(PreprocessingError):
+        dataset.actions.overlay.set(overlay_weight=[0.1, 1.1])
+        sample1 = dataset[0]["X"]
+    with pytest.raises(PreprocessingError):
+        dataset.actions.overlay.set(overlay_weight=[0.1, 0.5, 0.9])
+        sample1 = dataset[0]["X"]
+
+
 def test_overlay_update_labels(dataset_df, overlay_df):
     """should return different images each time"""
     dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
