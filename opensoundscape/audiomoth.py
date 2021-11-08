@@ -2,6 +2,7 @@
 import pytz
 import datetime
 from opensoundscape.helpers import hex_to_time
+from pathlib import Path
 
 
 def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):
@@ -30,17 +31,20 @@ def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):
     name = Path(file).stem
     if len(name) == 8:
         # HEX filename convention (old firmware)
-        dt = hex_to_time(Path(file).stem)
+        if filename_timezone != "UTC":
+            raise ValueError('hexidecimal file names must have filename_timezone="UTC"')
+        localized_dt = hex_to_time(Path(file).stem)  # returns UTC localized dt
     elif len(name) == 15:
         # human-readable format (newer firmware)
         dt = datetime.datetime.strptime(name, "%Y%m%d_%H%M%S")
+
+        # convert the naive datetime into a localized datetime based on the
+        # timezone provided by the user. (This is the time zone that the AudioMoth
+        # uses to record its name, not the time zone local to the recording site.)
+        localized_dt = pytz.timezone(filename_timezone).localize(dt)
+
     else:
         raise ValueError(f"file had unsupported name format: {name}")
-
-    # convert the naive datetime into a localized datetime based on the
-    # timezone provided by the user. (This is the time zone that the AudioMoth
-    # uses to record its name, not the time zone local to the recording site.)
-    localized_dt = pytz.timezone(timezone).localize(dt)
 
     if to_utc:
         return localized_dt.astimezone(pytz.utc)
@@ -56,7 +60,6 @@ def parse_audiomoth_metadata(metadata):
 
     Tested for AudioMoth firmware versions:
         1.5.0
-        ...?
 
     Args:
         metadata: dictionary with audiomoth metadata
@@ -68,6 +71,7 @@ def parse_audiomoth_metadata(metadata):
     import pytz
 
     comment = metadata["comment"]
+    # Assume the time zone in () is compatible with pytz.timezone()
     timezone = pytz.timezone(comment.split("(")[1].split(")")[0])
     datetime_str = comment.split("Recorded at ")[1][:19]
     metadata["recording_start_time"] = timezone.localize(
@@ -82,5 +86,16 @@ def parse_audiomoth_metadata(metadata):
 def parse_audiomoth_metadata_from_path(file_path):
     from tinytag import TinyTag
 
-    metadata = TinyTag.get(file_path).as_dict()
-    return parse_audiomoth_metadata(metadata)
+    metadata = TinyTag.get(file_path)
+
+    if metadata is None:
+        raise ValueError("This file does not contain metadata")
+    else:
+        metadata = metadata.as_dict()
+        artist = metadata["artist"]
+        if not artist or (not "AudioMoth" in artist):
+            raise ValueError(
+                "It looks like this file does not contain AudioMoth metadata."
+            )
+        else:
+            return parse_audiomoth_metadata(metadata)
