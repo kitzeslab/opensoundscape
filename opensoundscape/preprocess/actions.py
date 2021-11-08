@@ -221,7 +221,7 @@ class SpecToImg(BaseAction):
 
     Args:
         destination: a file path (string)
-        shape=None: tuple of image dimensions for 1 channel, eg (224,224)
+        shape=None: image dimensions for 1 channel, (height, width)
         mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
         colormap=None: (str) Matplotlib color map name (if None, greyscale)
     """
