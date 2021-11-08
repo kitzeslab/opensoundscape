@@ -2,7 +2,7 @@
 from datetime import datetime
 import pytz
 import pytest
-from opensoundscape import audiomoth
+from opensoundscape import moth
 
 
 @pytest.fixture()
