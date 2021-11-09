@@ -385,10 +385,20 @@ class Spectrogram:
             show_colorbar: include image legend colorbar from pyplot
         """
         from matplotlib import pyplot as plt
+        import matplotlib.colors
 
-        plt.pcolormesh(
-            self.times, self.frequencies, self.spectrogram, shading="auto", cmap="Greys"
+        norm = matplotlib.colors.Normalize(
+            vmin=self.decibel_limits[0], vmax=self.decibel_limits[1]
         )
+        plt.pcolormesh(
+            self.times,
+            self.frequencies,
+            self.spectrogram,
+            shading="auto",
+            cmap="Greys",
+            norm=norm,
+        )
+
         plt.xlabel("time (sec)")
         plt.ylabel("frequency (Hz)")
         if show_colorbar:
@@ -643,8 +653,13 @@ class MelSpectrogram(Spectrogram):
             show_colorbar: include image legend colorbar from pyplot
         """
         from matplotlib import pyplot as plt
+        import matplotlib.colors
 
-        plt.imshow(self.spectrogram[::-1], cmap="Greys")
+        color_norm = matplotlib.colors.Normalize(
+            vmin=self.decibel_limits[0], vmax=self.decibel_limits[1]
+        )
+
+        plt.imshow(self.spectrogram[::-1], cmap="Greys", norm=color_norm)
 
         # pick values to show on time and frequency axes
         yvals = self.frequencies.round(-2).astype(int)
