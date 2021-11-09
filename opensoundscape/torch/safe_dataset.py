@@ -81,7 +81,7 @@ class SafeDataset(torch.utils.data.Dataset):
             invalid_idx = False
             if idx >= len(self.dataset):
                 invalid_idx = True
-                raise IndexError
+                raise IndexError("index exceeded end of self.dataset")
             sample = self.dataset[idx]
             if idx not in self._safe_indices:
                 self._safe_indices.append(idx)
