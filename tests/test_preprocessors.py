@@ -135,6 +135,18 @@ def test_overlay_update_labels(dataset_df, overlay_df):
     assert np.array_equal(sample["y"].numpy(), [1, 1])
 
 
+def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
+    """duplicate indices of overlay_df are now removed, resolving
+    a bug that caused duplicated indices to return 2-d labels.
+    """
+    dataset_df = pd.concat([dataset_df, dataset_df])
+    dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
+    dataset.actions.overlay.set(overlay_class="different")
+    dataset.actions.overlay.set(update_labels=True)
+    sample = dataset[0]
+    assert np.array_equal(sample["y"].numpy(), [1, 1])
+
+
 def test_cnn_preprocessor_fails_on_short_file(dataset_df):
     """should fail on short file when audio duration is specified"""
     dataset = CnnPreprocessor(dataset_df, audio_length=5.0)

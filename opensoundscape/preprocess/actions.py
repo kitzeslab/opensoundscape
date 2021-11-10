@@ -586,6 +586,12 @@ class ImgOverlay(BaseAction):
     ):
         super(ImgOverlay, self).__init__()
 
+        assert max(overlay_df.index.duplicated()) == 0, (
+            "index of overlay_df "
+            "must be unique. contained duplicate indices. to drop duplicates "
+            "use: overlay_df = overlay_df[~overlay_df.index.duplicated()]"
+        )
+
         self.requires_labels = True
 
         # required arguments
