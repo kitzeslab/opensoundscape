@@ -540,3 +540,44 @@ def one_hot_labels_on_time_interval(
 
     # return a dictionary mapping classes to 0/1 labels
     return {c: l for c, l in zip(classes, one_hot_labels)}
+
+
+def categorical_to_one_hot(labels, classes=None):
+    """transform multi-target categorical labels (list of lists) to one-hot array
+
+    Args:
+        labels: list of lists of categorical labels, eg
+            [['white','red'],['green','white']] or [[0,1,2],[3]]
+        classes=None: list of classes for one-hot labels. if None,
+            taken to be the unique set of values in `labels`
+    Returns:
+        one_hot: 2d array with 0 for absent and 1 for present
+        classes: list of classes corresponding to columns in the array
+    """
+    if classes is None:
+        from itertools import chain
+
+        classes = list(set(chain(*labels)))
+
+    one_hot = np.zeros([len(labels), len(classes)])
+    for i, sample_labels in enumerate(labels):
+        for label in sample_labels:
+            if label in classes:
+                one_hot[i, classes.index(label)] = 1
+
+    return one_hot, classes
+
+
+def one_hot_to_categorical(one_hot, classes):
+    """transform one_hot labels to multi-target categorical (list of lists)
+
+    Args:
+        one_hot: 2d array with 0 for absent and 1 for present
+        classes: list of classes corresponding to columns in the array
+
+    Returns:
+        labels: list of lists of categorical labels for each sample, eg
+            [['white','red'],['green','white']] or [[0,1,2],[3]]
+    """
+    classes = np.array(classes)
+    return [list(classes[np.array(row).astype(bool)]) for row in one_hot]
