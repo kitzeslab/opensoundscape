@@ -5,11 +5,17 @@ from opensoundscape import ribbit
 import pytest
 import numpy as np
 import pandas as pd
+from math import isclose
 
 
 @pytest.fixture()
 def gpt_path():
     return "tests/audio/great_plains_toad.wav"
+
+
+@pytest.fixture()
+def veryshort_wav_str():
+    return "tests/audio/veryshort.wav"
 
 
 def test_calculate_pulse_score():
@@ -39,63 +45,85 @@ def test_calculate_pulse_score_zero_len_input():
         )
 
 
-def test_ribbit():
-    path = "./tests/audio/silence_10s.mp3"
-    audio = Audio.from_file(path, sample_rate=22050)
-    spec = Spectrogram.from_audio(audio)
+def test_ribbit(gpt_path):
+    audio = Audio.from_file(gpt_path, sample_rate=22050).trim(0, 16)
 
-    scores, times = ribbit.ribbit(
+    spec = Spectrogram.from_audio(
+        audio, window_samples=512, overlap_samples=256, decibel_limits=(-100, -20)
+    )
+
+    df = ribbit.ribbit(
         spec,
         pulse_rate_range=[5, 10],
         signal_band=[1000, 2000],
-        window_len=5.0,
+        clip_duration=5.0,
+        clip_overlap=0,
+        final_clip=None,
         noise_bands=[[0, 200]],
-        plot=True,
+        plot=False,
     )
-    assert len(scores) > 0
+
+    assert len(df) == 3
+    assert isclose(max(df["score"]), 0.0392323, abs_tol=1e-4)
 
 
-def test_pulsefinder_species_set(gpt_path):
-    df = pd.DataFrame(
-        columns=[
-            "species",
-            "pulse_rate_low",
-            "pulse_rate_high",
-            "low_f",
-            "high_f",
-            "reject_low",
-            "reject_high",
-            "window_length",
-        ]
+def test_ribbit_short_audio(veryshort_wav_str):
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    spec = Spectrogram.from_audio(
+        audio, window_samples=512, overlap_samples=256, decibel_limits=(-100, -20)
     )
-    df.at[0, :] = ["sp1", 5, 10, 1000, 2000, 0, 500, 1.0]
-    df.at[1, :] = ["sp2", 10, 15, 1000, 2000, 0, 500, 1.0]
 
-    audio = Audio.from_file(gpt_path, sample_rate=32000)
-    spec = Spectrogram.from_audio(audio, overlap_samples=256)
-
-    df = ribbit.pulse_finder_species_set(spec, df)
-
-    assert type(df) == pd.DataFrame
-
-
-def test_summarize_top_scores(gpt_path):
-    df = pd.DataFrame(
-        columns=[
-            "species",
-            "pulse_rate_low",
-            "pulse_rate_high",
-            "low_f",
-            "high_f",
-            "reject_low",
-            "reject_high",
-            "window_length",
-        ]
+    df = ribbit.ribbit(
+        spec,
+        pulse_rate_range=[5, 10],
+        signal_band=[1000, 2000],
+        clip_duration=5.0,
+        clip_overlap=2.5,
+        final_clip=None,
+        noise_bands=[[0, 200]],
+        plot=False,
     )
-    df.at[0, :] = ["sp1", 5, 10, 1000, 2000, 0, 500, 1.0]
-    df.at[1, :] = ["sp2", 10, 15, 1000, 2000, 0, 500, 1.0]
-    audio = Audio.from_file(gpt_path, sample_rate=32000)
-    spec = Spectrogram.from_audio(audio, overlap_samples=256)
-    df = ribbit.pulse_finder_species_set(spec, df)
+    assert len(df) == 0
 
-    ribbit.summarize_top_scores(["1", "2"], [df, df], scale_factor=10.0)
+
+def test_ribbit_high_spec_overlap(gpt_path):
+    """spec params should not effect number of clips in results"""
+    audio = Audio.from_file(gpt_path, sample_rate=22050).trim(0, 16)
+    spec = Spectrogram.from_audio(
+        audio, window_samples=512, overlap_samples=500, decibel_limits=(-100, -20)
+    )
+
+    df = ribbit.ribbit(
+        spec,
+        pulse_rate_range=[5, 10],
+        signal_band=[1000, 2000],
+        clip_duration=5.0,
+        clip_overlap=0,
+        final_clip=None,
+        noise_bands=[[0, 200]],
+        plot=False,
+    )
+    assert len(df) == 3
+    assert isclose(max(df["start_time"]), 10.0, abs_tol=1e-4)
+
+
+def test_ribbit_with_clip_overlap(gpt_path):
+    audio = Audio.from_file(gpt_path, sample_rate=22050).trim(0, 16)
+
+    spec = Spectrogram.from_audio(
+        audio, window_samples=512, overlap_samples=256, decibel_limits=(-100, -20)
+    )
+
+    df = ribbit.ribbit(
+        spec,
+        pulse_rate_range=[5, 10],
+        signal_band=[1000, 2000],
+        clip_duration=5.0,
+        clip_overlap=2.5,
+        final_clip=None,
+        noise_bands=[[0, 200]],
+        plot=False,
+    )
+
+    assert len(df) == 5
+    assert isclose(max(df["score"]), 0.039380, abs_tol=1e-4)
