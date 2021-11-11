@@ -262,20 +262,22 @@ class LongAudioPreprocessor(BasePreprocessor):
                     x = action.go(x)
 
             # Second, split the audio
-            clip_dicts = x.split(
+            audio_clips, clip_df = x.split(
                 clip_duration=self.audio_length,
                 clip_overlap=self.clip_overlap,
                 final_clip=self.final_clip,
             )
-            if len(clip_dicts) < 1:
+            if len(clip_df) < 1:
                 raise ValueError(f"File produced no samples: {Path(df_row.name)}")
-            audio_clips = [d["clip"] for d in clip_dicts]
-            start_times = [d["begin_time"] for d in clip_dicts]
-            end_times = [d["end_time"] for d in clip_dicts]
+
             clip_df = pd.DataFrame(
-                index=[[df_row.name] * len(audio_clips), start_times, end_times]
+                index=[
+                    [df_row.name] * len(clip_df),
+                    clip_df["start_time"],
+                    clip_df["end_time"],
+                ]
             )
-            clip_df.index.names = ["file", "start_t", "end_t"]
+            clip_df.index.names = ["file", "start_time", "end_time"]
 
             # Third, for each audio segment, run the rest of the pipeline and store the output
             outputs = [None for _ in range(len(audio_clips))]

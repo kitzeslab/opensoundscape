@@ -73,3 +73,57 @@ def test_jitter():
 def test_jitter_nonexistant_raises_value_error():
     with pytest.raises(ValueError):
         helpers.jitter([1, 2, 3], 1, distribution="nonexistant")
+
+
+def test_generate_clip_times_df_default():
+    """many corner cases / alternatives are tested for audio.split()"""
+    clip_df = helpers.generate_clip_times_df(full_duration=10, clip_duration=5.0)
+    assert clip_df.shape[0] == 2
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 5.0
+    assert clip_df.iloc[1]["start_time"] == 5.0
+    assert clip_df.iloc[1]["end_time"] == 10.0
+
+
+def test_generate_clip_times_df_extend():
+    clip_df = helpers.generate_clip_times_df(
+        full_duration=10, clip_duration=6.0, final_clip="extend"
+    )
+    assert clip_df.shape[0] == 2
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 6.0
+    assert clip_df.iloc[1]["start_time"] == 6.0
+    assert clip_df.iloc[1]["end_time"] == 12.0
+
+
+def test_generate_clip_times_df_remainder():
+    clip_df = helpers.generate_clip_times_df(
+        full_duration=10, clip_duration=6.0, final_clip="remainder"
+    )
+    assert clip_df.shape[0] == 2
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 6.0
+    assert clip_df.iloc[1]["start_time"] == 6.0
+    assert clip_df.iloc[1]["end_time"] == 10.0
+
+
+def test_generate_clip_times_df_full():
+    clip_df = helpers.generate_clip_times_df(
+        full_duration=11, clip_duration=6.0, final_clip="full"
+    )
+    assert clip_df.shape[0] == 2
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 6.0
+    assert clip_df.iloc[1]["start_time"] == 5.0
+    assert clip_df.iloc[1]["end_time"] == 11.0
+
+
+def test_generate_clip_times_df_overlap():
+    clip_df = helpers.generate_clip_times_df(
+        full_duration=10, clip_duration=5, clip_overlap=2.5
+    )
+    assert clip_df.shape[0] == 3
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 5.0
+    assert clip_df.iloc[1]["start_time"] == 2.5
+    assert clip_df.iloc[1]["end_time"] == 7.5
