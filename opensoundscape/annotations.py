@@ -6,6 +6,7 @@ etc.
 from opensoundscape.helpers import overlap, overlap_fraction, generate_clip_times_df
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
 
 class BoxedAnnotations:
@@ -56,7 +57,7 @@ class BoxedAnnotations:
         """load annotations from Raven txt file
 
         Args:
-            path: location of raven .txt file
+            path: location of raven .txt file, str or pathlib.Path
             annotation_column: (str) column containing annotations
             keep_extra_columns: keep or discard extra Raven file columns
                 (always keeps start_time, end_time, low_f, high_f, annotation
@@ -100,6 +101,7 @@ class BoxedAnnotations:
 
         Args:
             path: path for saved test file (extension must be ".tsv")
+                - can be str or pathlib.Path
 
         Outcomes:
             creates a file containing the annotations in a format compatible
@@ -109,7 +111,7 @@ class BoxedAnnotations:
         annotation column. Additional columns will not be shown in the Raven
         Lite interface.
         """
-        assert path[-4:] == ".txt", "file extension must be .txt"
+        assert Path(path).suffix == ".txt", "file extension must be .txt"
 
         df = self.df.copy().rename(
             columns={
@@ -120,12 +122,6 @@ class BoxedAnnotations:
             }
         )
         df.to_csv(path, sep="\t", index=False)
-
-    def to_csv(self, path):
-        """save annotations in csv file
-        Not Implemented
-        """
-        raise NotImplementedError
 
     def subset(self, classes):
         """subset annotations to those from a list of classes
@@ -242,7 +238,7 @@ class BoxedAnnotations:
         """get list of all unique (non-Falsy) labels"""
         return np.unique(self.df.dropna(subset=["annotation"])["annotation"])
 
-    def one_hot_labels(self, classes):
+    def global_one_hot_labels(self, classes):
         """get a dictionary of one-hot labels for entire duration
         Args:
             classes: iterable of class names to give 0/1 labels
