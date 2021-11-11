@@ -46,7 +46,8 @@ def boxed_annotations():
 
 def test_load_raven_annotations(raven_file):
     a = BoxedAnnotations.from_raven_file(raven_file, annotation_column="Species")
-    assert len(a.df) == 62
+    assert len(a.df) == 10
+    assert set(a.df["annotation"]) == {"WOTH", "EATO", "LOWA", np.nan}
 
 
 def test_load_raven_annotations_empty(raven_file_empty):
@@ -62,6 +63,11 @@ def test_to_raven_file(boxed_annotations, saved_raven_file):
 
 def test_subset(boxed_annotations):
     assert len(boxed_annotations.subset(["a", None]).df) == 2
+
+
+def test_subset_to_nan(raven_file):
+    a = BoxedAnnotations.from_raven_file(raven_file, annotation_column="Species")
+    assert len(a.subset([np.nan]).df) == 1
 
 
 def test_trim(boxed_annotations):
