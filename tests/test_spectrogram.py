@@ -207,9 +207,9 @@ def test_melspectrogram_to_image_with_reshape(veryshort_wav_str):
     audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
     mel_spec = MelSpectrogram.from_audio(audio)
     img = mel_spec.to_image(shape=(10, 20))
-    assert img.size == (10, 20)
+    assert img.size == (20, 10)
     arr = np.array(img)
-    assert arr.shape == (20, 10, 3)
+    assert arr.shape == (10, 20, 3)
 
 
 def test_melspectrogram_to_image_with_mode(veryshort_wav_str):
@@ -217,7 +217,7 @@ def test_melspectrogram_to_image_with_mode(veryshort_wav_str):
     mel_spec = MelSpectrogram.from_audio(audio)
     img = mel_spec.to_image(shape=(10, 20), mode="L")
     arr = np.array(img)
-    assert arr.shape == (20, 10)
+    assert arr.shape == (10, 20)
 
 
 def test_melspectrogram_trim_works(veryshort_wav_str):

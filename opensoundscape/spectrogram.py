@@ -491,7 +491,7 @@ class Spectrogram:
 
         Args:
             destination: a file path (string)
-            shape=None: tuple of image dimensions, eg (224,224)
+            shape=None: tuple of image dimensions as (height, width),
             mode="RGB": RGB for 3-channel output "L" for 1-channel output
             colormap=None:
                 if None, greyscale spectrogram is generated
@@ -524,7 +524,7 @@ class Spectrogram:
 
         # reshape to desired dimensions
         if shape is not None:
-            image = image.resize(shape)
+            image = image.resize(shape[::-1])
 
         return image
 
