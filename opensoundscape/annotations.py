@@ -6,6 +6,7 @@ etc.
 from opensoundscape.helpers import overlap, overlap_fraction, generate_clip_times_df
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
 
 class BoxedAnnotations:
@@ -56,7 +57,7 @@ class BoxedAnnotations:
         """load annotations from Raven txt file
 
         Args:
-            path: location of raven .txt file
+            path: location of raven .txt file, str or pathlib.Path
             annotation_column: (str) column containing annotations
             keep_extra_columns: keep or discard extra Raven file columns
                 (always keeps start_time, end_time, low_f, high_f, annotation
@@ -100,6 +101,7 @@ class BoxedAnnotations:
 
         Args:
             path: path for saved test file (extension must be ".tsv")
+                - can be str or pathlib.Path
 
         Outcomes:
             creates a file containing the annotations in a format compatible
@@ -109,7 +111,7 @@ class BoxedAnnotations:
         annotation column. Additional columns will not be shown in the Raven
         Lite interface.
         """
-        assert path[-4:] == ".txt", "file extension must be .txt"
+        assert Path(path).suffix == ".txt", "file extension must be .txt"
 
         df = self.df.copy().rename(
             columns={
@@ -120,12 +122,6 @@ class BoxedAnnotations:
             }
         )
         df.to_csv(path, sep="\t", index=False)
-
-    def to_csv(self, path):
-        """save annotations in csv file
-        Not Implemented
-        """
-        raise NotImplementedError
 
     def subset(self, classes):
         """subset annotations to those from a list of classes
@@ -242,7 +238,7 @@ class BoxedAnnotations:
         """get list of all unique (non-Falsy) labels"""
         return np.unique(self.df.dropna(subset=["annotation"])["annotation"])
 
-    def one_hot_labels(self, classes):
+    def global_one_hot_labels(self, classes):
         """get a dictionary of one-hot labels for entire duration
         Args:
             classes: iterable of class names to give 0/1 labels
@@ -540,3 +536,44 @@ def one_hot_labels_on_time_interval(
 
     # return a dictionary mapping classes to 0/1 labels
     return {c: l for c, l in zip(classes, one_hot_labels)}
+
+
+def categorical_to_one_hot(labels, classes=None):
+    """transform multi-target categorical labels (list of lists) to one-hot array
+
+    Args:
+        labels: list of lists of categorical labels, eg
+            [['white','red'],['green','white']] or [[0,1,2],[3]]
+        classes=None: list of classes for one-hot labels. if None,
+            taken to be the unique set of values in `labels`
+    Returns:
+        one_hot: 2d array with 0 for absent and 1 for present
+        classes: list of classes corresponding to columns in the array
+    """
+    if classes is None:
+        from itertools import chain
+
+        classes = list(set(chain(*labels)))
+
+    one_hot = np.zeros([len(labels), len(classes)]).astype(int)
+    for i, sample_labels in enumerate(labels):
+        for label in sample_labels:
+            if label in classes:
+                one_hot[i, classes.index(label)] = 1
+
+    return one_hot, classes
+
+
+def one_hot_to_categorical(one_hot, classes):
+    """transform one_hot labels to multi-target categorical (list of lists)
+
+    Args:
+        one_hot: 2d array with 0 for absent and 1 for present
+        classes: list of classes corresponding to columns in the array
+
+    Returns:
+        labels: list of lists of categorical labels for each sample, eg
+            [['white','red'],['green','white']] or [[0,1,2],[3]]
+    """
+    classes = np.array(classes)
+    return [list(classes[np.array(row).astype(bool)]) for row in one_hot]

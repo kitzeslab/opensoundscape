@@ -426,8 +426,14 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
         self.debug = debug
 
         # extra Actions for augmentation steps
-        self.actions.overlay = (
-            actions.ImgOverlay(
+
+        # overlay
+        if overlay_df is not None:
+            # first, remove duplicate indices from overlay_df
+            overlay_df = overlay_df[~overlay_df.index.duplicated()]
+
+            # create overlay action
+            self.actions.overlay = actions.ImgOverlay(
                 overlay_df=overlay_df,
                 audio_length=self.audio_length,
                 overlay_prob=1,
@@ -436,10 +442,10 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
                 loader_pipeline=self.pipeline[0:5],  # all actions up to overlay
                 update_labels=False,
             )
-            if overlay_df is not None
-            else actions.BaseAction()
-        )
+        else:  # create a blank action instead
+            self.actions.overlay = actions.BaseAction()
 
+        # other augmentations
         self.actions.color_jitter = actions.TorchColorJitter()
         self.actions.random_affine = actions.TorchRandomAffine()
         self.actions.time_mask = actions.TimeMask()

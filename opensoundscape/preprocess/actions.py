@@ -142,6 +142,7 @@ class AudioTrimmer(BaseAction):
                         f"clips, use extend=True"
                     )
             if self.params["random_trim"]:
+                # uniformly randomly choose clip time from full audio
                 extra_time = audio.duration() - self.params["audio_length"]
                 start_time = np.random.uniform() * extra_time
             else:
@@ -221,7 +222,7 @@ class SpecToImg(BaseAction):
 
     Args:
         destination: a file path (string)
-        shape=None: tuple of image dimensions for 1 channel, eg (224,224)
+        shape=None: image dimensions for 1 channel, (height, width)
         mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
         colormap=None: (str) Matplotlib color map name (if None, greyscale)
     """
@@ -586,6 +587,12 @@ class ImgOverlay(BaseAction):
     ):
         super(ImgOverlay, self).__init__()
 
+        assert max(overlay_df.index.duplicated()) == 0, (
+            "index of overlay_df "
+            "must be unique. contained duplicate indices. to drop duplicates "
+            "use: overlay_df = overlay_df[~overlay_df.index.duplicated()]"
+        )
+
         self.requires_labels = True
 
         # required arguments
@@ -625,9 +632,20 @@ class ImgOverlay(BaseAction):
             self.params["overlay_prob"] >= 0
         ), ("overlay_prob" f"should be in range (0,1), was {overlay_weight}")
 
-        assert (
-            self.params["overlay_weight"] < 1 and self.params["overlay_weight"] > 0
-        ), ("overlay_weight" f"should be between 0 and 1, was {overlay_weight}")
+        wts = self.params["overlay_weight"]
+        weight_error = f"overlay_weight should be between 0 and 1, was {wts}"
+
+        if hasattr(wts, "__iter__"):
+            assert (
+                len(wts) == 2
+            ), "must provide a float or a range of min,max values for overlay_weight"
+            assert (
+                wts[1] > wts[0]
+            ), "second value must be greater than first for overlay_weight"
+            for w in wts:
+                assert w < 1 and w > 0, weight_error
+        else:
+            assert wts < 1 and wts > 0, weight_error
 
         if overlay_class is not None:
             assert (
@@ -715,40 +733,10 @@ class ImgOverlay(BaseAction):
             # Select weight of overlay; <0.5 means more emphasis on original image
             # allows random selection from a range of weights eg [0.1,0.7]
             weight = self.params["overlay_weight"]
-            if type(weight) in (list, tuple, np.ndarray):
-                if len(weight) != 2:
-                    raise ValueError("Weight must be float or have length 2")
+            if hasattr(weight, "__iter__"):
                 weight = random.uniform(weight[0], weight[1])
-            else:
-                weight = self.params["overlay_weight"]
 
             # use a weighted sum to overlay (blend) the images
             x = Image.blend(x, x2, weight)
 
         return x, x_labels
-
-
-# def random_audio_trim(audio, duration, extend_short_clips=False):
-#     """randomly select a subsegment of Audio of fixed length
-#
-#     randomly chooses a time segment of the entire Audio object to cut out,
-#     from the set of all possible start times that allow a complete extraction
-#
-#     Args:
-#         Audio: input Audio object
-#         length: duration in seconds of the trimmed Audio output
-#
-#     Returns:
-#         Audio object trimmed from original
-#     """
-#     input_duration = len(audio.samples) / audio.sample_rate
-#     if duration > input_duration:
-#         if not extend_short_clips:
-#             raise ValueError(
-#                 f"the length of the original file ({input_duration} sec) was less than the length to extract ({duration} sec). To extend short clips, use extend_short_clips=True"
-#             )
-#         else:
-#             return audio.extend(duration)
-#     extra_time = input_duration - duration
-#     start_time = np.random.uniform() * extra_time
-#     return audio.trim(start_time, start_time + duration)

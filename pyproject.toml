@@ -31,6 +31,7 @@ numba = "0.48.0"
 scikit-learn = "^0.24.2"
 Jinja2 = "<3.0"
 ipython = "7.10"
+tinytag = "^1.6.0"
 
 [tool.poetry.dev-dependencies]
 black = "=19.3b0"
