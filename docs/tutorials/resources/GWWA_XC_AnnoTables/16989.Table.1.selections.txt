@@ -1,0 +1,6 @@
+Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	Species	Notes
+1	Spectrogram 1	1	1.100344757	3.180448544	3957.7	13132.3	GWWA_song	
+2	Spectrogram 1	1	12.300642769	14.327990301	3726.4	12644.1	GWWA_song	
+3	Spectrogram 1	1	22.331160976	24.162556702	3520.8	13003.8	GWWA_song	
+4	Spectrogram 1	1	32.119333508	33.980875665	3289.5	12361.4	GWWA_song	
+5	Spectrogram 1	1	42.612550307	44.730337134	2775.5	12489.9	GWWA_song	

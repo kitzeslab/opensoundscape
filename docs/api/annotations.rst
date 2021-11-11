@@ -2,10 +2,10 @@
 Annotations
 =================
 
-Raven
-^^^^^
+Annotations
+^^^^^^^^^^^
 
-.. automodule:: opensoundscape.raven
+.. automodule:: opensoundscape.annotations
    :members:
 
 Species Table
