@@ -734,9 +734,6 @@ class ImgOverlay(BaseAction):
             weight = self.params["overlay_weight"]
             if hasattr(weight, "__iter__"):
                 weight = random.uniform(weight[0], weight[1])
-                print(type(weight))
-            else:
-                print(type(weight))
 
             # use a weighted sum to overlay (blend) the images
             x = Image.blend(x, x2, weight)
