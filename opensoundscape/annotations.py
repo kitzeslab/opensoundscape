@@ -559,7 +559,7 @@ def categorical_to_one_hot(labels, classes=None):
 
         classes = list(set(chain(*labels)))
 
-    one_hot = np.zeros([len(labels), len(classes)])
+    one_hot = np.zeros([len(labels), len(classes)]).astype(int)
     for i, sample_labels in enumerate(labels):
         for label in sample_labels:
             if label in classes:
