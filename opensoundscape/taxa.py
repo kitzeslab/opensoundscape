@@ -6,6 +6,7 @@ import importlib.resources
 with importlib.resources.path("opensoundscape.resources", "species_table.csv") as f:
     species_table = pd.read_csv(f)
 
+
 def get_species_list():
     """list of scientific-names (lowercase-hyphenated) of species in the loaded species table"""
 
