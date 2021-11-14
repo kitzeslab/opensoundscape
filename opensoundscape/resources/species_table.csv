@@ -1,7 +1,4 @@
-from io import StringIO
-import pandas as pd
-
-species_table_str = """scientific,xc_common,bn_code,bn_common,bn_mapping_in_xc_dataset,relationship
+scientific,xc_common,bn_code,bn_common,bn_mapping_in_xc_dataset,relationship
 dendrocygna-autumnalis,blackbelliedwhistlingduck,bbwduc,blackbelliedwhistlingduck,dendrocygna-autumnalis,
 anser-caerulescens,snowgoose,snogoo,snowgoose,anser-caerulescens,
 anser-albifrons,greaterwhitefrontedgoose,gwfgoo,greaterwhitefrontedgoose,anser-albifrons,
@@ -508,6 +505,3 @@ passerella-unalaschcensis,sootyfoxsparrow,,,,XC split with multiple species in t
 passerella-schistacea,slatecoloredfoxsparrow,,,,XC split with multiple species in the ABA area; BirdNet's name for the entire complex (passerella-iliaca) refers to one of the ABA XC subspecies
 passerella-megarhyncha,thickbilledfoxsparrow,,,,XC split with multiple species in the ABA area; BirdNet's name for the entire complex (passerella-iliaca) refers to one of the ABA XC subspecies
 setophaga-auduboni,audubonswarbler,,,,XC split with multiple species in the ABA area; BirdNet's name for the complex (setophaga-coronata) refers to one of the XC ABA subspecies
-"""
-
-species_table = pd.read_csv(StringIO(species_table_str))
