@@ -57,6 +57,13 @@ def parse_audiomoth_metadata(metadata):
 
     -parses the comment field
     -adds keys for gain_setting, battery_state, recording_start_time
+    -if available (firmware >=1.4.0), addes temperature
+
+    Notes on comment field:
+    - Starting with Firmware 1.4.0, the audiomoth logs Temperature to the
+      metadata (wav header) eg "and temperature was 11.2C."
+    - At some point the firmware shifted from writing "gain setting 2" to
+      "medium gain setting". Should handle both modes.
 
     Tested for AudioMoth firmware versions:
         1.5.0
@@ -77,9 +84,18 @@ def parse_audiomoth_metadata(metadata):
     metadata["recording_start_time"] = timezone.localize(
         datetime.datetime.strptime(datetime_str, "%H:%M:%S %d/%m/%Y")
     )
-    metadata["gain_setting"] = int(comment.split("gain setting ")[1][:1])
+    # gain setting can be written "medium gain" or "gain setting 3"
+    try:
+        metadata["gain_setting"] = int(comment.split("gain setting ")[1][:1])
+    except ValueError:
+        metadata["gain_setting"] = comment.split(" gain setting")[0].split(" ")[-1]
     metadata["battery_state"] = float(comment.split("battery state was ")[1][:3])
     metadata["audiomoth_id"] = metadata["artist"].split(" ")[1]
+    if "temperature" in comment:
+        metadata["temperature_C"] = float(
+            comment.split("temperature was ")[1].split("C")[0]
+        )
+
     return metadata
 
 
