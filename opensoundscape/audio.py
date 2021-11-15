@@ -26,6 +26,8 @@ import pandas as pd
 import warnings
 from math import ceil
 from opensoundscape.helpers import generate_clip_times_df
+from opensoundscape.audiomoth import parse_audiomoth_metadata
+from tinytag import TinyTag
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -63,15 +65,21 @@ class Audio:
         An initialized `Audio` object
     """
 
-    __slots__ = ("samples", "sample_rate", "resample_type", "max_duration")
+    __slots__ = ("samples", "sample_rate", "resample_type", "max_duration", "metadata")
 
     def __init__(
-        self, samples, sample_rate, resample_type="kaiser_fast", max_duration=None
+        self,
+        samples,
+        sample_rate,
+        resample_type="kaiser_fast",
+        max_duration=None,
+        metadata=None,
     ):
         self.samples = samples
         self.sample_rate = sample_rate
         self.resample_type = resample_type
         self.max_duration = max_duration
+        self.metadata = metadata
 
         samples_error = None
         if not isinstance(self.samples, np.ndarray):
@@ -101,6 +109,7 @@ class Audio:
         """Load audio from files
 
         Deal with the various possible input types to load an audio file
+        Also attempts to load metadata using tinytag.
 
         Args:
             path (str, Path): path to an audio file
@@ -124,7 +133,22 @@ class Audio:
         )
         warnings.resetwarnings()
 
-        return cls(samples, sr, resample_type=resample_type, max_duration=max_duration)
+        try:
+            metadata = TinyTag.get(path).as_dict()
+            # if this is an AudioMoth file, we can parse out additional
+            # metadata from the comment field
+            if metadata["artist"] and "AudioMoth" in metadata["artist"]:
+                metadata = parse_audiomoth_metadata(metadata)
+        except Exception:
+            metadata = None
+
+        return cls(
+            samples,
+            sr,
+            resample_type=resample_type,
+            max_duration=max_duration,
+            metadata=metadata,
+        )
 
     @classmethod
     def from_bytesio(
