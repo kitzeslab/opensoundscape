@@ -119,6 +119,17 @@ def test_load_not_a_file_asserts_not_a_file(not_a_file_str):
         Audio.from_file(not_a_file_str)
 
 
+def test_load_metadata(veryshort_wav_str):
+    a = Audio.from_file(veryshort_wav_str)
+    assert a.metadata["samplerate"] == 44100
+
+
+# currently don't know how to create a file with bad / no metadata
+# def test_load_metadata_warning(path_with_no_metadata):
+#     with pytest.raises(UserWarning)
+#         a=Audio.from_file(path_with_no_metadata)
+
+
 def test_property_trim_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     duration = audio.duration()
