@@ -151,7 +151,13 @@ class Audio:
             # if this is an AudioMoth file, try to parse out additional
             # metadata from the comment field
             if metadata["artist"] and "AudioMoth" in metadata["artist"]:
-                metadata = parse_audiomoth_metadata(metadata)
+                try:
+                    metadata = parse_audiomoth_metadata(metadata)
+                except Exception as e:
+                    warnings.warn(
+                        "This seems to be an AudioMoth file, "
+                        f"but parse_audiomoth_metadata() raised: {e}"
+                    )
         except Exception as e:
             warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
             metadata = None
