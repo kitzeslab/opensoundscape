@@ -223,9 +223,10 @@ def tensor_binary_predictions(scores, mode, threshold=None):
     """generate binary 0/1 predictions from continuous scores
 
     Args:
-        scores: torch.Tensor of input scores on [-inf:inf]
+        scores: torch.Tensor of dim (batch_size, n_classes) with input scores [-inf:inf]
         mode: 'single_target', 'multi_target', or None (return empty tensor)
-        threshold: minimum score to predict 1, if mode=='multi_target'
+        threshold: minimum score to predict 1, if mode=='multi_target'. threshold
+        can be a single value for all classes or a list of class-specific values.
     Returns:
         torch.Tensor of 0/1 predictions in same shape as scores
 
@@ -240,13 +241,20 @@ def tensor_binary_predictions(scores, mode, threshold=None):
         if threshold is None:
             raise ValueError(f"threshold must be specified for multi_target prediction")
         # predict 0 or 1 based on a fixed threshold
-        preds = torch.sigmoid(scores) >= threshold
+        try:
+            if len(threshold) == 1 or len(threshold) == len(scores[0]):
+                preds = torch.sigmoid(scores) >= torch.tensor(threshold)
+            else:
+                raise ValueError(f"threshold must have the same number of values as there are classes")
+        except TypeError: #happens if threshold passed is a float
+            preds = torch.sigmoid(scores) >= torch.tensor(threshold)
+
     elif mode is None:
         preds = torch.Tensor([])
     else:
         raise ValueError(
-            f"invalid option for mode: {binary_preds}. "
-            "Expected 'single_target', 'multi_taret', or None."
+            f"invalid option for mode: {mode}. "
+            "Expected 'single_target', 'multi_target', or None."
         )
 
     return preds
