@@ -245,8 +245,10 @@ def tensor_binary_predictions(scores, mode, threshold=None):
             if len(threshold) == 1 or len(threshold) == len(scores[0]):
                 preds = torch.sigmoid(scores) >= torch.tensor(threshold)
             else:
-                raise ValueError(f"threshold must have the same number of values as there are classes")
-        except TypeError: #happens if threshold passed is a float
+                raise ValueError(
+                    f"threshold must have the same number of values as there are classes"
+                )
+        except TypeError:  # happens if threshold passed is a float
             preds = torch.sigmoid(scores) >= torch.tensor(threshold)
 
     elif mode is None:
