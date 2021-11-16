@@ -104,7 +104,12 @@ class Audio:
 
     @classmethod
     def from_file(
-        cls, path, sample_rate=None, resample_type="kaiser_fast", max_duration=None
+        cls,
+        path,
+        sample_rate=None,
+        resample_type="kaiser_fast",
+        max_duration=None,
+        metadata=True,
     ):
         """Load audio from files
 
@@ -118,9 +123,17 @@ class Audio:
             resample_type: method used to resample_type (default: kaiser_fast)
             max_duration: the maximum length of an input file,
                 None is no maximum (default: None)
+            metadata (bool): if True, attempts to load metadata from the audio
+                file. If an exception occurs, self.metadata will be `None`.
+                Otherwise self.metadata is a dictionary.
+                Note: will also attempt to parse AudioMoth metadata from the
+                `comment` field, if the `artist` field includes `AudioMoth`.
+                The parsing function for AudioMoth is likely to break when new
+                firmware versions change the `comment` metadata field.
 
         Returns:
-            Audio: attributes samples and sample_rate
+            Audio object with attributes: samples, sample_rate, resample_type,
+            max_duration, metadata (dict or None)
         """
         path = str(path)  # Pathlib path can have dependency issues - use string
         if max_duration:
@@ -135,11 +148,12 @@ class Audio:
 
         try:
             metadata = TinyTag.get(path).as_dict()
-            # if this is an AudioMoth file, we can parse out additional
+            # if this is an AudioMoth file, try to parse out additional
             # metadata from the comment field
             if metadata["artist"] and "AudioMoth" in metadata["artist"]:
                 metadata = parse_audiomoth_metadata(metadata)
-        except Exception:
+        except Exception as e:
+            warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
             metadata = None
 
         return cls(
