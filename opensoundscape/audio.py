@@ -26,6 +26,8 @@ import pandas as pd
 import warnings
 from math import ceil
 from opensoundscape.helpers import generate_clip_times_df
+from opensoundscape.audiomoth import parse_audiomoth_metadata
+from tinytag import TinyTag
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -63,15 +65,21 @@ class Audio:
         An initialized `Audio` object
     """
 
-    __slots__ = ("samples", "sample_rate", "resample_type", "max_duration")
+    __slots__ = ("samples", "sample_rate", "resample_type", "max_duration", "metadata")
 
     def __init__(
-        self, samples, sample_rate, resample_type="kaiser_fast", max_duration=None
+        self,
+        samples,
+        sample_rate,
+        resample_type="kaiser_fast",
+        max_duration=None,
+        metadata=None,
     ):
         self.samples = samples
         self.sample_rate = sample_rate
         self.resample_type = resample_type
         self.max_duration = max_duration
+        self.metadata = metadata
 
         samples_error = None
         if not isinstance(self.samples, np.ndarray):
@@ -96,11 +104,17 @@ class Audio:
 
     @classmethod
     def from_file(
-        cls, path, sample_rate=None, resample_type="kaiser_fast", max_duration=None
+        cls,
+        path,
+        sample_rate=None,
+        resample_type="kaiser_fast",
+        max_duration=None,
+        metadata=True,
     ):
         """Load audio from files
 
         Deal with the various possible input types to load an audio file
+        Also attempts to load metadata using tinytag.
 
         Args:
             path (str, Path): path to an audio file
@@ -109,9 +123,17 @@ class Audio:
             resample_type: method used to resample_type (default: kaiser_fast)
             max_duration: the maximum length of an input file,
                 None is no maximum (default: None)
+            metadata (bool): if True, attempts to load metadata from the audio
+                file. If an exception occurs, self.metadata will be `None`.
+                Otherwise self.metadata is a dictionary.
+                Note: will also attempt to parse AudioMoth metadata from the
+                `comment` field, if the `artist` field includes `AudioMoth`.
+                The parsing function for AudioMoth is likely to break when new
+                firmware versions change the `comment` metadata field.
 
         Returns:
-            Audio: attributes samples and sample_rate
+            Audio object with attributes: samples, sample_rate, resample_type,
+            max_duration, metadata (dict or None)
         """
         path = str(path)  # Pathlib path can have dependency issues - use string
         if max_duration:
@@ -124,7 +146,29 @@ class Audio:
         )
         warnings.resetwarnings()
 
-        return cls(samples, sr, resample_type=resample_type, max_duration=max_duration)
+        try:
+            metadata = TinyTag.get(path).as_dict()
+            # if this is an AudioMoth file, try to parse out additional
+            # metadata from the comment field
+            if metadata["artist"] and "AudioMoth" in metadata["artist"]:
+                try:
+                    metadata = parse_audiomoth_metadata(metadata)
+                except Exception as e:
+                    warnings.warn(
+                        "This seems to be an AudioMoth file, "
+                        f"but parse_audiomoth_metadata() raised: {e}"
+                    )
+        except Exception as e:
+            warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
+            metadata = None
+
+        return cls(
+            samples,
+            sr,
+            resample_type=resample_type,
+            max_duration=max_duration,
+            metadata=metadata,
+        )
 
     @classmethod
     def from_bytesio(
