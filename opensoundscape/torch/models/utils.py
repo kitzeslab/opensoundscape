@@ -243,10 +243,11 @@ def tensor_binary_predictions(scores, mode, threshold=None):
         # predict 0 or 1 based on a fixed threshold
         try:
             if len(threshold) == 1 or len(threshold) == len(scores[0]):
+                # will make predictions for either a single threshold value or list of class-specific threshold values
                 preds = torch.sigmoid(scores) >= torch.tensor(threshold)
             else:
                 raise ValueError(
-                    f"threshold must have the same number of values as there are classes"
+                    f"threshold must be a single value, or have the same number of values as there are classes"
                 )
         except TypeError:  # happens if threshold passed is a float
             preds = torch.sigmoid(scores) >= torch.tensor(threshold)

@@ -23,4 +23,5 @@ def test_tensor_binary_predictions():
     with pytest.raises(ValueError):
         tensor_binary_predictions(scores, mode="wrong", threshold=0.5)
     with pytest.raises(ValueError):
+        # must raise ValueError because threshold is length 2, but there are 3 classes
         tensor_binary_predictions(scores, mode="multi_target", threshold=[0.5, 0])
