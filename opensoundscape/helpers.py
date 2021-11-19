@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-
+import requests
 
 def isNan(x):
     """check for nan by equating x to itself"""
@@ -213,3 +213,18 @@ def generate_clip_times_df(
         pass
 
     return pd.DataFrame({"start_time": starts, "end_time": ends})
+
+def retrieve_url(url, filename):
+    """
+    Download a file from a url, and write to 'filename' in the working directory
+    """
+    r = requests.get(url, stream=True)
+    if r.status_code != 200: #status_code 200 = OK
+        headers = {'User-Agent': "Mozilla/5.0 custom"} #try a real-looking user-agent string
+        r = requests.get(url, stream=True, allow_redirects=True, headers=headers)
+        if r.status_code != 200:
+            raise ConnectionError('could not download {}\nerror code: {}'.format(url, r.status_code))
+
+    with open(filename, "wb") as f:
+        for chunk in r.iter_content(1024):
+            f.write(chunk)
