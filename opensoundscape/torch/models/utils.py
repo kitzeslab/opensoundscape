@@ -5,6 +5,7 @@ from opensoundscape.torch.sampling import ClassAwareSampler, ImbalancedDatasetSa
 from torch.utils.data import DataLoader
 from torch.nn.functional import softmax
 import pandas as pd
+import numpy as np
 
 
 class BaseModule(nn.Module):
@@ -241,7 +242,9 @@ def tensor_binary_predictions(scores, mode, threshold=None):
         if threshold is None:
             raise ValueError(f"threshold must be specified for multi_target prediction")
         # predict 0 or 1 based on a fixed threshold
-        try:
+        elif type(threshold) in [float, np.float32, np.float64, int]:
+            preds = torch.sigmoid(scores) >= threshold
+        elif type(threshold) in [np.array, list, torch.Tensor, tuple]:
             if len(threshold) == 1 or len(threshold) == len(scores[0]):
                 # will make predictions for either a single threshold value or list of class-specific threshold values
                 preds = torch.sigmoid(scores) >= torch.tensor(threshold)
@@ -249,8 +252,6 @@ def tensor_binary_predictions(scores, mode, threshold=None):
                 raise ValueError(
                     f"threshold must be a single value, or have the same number of values as there are classes"
                 )
-        except TypeError:  # happens if threshold passed is a float
-            preds = torch.sigmoid(scores) >= torch.tensor(threshold)
 
     elif mode is None:
         preds = torch.Tensor([])
