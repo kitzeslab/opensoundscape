@@ -85,14 +85,11 @@ class BaseAction:
 class AudioLoader(BaseAction):
     """Action child class for Audio.from_file() (path -> Audio)
 
-    Loads an audio file, see Audio.from_file() for documentation.
+    Loads an audio file or part of a file.
+    see Audio.from_file() for documentation.
 
     Args:
-        sample_rate (int, None): resample audio with value and resample_type,
-            if None use source sample_rate (default: None)
-        resample_type: method used to resample_type (default: kaiser_fast)
-        max_duration: the maximum length of an input file,
-            None is no maximum (default: None)
+        see Audio.from_file
 
     Note: default sample_rate=None means use file's sample rate, don't resample
     """

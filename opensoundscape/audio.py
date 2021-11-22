@@ -152,6 +152,10 @@ class Audio:
         Returns:
             Audio object with attributes: samples, sample_rate, resample_type,
             max_duration, metadata (dict or None)
+
+        Note: default sample_rate=None means use file's sample rate, don't
+        resample
+
         """
         path = str(path)  # Pathlib path can have dependency issues - use string
         if max_duration:

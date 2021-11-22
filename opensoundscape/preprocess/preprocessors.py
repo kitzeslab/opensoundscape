@@ -177,6 +177,20 @@ class AudioLoadingPreprocessor(BasePreprocessor):
         self.pipeline.append(self.actions.trim_audio)
 
 
+# basically we need a class that's equivalent to the regular one, but
+# allows the input df to have additional indices 'start_time','end_time'
+# or, instead, could have additional dataframe input listing clips - then
+# might be able to use all the same classes. Like,
+# BasePreprocessor(df....)
+# if df.index is (path, start_t, end_t)...
+# otherwise, assert df.index is path...
+# but then every action would need to handle the possibility of
+# the nice thing is that this would integrate well with labels
+# for instance label_df created from long raven file, with triple-index.
+# the only actions (currently) that require labels/use file path are
+# overlay and save tensor.
+
+
 class LongAudioPreprocessor(BasePreprocessor):
     """
     loads audio paths, splits into segments, and runs pipeline on each segment
@@ -312,7 +326,7 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
     """
     loads audio paths, creates spectrogram, returns tensor
 
-    by default, does not resample audio, but bandpasses to 0-10 kHz
+    by default, does not resample audio, but bandpasses to 0-11025 Hz
     (to ensure all outputs have same scale in y-axis)
     can change with .actions.load_audio.set(sample_rate=sr)
 
