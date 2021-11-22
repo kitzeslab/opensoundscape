@@ -125,7 +125,7 @@ def ribbit(
     Also, `clip_overlap` can be used for overlap between sequential clips. This
     is more computationally expensive but will be more likely to center a target
     sound in the clip (with zero overlap, the target sound may be split up between
-    adjascent clips).
+    adjacent clips).
 
     **Plot:** We can choose to show the power spectrum of pulse repetition rate for each window by setting `plot=True`. The default is not to show these plots (`plot=False`).
 
