@@ -58,6 +58,14 @@ def test_audio_trimmer(audio_10s):
     assert isclose(audio.duration(), 1.0, abs_tol=1e-4)
 
 
+def test_audio_trimmer_random_trim(audio_10s):
+    action = actions.AudioTrimmer(audio_length=0.1, random_trim=True)
+    audio = action.go(audio_10s)
+    audio2 = action.go(audio_10s)
+    assert isclose(audio.duration(), 0.1, abs_tol=1e-4)
+    assert not np.array_equal(audio.samples, audio2.samples)
+
+
 def test_audio_trimmer_default(audio_10s):
     action = actions.AudioTrimmer()
     audio = action.go(audio_10s)

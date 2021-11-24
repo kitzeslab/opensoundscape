@@ -14,7 +14,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
     Args:
         df:
-            dataframe of samples. df must have audio paths in the index.
+            dataframe of audio clips. df must have audio paths in the index.
             If df has labels, the class names should be the columns, and
             the values of each row should be 0 or 1.
             If data does not have labels, df will have no columns
@@ -117,13 +117,35 @@ class BasePreprocessor(torch.utils.data.Dataset):
         new_ds.df = new_ds.df.head(n)
         return new_ds
 
+    def pipeline_summary(self):
+        """Generate a DataFrame describing the current pipeline
+
+        The DataFrame has columns for name (corresponds to the attribute
+        name, eg 'to_img' for self.actions.to_img), on (not bypassed) / off
+        (bypassed), and action_reference (a reference to the object)
+        """
+        df = pd.DataFrame(columns=["name", "on/off", "action_reference"])
+        action_dict = {val: key for key, val in vars(self.actions).items()}
+
+        for action in self.pipeline:
+            df = df.append(
+                {
+                    "name": action_dict[action],
+                    "on/off": "off" if action.bypass else "ON",
+                    "action_reference": action,
+                },
+                ignore_index=True,
+            )
+
+        return df
+
 
 class AudioLoadingPreprocessor(BasePreprocessor):
     """creates Audio objects from file paths
 
     Args:
         df:
-            dataframe of samples. df must have audio paths in the index.
+            dataframe of audio clips. df must have audio paths in the index.
             If df has labels, the class names should be the columns, and
             the values of each row should be 0 or 1.
             If data does not have labels, df will have no columns
@@ -155,9 +177,9 @@ class AudioLoadingPreprocessor(BasePreprocessor):
         self.pipeline.append(self.actions.trim_audio)
 
 
-class AudioToSpectrogramPreprocessor(BasePreprocessor):
+class LongAudioPreprocessor(BasePreprocessor):
     """
-    loads audio paths, creates spectrogram, returns tensor
+    loads audio paths, splits into segments, and runs pipeline on each segment
 
     by default, resamples audio to sr=22050
     can change with .actions.load_audio.set(sample_rate=sr)
@@ -165,6 +187,138 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
     Args:
         df:
             dataframe of samples. df must have audio paths in the index.
+            If df has labels, the class names should be the columns, and
+            the values of each row should be 0 or 1.
+            If data does not have labels, df will have no columns
+        audio_length:
+            length in seconds of audio clips [default: None]
+            If provided, longer clips trimmed to this length. By default,
+            shorter clips will not be extended (modify actions.AudioTrimmer
+            to change behavior).
+        clip_overlap:
+            overlap in seconds between adjacent clips
+        final_clip=None:
+            see Audio.split() for final clip behavior and options
+        out_shape:
+            output shape of tensor in pixels [default: [224,224]]
+
+        Note: returning labels is not implemented
+
+    Returns: DataSet object
+    """
+
+    def __init__(
+        self, df, audio_length, clip_overlap=0, final_clip=None, out_shape=[224, 224]
+    ):
+
+        super(LongAudioPreprocessor, self).__init__(df, return_labels=False)
+
+        self.audio_length = audio_length
+        self.clip_overlap = clip_overlap
+        self.final_clip = final_clip
+        # self.return_labels = return_labels
+
+        # create separate pipeline for any actions that happen before audio splitting
+        # running the actions of pre_split_pipeline should result in a single audio object
+        self.pre_split_pipeline = []
+        self.actions.load_audio = actions.AudioLoader(sample_rate=None)
+        self.pre_split_pipeline.append(self.actions.load_audio)
+
+        # add each action to our tool kit, then to pipeline
+        self.actions.trim_audio = actions.AudioTrimmer(
+            extend=True, random_trim=False, audio_length=audio_length
+        )
+        self.pipeline.append(self.actions.trim_audio)
+
+        self.actions.to_spec = actions.AudioToSpectrogram()
+        self.pipeline.append(self.actions.to_spec)
+
+        # bandpass since we don't resample audio to guarantee equivalence
+        self.actions.bandpass = actions.SpectrogramBandpass(min_f=0, max_f=11025)
+        self.pipeline.append(self.actions.bandpass)
+
+        self.actions.to_img = actions.SpecToImg(shape=out_shape)
+        self.pipeline.append(self.actions.to_img)
+
+        self.actions.to_tensor = actions.ImgToTensor()
+        self.pipeline.append(self.actions.to_tensor)
+
+        self.actions.normalize = actions.TensorNormalize()
+        self.pipeline.append(self.actions.normalize)
+
+    def __getitem__(self, item_idx):
+
+        try:
+            df_row = self.df.iloc[item_idx]
+            x = Path(df_row.name)  # the index contains a path to a file
+
+            # First, run the pre_split_pipeline to get an audio object
+            for action in self.pre_split_pipeline:
+                if action.bypass:
+                    continue
+                if action.requires_labels:
+                    x, df_row = action.go(x, copy.deepcopy(df_row))
+                else:
+                    x = action.go(x)
+
+            # Second, split the audio
+            audio_clips, clip_df = x.split(
+                clip_duration=self.audio_length,
+                clip_overlap=self.clip_overlap,
+                final_clip=self.final_clip,
+            )
+            if len(clip_df) < 1:
+                raise ValueError(f"File produced no samples: {Path(df_row.name)}")
+
+            clip_df = pd.DataFrame(
+                index=[
+                    [df_row.name] * len(clip_df),
+                    clip_df["start_time"],
+                    clip_df["end_time"],
+                ]
+            )
+            clip_df.index.names = ["file", "start_time", "end_time"]
+
+            # Third, for each audio segment, run the rest of the pipeline and store the output
+            outputs = [None for _ in range(len(audio_clips))]
+            for i, x in enumerate(audio_clips):
+                for action in self.pipeline:
+                    if action.bypass:
+                        continue
+                    if action.requires_labels:
+                        x, df_row = action.go(x, copy.deepcopy(df_row))
+                    else:
+                        x = action.go(x)
+                outputs[i] = x
+
+            # concatenate the outputs into a single tensor
+            if type(outputs[0]) == torch.Tensor:
+                outputs = torch.Tensor(np.stack(outputs))
+
+            # Return sample & label pairs (training/validation)
+            if self.return_labels:
+                labels = torch.from_numpy(df_row.values)
+                return {"X": outputs, "y": labels, "df": clip_df}
+
+            # Return sample only (prediction)
+            return {"X": outputs, "df": clip_df}
+        except:
+            raise PreprocessingError(
+                f"failed to preprocess sample: {self.df.index[item_idx]}"
+            )
+
+
+class AudioToSpectrogramPreprocessor(BasePreprocessor):
+    """
+    loads audio paths, creates spectrogram, returns tensor
+
+    by default, does not resample audio, but bandpasses to 0-10 kHz
+    (to ensure all outputs have same scale in y-axis)
+    can change with .actions.load_audio.set(sample_rate=sr)
+
+    Args:
+        df:
+            dataframe of audio clips. df must have audio paths in the index.
             If df has labels, the class names should be the columns, and
             the values of each row should be 0 or 1.
             If data does not have labels, df will have no columns
@@ -192,7 +346,7 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
         self.return_labels = return_labels
 
         # add each action to our tool kit, then to pipeline
-        self.actions.load_audio = actions.AudioLoader(sample_rate=22050)
+        self.actions.load_audio = actions.AudioLoader(sample_rate=None)
         self.pipeline.append(self.actions.load_audio)
 
         self.actions.trim_audio = actions.AudioTrimmer(
@@ -203,9 +357,10 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
         self.actions.to_spec = actions.AudioToSpectrogram()
         self.pipeline.append(self.actions.to_spec)
 
-        self.actions.bandpass = actions.SpectrogramBandpass(min_f=0, max_f=20000)
+        self.actions.bandpass = actions.SpectrogramBandpass(
+            min_f=0, max_f=11025, out_of_bounds_ok=False
+        )
         self.pipeline.append(self.actions.bandpass)
-        self.actions.bandpass.off()  # bandpass is off by default
 
         self.actions.to_img = actions.SpecToImg(shape=out_shape)
         self.pipeline.append(self.actions.to_img)
@@ -222,12 +377,13 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
 
     loads audio, creates spectrogram, performs augmentations, returns tensor
 
-    by default, resamples audio to sr=22050
+    by default, does not resample audio, but bandpasses to 0-10 kHz
+    (to ensure all outputs have same scale in y-axis)
     can change with .actions.load_audio.set(sample_rate=sr)
 
     Args:
         df:
-            dataframe of samples. df must have audio paths in the index.
+            dataframe of audio clips. df must have audio paths in the index.
             If df has labels, the class names should be the columns, and
             the values of each row should be 0 or 1.
             If data does not have labels, df will have no columns
@@ -270,8 +426,14 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
         self.debug = debug
 
         # extra Actions for augmentation steps
-        self.actions.overlay = (
-            actions.ImgOverlay(
+
+        # overlay
+        if overlay_df is not None:
+            # first, remove duplicate indices from overlay_df
+            overlay_df = overlay_df[~overlay_df.index.duplicated()]
+
+            # create overlay action
+            self.actions.overlay = actions.ImgOverlay(
                 overlay_df=overlay_df,
                 audio_length=self.audio_length,
                 overlay_prob=1,
@@ -280,10 +442,10 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
                 loader_pipeline=self.pipeline[0:5],  # all actions up to overlay
                 update_labels=False,
             )
-            if overlay_df is not None
-            else actions.BaseAction()
-        )
+        else:  # create a blank action instead
+            self.actions.overlay = actions.BaseAction()
 
+        # other augmentations
         self.actions.color_jitter = actions.TorchColorJitter()
         self.actions.random_affine = actions.TorchRandomAffine()
         self.actions.time_mask = actions.TimeMask()

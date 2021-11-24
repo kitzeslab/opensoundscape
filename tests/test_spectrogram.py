@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from opensoundscape.audio import Audio
-from opensoundscape.spectrogram import Spectrogram
+from opensoundscape.spectrogram import Spectrogram, MelSpectrogram
 import pytest
 import numpy as np
 from math import isclose
@@ -88,6 +88,22 @@ def test_bandpass_spectrogram():
     ).bandpass(2, 4)
 
 
+def test_bandpass_spectrogram_out_of_bounds():
+    with pytest.raises(ValueError):
+        Spectrogram(
+            np.zeros((5, 10)),
+            np.linspace(0, 10, 5),
+            np.linspace(0, 10, 10),
+            (-100, -20),
+        ).bandpass(0, 11, out_of_bounds_ok=False)
+
+
+def test_bandpass_spectrogram_not_out_of_bounds():
+    Spectrogram(
+        np.zeros((5, 10)), np.linspace(0, 10, 5), np.linspace(0, 10, 10), (-100, -20)
+    ).bandpass(0.0, 10.0, out_of_bounds_ok=False)
+
+
 def test_bandpass_spectrogram_bad_limits():
     with pytest.raises(ValueError):
         Spectrogram(
@@ -173,3 +189,43 @@ def test_to_image_with_bandpass():
         ).to_image(),
         Image,
     )
+
+
+def test_melspectrogram_shape_of_S_for_veryshort(veryshort_wav_str):
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    mel_spec = MelSpectrogram.from_audio(audio)
+    assert mel_spec.spectrogram.shape == (64, 11)
+
+
+def test_melspectrogram_to_image_works(veryshort_wav_str):
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    mel_spec = MelSpectrogram.from_audio(audio)
+    assert mel_spec.to_image()
+
+
+def test_melspectrogram_to_image_with_reshape(veryshort_wav_str):
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    mel_spec = MelSpectrogram.from_audio(audio)
+    img = mel_spec.to_image(shape=(10, 20))
+    assert img.size == (20, 10)
+    arr = np.array(img)
+    assert arr.shape == (10, 20, 3)
+
+
+def test_melspectrogram_to_image_with_mode(veryshort_wav_str):
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    mel_spec = MelSpectrogram.from_audio(audio)
+    img = mel_spec.to_image(shape=(10, 20), mode="L")
+    arr = np.array(img)
+    assert arr.shape == (10, 20)
+
+
+def test_melspectrogram_trim_works(veryshort_wav_str):
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    mel_spec = MelSpectrogram.from_audio(audio).trim(0, 1)
+
+
+def test_melspectrogram_bandpass_works(veryshort_wav_str):
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    mel_spec = MelSpectrogram.from_audio(audio).bandpass(2000, 3000)
+    assert mel_spec.spectrogram.shape == (8, 11)

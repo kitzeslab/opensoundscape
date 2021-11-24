@@ -9,9 +9,11 @@ from opensoundscape.preprocess.preprocessors import (
     CnnPreprocessor,
     AudioLoadingPreprocessor,
     PreprocessingError,
+    LongAudioPreprocessor,
 )
 from PIL import Image
 import warnings
+import torch
 
 
 @pytest.fixture()
@@ -106,8 +108,38 @@ def test_overlay_specific_class(dataset_df, overlay_df):
     sample1 = dataset[0]["X"]
 
 
+def test_overlay_with_weight_range(dataset_df, overlay_df):
+    """overlay should allow range [min,max] for overlay_weight"""
+    dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
+    dataset.actions.overlay.set(overlay_weight=[0.3, 0.7])
+    sample1 = dataset[0]["X"]
+
+
+def test_overlay_with_invalid_weight_range(dataset_df, overlay_df):
+    """overlay should allow range [min,max] for overlay_weight"""
+    dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
+    with pytest.raises(PreprocessingError):
+        dataset.actions.overlay.set(overlay_weight=[0.1, 1.1])
+        sample1 = dataset[0]["X"]
+    with pytest.raises(PreprocessingError):
+        dataset.actions.overlay.set(overlay_weight=[0.1, 0.5, 0.9])
+        sample1 = dataset[0]["X"]
+
+
 def test_overlay_update_labels(dataset_df, overlay_df):
     """should return different images each time"""
+    dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
+    dataset.actions.overlay.set(overlay_class="different")
+    dataset.actions.overlay.set(update_labels=True)
+    sample = dataset[0]
+    assert np.array_equal(sample["y"].numpy(), [1, 1])
+
+
+def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
+    """duplicate indices of overlay_df are now removed, resolving
+    a bug that caused duplicated indices to return 2-d labels.
+    """
+    dataset_df = pd.concat([dataset_df, dataset_df])
     dataset = CnnPreprocessor(dataset_df, overlay_df=overlay_df)
     dataset.actions.overlay.set(overlay_class="different")
     dataset.actions.overlay.set(update_labels=True)
@@ -120,3 +152,21 @@ def test_cnn_preprocessor_fails_on_short_file(dataset_df):
     dataset = CnnPreprocessor(dataset_df, audio_length=5.0)
     with pytest.raises(PreprocessingError):
         sample = dataset[1]["X"]
+
+
+def test_long_audio_dataset():
+    df = pd.DataFrame(index=["tests/audio/1min.wav"])
+    ds = LongAudioPreprocessor(
+        df, audio_length=5.0, clip_overlap=0.0, out_shape=[224, 224]
+    )
+    superbatch = ds[0]
+    assert superbatch["X"].shape == torch.Size([12, 3, 224, 224])
+
+
+def test_long_audio_dataset_fails_on_short_audio():
+    df = pd.DataFrame(index=["tests/audio/veryshort.wav"])
+    ds = LongAudioPreprocessor(
+        df, audio_length=5.0, clip_overlap=3, out_shape=[224, 224]
+    )
+    with pytest.raises(PreprocessingError):
+        superbatch = ds[0]

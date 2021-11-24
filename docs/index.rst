@@ -26,7 +26,7 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
    :caption: Tutorials
 
    tutorials/audio_and_spectrogram
-   tutorials/raven
+   tutorials/annotation_tutorial
    tutorials/predict_with_pretrained_cnn
    tutorials/cnn
    tutorials/preprocessors
@@ -37,16 +37,12 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
    :maxdepth: 1
    :caption: API Documentation
 
-   api/annotations
-   api/audio
-   api/localization
-   api/machine_learning
-   api/miscellaneous
-   api/preprocessing
-   api/ribbit
-   api/spectrogram
+   api/modules
+
 
 .. toctree::
    :maxdepth: 0
+   :caption: Index
 
    genindex
+   api/indices

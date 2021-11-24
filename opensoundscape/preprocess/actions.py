@@ -20,7 +20,7 @@ from torchvision.utils import save_image
 import warnings
 
 from opensoundscape.audio import Audio
-from opensoundscape.spectrogram import Spectrogram
+from opensoundscape.spectrogram import Spectrogram, MelSpectrogram
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError
 
@@ -142,7 +142,8 @@ class AudioTrimmer(BaseAction):
                         f"clips, use extend=True"
                     )
             if self.params["random_trim"]:
-                extra_time = input_duration - duration
+                # uniformly randomly choose clip time from full audio
+                extra_time = audio.duration() - self.params["audio_length"]
                 start_time = np.random.uniform() * extra_time
             else:
                 start_time = 0
@@ -154,24 +155,46 @@ class AudioTrimmer(BaseAction):
 
 
 class AudioToSpectrogram(BaseAction):
-    """Action child class for Audio.from_file() (Audio -> Spectrogram)
+    """Action child class for Spectrogram.from_audio() (Audio -> Spectrogram)
 
     see spectrogram.Spectrogram.from_audio for documentation
 
     Args:
-        window_type="hann":
-            see scipy.signal.spectrogram docs for description of window parameter
-        window_samples=512:
-            number of audio samples per spectrogram window (pixel)
-        overlap_samples=256:
-            number of samples shared by consecutive windows
-        decibel_limits = (-100,-20) :
-        limit the dB values to (min,max)
-        (lower values set to min, higher values set to max)
+        window_type="hann": see scipy.signal.spectrogram docs for description of window parameter
+        window_samples=512: number of audio samples per spectrogram window (pixel)
+        overlap_samples=256: number of samples shared by consecutive windows
+        decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
+        dB_scale=True : If True, rescales values to decibels, x=10*log10(x)
+            - if dB_scale is False, decibel_limits is ignored
     """
 
     def go(self, audio):
         return Spectrogram.from_audio(audio, **self.params)
+
+
+class AudioToMelSpectrogram(BaseAction):
+    """Action child class for MelSpectrogram.from_audio()
+    (Audio -> MelSpectrogram)
+
+    see spectrogram.MelSpectrogram.from_audio for documentation
+
+    Args:
+        n_mels: Number of mel bands to generate [default: 128]
+            Note: n_mels should be chosen for compatibility with the
+            Spectrogram parameter `window_samples`. Choosing a value
+            `> ~ window_samples/10` will result in zero-valued rows while
+            small values blend rows from the original spectrogram.
+        window_type: The windowing function to use [default: "hann"]
+        window_samples: n samples per window [default: 512]
+        overlap_samples: n samples shared by consecutive windows [default: 256]
+        htk: use HTK mel-filter bank instead of Slaney, see Librosa docs [default: False]
+        norm='slanley': mel filter bank normalization, see Librosa docs
+        dB_scale=True: If True, rescales values to decibels, x=10*log10(x)
+            - if dB_scale is False, decibel_limits is ignored
+    """
+
+    def go(self, audio):
+        return MelSpectrogram.from_audio(audio, **self.params)
 
 
 class SpectrogramBandpass(BaseAction):
@@ -185,7 +208,7 @@ class SpectrogramBandpass(BaseAction):
     Args:
         min_f: low frequency in Hz for bandpass
         max_f: high frequency in Hz for bandpass
-
+        out_of_bounds_ok: if False, raises error if min or max beyond spec limits
     """
 
     def go(self, spectrogram):
@@ -199,9 +222,9 @@ class SpecToImg(BaseAction):
 
     Args:
         destination: a file path (string)
-        shape=None: tuple of image dimensions for 1 channel, eg (224,224)
+        shape=None: image dimensions for 1 channel, (height, width)
         mode="RGB": RGB for 3-channel color or "L" for 1-channel grayscale
-        spec_range=[-100,-20]: the lowest and highest possible values in the spectrogram
+        colormap=None: (str) Matplotlib color map name (if None, greyscale)
     """
 
     # shape=(self.width, self.height), mode="L" during construction
@@ -360,6 +383,10 @@ class TimeWarp(BaseAction):
 
     Args:
         warp_amount: use higher values for more skew and offset (experimental)
+
+    Note: this augmentation reduces the image to greyscale and duplicates the
+    result across the 3 channels.
+
     """
 
     def __init__(self, **kwargs):
@@ -408,17 +435,15 @@ class TimeMask(BaseAction):
         # convert max_width from fraction of image to pixels
         max_width_px = int(x.shape[-1] * self.params["max_width"])
 
-        # add "batch" dimension to tensor and use just first channel
-        x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+        # add "batch" dimension expected by tensaug
+        x = x.unsqueeze(0)
 
         # perform transform
         x = tensaug.time_mask(x, T=max_width_px, max_masks=self.params["max_masks"])
 
         # remove "batch" dimension
-        x = x[0, :]
+        x = x.squeeze(0)
 
-        # Copy 1 channel to 3 RGB channels
-        x = torch.cat([x] * 3, dim=0)
         return x
 
 
@@ -446,17 +471,15 @@ class FrequencyMask(BaseAction):
         # convert max_width from fraction of image to pixels
         max_width_px = int(x.shape[-2] * self.params["max_width"])
 
-        # add "batch" dimension to tensor and use just first channel
-        x = x[0, :, :].unsqueeze(0).unsqueeze(0)
+        # add "batch" dimension expected by tensaug
+        x = x.unsqueeze(0)
 
         # perform transform
         x = tensaug.freq_mask(x, F=max_width_px, max_masks=self.params["max_masks"])
 
         # remove "batch" dimension
-        x = x[0, :]
+        x = x.squeeze(0)
 
-        # Copy 1 channel to 3 RGB channels
-        x = torch.cat([x] * 3, dim=0)
         return x
 
 
@@ -466,6 +489,9 @@ class TensorAugment(BaseAction):
     time warp, time mask, and frequency mask
 
     use (bool) time_warp, time_mask, freq_mask to turn each on/off
+
+    Note: This function reduces the image to greyscale then duplicates the
+    image across the 3 channels
     """
 
     def __init__(self, **kwargs):
@@ -561,6 +587,12 @@ class ImgOverlay(BaseAction):
     ):
         super(ImgOverlay, self).__init__()
 
+        assert max(overlay_df.index.duplicated()) == 0, (
+            "index of overlay_df "
+            "must be unique. contained duplicate indices. to drop duplicates "
+            "use: overlay_df = overlay_df[~overlay_df.index.duplicated()]"
+        )
+
         self.requires_labels = True
 
         # required arguments
@@ -600,9 +632,20 @@ class ImgOverlay(BaseAction):
             self.params["overlay_prob"] >= 0
         ), ("overlay_prob" f"should be in range (0,1), was {overlay_weight}")
 
-        assert (
-            self.params["overlay_weight"] < 1 and self.params["overlay_weight"] > 0
-        ), ("overlay_weight" f"should be between 0 and 1, was {overlay_weight}")
+        wts = self.params["overlay_weight"]
+        weight_error = f"overlay_weight should be between 0 and 1, was {wts}"
+
+        if hasattr(wts, "__iter__"):
+            assert (
+                len(wts) == 2
+            ), "must provide a float or a range of min,max values for overlay_weight"
+            assert (
+                wts[1] > wts[0]
+            ), "second value must be greater than first for overlay_weight"
+            for w in wts:
+                assert w < 1 and w > 0, weight_error
+        else:
+            assert wts < 1 and wts > 0, weight_error
 
         if overlay_class is not None:
             assert (
@@ -690,40 +733,10 @@ class ImgOverlay(BaseAction):
             # Select weight of overlay; <0.5 means more emphasis on original image
             # allows random selection from a range of weights eg [0.1,0.7]
             weight = self.params["overlay_weight"]
-            if type(weight) in (list, tuple, np.ndarray):
-                if len(weight) != 2:
-                    raise ValueError("Weight must be float or have length 2")
+            if hasattr(weight, "__iter__"):
                 weight = random.uniform(weight[0], weight[1])
-            else:
-                weight = self.params["overlay_weight"]
 
             # use a weighted sum to overlay (blend) the images
             x = Image.blend(x, x2, weight)
 
         return x, x_labels
-
-
-# def random_audio_trim(audio, duration, extend_short_clips=False):
-#     """randomly select a subsegment of Audio of fixed length
-#
-#     randomly chooses a time segment of the entire Audio object to cut out,
-#     from the set of all possible start times that allow a complete extraction
-#
-#     Args:
-#         Audio: input Audio object
-#         length: duration in seconds of the trimmed Audio output
-#
-#     Returns:
-#         Audio object trimmed from original
-#     """
-#     input_duration = len(audio.samples) / audio.sample_rate
-#     if duration > input_duration:
-#         if not extend_short_clips:
-#             raise ValueError(
-#                 f"the length of the original file ({input_duration} sec) was less than the length to extract ({duration} sec). To extend short clips, use extend_short_clips=True"
-#             )
-#         else:
-#             return audio.extend(duration)
-#     extra_time = input_duration - duration
-#     start_time = np.random.uniform() * extra_time
-#     return audio.trim(start_time, start_time + duration)

@@ -2,3 +2,4 @@ sphinx>=1.4
 ipykernel
 nbsphinx
 m2r
+docutils<0.18
