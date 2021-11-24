@@ -141,23 +141,11 @@ Signal Processing
 Misc tools
 ==========
 
-Commands
-^^^^^^^^
-
-.. automodule:: opensoundscape.commands
-   :members:
 
 Helpers
 ^^^^^^^
 
 .. automodule:: opensoundscape.helpers
-   :members:
-
-
-Species Table
-^^^^^^^^^^^^^
-
-.. automodule:: opensoundscape.species_table
    :members:
 
 
