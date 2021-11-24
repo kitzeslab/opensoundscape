@@ -97,6 +97,8 @@ autodoc_mock_imports = [
     "yaml",
     "torchvision",
     "matplotlib",
+    "pywt",
+    "tinytag",
 ]
 
 master_doc = "index"
