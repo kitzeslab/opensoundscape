@@ -388,13 +388,23 @@ def detect_peak_sequence_cwt(
         )
 
     # create a dataframe summarizing all detections
-    detection_df = pd.concat(dfs).reset_index(drop=True)
-    detection_df["seq_len"] = [len(seq_y) for seq_y in detection_df.sequence_y]
-    detection_df["seq_start_time"] = [t[0] for t in detection_df.sequence_t]
-    detection_df["seq_end_time"] = [t[-1] for t in detection_df.sequence_t]
-    detection_df["seq_midpoint_time"] = (
-        detection_df.seq_start_time + detection_df.seq_end_time
-    ) / 2
-
-    # return the detection table
+    detection_df = pd.DataFrame(
+        columns=[
+            "sequence_y",
+            "sequence_t",
+            "window_start_t",
+            "seq_len",
+            "seq_start_time",
+            "seq_end_time",
+            "seq_midpoint_time",
+        ]
+    )
+    if len(dfs) > 0:
+        detection_df = pd.concat(dfs).reset_index(drop=True)
+        detection_df["seq_len"] = [len(seq_y) for seq_y in detection_df.sequence_y]
+        detection_df["seq_start_time"] = [t[0] for t in detection_df.sequence_t]
+        detection_df["seq_end_time"] = [t[-1] for t in detection_df.sequence_t]
+        detection_df["seq_midpoint_time"] = (
+            detection_df.seq_start_time + detection_df.seq_end_time
+        ) / 2
     return detection_df
