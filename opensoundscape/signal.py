@@ -374,7 +374,7 @@ def detect_peak_sequence_cwt(
             plt.show()
 
         # convert seq_t to time since beginning of audio file
-        seq_t = list(np.array(seq_t) + window_start_t)
+        seq_t = [list(np.array(s) + window_start_t) for s in seq_t]
 
         # save df of detected sequences in list
         dfs.append(
