@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "opensoundscape"
-version = "0.5.0"
+version = "0.6.0"
 description = "Open source, scalable acoustic classification for ecology and conservation"
 authors = [
   "Justin Kitzes <justin.kitzes@pitt.edu>",
@@ -15,34 +15,35 @@ packages = [{include = "opensoundscape"}]
 include = ["opensoundscape/**/*.py"]
 
 [tool.poetry.dependencies]
-python = "^3.7"
-docopt = "^0.6.2"
-librosa = "^0.7.0"
-ray = "^0.8.5"
-torch = "^1.8.1"
-torchvision = "^0.9.1"
-ipykernel = "^5.2.0"
-pandas = "^1.0.3"
-matplotlib = "^3.2.1"
-schema = "^0.7.2"
-jupyterlab = "^2.1.4"
-scikit-image = "^0.17.2"
-numba = "0.48.0"
-scikit-learn = "^0.24.2"
+python = ">=3.7"
+docopt = ">=0.6.2"
+librosa = ">=0.7.0"
+ray = ">=0.8.5"
+torch = ">=1.8.1"
+torchvision = ">=0.9.1"
+ipykernel = ">=5.2.0"
+pandas = ">=1.0.3"
+matplotlib = ">=3.2.1"
+schema = ">=0.7.2"
+jupyterlab = ">=2.1.4"
+scikit-image = ">=0.17.2"
+numba = ">=0.48.0"
+scikit-learn = ">=0.24.2"
 Jinja2 = "<3.0"
-ipython = "7.10"
-tinytag = "^1.6.0"
+ipython = ">=7.10"
+pywavelets = ">=1.2.0"
+tinytag = ">=1.6.0"
 
 [tool.poetry.dev-dependencies]
 black = "=19.3b0"
-pre-commit = "^1.18"
-sphinx = "^2.1"
-pytest = "^5.1"
-sphinx-rtd-theme = "^0.4.3"
-recommonmark = "^0.6.0"
-nbsphinx = "^0.7.1"
-m2r = "^0.2"
-docutils = "0.16"
+pre-commit = ">=1.18"
+sphinx = ">=2.1"
+pytest = ">=5.1"
+sphinx-rtd-theme = ">=0.4.3"
+recommonmark = ">=0.6.0"
+nbsphinx = ">=0.7.1"
+m2r = ">=0.2"
+docutils = "=0.17"
 
 [tool.black]
 line-length = 88

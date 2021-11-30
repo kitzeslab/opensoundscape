@@ -210,7 +210,7 @@ class LongAudioPreprocessor(BasePreprocessor):
             shorter clips will not be extended (modify actions.AudioTrimmer
             to change behavior).
         clip_overlap:
-            overlap in seconds between adjascent clips
+            overlap in seconds between adjacent clips
         final_clip=None:
             see Audio.split() for final clip behavior and options
         out_shape:

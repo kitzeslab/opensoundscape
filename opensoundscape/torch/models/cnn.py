@@ -608,7 +608,7 @@ class PytorchModel(BaseModule):
                 - None: do not create or return binary predictions
                 [default: None]
             threshold:
-                prediction threshold for sigmoid scores. Only relevant when
+                prediction threshold(s) for sigmoid scores. Only relevant when
                 binary_preds == 'multi_target'
             error_log:
                 if not None, saves a list of files that raised errors to

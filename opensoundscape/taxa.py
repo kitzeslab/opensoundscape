@@ -1,6 +1,10 @@
 """a set of utilites for converting between scientific and common names of bird species in different naming systems (xeno canto and bird net)"""
 import numpy as np
-from opensoundscape.species_table import species_table
+import pandas as pd
+import importlib.resources
+
+with importlib.resources.path("opensoundscape.resources", "species_table.csv") as f:
+    species_table = pd.read_csv(f)
 
 
 def get_species_list():
