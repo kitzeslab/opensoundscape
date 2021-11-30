@@ -31,6 +31,7 @@ opensoundscape.torch.models.cnn.
 """
 from torchvision import models
 from torch import nn
+from opensoundscape.torch.architectures.utils import CompositeArchitecture
 
 
 def set_parameter_requires_grad(model, freeze_feature_extractor):
@@ -155,6 +156,41 @@ def resnet152(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     num_ftrs = model_ft.fc.in_features
     model_ft.fc = nn.Linear(num_ftrs, num_classes)
     return model_ft
+
+
+def resnet18_composite(
+    num_classes, freeze_feature_extractor=False, use_pretrained=True
+):
+    """ResNet18 arch w/ separate feature extraction and classification blocks
+
+    input_size = 224
+
+    Args:
+        num_classes:
+            number of output nodes for the final layer
+        freeze_feature_extractor:
+            if False (default), entire network will have gradients and can train
+            if True, feature block is frozen and only final layer is trained
+        use_pretrained:
+            if True, uses pre-trained ImageNet features from
+            Pytorch's model zoo.
+    """
+    model_ft = models.resnet18(pretrained=use_pretrained)
+    set_parameter_requires_grad(model_ft, freeze_feature_extractor)
+    num_ftrs = model_ft.fc.in_features
+
+    # remove the fc layer
+    del model_ft.fc
+
+    # create independent fc layer, and set 'requires grad'
+    clf = nn.Linear(num_ftrs, num_classes)
+    # by default, all parameters have requires_grad=True
+
+    # create composite model with separate feature and classifier blocks
+    arch = CompositeArchitecture()  # forward() runs both feat. and clf.
+    arch.feature = model_ft
+    arch.classifier = clf
+    return arch
 
 
 def alexnet(num_classes, freeze_feature_extractor=False, use_pretrained=True):
