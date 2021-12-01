@@ -1039,6 +1039,17 @@ class Resnet18Multiclass(CnnResampleLoss):
         param_dict["classifier"]["params"] = self.network.classifier.parameters()
         return self.optimizer_cls(param_dict.values())
 
+    @classmethod
+    def from_checkpoint(cls, path):
+        # need to get classes first to initialize the model object
+        try:
+            classes = torch.load(path)["classes"]
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        model_obj = cls(classes)
+        model_obj.load(path)
+        return model_obj
+
 
 class Resnet18Binary(PytorchModel):
     """Subclass of PytorchModel with Resnet18 architecture
