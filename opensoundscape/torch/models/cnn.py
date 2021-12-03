@@ -990,14 +990,13 @@ class Resnet18Multiclass(CnnResampleLoss):
     def __init__(self, classes, single_target=False, use_pretrained=True):
 
         self.classes = classes
-        architecture = cnn_architectures.resnet18_composite(
+        architecture = cnn_architectures.resnet18(
             num_classes=len(self.classes), use_pretrained=use_pretrained
         )
         super(Resnet18Multiclass, self).__init__(
             architecture, self.classes, single_target
         )
         self.name = "Resnet18Multiclass"
-        self.loss_cls = ResampleLoss
 
         # optimization parameters for parts of the networks - see
         # https://pytorch.org/docs/stable/optim.html#per-parameter-options
@@ -1032,11 +1031,20 @@ class Resnet18Multiclass(CnnResampleLoss):
         prior to calling .train().
         """
         param_dict = self.optimizer_params
-        param_dict["feature"]["params"] = self.network.feature.parameters()
-        param_dict["classifier"]["params"] = self.network.classifier.parameters()
+        feature_extractor_params_list = [
+            param
+            for name, param in self.network.named_parameters()
+            if not name.split(".")[0] == "fc"
+        ]
+        classifier_params_list = [
+            param
+            for name, param in self.network.named_parameters()
+            if name.split(".")[0] == "fc"
+        ]
+        param_dict["feature"]["params"] = feature_extractor_params_list
+        param_dict["classifier"]["params"] = classifier_params_list
         return self.optimizer_cls(param_dict.values())
 
-    # TODO: test this
     @classmethod
     def from_checkpoint(cls, path):
         # need to get classes first to initialize the model object
@@ -1049,7 +1057,7 @@ class Resnet18Multiclass(CnnResampleLoss):
         return model_obj
 
 
-class Resnet18Binary(Resnet18Multiclass):
+class Resnet18Binary(PytorchModel):
     """Subclass of PytorchModel with Resnet18 architecture
 
     This subclass allows separate training parameters
@@ -1069,12 +1077,70 @@ class Resnet18Binary(Resnet18Multiclass):
         assert (len(classes) == 2, "binary model must have 2 classes")
 
         single_target = True  # binary model is always single-target
-
-        super(Resnet18Binary, self).__init__(classes, single_target, use_pretrained)
+        self.classes = classes
+        architecture = cnn_architectures.resnet18(
+            num_classes=len(self.classes), use_pretrained=use_pretrained
+        )
+        super(Resnet18Binary, self).__init__(architecture, self.classes, single_target)
         self.name = "Resnet18Binary"
 
-        ### loss function for single-target model ###
-        self.loss_cls = CrossEntropyLoss_hot
+        # optimization parameters for separate feature extractor and classifier
+        # see: https://pytorch.org/docs/stable/optim.html#per-parameter-options
+        self.optimizer_params = {
+            "feature": {  # optimizer parameters for feature extraction layers
+                # "params": self.network.feature.parameters(),
+                "lr": 0.001,
+                "momentum": 0.9,
+                "weight_decay": 0.0005,
+            },
+            "classifier": {  # optimizer parameters for classification layers
+                # "params": self.network.classifier.parameters(),
+                "lr": 0.01,
+                "momentum": 0.9,
+                "weight_decay": 0.0005,
+            },
+        }
+
+    def _init_optimizer(self):
+        """initialize an instance of self.optimizer
+
+        We override the parent method because we need to pass a list of
+        separate optimizer_params for different parts of the network
+        - ie we now have a dictionary of param dictionaries instead of just a
+        param dictionary.
+
+        This function is called during .train() so that the user
+        has a chance to swap/modify the optimizer before training.
+
+        To modify the optimizer, change the value of
+        self.optimizer_cls and/or self.optimizer_params
+        prior to calling .train().
+        """
+        param_dict = self.optimizer_params
+        feature_extractor_params_list = [
+            param
+            for name, param in self.network.named_parameters()
+            if not name.split(".")[0] == "fc"
+        ]
+        classifier_params_list = [
+            param
+            for name, param in self.network.named_parameters()
+            if name.split(".")[0] == "fc"
+        ]
+        param_dict["feature"]["params"] = feature_extractor_params_list
+        param_dict["classifier"]["params"] = classifier_params_list
+        return self.optimizer_cls(param_dict.values())
+
+    @classmethod
+    def from_checkpoint(cls, path):
+        # need to get classes first to initialize the model object
+        try:
+            classes = torch.load(path)["classes"]
+        except RuntimeError:  # model was saved on GPU and now on CPU
+            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        model_obj = cls(classes)
+        model_obj.load(path)
+        return model_obj
 
 
 class InceptionV3(PytorchModel):
