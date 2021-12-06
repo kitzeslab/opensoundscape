@@ -39,10 +39,11 @@ class BoxedAnnotations:
         Returns:
             BoxedAnnotations object
         """
-        for col in ["annotation", "start_time", "end_time", "low_f", "high_f"]:
+        needed_cols = ["annotation", "start_time", "end_time", "low_f", "high_f"]
+        for col in needed_cols:
             assert col in df.columns, (
-                "df columns must include all of these:"
-                ' ["annotation","start_time","end_time","low_f","high_f"]'
+                f"df columns must include all of these: {str(needed_cols)}\n"
+                f"columns in df: {list(df.columns)}"
             )
         self.df = df
         self.audio_file = audio_file
@@ -72,6 +73,10 @@ class BoxedAnnotations:
             BoxedAnnotations object containing annotaitons from the Raven file
         """
         df = pd.read_csv(path, delimiter="\t")
+        assert annotation_column in df.columns, (
+            f"Raven file does not contain annotation_column={annotation_column}\n"
+            f"(columns in file: {list(df.columns)})"
+        )
         df = df.rename(
             columns={
                 annotation_column: "annotation",
