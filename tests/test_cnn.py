@@ -62,6 +62,10 @@ def test_train(train_dataset):
     model_path = Path("tests/models/binary/best.model")
     binary.save(model_path)
     assert model_path.exists()
+
+    # check that from_checkpoint works
+    Resnet18Multiclass.from_checkpoint(model_path)
+
     shutil.rmtree("tests/models/binary")
 
 
@@ -79,6 +83,10 @@ def test_train_multiclass(train_dataset):
     model_path = Path("tests/models/multiclass/best.model")
     model.save(model_path)
     assert model_path.exists()
+
+    # check that from_checkpoint works
+    Resnet18Multiclass.from_checkpoint(model_path)
+
     shutil.rmtree("tests/models/multiclass/")
 
 
