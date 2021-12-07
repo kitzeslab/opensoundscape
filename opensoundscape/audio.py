@@ -111,7 +111,7 @@ class Audio:
         resample_type="kaiser_fast",
         max_duration=None,
         metadata=True,
-        start_time=0,
+        offset=0,
         duration=None,
     ):
         """Load audio from files
@@ -144,10 +144,10 @@ class Audio:
                 `comment` field, if the `artist` field includes `AudioMoth`.
                 The parsing function for AudioMoth is likely to break when new
                 firmware versions change the `comment` metadata field.
-            start_time: load audio starting at this time (seconds) after the
+            offset: load audio starting at this time (seconds) after the
                 start of the file. Default: 0 seconds.
             duration: load audio of this duration (seconds) starting at
-                start_time. If None, loads all the way to the end of the file.
+                `offset`. If None, loads all the way to the end of the file.
 
         Returns:
             Audio object with attributes: samples, sample_rate, resample_type,
@@ -169,7 +169,7 @@ class Audio:
             sr=sample_rate,
             res_type=resample_type,
             mono=True,
-            offset=start_time,
+            offset=offset,
             duration=duration,
         )
         warnings.resetwarnings()
@@ -182,10 +182,8 @@ class Audio:
             if metadata["artist"] and "AudioMoth" in metadata["artist"]:
                 try:
                     metadata = parse_audiomoth_metadata(metadata)
-                    # if the start_time > 0, we need to update the timestamp
-                    metadata["recording_start_time"] += timedelta(
-                        seconds=round(start_time)
-                    )
+                    # if the offset > 0, we need to update the timestamp
+                    metadata["recording_start_time"] += timedelta(seconds=round(offset))
                 except Exception as e:
                     warnings.warn(
                         "This seems to be an AudioMoth file, "
@@ -203,7 +201,7 @@ class Audio:
             metadata["samplerate"] = sr
 
             # if we loaded part we don't know the file size anymore
-            if start_time > 0 or duration is not None:
+            if offset > 0 or duration is not None:
                 metadata["filesize"] = np.nan
 
         except Exception as e:
