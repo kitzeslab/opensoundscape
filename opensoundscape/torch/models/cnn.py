@@ -625,12 +625,11 @@ class PytorchModel(BaseModule):
         Note: if no return type selected for labels/scores/preds, returns None
         instead of a DataFrame in the returned tuple
         """
-        err_msg = (
-            "Prediction dataset must have same classes"
-            "and class order as model object, or no classes."
-        )
         if len(prediction_dataset.df.columns) > 0:
-            assert list(self.classes) == list(prediction_dataset.df.columns), err_msg
+            if not list(self.classes) == list(prediction_dataset.df.columns):
+                warnings.warn(
+                    "The columns of prediction_dataset.df differ" "from model.classes"
+                )
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
