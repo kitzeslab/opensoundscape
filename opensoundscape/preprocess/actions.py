@@ -98,6 +98,28 @@ class AudioLoader(BaseAction):
         return Audio.from_file(path, **self.params)
 
 
+class AudioClipLoader(BaseAction):
+    """Action to load only a specific segment of an audio file
+
+    Loads an audio file or part of a file.
+    see Audio.from_file() for documentation.
+
+    Args:
+        see Audio.from_file
+
+    Note: default sample_rate=None means use file's sample rate, don't resample
+    """
+
+    def __init__(self, **kwargs):
+        super(AudioClipLoader, self).__init__(**kwargs)
+        self.requires_clip_times = True
+
+    def go(self, path, start_time, end_time):
+        return Audio.from_file(
+            path, offset=start_time, duration=end_time - start_time, **self.params
+        )
+
+
 class AudioTrimmer(BaseAction):
     """Action child class for trimming audio (Audio -> Audio)
 

@@ -507,3 +507,81 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
     def augmentation_off(self):
         """use pipeline that skips all augmentations"""
         self.pipeline = self.no_augmentation_pipeline
+
+
+class ClipLoadingSpectrogramPreprocessor(AudioToSpectrogramPreprocessor):
+    """load audio samples from long audio files
+
+    Directly loads a part of an audio file, eg 5-10 seconds, without loading
+    entire file. This alows for prediction on long audio files without needing to
+    pre-split or load large files into memory.
+
+    Note that this preprocessor does Not support passing labels.
+
+    Expects a df with index: audio file paths,
+    columns: ['start_time','end_time'] (seconds since beginning of file)
+    It will load the desired audio clip into a sample, regardless of length.
+
+    You can quickly create such a df for a set of audio files like this:
+
+    ```
+    import librosa
+    from opensoundscape.helpers import generate_clip_times_df
+    files = glob('/path_to/*/*.WAV') #get list of full-length files
+    clip_dfs = []
+    clip_duration=5.0
+    clip_overlap = 0.0
+    for f in files:
+        t = librosa.get_duration(filename=f)
+        clips = generate_clip_times_df(t,clip_duration,clip_overlap)
+        clips.index = [f]*len(clips)
+        clips.index.name = 'file'
+        clip_dfs.append(clips)
+    clip_df_all_files = pd.concat(clip_dfs)
+    ```
+
+    """
+
+    def __init__(self, df):
+        assert df.columns[0] == "start_time"
+        assert df.columns[1] == "end_time"
+        super(ClipLoadingSpectrogramPreprocessor, self).__init__(
+            df, return_labels=False
+        )
+
+        self.actions.load_audio = actions.AudioClipLoader(sample_rate=None)
+        self.pipeline[0] = self.actions.load_audio
+        self.verbose = False
+
+    def __getitem__(self, item_idx):
+
+        try:
+            df_row = self.df.iloc[item_idx]
+            x = Path(df_row.name)  # the index contains a path to a file
+
+            # perform each action in the pipeline if action.bypass==False
+            for action in self.pipeline:
+                if action.bypass:
+                    continue
+                elif (
+                    hasattr(action, "requires_clip_times")
+                    and action.requires_clip_times
+                ):
+                    x = action.go(x, df_row["start_time"], df_row["end_time"])
+                elif action.requires_labels:
+                    x, df_row = action.go(x, copy.deepcopy(df_row))
+                else:
+                    x = action.go(x)
+
+            # this preprocessor does not support labels!
+            #             # Return sample & label pairs (training/validation)
+            #             if self.return_labels:
+            #                 labels = torch.from_numpy(df_row.values)
+            #                 return {"X": x, "y": labels}
+
+            # Return sample only (prediction)
+            return {"X": x}
+        except:
+            raise PreprocessingError(
+                f"failed to preprocess sample: {self.df.index[item_idx]}"
+            )
