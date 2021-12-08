@@ -81,6 +81,16 @@ class PytorchModel(BaseModule):
         # must have .forward(), .train(), .eval(), .to(), .state_dict()
         self.network = architecture
 
+        ### network device ###
+        # automatically gpu (default is 'cuda:0') if available
+        # can override after init, eg model.device='cuda:1'
+        # network and samples are moved to gpu during training/inference
+        # devices could be 'cuda:0', torch.device('gpu'), torch.device('cpu')
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+
         ### loss function ###
         if self.single_target:  # use cross entropy loss by default
             self.loss_cls = CrossEntropyLoss_hot
@@ -153,12 +163,8 @@ class PytorchModel(BaseModule):
         """
 
         ###########################
-        # Setup cuda and networks #
+        # Move network to device  #
         ###########################
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
         self.network.to(self.device)
 
         ###########################
@@ -632,10 +638,7 @@ class PytorchModel(BaseModule):
         if len(prediction_dataset.df.columns) > 0:
             assert list(self.classes) == list(prediction_dataset.df.columns), err_msg
 
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        # move network to device
         self.network.to(self.device)
 
         self.network.eval()
@@ -802,10 +805,7 @@ class PytorchModel(BaseModule):
         if len(prediction_dataset.df.columns) > 0:
             assert False, err_msg
 
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        # move network to device,
         self.network.to(self.device)
 
         self.network.eval()
