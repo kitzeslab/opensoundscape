@@ -255,6 +255,7 @@ class PytorchModel(BaseModule):
             loss = self.loss_fn(logits, batch_labels)
 
             # save loss for each batch; later take average for epoch
+
             batch_loss.append(loss.detach().cpu().numpy())
 
             #############################
@@ -524,10 +525,7 @@ class PytorchModel(BaseModule):
                 for optimizer's state [default: True]
             verbose: if True, print missing and unused keys for model weights
         """
-        try:
-            model_dict = torch.load(path)
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            model_dict = torch.load(path, map_location=torch.device("cpu"))
+        model_dict = torch.load(path, map_location=self.device)
 
         # load misc saved items
         self.current_epoch = model_dict["epoch"]
@@ -1042,10 +1040,7 @@ class Resnet18Multiclass(CnnResampleLoss):
     @classmethod
     def from_checkpoint(cls, path):
         # need to get classes first to initialize the model object
-        try:
-            classes = torch.load(path)["classes"]
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        classes = torch.load(path, map_location=self.device)["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
         return model_obj
@@ -1124,10 +1119,7 @@ class Resnet18Binary(PytorchModel):
     @classmethod
     def from_checkpoint(cls, path):
         # need to get classes first to initialize the model object
-        try:
-            classes = torch.load(path)["classes"]
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        classes = torch.load(path, map_location=self.device)["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
         return model_obj
@@ -1261,10 +1253,7 @@ class InceptionV3(PytorchModel):
     @classmethod
     def from_checkpoint(cls, path):
         # need to get classes first to initialize the model object
-        try:
-            classes = torch.load(path)["classes"]
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        classes = torch.load(path, map_location=self.device)["classes"]
         model_obj = cls(classes=classes, use_pretrained=False)
         model_obj.load(path)
         return model_obj
