@@ -82,6 +82,16 @@ class PytorchModel(BaseModule):
         # must have .forward(), .train(), .eval(), .to(), .state_dict()
         self.network = architecture
 
+        ### network device ###
+        # automatically gpu (default is 'cuda:0') if available
+        # can override after init, eg model.device='cuda:1'
+        # network and samples are moved to gpu during training/inference
+        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu')
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+
         ### loss function ###
         if self.single_target:  # use cross entropy loss by default
             self.loss_cls = CrossEntropyLoss_hot
@@ -154,12 +164,8 @@ class PytorchModel(BaseModule):
         """
 
         ###########################
-        # Setup cuda and networks #
+        # Move network to device  #
         ###########################
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
         self.network.to(self.device)
 
         ###########################
@@ -250,6 +256,7 @@ class PytorchModel(BaseModule):
             loss = self.loss_fn(logits, batch_labels)
 
             # save loss for each batch; later take average for epoch
+
             batch_loss.append(loss.detach().cpu().numpy())
 
             #############################
@@ -519,10 +526,7 @@ class PytorchModel(BaseModule):
                 for optimizer's state [default: True]
             verbose: if True, print missing and unused keys for model weights
         """
-        try:
-            model_dict = torch.load(path)
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            model_dict = torch.load(path, map_location=torch.device("cpu"))
+        model_dict = torch.load(path, map_location=self.device)
 
         # load misc saved items
         self.current_epoch = model_dict["epoch"]
@@ -632,10 +636,7 @@ class PytorchModel(BaseModule):
                     "The columns of prediction_dataset.df differ" "from model.classes"
                 )
 
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        # move network to device
         self.network.to(self.device)
 
         self.network.eval()
@@ -808,10 +809,7 @@ class PytorchModel(BaseModule):
         if len(prediction_dataset.df.columns) > 0:
             assert False, err_msg
 
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        # move network to device,
         self.network.to(self.device)
 
         self.network.eval()
@@ -1046,12 +1044,25 @@ class Resnet18Multiclass(CnnResampleLoss):
         return self.optimizer_cls(param_dict.values())
 
     @classmethod
-    def from_checkpoint(cls, path):
+    def from_checkpoint(cls, path, device=None):
+        """create instance of class from saved model object
+
+        Args:
+            path: file path of saved model
+            device: which device to load into, eg 'cuda:1'
+            [default: None] will choose first gpu if available, otherwise cpu
+
+        Returns:
+            a model object with loaded weights
+        """
         # need to get classes first to initialize the model object
-        try:
-            classes = torch.load(path)["classes"]
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        if device is None:
+            device = (
+                torch.device("cuda")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
+        classes = torch.load(path, map_location=device)["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
         return model_obj
@@ -1128,12 +1139,25 @@ class Resnet18Binary(PytorchModel):
         return self.optimizer_cls(param_dict.values())
 
     @classmethod
-    def from_checkpoint(cls, path):
+    def from_checkpoint(cls, path, device=None):
+        """create instance of class from saved model object
+
+        Args:
+            path: file path of saved model
+            device: which device to load into, eg 'cuda:1'
+            [default: None] will choose first gpu if available, otherwise cpu
+
+        Returns:
+            a model object with loaded weights
+        """
         # need to get classes first to initialize the model object
-        try:
-            classes = torch.load(path)["classes"]
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
+        if device is None:
+            device = (
+                torch.device("cuda")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
+        classes = torch.load(path, map_location=device)["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
         return model_obj
@@ -1265,13 +1289,26 @@ class InceptionV3(PytorchModel):
         return total_tgts, total_preds, total_scores
 
     @classmethod
-    def from_checkpoint(cls, path):
+    def from_checkpoint(cls, path, device=None):
+        """create instance of class from saved model object
+
+        Args:
+            path: file path of saved model
+            device: which device to load into, eg 'cuda:1'
+            [default: None] will choose first gpu if available, otherwise cpu
+
+        Returns:
+            a model object with loaded weights
+        """
         # need to get classes first to initialize the model object
-        try:
-            classes = torch.load(path)["classes"]
-        except RuntimeError:  # model was saved on GPU and now on CPU
-            classes = torch.load(path, map_location=torch.device("cpu"))["classes"]
-        model_obj = cls(classes=classes, use_pretrained=False)
+        if device is None:
+            device = (
+                torch.device("cuda")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
+        classes = torch.load(path, map_location=device)["classes"]
+        model_obj = cls(classes, use_pretrained=False)
         model_obj.load(path)
         return model_obj
 

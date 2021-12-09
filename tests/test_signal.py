@@ -120,3 +120,53 @@ def test_detect_peak_sequence_cwt(rugr_wav_str):
     )
     assert len(detections) == 1
     assert detections.iloc[0].seq_len == 24
+
+
+def test_detect_peak_sequence_cwt_no_results(rugr_wav_str):
+    """tests that empty dataframe is returned (instead of errror) if input audio
+    is shorter than window_length 
+    """
+    rugr_audio = Audio.from_file(rugr_wav_str).trim(0, 1)
+    detections = sig.detect_peak_sequence_cwt(
+        rugr_audio,
+        sr=400,
+        window_len=10,
+        center_frequency=50,
+        wavelet="morl",
+        peak_threshold=0.2,
+        peak_separation=15 / 400,
+        dt_range=[0.05, 0.8],
+        dy_range=[-0.2, 0],
+        d2y_range=[-0.05, 0.15],
+        max_skip=3,
+        duration_range=[1, 15],
+        points_range=[9, 100],
+        plot=False,
+    )
+    assert len(detections) == 0
+
+
+def test_detect_peak_sequence_cwt_uneven_length_results(rugr_wav_str):
+    """
+
+    this test is for the (resolved) issue #410 in which uneven lengths of
+    detected sequences caused a TypeError
+    """
+    rugr_audio = Audio.from_file(rugr_wav_str).trim(1, 8).loop(length=20)
+    detections = sig.detect_peak_sequence_cwt(
+        rugr_audio,
+        sr=400,
+        window_len=3,
+        center_frequency=50,
+        wavelet="morl",
+        peak_threshold=0.2,
+        peak_separation=15 / 400,
+        dt_range=[0.05, 0.8],
+        dy_range=[-0.2, 0],
+        d2y_range=[-0.05, 0.15],
+        max_skip=3,
+        duration_range=[1, 15],
+        points_range=[9, 100],
+        plot=False,
+    )
+    assert len(detections) == 2
