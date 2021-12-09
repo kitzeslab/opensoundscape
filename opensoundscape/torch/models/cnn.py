@@ -1050,12 +1050,8 @@ class Resnet18Multiclass(CnnResampleLoss):
             a model object with loaded weights
         """
         # need to get classes first to initialize the model object
-        if device == "auto":
-            device = (
-                torch.device("gpu")
-                if torch.cuda.is_available()
-                else torch.device("cpu")
-            )
+        if device is None:
+            device = "gpu" if torch.cuda.is_available() else "cpu"
         classes = torch.load(path, map_location=device)["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
@@ -1146,11 +1142,7 @@ class Resnet18Binary(PytorchModel):
         """
         # need to get classes first to initialize the model object
         if device is None:
-            device = (
-                torch.device("gpu")
-                if torch.cuda.is_available()
-                else torch.device("cpu")
-            )
+            device = "gpu" if torch.cuda.is_available() else "cpu"
         classes = torch.load(path, map_location=device)["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
@@ -1296,11 +1288,7 @@ class InceptionV3(PytorchModel):
         """
         # need to get classes first to initialize the model object
         if device is None:
-            device = (
-                torch.device("gpu")
-                if torch.cuda.is_available()
-                else torch.device("cpu")
-            )
+            device = "gpu" if torch.cuda.is_available() else "cpu"
         classes = torch.load(path, map_location=device)["classes"]
         model_obj = cls(classes, use_pretrained=False)
         model_obj.load(path)
