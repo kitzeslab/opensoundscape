@@ -1038,9 +1038,25 @@ class Resnet18Multiclass(CnnResampleLoss):
         return self.optimizer_cls(param_dict.values())
 
     @classmethod
-    def from_checkpoint(cls, path):
+    def from_checkpoint(cls, path, device=None):
+        """create instance of class from saved model object
+
+        Args:
+            path: file path of saved model
+            device: which device to load into, eg 'cuda:1'
+            [default: None] will choose first gpu if available, otherwise cpu
+
+        Returns:
+            a model object with loaded weights
+        """
         # need to get classes first to initialize the model object
-        classes = torch.load(path, map_location=self.device)["classes"]
+        if device == "auto":
+            device = (
+                torch.device("gpu")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
+        classes = torch.load(path, map_location=device)["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
         return model_obj
@@ -1117,9 +1133,25 @@ class Resnet18Binary(PytorchModel):
         return self.optimizer_cls(param_dict.values())
 
     @classmethod
-    def from_checkpoint(cls, path):
+    def from_checkpoint(cls, path, device=None):
+        """create instance of class from saved model object
+
+        Args:
+            path: file path of saved model
+            device: which device to load into, eg 'cuda:1'
+            [default: None] will choose first gpu if available, otherwise cpu
+
+        Returns:
+            a model object with loaded weights
+        """
         # need to get classes first to initialize the model object
-        classes = torch.load(path, map_location=self.device)["classes"]
+        if device is None:
+            device = (
+                torch.device("gpu")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
+        classes = torch.load(path, map_location=device)["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
         return model_obj
@@ -1251,10 +1283,26 @@ class InceptionV3(PytorchModel):
         return total_tgts, total_preds, total_scores
 
     @classmethod
-    def from_checkpoint(cls, path):
+    def from_checkpoint(cls, path, device=None):
+        """create instance of class from saved model object
+
+        Args:
+            path: file path of saved model
+            device: which device to load into, eg 'cuda:1'
+            [default: None] will choose first gpu if available, otherwise cpu
+
+        Returns:
+            a model object with loaded weights
+        """
         # need to get classes first to initialize the model object
-        classes = torch.load(path, map_location=self.device)["classes"]
-        model_obj = cls(classes=classes, use_pretrained=False)
+        if device is None:
+            device = (
+                torch.device("gpu")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
+        classes = torch.load(path, map_location=device)["classes"]
+        model_obj = cls(classes, use_pretrained=False)
         model_obj.load(path)
         return model_obj
 
