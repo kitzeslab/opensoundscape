@@ -85,7 +85,7 @@ class PytorchModel(BaseModule):
         # automatically gpu (default is 'cuda:0') if available
         # can override after init, eg model.device='cuda:1'
         # network and samples are moved to gpu during training/inference
-        # devices could be 'cuda:0', torch.device('gpu'), torch.device('cpu')
+        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu')
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
@@ -1051,7 +1051,11 @@ class Resnet18Multiclass(CnnResampleLoss):
         """
         # need to get classes first to initialize the model object
         if device is None:
-            device = "gpu" if torch.cuda.is_available() else "cpu"
+            device = (
+                torch.device("cuda")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
         classes = torch.load(path, map_location=device)["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
@@ -1142,7 +1146,11 @@ class Resnet18Binary(PytorchModel):
         """
         # need to get classes first to initialize the model object
         if device is None:
-            device = "gpu" if torch.cuda.is_available() else "cpu"
+            device = (
+                torch.device("cuda")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
         classes = torch.load(path, map_location=device)["classes"]
         model_obj = cls(classes)
         model_obj.load(path)
@@ -1288,7 +1296,11 @@ class InceptionV3(PytorchModel):
         """
         # need to get classes first to initialize the model object
         if device is None:
-            device = "gpu" if torch.cuda.is_available() else "cpu"
+            device = (
+                torch.device("cuda")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
         classes = torch.load(path, map_location=device)["classes"]
         model_obj = cls(classes, use_pretrained=False)
         model_obj.load(path)
