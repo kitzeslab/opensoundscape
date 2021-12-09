@@ -13,6 +13,7 @@ from pathlib import Path
 from collections import OrderedDict
 import warnings
 import random
+from deprecated import deprecated
 
 import torch
 import torch.optim as optim
@@ -727,6 +728,12 @@ class PytorchModel(BaseModule):
 
         return score_df, pred_df, label_df
 
+    @deprecated(
+        version="0.6.1",
+        reason="Use ClipLoadingSpectrogramPreprocessor"
+        "with model.predict() for similar functionality but "
+        "lower memory requirements.",
+    )
     def split_and_predict(
         self,
         prediction_dataset,

@@ -1,10 +1,12 @@
 import pandas as pd
 import numpy as np
 import torch
-from opensoundscape.preprocess import actions
+from deprecated import deprecated
 from pathlib import Path
 import copy
+
 from opensoundscape.preprocess.utils import PreprocessingError
+from opensoundscape.preprocess import actions
 
 
 class BasePreprocessor(torch.utils.data.Dataset):
@@ -191,6 +193,11 @@ class AudioLoadingPreprocessor(BasePreprocessor):
 # overlay and save tensor.
 
 
+@deprecated(
+    version="0.6.1",
+    reason="Use ClipLoadingSpectrogramPreprocessor"
+    "for similar functionality with lower memory requirements.",
+)
 class LongAudioPreprocessor(BasePreprocessor):
     """
     loads audio paths, splits into segments, and runs pipeline on each segment
