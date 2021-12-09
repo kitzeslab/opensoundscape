@@ -523,12 +523,15 @@ class ClipLoadingSpectrogramPreprocessor(AudioToSpectrogramPreprocessor):
     entire file. This alows for prediction on long audio files without needing to
     pre-split or load large files into memory.
 
-    Note that this preprocessor does Not support passing labels.
+    It will load the requested audio segments into samples, regardless of length
 
-    Expects a df with index: audio file paths,
-    columns: ['start_time','end_time'] (seconds since beginning of file)
-    It will load the desired audio clip into a sample, regardless of length.
+    Args:
+        df: a dataframe with file paths as index and 2 columns:
+            ['start_time','end_time'] (seconds since beginning of file)
+    Returns:
+        ClipLoadingSpectrogramPreprocessor object
 
+    Examples:
     You can quickly create such a df for a set of audio files like this:
 
     ```
@@ -544,9 +547,19 @@ class ClipLoadingSpectrogramPreprocessor(AudioToSpectrogramPreprocessor):
         clips.index = [f]*len(clips)
         clips.index.name = 'file'
         clip_dfs.append(clips)
-    clip_df_all_files = pd.concat(clip_dfs)
+    clip_df = pd.concat(clip_dfs) #contains clip times for all files
     ```
 
+    If you use this preprocessor with model.predict(), it will work, but
+    the scores/predictions df will only have file paths not the times of clips.
+    You will want to re-add the start and end times of clips as multi-index:
+
+    ```
+    score_df = model.predict(clip_loading_ds) #for instance
+    score_df.index = pd.MultiIndex.from_arrays(
+        [clip_df.index,clip_df['start_time'],clip_df['end_time']]
+    )
+    ```
     """
 
     def __init__(self, df):
