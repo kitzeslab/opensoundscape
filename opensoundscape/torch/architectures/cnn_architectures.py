@@ -19,7 +19,7 @@ model has 10 output classes, write
 Then you can initialize a model object from
 `opensoundscape.torch.models.cnn` with your architecture:
 
-`model=PytorchModel(classes,my_arch)`
+`model=PytorchModel(my_arch,classes)`
 
 or override an existing model's architecture:
 
