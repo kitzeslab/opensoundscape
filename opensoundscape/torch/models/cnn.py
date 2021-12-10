@@ -1063,7 +1063,7 @@ class Resnet18Multiclass(CnnResampleLoss):
                 else torch.device("cpu")
             )
         classes = torch.load(path, map_location=device)["classes"]
-        model_obj = cls(classes)
+        model_obj = cls(classes, use_pretrained=False)
         model_obj.load(path)
         return model_obj
 
@@ -1162,7 +1162,7 @@ class Resnet18Binary(PytorchModel):
                 else torch.device("cpu")
             )
         classes = torch.load(path, map_location=device)["classes"]
-        model_obj = cls(classes)
+        model_obj = cls(classes, use_pretrained=False)
         model_obj.load(path)
         return model_obj
 
