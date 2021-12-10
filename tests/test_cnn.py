@@ -19,6 +19,19 @@ import shutil
 
 
 @pytest.fixture()
+def model_save_path(request):
+    path = Path("tests/models/temp.model")
+
+    # always delete this at the end
+    def fin():
+        path.unlink()
+
+    request.addfinalizer(fin)
+
+    return path
+
+
+@pytest.fixture()
 def train_dataset():
     df = pd.DataFrame(
         index=["tests/audio/great_plains_toad.wav", "tests/audio/1min.wav"],
@@ -157,3 +170,33 @@ def test_split_and_predict(long_audio_dataset):
     )
     assert len(scores) == 12
     assert len(preds) == 12
+
+
+def test_save_and_load(model_save_path):
+    arch = alexnet(2, use_pretrained=False)
+    m = PytorchModel(arch, classes=["negative", "positive"])
+    m.save(model_save_path)
+    m.load(model_save_path)
+
+
+def test_Resnet18Binary_from_checkpoint(model_save_path):
+    arch = alexnet(2, use_pretrained=False)
+    classes = ["negative", "positive"]
+    m = Resnet18Binary(classes=classes, use_pretrained=False)
+    m.save(model_save_path)
+    m = Resnet18Binary.from_checkpoint(model_save_path)
+    assert m.classes == classes
+
+
+def test_Resnet18Multiclass_from_checkpoint(model_save_path):
+    classes = ["negative", "positive"]
+    Resnet18Multiclass(classes=classes, use_pretrained=False).save(model_save_path)
+    m = Resnet18Multiclass.from_checkpoint(model_save_path)
+    assert m.classes == classes
+
+
+def test_InceptionV3_from_checkpoint(model_save_path):
+    classes = ["negative", "positive"]
+    InceptionV3(classes=classes, use_pretrained=False).save(model_save_path)
+    m = InceptionV3.from_checkpoint(model_save_path)
+    assert m.classes == classes
