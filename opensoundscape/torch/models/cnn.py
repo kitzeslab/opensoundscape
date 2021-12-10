@@ -981,8 +981,7 @@ class Resnet18Multiclass(CnnResampleLoss):
     Notes
     - Allows separate parameters for feature & classifier blocks
         via self.optimizer_params's keys: "feature" and "classifier"
-        (by using hand-built architecture)
-    - Uses ResampleLoss which requires class counts as an input.
+    - Uses ResampleLoss
     """
 
     def __init__(self, classes, single_target=False, use_pretrained=True):
@@ -1029,6 +1028,7 @@ class Resnet18Multiclass(CnnResampleLoss):
         prior to calling .train().
         """
         param_dict = self.optimizer_params
+        # in torch's resnet18, the classifier layer is called "fc"
         feature_extractor_params_list = [
             param
             for name, param in self.network.named_parameters()
@@ -1072,7 +1072,7 @@ class Resnet18Binary(PytorchModel):
     """Subclass of PytorchModel with Resnet18 architecture
 
     This subclass allows separate training parameters
-    for the feature extractor and classifier
+    for the feature extractor and classifier via optimizer_params
 
     Args:
         classes:
@@ -1085,7 +1085,7 @@ class Resnet18Binary(PytorchModel):
     """
 
     def __init__(self, classes, use_pretrained=True):
-        assert (len(classes) == 2, "binary model must have 2 classes")
+        assert len(classes) == 2, "binary model must have 2 classes"
 
         single_target = True  # binary model is always single-target
         self.classes = classes
