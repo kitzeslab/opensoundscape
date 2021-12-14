@@ -69,7 +69,7 @@ class PytorchModel(BaseModule):
 
         # model characteristics
         self.current_epoch = 0
-        self.classes = classes  # train_dataset.labels
+        self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         print(f"created {self.name} model object with {len(self.classes)} classes")
 
@@ -630,6 +630,13 @@ class PytorchModel(BaseModule):
         Note: if no return type selected for labels/scores/preds, returns None
         instead of a DataFrame in the returned tuple
         """
+        if prediction_dataset.specifies_clip_times:
+            # this dataset provides start and end times of each clip
+            # rather than supplying labels in the columns.
+            # we should add the start_time and end_time back into the output df
+            assert np.array_equal(
+                prediction_dataset.df.columns, ["start_time", "end_time"]
+            )
         if len(prediction_dataset.df.columns) > 0:
             if not list(self.classes) == list(prediction_dataset.df.columns):
                 warnings.warn(
@@ -663,8 +670,6 @@ class PytorchModel(BaseModule):
 
         failed_files = []  # keep list of any samples that raise errors
 
-        has_labels = False
-
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
 
@@ -674,10 +679,9 @@ class PytorchModel(BaseModule):
                 batch_tensors.requires_grad = False
                 # get batch's labels if available
                 batch_targets = torch.Tensor([]).to(self.device)
-                if "y" in batch.keys():
+                if prediction_dataset.return_labels:
                     batch_targets = batch["y"].to(self.device)
                     batch_targets.requires_grad = False
-                    has_labels = True
 
                 # forward pass of network: feature extractor + classifier
                 logits = self.network.forward(batch_tensors)
@@ -714,18 +718,31 @@ class PytorchModel(BaseModule):
 
         # return 3 DataFrames with same index/columns as prediction_dataset's df
         # use None for placeholder if no preds / labels
+        # scores
         samples = prediction_dataset.df.index.values
         score_df = pd.DataFrame(index=samples, data=total_scores, columns=self.classes)
-        pred_df = (
-            None
-            if binary_preds is None
-            else pd.DataFrame(index=samples, data=total_preds, columns=self.classes)
-        )
-        label_df = (
-            None
-            if not has_labels
-            else pd.DataFrame(index=samples, data=total_tgts, columns=self.classes)
-        )
+        if prediction_dataset.specifies_clip_times:
+            score_df.index = pd.MultiIndex.from_frame(
+                prediction_dataset.df.reset_index()
+            )
+        # 0/1 predictions
+        if binary_preds is None:
+            pred_df = None
+        else:
+            pred_df = pd.DataFrame(
+                index=samples, data=total_preds, columns=self.classes
+            )
+            if prediction_dataset.specifies_clip_times:
+                pred_df.index = pd.MultiIndex.from_frame(
+                    prediction_dataset.df.reset_index()
+                )
+        # labels
+        if prediction_dataset.return_labels:
+            label_df = pd.DataFrame(
+                index=samples, data=total_tgts, columns=self.classes
+            )
+        else:
+            label_df = None
 
         return score_df, pred_df, label_df
 

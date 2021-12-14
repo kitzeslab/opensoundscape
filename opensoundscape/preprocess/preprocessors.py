@@ -44,7 +44,8 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
         self.df = df
         self.return_labels = return_labels
-        self.labels = df.columns
+        self.classes = df.columns
+        self.specifies_clip_times = False
 
         # actions: a collection of instances of BaseAction child classes
         self.actions = actions.ActionContainer()
@@ -237,7 +238,6 @@ class LongAudioPreprocessor(BasePreprocessor):
         self.audio_length = audio_length
         self.clip_overlap = clip_overlap
         self.final_clip = final_clip
-        # self.return_labels = return_labels
 
         # create separate pipeline for any actions that happen before audio splitting
         # running the actions of pre_split_pipeline should result in a single audio object
@@ -572,6 +572,7 @@ class ClipLoadingSpectrogramPreprocessor(AudioToSpectrogramPreprocessor):
         self.actions.load_audio = actions.AudioClipLoader(sample_rate=None)
         self.pipeline[0] = self.actions.load_audio
         self.verbose = False
+        self.specifies_clip_times = True
 
     def __getitem__(self, item_idx):
 
