@@ -10,6 +10,7 @@ from opensoundscape.preprocess.preprocessors import (
     AudioLoadingPreprocessor,
     PreprocessingError,
     LongAudioPreprocessor,
+    ClipLoadingSpectrogramPreprocessor,
 )
 from PIL import Image
 import warnings
@@ -152,6 +153,30 @@ def test_cnn_preprocessor_fails_on_short_file(dataset_df):
     dataset = CnnPreprocessor(dataset_df, audio_length=5.0)
     with pytest.raises(PreprocessingError):
         sample = dataset[1]["X"]
+
+
+def test_cliploadingspectrogrampreprocessor(dataset_df):
+    import librosa
+    from opensoundscape.helpers import generate_clip_times_df
+
+    # prepare a df for clip loading preprocessor: start_time, end_time columns
+    files = dataset_df.index.values
+    clip_dfs = []
+    for f in files:
+        t = librosa.get_duration(filename=f)
+        clips = generate_clip_times_df(t, 5, 0)
+        clips.index = [f] * len(clips)
+        clips.index.name = "file"
+        clip_dfs.append(clips)
+    clip_df = pd.concat(clip_dfs)
+    dataset = ClipLoadingSpectrogramPreprocessor(clip_df)
+    assert len(dataset) == 2
+    # load a sample
+    dataset[0]["X"]
+
+    # test with zero samples
+    dataset = ClipLoadingSpectrogramPreprocessor(clip_df.head(0))
+    assert len(dataset) == 0
 
 
 def test_long_audio_dataset():
