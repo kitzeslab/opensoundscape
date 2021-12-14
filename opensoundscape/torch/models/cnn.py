@@ -432,7 +432,7 @@ class PytorchModel(BaseModule):
 
         # warn the user if there were unsafe samples (failed to preprocess)
         if len(self.train_safe_dataset._unsafe_indices) > 0:
-            bad_paths = self.train_safe_dataset.df.index[
+            bad_paths = self.train_safe_dataset.dataset.df.index[
                 self.train_safe_dataset._unsafe_indices
             ].values
             msg = (
