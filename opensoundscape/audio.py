@@ -28,6 +28,7 @@ from math import ceil
 from opensoundscape.helpers import generate_clip_times_df
 from opensoundscape.audiomoth import parse_audiomoth_metadata
 from tinytag import TinyTag
+from datetime import timedelta
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -110,11 +111,24 @@ class Audio:
         resample_type="kaiser_fast",
         max_duration=None,
         metadata=True,
+        offset=0,
+        duration=None,
     ):
         """Load audio from files
 
         Deal with the various possible input types to load an audio file
         Also attempts to load metadata using tinytag.
+
+        Audio objects only support mono (one-channel) at this time. Files
+        with multiple channels are mixed down to a single channel.
+
+        Optionally, load only a piece of a file using start_time and end_time.
+        This will efficiently read sections of a .wav file regardless of where
+        the desired clip is in the audio. For mp3 files, access time grows
+        linearly with time since the beginning of the file.
+
+        This function relies on librosa.load(), which supports wav natively but
+        requires ffmpeg for mp3 support.
 
         Args:
             path (str, Path): path to an audio file
@@ -130,22 +144,37 @@ class Audio:
                 `comment` field, if the `artist` field includes `AudioMoth`.
                 The parsing function for AudioMoth is likely to break when new
                 firmware versions change the `comment` metadata field.
+            offset: load audio starting at this time (seconds) after the
+                start of the file. Default: 0 seconds.
+            duration: load audio of this duration (seconds) starting at
+                `offset`. If None, loads all the way to the end of the file.
 
         Returns:
             Audio object with attributes: samples, sample_rate, resample_type,
             max_duration, metadata (dict or None)
+
+        Note: default sample_rate=None means use file's sample rate, don't
+        resample
+
         """
         path = str(path)  # Pathlib path can have dependency issues - use string
         if max_duration:
             if librosa.get_duration(filename=path) > max_duration:
                 raise OpsoLoadAudioInputTooLong()
 
+        ## Load samples ##
         warnings.filterwarnings("ignore")
         samples, sr = librosa.load(
-            path, sr=sample_rate, res_type=resample_type, mono=True
+            path,
+            sr=sample_rate,
+            res_type=resample_type,
+            mono=True,
+            offset=offset,
+            duration=duration,
         )
         warnings.resetwarnings()
 
+        ## Load Metadata ##
         try:
             metadata = TinyTag.get(path).as_dict()
             # if this is an AudioMoth file, try to parse out additional
@@ -153,11 +182,28 @@ class Audio:
             if metadata["artist"] and "AudioMoth" in metadata["artist"]:
                 try:
                     metadata = parse_audiomoth_metadata(metadata)
+                    # if the offset > 0, we need to update the timestamp
+                    metadata["recording_start_time"] += timedelta(seconds=round(offset))
                 except Exception as e:
                     warnings.warn(
                         "This seems to be an AudioMoth file, "
                         f"but parse_audiomoth_metadata() raised: {e}"
                     )
+
+            ## Update metadata ##
+            metadata["channels"] = 1
+
+            # update the duration because we may have only loaded
+            # a piece of the entire audio file.
+            metadata["duration"] = len(samples) / sr
+
+            # update the sample rate in metadata
+            metadata["samplerate"] = sr
+
+            # if we loaded part we don't know the file size anymore
+            if offset > 0 or duration is not None:
+                metadata["filesize"] = np.nan
+
         except Exception as e:
             warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
             metadata = None

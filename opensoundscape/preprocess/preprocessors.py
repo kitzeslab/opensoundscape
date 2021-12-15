@@ -1,10 +1,12 @@
 import pandas as pd
 import numpy as np
 import torch
-from opensoundscape.preprocess import actions
+from deprecated import deprecated
 from pathlib import Path
 import copy
+
 from opensoundscape.preprocess.utils import PreprocessingError
+from opensoundscape.preprocess import actions
 
 
 class BasePreprocessor(torch.utils.data.Dataset):
@@ -42,7 +44,8 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
         self.df = df
         self.return_labels = return_labels
-        self.labels = df.columns
+        self.classes = df.columns
+        self.specifies_clip_times = False
 
         # actions: a collection of instances of BaseAction child classes
         self.actions = actions.ActionContainer()
@@ -177,6 +180,25 @@ class AudioLoadingPreprocessor(BasePreprocessor):
         self.pipeline.append(self.actions.trim_audio)
 
 
+# basically we need a class that's equivalent to the regular one, but
+# allows the input df to have additional indices 'start_time','end_time'
+# or, instead, could have additional dataframe input listing clips - then
+# might be able to use all the same classes. Like,
+# BasePreprocessor(df....)
+# if df.index is (path, start_t, end_t)...
+# otherwise, assert df.index is path...
+# but then every action would need to handle the possibility of
+# the nice thing is that this would integrate well with labels
+# for instance label_df created from long raven file, with triple-index.
+# the only actions (currently) that require labels/use file path are
+# overlay and save tensor.
+
+
+@deprecated(
+    version="0.6.1",
+    reason="Use ClipLoadingSpectrogramPreprocessor"
+    "for similar functionality with lower memory requirements.",
+)
 class LongAudioPreprocessor(BasePreprocessor):
     """
     loads audio paths, splits into segments, and runs pipeline on each segment
@@ -216,7 +238,6 @@ class LongAudioPreprocessor(BasePreprocessor):
         self.audio_length = audio_length
         self.clip_overlap = clip_overlap
         self.final_clip = final_clip
-        # self.return_labels = return_labels
 
         # create separate pipeline for any actions that happen before audio splitting
         # running the actions of pre_split_pipeline should result in a single audio object
@@ -312,7 +333,7 @@ class AudioToSpectrogramPreprocessor(BasePreprocessor):
     """
     loads audio paths, creates spectrogram, returns tensor
 
-    by default, does not resample audio, but bandpasses to 0-10 kHz
+    by default, does not resample audio, but bandpasses to 0-11025 Hz
     (to ensure all outputs have same scale in y-axis)
     can change with .actions.load_audio.set(sample_rate=sr)
 
@@ -493,3 +514,95 @@ class CnnPreprocessor(AudioToSpectrogramPreprocessor):
     def augmentation_off(self):
         """use pipeline that skips all augmentations"""
         self.pipeline = self.no_augmentation_pipeline
+
+
+class ClipLoadingSpectrogramPreprocessor(AudioToSpectrogramPreprocessor):
+    """load audio samples from long audio files
+
+    Directly loads a part of an audio file, eg 5-10 seconds, without loading
+    entire file. This alows for prediction on long audio files without needing to
+    pre-split or load large files into memory.
+
+    It will load the requested audio segments into samples, regardless of length
+
+    Args:
+        df: a dataframe with file paths as index and 2 columns:
+            ['start_time','end_time'] (seconds since beginning of file)
+    Returns:
+        ClipLoadingSpectrogramPreprocessor object
+
+    Examples:
+    You can quickly create such a df for a set of audio files like this:
+
+    ```
+    import librosa
+    from opensoundscape.helpers import generate_clip_times_df
+    files = glob('/path_to/*/*.WAV') #get list of full-length files
+    clip_dfs = []
+    clip_duration=5.0
+    clip_overlap = 0.0
+    for f in files:
+        t = librosa.get_duration(filename=f)
+        clips = generate_clip_times_df(t,clip_duration,clip_overlap)
+        clips.index = [f]*len(clips)
+        clips.index.name = 'file'
+        clip_dfs.append(clips)
+    clip_df = pd.concat(clip_dfs) #contains clip times for all files
+    ```
+
+    If you use this preprocessor with model.predict(), it will work, but
+    the scores/predictions df will only have file paths not the times of clips.
+    You will want to re-add the start and end times of clips as multi-index:
+
+    ```
+    score_df = model.predict(clip_loading_ds) #for instance
+    score_df.index = pd.MultiIndex.from_arrays(
+        [clip_df.index,clip_df['start_time'],clip_df['end_time']]
+    )
+    ```
+    """
+
+    def __init__(self, df):
+        assert df.columns[0] == "start_time"
+        assert df.columns[1] == "end_time"
+        super(ClipLoadingSpectrogramPreprocessor, self).__init__(
+            df, return_labels=False
+        )
+
+        self.actions.load_audio = actions.AudioClipLoader(sample_rate=None)
+        self.pipeline[0] = self.actions.load_audio
+        self.verbose = False
+        self.specifies_clip_times = True
+
+    def __getitem__(self, item_idx):
+
+        try:
+            df_row = self.df.iloc[item_idx]
+            x = Path(df_row.name)  # the index contains a path to a file
+
+            # perform each action in the pipeline if action.bypass==False
+            for action in self.pipeline:
+                if action.bypass:
+                    continue
+                elif (
+                    hasattr(action, "requires_clip_times")
+                    and action.requires_clip_times
+                ):
+                    x = action.go(x, df_row["start_time"], df_row["end_time"])
+                elif action.requires_labels:
+                    x, df_row = action.go(x, copy.deepcopy(df_row))
+                else:
+                    x = action.go(x)
+
+            # this preprocessor does not support labels!
+            #             # Return sample & label pairs (training/validation)
+            #             if self.return_labels:
+            #                 labels = torch.from_numpy(df_row.values)
+            #                 return {"X": x, "y": labels}
+
+            # Return sample only (prediction)
+            return {"X": x}
+        except:
+            raise PreprocessingError(
+                f"failed to preprocess sample: {self.df.index[item_idx]}"
+            )

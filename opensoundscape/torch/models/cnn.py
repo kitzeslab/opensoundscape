@@ -13,6 +13,7 @@ from pathlib import Path
 from collections import OrderedDict
 import warnings
 import random
+from deprecated import deprecated
 
 import torch
 import torch.optim as optim
@@ -67,7 +68,7 @@ class PytorchModel(BaseModule):
 
         # model characteristics
         self.current_epoch = 0
-        self.classes = classes  # train_dataset.labels
+        self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         print(f"created {self.name} model object with {len(self.classes)} classes")
 
@@ -532,12 +533,23 @@ class PytorchModel(BaseModule):
         Note: if no return type selected for labels/scores/preds, returns None
         instead of a DataFrame in the returned tuple
         """
-        err_msg = (
-            "Prediction dataset must have same classes"
-            "and class order as model object, or no classes."
-        )
-        if len(prediction_dataset.df.columns) > 0:
-            assert list(self.classes) == list(prediction_dataset.df.columns), err_msg
+        if len(prediction_dataset) < 1:
+            warnings.warn("prediction_dataset has zero samples. Returning None.")
+            return None, None, None
+
+        if prediction_dataset.specifies_clip_times:
+            # this dataset provides start and end times of each clip
+            # rather than supplying labels in the columns.
+            # we will add the start_time and end_time back into the output df
+            assert np.array_equal(
+                prediction_dataset.df.columns, ["start_time", "end_time"]
+            )
+        elif len(prediction_dataset.df.columns) > 0:
+            if not list(self.classes) == list(prediction_dataset.df.columns):
+                raise ValueError(
+                    "The columns of prediction_dataset.df differ"
+                    "from model.classes. Should have same columns or no columns."
+                )
 
         # move network to device
         self.network.to(self.device)
@@ -548,6 +560,7 @@ class PytorchModel(BaseModule):
         # but will provide a different sample! Later we go back and replace scores
         # with np.nan for the bad samples (using safe_dataset._unsafe_indices)
         # this approach to error handling feels hacky
+        # however, returning None would break the batching of samples
         safe_dataset = SafeDataset(prediction_dataset, unsafe_behavior="substitute")
 
         dataloader = torch.utils.data.DataLoader(
@@ -566,8 +579,6 @@ class PytorchModel(BaseModule):
 
         failed_files = []  # keep list of any samples that raise errors
 
-        has_labels = False
-
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
 
@@ -577,10 +588,9 @@ class PytorchModel(BaseModule):
                 batch_tensors.requires_grad = False
                 # get batch's labels if available
                 batch_targets = torch.Tensor([]).to(self.device)
-                if "y" in batch.keys():
+                if prediction_dataset.return_labels:
                     batch_targets = batch["y"].to(self.device)
                     batch_targets.requires_grad = False
-                    has_labels = True
 
                 # forward pass of network: feature extractor + classifier
                 logits = self.network.forward(batch_tensors)
@@ -589,14 +599,11 @@ class PytorchModel(BaseModule):
                 scores = apply_activation_layer(logits, activation_layer)
 
                 ### Binary predictions ###
-                # generate binary predictions
                 batch_preds = tensor_binary_predictions(
                     scores=logits, mode=binary_preds, threshold=threshold
                 )
 
-                # detach the returned values: currently tethered to gradients
-                # and updates via optimizer/backprop. detach() returns
-                # just numeric values.
+                # disable gradients on returned values
                 total_scores.append(scores.detach().cpu().numpy())
                 total_preds.append(batch_preds.float().detach().cpu().numpy())
                 total_tgts.append(batch_targets.int().detach().cpu().numpy())
@@ -617,21 +624,40 @@ class PytorchModel(BaseModule):
 
         # return 3 DataFrames with same index/columns as prediction_dataset's df
         # use None for placeholder if no preds / labels
+        # scores
         samples = prediction_dataset.df.index.values
         score_df = pd.DataFrame(index=samples, data=total_scores, columns=self.classes)
-        pred_df = (
-            None
-            if binary_preds is None
-            else pd.DataFrame(index=samples, data=total_preds, columns=self.classes)
-        )
-        label_df = (
-            None
-            if not has_labels
-            else pd.DataFrame(index=samples, data=total_tgts, columns=self.classes)
-        )
+        if prediction_dataset.specifies_clip_times:
+            score_df.index = pd.MultiIndex.from_frame(
+                prediction_dataset.df.reset_index()
+            )
+        # binary 0/1 predictions
+        if binary_preds is None:
+            pred_df = None
+        else:
+            pred_df = pd.DataFrame(
+                index=samples, data=total_preds, columns=self.classes
+            )
+            if prediction_dataset.specifies_clip_times:
+                pred_df.index = pd.MultiIndex.from_frame(
+                    prediction_dataset.df.reset_index()
+                )
+        # labels
+        if prediction_dataset.return_labels:
+            label_df = pd.DataFrame(
+                index=samples, data=total_tgts, columns=self.classes
+            )
+        else:
+            label_df = None
 
         return score_df, pred_df, label_df
 
+    @deprecated(
+        version="0.6.1",
+        reason="Use ClipLoadingSpectrogramPreprocessor"
+        "with model.predict() for similar functionality but "
+        "lower memory requirements.",
+    )
     def split_and_predict(
         self,
         prediction_dataset,
@@ -702,6 +728,10 @@ class PytorchModel(BaseModule):
             is ambiguous since the original files are split into clips during
             prediction (output values are for clips, not entire file)
             """
+        if len(prediction_dataset) < 1:
+            warnings.warn("prediction_dataset has zero samples. Returning None.")
+            return None, None, None
+
         err_msg = "Prediction dataset should only contain file paths (index)" ""
         if len(prediction_dataset.df.columns) > 0:
             assert False, err_msg

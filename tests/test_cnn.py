@@ -1,6 +1,7 @@
 from opensoundscape.preprocess.preprocessors import (
     CnnPreprocessor,
     LongAudioPreprocessor,
+    ClipLoadingSpectrogramPreprocessor,
 )
 from opensoundscape.torch.models.cnn import (
     PytorchModel,
@@ -48,6 +49,24 @@ def long_audio_dataset():
     return LongAudioPreprocessor(
         df, audio_length=5.0, clip_overlap=0.0, out_shape=[224, 224]
     )
+
+
+@pytest.fixture()
+def clip_loading_preprocessor():
+    import librosa
+    from opensoundscape.helpers import generate_clip_times_df
+
+    # prepare a df for clip loading preprocessor: start_time, end_time columns
+    files = ["tests/audio/1min.wav"]
+    clip_dfs = []
+    for f in files:
+        t = librosa.get_duration(filename=f)
+        clips = generate_clip_times_df(t, 5, 0)
+        clips.index = [f] * len(clips)
+        clips.index.name = "file"
+        clip_dfs.append(clips)
+    clip_df = pd.concat(clip_dfs)
+    return ClipLoadingSpectrogramPreprocessor(clip_df)
 
 
 @pytest.fixture()
@@ -149,6 +168,12 @@ def test_split_and_predict(long_audio_dataset):
     )
     assert len(scores) == 12
     assert len(preds) == 12
+
+
+def test_predict_with_cliploading(clip_loading_preprocessor):
+    binary = Resnet18Binary(classes=["negative", "positive"])
+    scores, _, _ = binary.predict(clip_loading_preprocessor, binary_preds=None)
+    assert len(scores) == 12
 
 
 def test_save_and_load_model(model_save_path):

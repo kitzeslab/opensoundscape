@@ -4,6 +4,11 @@ import numpy as np
 import pytest
 
 
+@pytest.fixture()
+def silence_10s_mp3_str():
+    return "tests/audio/silence_10s.mp3"
+
+
 def test_isnan():
     assert not helpers.isNan(0) and helpers.isNan(nan)
 
@@ -127,3 +132,12 @@ def test_generate_clip_times_df_overlap():
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert clip_df.iloc[1]["start_time"] == 2.5
     assert clip_df.iloc[1]["end_time"] == 7.5
+
+
+def test_make_clip_df(silence_10s_mp3_str):
+    """many corner cases / alternatives are tested for audio.split()"""
+    clip_df = helpers.make_clip_df(
+        files=[silence_10s_mp3_str, silence_10s_mp3_str], clip_duration=5.0
+    )
+    assert len(clip_df) == 4
+    assert np.array_equal(clip_df.columns, ["start_time", "end_time"])
