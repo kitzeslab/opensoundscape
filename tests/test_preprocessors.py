@@ -174,10 +174,6 @@ def test_cliploadingspectrogrampreprocessor(dataset_df):
     # load a sample
     dataset[0]["X"]
 
-    # test with zero samples
-    dataset = ClipLoadingSpectrogramPreprocessor(clip_df.head(0))
-    assert len(dataset) == 0
-
 
 def test_long_audio_dataset():
     df = pd.DataFrame(index=["tests/audio/1min.wav"])
