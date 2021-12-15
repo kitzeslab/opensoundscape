@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore_support
 
 from opensoundscape.torch.architectures.resnet import ResNetArchitecture
+from opensoundscape.torch.architectures import cnn_architectures
 from opensoundscape.torch.models.utils import (
     BaseModule,
     get_dataloader,
@@ -40,13 +41,11 @@ from opensoundscape.torch.safe_dataset import SafeDataset
 
 class PytorchModel(BaseModule):
     """
-    Generic Pytorch Model with .train() and .predict()
+    Generic Pytorch Model with .train(), .predict(), and .save()
 
     flexible architecture, optimizer, loss function, parameters
 
     for tutorials and examples see opensoundscape.org
-
-    methods include train(), predict(), save(), and load()
 
     Args:
         architecture:
@@ -415,14 +414,7 @@ class PytorchModel(BaseModule):
             ) % self.save_interval == 0 or epoch >= epochs - 1:
                 print("Saving weights, metrics, and train/valid scores.")
 
-                self.save(
-                    extras={
-                        "train_scores": train_scores,
-                        "train_targets": train_targets,
-                        "validation_scores": valid_scores,
-                        "validation_targets": valid_targets,
-                    }
-                )
+                self.save(f"{self.save_path}/epoch-{self.current_epoch}.model")
 
             # if best model (by F1 score), update & save weights to best.model
             f1 = self.valid_metrics[self.current_epoch]["f1"]
@@ -430,15 +422,7 @@ class PytorchModel(BaseModule):
                 self.best_f1 = f1
                 self.best_epoch = self.current_epoch
                 print("Updating best model")
-                self.save(
-                    f"{self.save_path}/best.model",
-                    extras={
-                        "train_scores": train_scores,
-                        "train_targets": train_targets,
-                        "validation_scores": valid_scores,
-                        "validation_targets": valid_targets,
-                    },
-                )
+                self.save(f"{self.save_path}/best.model")
 
             self.current_epoch += 1
 
@@ -448,7 +432,7 @@ class PytorchModel(BaseModule):
 
         # warn the user if there were unsafe samples (failed to preprocess)
         if len(self.train_safe_dataset._unsafe_indices) > 0:
-            bad_paths = self.train_safe_dataset.df.index[
+            bad_paths = self.train_safe_dataset.dataset.df.index[
                 self.train_safe_dataset._unsafe_indices
             ].values
             msg = (
@@ -461,111 +445,30 @@ class PytorchModel(BaseModule):
                     [f.write(p + "\n") for p in bad_paths]
             warnings.warn(msg)
 
-    def save(self, path=None, save_weights=True, save_optimizer=True, extras={}):
-        """save model with weights (default location is self.save_path)
+    def save(model, path, save_datasets=True):
+        import copy
+
+        """save model with weights using torch.save()
+
+        load from saved file with torch.load(path) or cnn.load_model(path)
 
         Args:
-            path: destination for saved model. if None, uses self.save_path
-            save_weights: if False, only save metadata/metrics [default: True]
-            save_optimizer: if False, don't save self.optim.state_dict()
-            extras: arbitrary dictionary of things to save, eg valid-preds
+            path: file path for saved model object
         """
-
-        if path is None:
-            path = f"{self.save_path}/epoch-{self.current_epoch}.model"
-        path = Path(path)
-        os.makedirs(path.parent, exist_ok=True)
-
-        # add items to save into a dictionary
-        model_dict = {
-            "model": self.name,
-            "classes": self.classes,
-            "epoch": self.current_epoch,
-            "valid_metrics": self.valid_metrics,
-            "train_metrics": self.train_metrics,
-            "loss_hist": self.loss_hist,
-            "lr_update_interval": self.lr_update_interval,
-            "lr_cooling_factor": self.lr_cooling_factor,
-            "optimizer_params": self.optimizer_params,
-            "single_target": self.single_target,
-        }
-        if save_weights:
-            model_dict.update({"model_state_dict": self.network.state_dict()})
-        if save_optimizer:
-            if self.opt_net is None:
-                self.opt_net = self._init_optimizer()
-            model_dict.update({"optimizer_state_dict": self.opt_net.state_dict()})
-
-        # user can provide an arbitrary dictionary of extra things to save
-        model_dict.update(extras)
-
-        print(f"Saving to {path}")
-        torch.save(model_dict, path)
-
-    def load(
-        self,
-        path,
-        load_weights=True,
-        load_classifier_weights=True,
-        load_optimizer_state_dict=True,
-        verbose=False,
-    ):
-        """load model and optimizer state_dict from disk
-
-        the object should be saved with model.save()
-        which uses torch.save with keys for 'model_state_dict' and 'optimizer_state_dict'
-
-        Args:
-            path: where the file is saved
-            load_weights: if False, ignore network weights [default:True]
-            load_classifier_weights: if False, ignore classifier layer weights
-                Use False to only load feature weights, eg to re-use
-                trained cnn's feature extractor for new class [default: True]
-            load_optimizer_state_dict: if False, ignore saved parameters
-                for optimizer's state [default: True]
-            verbose: if True, print missing and unused keys for model weights
-        """
-        model_dict = torch.load(path, map_location=self.device)
-
-        # load misc saved items
-        self.current_epoch = model_dict["epoch"]
-        self.train_metrics = model_dict["train_metrics"]
-        self.valid_metrics = model_dict["valid_metrics"]
-        self.loss_hist = model_dict["loss_hist"]
-        self.lr_update_interval = model_dict["lr_update_interval"]
-        self.lr_cooling_factor = model_dict["lr_cooling_factor"]
-        self.optimizer_params = model_dict["optimizer_params"]
-        self.single_target = model_dict["single_target"]
-
-        # load the nn feature/classifier weights from the checkpoint
-        if load_weights and "model_state_dict" in model_dict:
-            print("loading weights from saved object")
-            init_weights = model_dict["model_state_dict"]
-            # init_weights = OrderedDict({'network.'+k: init_weights[k]
-            #                         for k in init_weights})
-            if load_classifier_weights:
-                self.network.load_state_dict(init_weights, strict=False)
-                load_keys = set(init_weights.keys())
-                self_keys = set(self.network.state_dict().keys())
-            else:  # load only the feature weights
-                init_weights = OrderedDict(
-                    {k.replace("feature.", ""): init_weights[k] for k in init_weights}
-                )
-                self.network.feature.load_state_dict(init_weights, strict=False)
-                load_keys = set(init_weights.keys())
-                self_keys = set(self.network.feature.state_dict().keys())
-
-            if verbose:
-                # check if some weight_dict keys were missing or unused
-                missing_keys = self_keys - load_keys
-                unused_keys = load_keys - self_keys
-                print("missing keys: {}".format(sorted(list(missing_keys))))
-                print("unused_keys: {}".format(sorted(list(unused_keys))))
-
-        # create an optimizer then load the checkpoint state dict
-        self.opt_net = self._init_optimizer()
-        if load_optimizer_state_dict and "optimizer_state_dict" in model_dict:
-            self.opt_net.load_state_dict(model_dict["optimizer_state_dict"])
+        os.makedirs(Path(path).parent, exist_ok=True)
+        model_copy = copy.deepcopy(model)
+        if not save_datasets:
+            for atr in [
+                "train_dataset",
+                "train_loader",
+                "train_safe_dataset",
+                "valid_dataset",
+            ]:
+                try:
+                    delattr(model_copy, atr)
+                except AttributeError:
+                    pass
+        torch.save(model_copy, path)
 
     def predict(
         self,
@@ -980,21 +883,15 @@ class Resnet18Multiclass(CnnResampleLoss):
     Notes
     - Allows separate parameters for feature & classifier blocks
         via self.optimizer_params's keys: "feature" and "classifier"
-        (by using hand-built architecture)
-    - Uses ResampleLoss which requires class counts as an input.
+    - Uses ResampleLoss
     """
 
-    def __init__(self, classes, single_target=False):
+    def __init__(self, classes, single_target=False, use_pretrained=True):
 
         self.classes = classes
-        self.weights_init = "ImageNet"
-
-        # initialize the model architecture without an optimizer
-        # since we dont know the train class counts to give the optimizer
-        architecture = ResNetArchitecture(
-            num_cls=len(self.classes), weights_init=self.weights_init, num_layers=18
+        architecture = cnn_architectures.resnet18(
+            num_classes=len(self.classes), use_pretrained=use_pretrained
         )
-
         super(Resnet18Multiclass, self).__init__(
             architecture, self.classes, single_target
         )
@@ -1033,40 +930,27 @@ class Resnet18Multiclass(CnnResampleLoss):
         prior to calling .train().
         """
         param_dict = self.optimizer_params
-        param_dict["feature"]["params"] = self.network.feature.parameters()
-        param_dict["classifier"]["params"] = self.network.classifier.parameters()
+        # in torch's resnet18, the classifier layer is called "fc"
+        feature_extractor_params_list = [
+            param
+            for name, param in self.network.named_parameters()
+            if not name.split(".")[0] == "fc"
+        ]
+        classifier_params_list = [
+            param
+            for name, param in self.network.named_parameters()
+            if name.split(".")[0] == "fc"
+        ]
+        param_dict["feature"]["params"] = feature_extractor_params_list
+        param_dict["classifier"]["params"] = classifier_params_list
         return self.optimizer_cls(param_dict.values())
-
-    @classmethod
-    def from_checkpoint(cls, path, device=None):
-        """create instance of class from saved model object
-
-        Args:
-            path: file path of saved model
-            device: which device to load into, eg 'cuda:1'
-            [default: None] will choose first gpu if available, otherwise cpu
-
-        Returns:
-            a model object with loaded weights
-        """
-        # need to get classes first to initialize the model object
-        if device is None:
-            device = (
-                torch.device("cuda")
-                if torch.cuda.is_available()
-                else torch.device("cpu")
-            )
-        classes = torch.load(path, map_location=device)["classes"]
-        model_obj = cls(classes)
-        model_obj.load(path)
-        return model_obj
 
 
 class Resnet18Binary(PytorchModel):
     """Subclass of PytorchModel with Resnet18 architecture
 
     This subclass allows separate training parameters
-    for the feature extractor and classifier
+    for the feature extractor and classifier via optimizer_params
 
     Args:
         classes:
@@ -1078,25 +962,19 @@ class Resnet18Binary(PytorchModel):
 
     """
 
-    def __init__(self, classes):
+    def __init__(self, classes, use_pretrained=True):
+        assert len(classes) == 2, "binary model must have 2 classes"
 
-        self.weights_init = "ImageNet"
+        single_target = True  # binary model is always single-target
         self.classes = classes
-
-        architecture = ResNetArchitecture(
-            num_cls=2, weights_init=self.weights_init, num_layers=18
+        architecture = cnn_architectures.resnet18(
+            num_classes=len(self.classes), use_pretrained=use_pretrained
         )
-
-        super(Resnet18Binary, self).__init__(
-            architecture, self.classes, single_target=True
-        )
+        super(Resnet18Binary, self).__init__(architecture, self.classes, single_target)
         self.name = "Resnet18Binary"
 
-        self.metrics_fn = binary_metrics
-        self.single_target = True
-
-        # optimization parameters for parts of the networks - see
-        # https://pytorch.org/docs/stable/optim.html#per-parameter-options
+        # optimization parameters for separate feature extractor and classifier
+        # see: https://pytorch.org/docs/stable/optim.html#per-parameter-options
         self.optimizer_params = {
             "feature": {  # optimizer parameters for feature extraction layers
                 # "params": self.network.feature.parameters(),
@@ -1117,8 +995,8 @@ class Resnet18Binary(PytorchModel):
 
         We override the parent method because we need to pass a list of
         separate optimizer_params for different parts of the network
-         - ie we now have a dictionary of param dictionaries instead of just a
-         param dictionary.
+        - ie we now have a dictionary of param dictionaries instead of just a
+        param dictionary.
 
         This function is called during .train() so that the user
         has a chance to swap/modify the optimizer before training.
@@ -1128,33 +1006,19 @@ class Resnet18Binary(PytorchModel):
         prior to calling .train().
         """
         param_dict = self.optimizer_params
-        param_dict["feature"]["params"] = self.network.feature.parameters()
-        param_dict["classifier"]["params"] = self.network.classifier.parameters()
+        feature_extractor_params_list = [
+            param
+            for name, param in self.network.named_parameters()
+            if not name.split(".")[0] == "fc"
+        ]
+        classifier_params_list = [
+            param
+            for name, param in self.network.named_parameters()
+            if name.split(".")[0] == "fc"
+        ]
+        param_dict["feature"]["params"] = feature_extractor_params_list
+        param_dict["classifier"]["params"] = classifier_params_list
         return self.optimizer_cls(param_dict.values())
-
-    @classmethod
-    def from_checkpoint(cls, path, device=None):
-        """create instance of class from saved model object
-
-        Args:
-            path: file path of saved model
-            device: which device to load into, eg 'cuda:1'
-            [default: None] will choose first gpu if available, otherwise cpu
-
-        Returns:
-            a model object with loaded weights
-        """
-        # need to get classes first to initialize the model object
-        if device is None:
-            device = (
-                torch.device("cuda")
-                if torch.cuda.is_available()
-                else torch.device("cpu")
-            )
-        classes = torch.load(path, map_location=device)["classes"]
-        model_obj = cls(classes)
-        model_obj.load(path)
-        return model_obj
 
 
 class InceptionV3(PytorchModel):
@@ -1282,30 +1146,6 @@ class InceptionV3(PytorchModel):
 
         return total_tgts, total_preds, total_scores
 
-    @classmethod
-    def from_checkpoint(cls, path, device=None):
-        """create instance of class from saved model object
-
-        Args:
-            path: file path of saved model
-            device: which device to load into, eg 'cuda:1'
-            [default: None] will choose first gpu if available, otherwise cpu
-
-        Returns:
-            a model object with loaded weights
-        """
-        # need to get classes first to initialize the model object
-        if device is None:
-            device = (
-                torch.device("cuda")
-                if torch.cuda.is_available()
-                else torch.device("cpu")
-            )
-        classes = torch.load(path, map_location=device)["classes"]
-        model_obj = cls(classes, use_pretrained=False)
-        model_obj.load(path)
-        return model_obj
-
 
 class InceptionV3ResampleLoss(InceptionV3):
     def __init__(
@@ -1345,3 +1185,23 @@ class InceptionV3ResampleLoss(InceptionV3):
         class_frequency = np.sum(self.train_dataset.df.values, 0)
         # initializing ResampleLoss requires us to pass class_frequency
         self.loss_fn = self.loss_cls(class_frequency)
+
+
+def load_model(path, device=None):
+    """load a saved model object
+
+    Args:
+        path: file path of saved model
+        device: which device to load into, eg 'cuda:1'
+        [default: None] will choose first gpu if available, otherwise cpu
+
+    Returns:
+        a model object with loaded weights
+    """
+    if device is None:
+        device = (
+            torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        )
+    model = torch.load(path, map_location=device)
+    model.device = device
+    return model

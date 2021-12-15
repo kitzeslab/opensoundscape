@@ -10,14 +10,14 @@ errors when predicting a model (replacing a bad file with a different file),
 and you should always be careful to check for ._unsafe_indices after using
 a SafeDataset.
 
-implemented by @msamogh in nonechucks
+based on an implementation by @msamogh in nonechucks
 (github.com/msamogh/nonechucks/)
 """
 import torch
 import torch.utils.data
 
 
-class SafeDataset(torch.utils.data.Dataset):
+class SafeDataset:
     """A wrapper for a Dataset that handles errors when loading samples
 
     WARNING: When iterating, will skip the failed sample, but when using within
@@ -42,7 +42,7 @@ class SafeDataset(torch.utils.data.Dataset):
     """
 
     def __init__(self, dataset, unsafe_behavior, eager_eval=False):
-        """Creates a `SafeDataset` wrapper on `dataset` to handle bad samples
+        """Creates a `SafeDataset` wrapper on a DataSet to handle bad samples
 
         Args:
             dataset: a Pytorch DataSet object
@@ -164,9 +164,3 @@ class SafeDataset(torch.utils.data.Dataset):
             raise ValueError(
                 f"unsafe_behavior must be 'substitute','raise', or 'none'. Got {self.unsafe_behavior}"
             )
-
-    def __getattr__(self, key):
-        """Delegates to original dataset object if an attribute is not
-        found in this class.
-        """
-        return getattr(self.dataset, key)

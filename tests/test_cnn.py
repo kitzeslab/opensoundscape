@@ -7,6 +7,7 @@ from opensoundscape.torch.models.cnn import (
     Resnet18Multiclass,
     Resnet18Binary,
     InceptionV3,
+    load_model,
 )
 from opensoundscape.torch.architectures.cnn_architectures import alexnet
 import pandas as pd
@@ -16,6 +17,19 @@ import numpy as np
 import pandas as pd
 import pytest
 import shutil
+
+
+@pytest.fixture()
+def model_save_path(request):
+    path = Path("tests/models/temp.model")
+
+    # always delete this at the end
+    def fin():
+        path.unlink()
+
+    request.addfinalizer(fin)
+
+    return path
 
 
 @pytest.fixture()
@@ -59,14 +73,6 @@ def test_train(train_dataset):
         save_interval=10,
         num_workers=0,
     )
-    model_path = Path("tests/models/binary/best.model")
-    binary.save(model_path)
-    assert model_path.exists()
-
-    # check that from_checkpoint works
-    Resnet18Multiclass.from_checkpoint(model_path)
-
-    shutil.rmtree("tests/models/binary")
 
 
 def test_train_multiclass(train_dataset):
@@ -80,14 +86,6 @@ def test_train_multiclass(train_dataset):
         save_interval=10,
         num_workers=0,
     )
-    model_path = Path("tests/models/multiclass/best.model")
-    model.save(model_path)
-    assert model_path.exists()
-
-    # check that from_checkpoint works
-    Resnet18Multiclass.from_checkpoint(model_path)
-
-    shutil.rmtree("tests/models/multiclass/")
 
 
 def test_single_target_prediction(train_dataset):
@@ -122,12 +120,6 @@ def test_train_predict_inception(train_dataset):
         num_workers=0,
     )
     model.predict(train_dataset, num_workers=0)
-    model_path = Path("tests/models/multiclass/best.model")
-    model.save(model_path)
-    assert model_path.exists()
-
-    InceptionV3.from_checkpoint(model_path)
-    shutil.rmtree("tests/models/multiclass/")
 
 
 def test_train_predict_architecture(train_dataset):
@@ -157,3 +149,28 @@ def test_split_and_predict(long_audio_dataset):
     )
     assert len(scores) == 12
     assert len(preds) == 12
+
+
+def test_save_and_load_model(model_save_path):
+    arch = alexnet(2, use_pretrained=False)
+    classes = ["negative", "positive"]
+
+    PytorchModel(arch, classes=classes).save(model_save_path)
+    m = load_model(model_save_path)
+    assert m.classes == classes
+    assert type(m) == PytorchModel
+
+    Resnet18Binary(classes=classes, use_pretrained=False).save(model_save_path)
+    m = load_model(model_save_path)
+    assert m.classes == classes
+    assert type(m) == Resnet18Binary
+
+    Resnet18Multiclass(classes=classes, use_pretrained=False).save(model_save_path)
+    m = load_model(model_save_path)
+    assert m.classes == classes
+    assert type(m) == Resnet18Multiclass
+
+    InceptionV3(classes=classes, use_pretrained=False).save(model_save_path)
+    m = load_model(model_save_path)
+    assert m.classes == classes
+    assert type(m) == InceptionV3
