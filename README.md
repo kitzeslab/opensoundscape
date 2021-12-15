@@ -21,12 +21,75 @@ For more detailed instructions on how to install OpenSoundscape and use it in Ju
 OpenSoundscape includes functions to:
 * trim, split, and manipulate audio files
 * create and manipulate spectrograms
-* train binary CNNs on spectrograms with PyTorch
+* train CNNs on spectrograms with PyTorch
 * run pre-trained CNNs to detect vocalizations
 * detect periodic vocalizations with RIBBIT
-* spatially locate sounds
-* manipulate Raven annotations
+* load and manipulate Raven annotations
 
 OpenSoundscape can also be used with our library of publicly available trained machine learning models for the detection of 500 common North American bird species.
 
 For full API documentation and tutorials on how to use OpenSoundscape to work with audio and spectrograms, train machine learning models, apply trained machine learning models to acoustic data, and detect periodic vocalizations using RIBBIT, see the [documentation](http://opensoundscape.org).
+
+# Quick Start
+
+Using Audio and Spectrogram classes #tldr
+```
+from opensoundscape.audio import Audio
+from opensoundscape.spectrogram import Spectrogram
+
+#load an audio file and trim out a 5 second clip
+my_audio = Audio.from_file("/path/to/audio.wav")
+clip_5s = my_audio.trim(0,5)
+
+#create a spectrogram and plot it
+my_spec = Spectrogram.from_audio(clip_5s)
+my_spec.plot()
+```
+
+Using a pre-trained CNN to make predictions on long audio files
+```
+from opensoundscape.torch.models.cnn import load_model
+from opensoundscape.preprocess.preprocessors import ClipLoadingSpectrogramPreprocessor
+from opensoundscape.helpers import make_clip_df
+from glob import glob
+
+#get list of audio files
+files = glob('./dir/*.WAV')
+
+#generate clip df
+clip_df = make_clip_df(files,clip_duration=5.0,clip_overlap=0)
+
+#create dataset
+dataset = ClipLoadingSpectrogramPreprocessor(clip_df)
+#you may need to change preprocessing params to match model
+
+#generate predictions with a model
+model = load_model('/path/to/saved.model')
+scores, _, _ = model.predict(dataset)
+
+#scores is a dataframe with MultiIndex: file, start_time, end_time
+#containing inference scores for each class and each audio window
+```
+
+Training a CNN with labeled audio data
+```
+from opensoundscape.torch.models.cnn import Resnet18Multiclass
+from opensoundscape.preprocess.preprocessors import CnnPreprocessor
+
+#load a DataFrame of one-hot audio clip labels
+#(index: file paths, columns: classes)
+df = pd.read_csv('my_labels.csv')
+
+#create a preprocessor that will create and augment samples for the CNN
+train_dataset = CnnPreprocessor(df)
+
+#create a CNN and train for 2 epochs
+#for simplicity, using the training set as validation (not recommended!)
+#the best model is automatically saved to `./best.model`
+model = Resnet18Multiclass(classes=df.columns)
+model.train(
+  train_dataset=train_dataset,
+  valid_dataset=train_dataset,
+  epochs=2
+)
+```
