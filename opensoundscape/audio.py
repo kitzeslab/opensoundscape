@@ -453,49 +453,49 @@ class Audio:
 
         return clips, clip_df
 
+    def split_and_save(
+        self,
+        destination,
+        prefix,
+        clip_duration,
+        clip_overlap=0,
+        final_clip=None,
+        dry_run=False,
+    ):
+        """Split audio into clips and save them to a folder
 
-def split_and_save(
-    audio,
-    destination,
-    prefix,
-    clip_duration,
-    clip_overlap=0,
-    final_clip=None,
-    dry_run=False,
-):
-    """Split audio into clips and save them to a folder
+        Args:
+            destination:        A folder to write clips to
+            prefix:             A name to prepend to the written clips
+            clip_duration:      The duration of each clip in seconds
+            clip_overlap:       The overlap of each clip in seconds [default: 0]
+            final_clip (str):   Behavior if final_clip is less than clip_duration seconds long. [default: None]
+                By default, ignores final clip entirely.
+                Possible options (any other input will ignore the final clip entirely),
+                    - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
+                    - "full":       Increase the overlap to yield a clip with clip_duration length
+                    - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+                    - None:         Discard the remainder
+            dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
 
-    Args:
-        audio:              The input Audio to split
-        destination:        A folder to write clips to
-        prefix:             A name to prepend to the written clips
-        clip_duration:      The duration of each clip in seconds
-        clip_overlap:       The overlap of each clip in seconds [default: 0]
-        final_clip (str):   Behavior if final_clip is less than clip_duration seconds long. [default: None]
-            By default, ignores final clip entirely.
-            Possible options (any other input will ignore the final clip entirely),
-                - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
-                - "full":       Increase the overlap to yield a clip with clip_duration length
-                - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
-                - None:         Discard the remainder
-        dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
+        Returns:
+            pandas.DataFrame containing paths and start and end times for each clip
+        """
 
-    Returns:
-        pandas.DataFrame containing paths and start and end times for each clip
-    """
+        clips, df = self.split(
+            clip_duration=clip_duration,
+            clip_overlap=clip_overlap,
+            final_clip=final_clip,
+        )
+        clip_names = []
+        for i, clip in enumerate(clips):
+            start_t = df.at[i, "start_time"]
+            end_t = df.at[i, "end_time"]
+            clip_name = f"{destination}/{prefix}_{start_t}s_{end_t}s.wav"
+            clip_names.append(clip_name)
+            if not dry_run:
+                clip.save(clip_name)
 
-    clips, df = audio.split(
-        clip_duration=clip_duration, clip_overlap=clip_overlap, final_clip=final_clip
-    )
-    clip_names = []
-    for i, clip in enumerate(clips):
-        start_t = df.at[i, "start_time"]
-        end_t = df.at[i, "end_time"]
-        clip_name = f"{destination}/{prefix}_{start_t}s_{end_t}s.wav"
-        clip_names.append(clip_name)
-        if not dry_run:
-            clip.save(clip_name)
-
-    df.index = clip_names
-    df.index.name = "file"
-    return df
+        df.index = clip_names
+        df.index.name = "file"
+        return df
