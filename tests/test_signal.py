@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from opensoundscape.audio import Audio, OpsoLoadAudioInputTooLong, split_and_save
+from opensoundscape.audio import Audio, OpsoLoadAudioInputTooLong
 import pytest
 import numpy as np
 from opensoundscape import signal as sig
@@ -124,7 +124,7 @@ def test_detect_peak_sequence_cwt(rugr_wav_str):
 
 def test_detect_peak_sequence_cwt_no_results(rugr_wav_str):
     """tests that empty dataframe is returned (instead of errror) if input audio
-    is shorter than window_length 
+    is shorter than window_length
     """
     rugr_audio = Audio.from_file(rugr_wav_str).trim(0, 1)
     detections = sig.detect_peak_sequence_cwt(
