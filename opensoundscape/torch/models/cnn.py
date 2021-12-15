@@ -630,17 +630,22 @@ class PytorchModel(BaseModule):
         Note: if no return type selected for labels/scores/preds, returns None
         instead of a DataFrame in the returned tuple
         """
+        if len(prediction_dataset) < 1:
+            warnings.warn("prediction_dataset has zero samples. Returning None.")
+            return None, None, None
+
         if prediction_dataset.specifies_clip_times:
             # this dataset provides start and end times of each clip
             # rather than supplying labels in the columns.
-            # we should add the start_time and end_time back into the output df
+            # we will add the start_time and end_time back into the output df
             assert np.array_equal(
                 prediction_dataset.df.columns, ["start_time", "end_time"]
             )
-        if len(prediction_dataset.df.columns) > 0:
+        elif len(prediction_dataset.df.columns) > 0:
             if not list(self.classes) == list(prediction_dataset.df.columns):
-                warnings.warn(
-                    "The columns of prediction_dataset.df differ" "from model.classes"
+                raise ValueError(
+                    "The columns of prediction_dataset.df differ"
+                    "from model.classes. Should have same columns or no columns."
                 )
 
         # move network to device
@@ -652,6 +657,7 @@ class PytorchModel(BaseModule):
         # but will provide a different sample! Later we go back and replace scores
         # with np.nan for the bad samples (using safe_dataset._unsafe_indices)
         # this approach to error handling feels hacky
+        # however, returning None would break the batching of samples
         safe_dataset = SafeDataset(prediction_dataset, unsafe_behavior="substitute")
 
         dataloader = torch.utils.data.DataLoader(
@@ -690,14 +696,11 @@ class PytorchModel(BaseModule):
                 scores = apply_activation_layer(logits, activation_layer)
 
                 ### Binary predictions ###
-                # generate binary predictions
                 batch_preds = tensor_binary_predictions(
                     scores=logits, mode=binary_preds, threshold=threshold
                 )
 
-                # detach the returned values: currently tethered to gradients
-                # and updates via optimizer/backprop. detach() returns
-                # just numeric values.
+                # disable gradients on returned values
                 total_scores.append(scores.detach().cpu().numpy())
                 total_preds.append(batch_preds.float().detach().cpu().numpy())
                 total_tgts.append(batch_targets.int().detach().cpu().numpy())
@@ -725,7 +728,7 @@ class PytorchModel(BaseModule):
             score_df.index = pd.MultiIndex.from_frame(
                 prediction_dataset.df.reset_index()
             )
-        # 0/1 predictions
+        # binary 0/1 predictions
         if binary_preds is None:
             pred_df = None
         else:
@@ -822,6 +825,10 @@ class PytorchModel(BaseModule):
             is ambiguous since the original files are split into clips during
             prediction (output values are for clips, not entire file)
             """
+        if len(prediction_dataset) < 1:
+            warnings.warn("prediction_dataset has zero samples. Returning None.")
+            return None, None, None
+
         err_msg = "Prediction dataset should only contain file paths (index)" ""
         if len(prediction_dataset.df.columns) > 0:
             assert False, err_msg
