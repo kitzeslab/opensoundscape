@@ -19,7 +19,7 @@ model has 10 output classes, write
 Then you can initialize a model object from
 `opensoundscape.torch.models.cnn` with your architecture:
 
-`model=PytorchModel(classes,my_arch)`
+`model=PytorchModel(my_arch,classes)`
 
 or override an existing model's architecture:
 
@@ -31,6 +31,7 @@ opensoundscape.torch.models.cnn.
 """
 from torchvision import models
 from torch import nn
+from opensoundscape.torch.architectures.utils import CompositeArchitecture
 
 
 def set_parameter_requires_grad(model, freeze_feature_extractor):
