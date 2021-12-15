@@ -26,3 +26,11 @@ class BaseArchitecture(nn.Module):
 
     def update_best(self):
         pass
+
+
+class CompositeArchitecture(nn.Module):
+    """Architecture with separate feature and classsifier blocks"""
+
+    def forward(self, batch_tensor):
+        feats = self.feature(batch_tensor)  # feature extraction
+        return self.classifier(feats)  # classification
