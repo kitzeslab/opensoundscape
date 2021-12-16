@@ -20,7 +20,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore_support
 
-from opensoundscape.torch.architectures.resnet import ResNetArchitecture
 from opensoundscape.torch.architectures import cnn_architectures
 from opensoundscape.torch.models.utils import (
     BaseModule,
@@ -50,10 +49,14 @@ class PytorchModel(BaseModule):
 
     Args:
         architecture:
-            a model architecture object, for example one generated
-            with the torch.architectures.cnn_architectures module
+            *EITHER* a pytorch model object (subclass of torch.nn.Module),
+            for example one generated with the `cnn_architectures` module
+            *OR* a string matching one of the architectures listed by
+            cnn_architectures.list_architectures(), eg 'resnet18'.
+            - If a string is provided, uses default parameters
+                (including use_pretrained=True)
         classes:
-            list of class names. Must match with training dataset classes.
+            list of class names. Must match with training dataset classes if training.
         single_target:
             - True: model expects exactly one positive class per sample
             - False: samples can have an number of positive classes
@@ -79,6 +82,18 @@ class PytorchModel(BaseModule):
         # (feature extraction + classifier + loss fn)
         # can by a pytorch CNN such as Resnet18, or RNN, etc
         # must have .forward(), .train(), .eval(), .to(), .state_dict()
+        # for convenience, allow user to provide string matching
+        # a key from cnn_architectures.ARCH_DICT
+        if type(architecture) == str:
+            assert architecture in cnn_architectures.list_architectures(), (
+                f"architecture must be a pytorch model object or string matching "
+                f"one of cnn_architectures.list_architectures() options. Got {architecture}"
+            )
+            architecture = cnn_architectures.ARCH_DICT[architecture](len(classes))
+        else:
+            assert issubclass(
+                type(architecture), torch.nn.Module
+            ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
         self.network = architecture
 
         ### network device ###
