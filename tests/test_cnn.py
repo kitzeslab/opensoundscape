@@ -81,6 +81,10 @@ def test_multiclass_object_init():
     _ = Resnet18Multiclass([0, 1, 2, 3])
 
 
+def test_init_with_str():
+    model = PytorchModel("resnet18", classes=[0, 1])
+
+
 def test_train(train_dataset):
     binary = Resnet18Binary(classes=["negative", "positive"])
     binary.train(
