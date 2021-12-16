@@ -92,6 +92,7 @@ def test_train(train_dataset):
         save_interval=10,
         num_workers=0,
     )
+    shutil.rmtree("tests/models/binary/")
 
 
 def test_train_multiclass(train_dataset):
@@ -105,6 +106,7 @@ def test_train_multiclass(train_dataset):
         save_interval=10,
         num_workers=0,
     )
+    shutil.rmtree("tests/models/multiclass/")
 
 
 def test_single_target_prediction(train_dataset):
@@ -139,6 +141,7 @@ def test_train_predict_inception(train_dataset):
         num_workers=0,
     )
     model.predict(train_dataset, num_workers=0)
+    shutil.rmtree("tests/models/multiclass/")
 
 
 def test_train_predict_architecture(train_dataset):
@@ -155,9 +158,6 @@ def test_train_predict_architecture(train_dataset):
         num_workers=0,
     )
     model.predict(train_dataset, num_workers=0)
-    model_path = Path("tests/models/multiclass/best.model")
-    model.save(model_path)
-    assert model_path.exists()
     shutil.rmtree("tests/models/multiclass/")
 
 
