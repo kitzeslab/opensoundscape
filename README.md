@@ -73,7 +73,7 @@ scores, _, _ = model.predict(dataset)
 
 Training a CNN with labeled audio data
 ```
-from opensoundscape.torch.models.cnn import Resnet18Multiclass
+from opensoundscape.torch.models.cnn import PytorchModel
 from opensoundscape.preprocess.preprocessors import CnnPreprocessor
 
 #load a DataFrame of one-hot audio clip labels
@@ -86,7 +86,7 @@ train_dataset = CnnPreprocessor(df)
 #create a CNN and train for 2 epochs
 #for simplicity, using the training set as validation (not recommended!)
 #the best model is automatically saved to `./best.model`
-model = Resnet18Multiclass(classes=df.columns)
+model = PytorchModel('resnet18',classes=df.columns)
 model.train(
   train_dataset=train_dataset,
   valid_dataset=train_dataset,
