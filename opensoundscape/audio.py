@@ -122,7 +122,7 @@ class Audio:
         Audio objects only support mono (one-channel) at this time. Files
         with multiple channels are mixed down to a single channel.
 
-        Optionally, load only a piece of a file using start_time and end_time.
+        Optionally, load only a piece of a file using `offset` and `duration`.
         This will efficiently read sections of a .wav file regardless of where
         the desired clip is in the audio. For mp3 files, access time grows
         linearly with time since the beginning of the file.
