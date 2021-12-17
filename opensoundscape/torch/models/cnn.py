@@ -463,7 +463,7 @@ class PytorchModel(BaseModule):
                     [f.write(p + "\n") for p in bad_paths]
             warnings.warn(msg)
 
-    def save(model, path, save_datasets=True):
+    def save(self, path, save_datasets=True):
         import copy
 
         """save model with weights using torch.save()
@@ -474,7 +474,7 @@ class PytorchModel(BaseModule):
             path: file path for saved model object
         """
         os.makedirs(Path(path).parent, exist_ok=True)
-        model_copy = copy.deepcopy(model)
+        model_copy = copy.deepcopy(self)
         if not save_datasets:
             for atr in [
                 "train_dataset",
