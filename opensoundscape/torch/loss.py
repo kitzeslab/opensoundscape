@@ -106,11 +106,6 @@ class ResampleLoss(nn.Module):
     def __init__(self, class_freq, reduction="mean", loss_weight=1.0):
         super(ResampleLoss, self).__init__()
 
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
-
         self.loss_weight = loss_weight
         self.reduction = reduction
 
@@ -126,7 +121,7 @@ class ResampleLoss(nn.Module):
         self.map_beta = 0.2
         self.map_gamma = 0.1
 
-        self.class_freq = torch.from_numpy(class_freq).float().to(self.device)
+        self.class_freq = torch.from_numpy(class_freq).float()
         self.neg_class_freq = self.class_freq.sum() - self.class_freq
         self.num_classes = self.class_freq.shape[0]
         self.train_num = self.class_freq.sum()
@@ -141,9 +136,7 @@ class ResampleLoss(nn.Module):
             * init_bias
             / self.neg_scale
         )
-        self.freq_inv = (
-            torch.ones(self.class_freq.shape).to(self.device) / self.class_freq
-        )
+        self.freq_inv = torch.ones(self.class_freq.shape) / self.class_freq
         self.propotion_inv = self.train_num / self.class_freq
 
     def forward(

@@ -28,6 +28,7 @@ from math import ceil
 from opensoundscape.helpers import generate_clip_times_df
 from opensoundscape.audiomoth import parse_audiomoth_metadata
 from tinytag import TinyTag
+from datetime import timedelta
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -110,11 +111,24 @@ class Audio:
         resample_type="kaiser_fast",
         max_duration=None,
         metadata=True,
+        offset=0,
+        duration=None,
     ):
         """Load audio from files
 
         Deal with the various possible input types to load an audio file
         Also attempts to load metadata using tinytag.
+
+        Audio objects only support mono (one-channel) at this time. Files
+        with multiple channels are mixed down to a single channel.
+
+        Optionally, load only a piece of a file using `offset` and `duration`.
+        This will efficiently read sections of a .wav file regardless of where
+        the desired clip is in the audio. For mp3 files, access time grows
+        linearly with time since the beginning of the file.
+
+        This function relies on librosa.load(), which supports wav natively but
+        requires ffmpeg for mp3 support.
 
         Args:
             path (str, Path): path to an audio file
@@ -130,22 +144,37 @@ class Audio:
                 `comment` field, if the `artist` field includes `AudioMoth`.
                 The parsing function for AudioMoth is likely to break when new
                 firmware versions change the `comment` metadata field.
+            offset: load audio starting at this time (seconds) after the
+                start of the file. Default: 0 seconds.
+            duration: load audio of this duration (seconds) starting at
+                `offset`. If None, loads all the way to the end of the file.
 
         Returns:
             Audio object with attributes: samples, sample_rate, resample_type,
             max_duration, metadata (dict or None)
+
+        Note: default sample_rate=None means use file's sample rate, don't
+        resample
+
         """
         path = str(path)  # Pathlib path can have dependency issues - use string
         if max_duration:
             if librosa.get_duration(filename=path) > max_duration:
                 raise OpsoLoadAudioInputTooLong()
 
+        ## Load samples ##
         warnings.filterwarnings("ignore")
         samples, sr = librosa.load(
-            path, sr=sample_rate, res_type=resample_type, mono=True
+            path,
+            sr=sample_rate,
+            res_type=resample_type,
+            mono=True,
+            offset=offset,
+            duration=duration,
         )
         warnings.resetwarnings()
 
+        ## Load Metadata ##
         try:
             metadata = TinyTag.get(path).as_dict()
             # if this is an AudioMoth file, try to parse out additional
@@ -153,11 +182,28 @@ class Audio:
             if metadata["artist"] and "AudioMoth" in metadata["artist"]:
                 try:
                     metadata = parse_audiomoth_metadata(metadata)
+                    # if the offset > 0, we need to update the timestamp
+                    metadata["recording_start_time"] += timedelta(seconds=round(offset))
                 except Exception as e:
                     warnings.warn(
                         "This seems to be an AudioMoth file, "
                         f"but parse_audiomoth_metadata() raised: {e}"
                     )
+
+            ## Update metadata ##
+            metadata["channels"] = 1
+
+            # update the duration because we may have only loaded
+            # a piece of the entire audio file.
+            metadata["duration"] = len(samples) / sr
+
+            # update the sample rate in metadata
+            metadata["samplerate"] = sr
+
+            # if we loaded part we don't know the file size anymore
+            if offset > 0 or duration is not None:
+                metadata["filesize"] = np.nan
+
         except Exception as e:
             warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
             metadata = None
@@ -453,49 +499,49 @@ class Audio:
 
         return clips, clip_df
 
+    def split_and_save(
+        self,
+        destination,
+        prefix,
+        clip_duration,
+        clip_overlap=0,
+        final_clip=None,
+        dry_run=False,
+    ):
+        """Split audio into clips and save them to a folder
 
-def split_and_save(
-    audio,
-    destination,
-    prefix,
-    clip_duration,
-    clip_overlap=0,
-    final_clip=None,
-    dry_run=False,
-):
-    """Split audio into clips and save them to a folder
+        Args:
+            destination:        A folder to write clips to
+            prefix:             A name to prepend to the written clips
+            clip_duration:      The duration of each clip in seconds
+            clip_overlap:       The overlap of each clip in seconds [default: 0]
+            final_clip (str):   Behavior if final_clip is less than clip_duration seconds long. [default: None]
+                By default, ignores final clip entirely.
+                Possible options (any other input will ignore the final clip entirely),
+                    - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
+                    - "full":       Increase the overlap to yield a clip with clip_duration length
+                    - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
+                    - None:         Discard the remainder
+            dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
 
-    Args:
-        audio:              The input Audio to split
-        destination:        A folder to write clips to
-        prefix:             A name to prepend to the written clips
-        clip_duration:      The duration of each clip in seconds
-        clip_overlap:       The overlap of each clip in seconds [default: 0]
-        final_clip (str):   Behavior if final_clip is less than clip_duration seconds long. [default: None]
-            By default, ignores final clip entirely.
-            Possible options (any other input will ignore the final clip entirely),
-                - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
-                - "full":       Increase the overlap to yield a clip with clip_duration length
-                - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
-                - None:         Discard the remainder
-        dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
+        Returns:
+            pandas.DataFrame containing paths and start and end times for each clip
+        """
 
-    Returns:
-        pandas.DataFrame containing paths and start and end times for each clip
-    """
+        clips, df = self.split(
+            clip_duration=clip_duration,
+            clip_overlap=clip_overlap,
+            final_clip=final_clip,
+        )
+        clip_names = []
+        for i, clip in enumerate(clips):
+            start_t = df.at[i, "start_time"]
+            end_t = df.at[i, "end_time"]
+            clip_name = f"{destination}/{prefix}_{start_t}s_{end_t}s.wav"
+            clip_names.append(clip_name)
+            if not dry_run:
+                clip.save(clip_name)
 
-    clips, df = audio.split(
-        clip_duration=clip_duration, clip_overlap=clip_overlap, final_clip=final_clip
-    )
-    clip_names = []
-    for i, clip in enumerate(clips):
-        start_t = df.at[i, "start_time"]
-        end_t = df.at[i, "end_time"]
-        clip_name = f"{destination}/{prefix}_{start_t}s_{end_t}s.wav"
-        clip_names.append(clip_name)
-        if not dry_run:
-            clip.save(clip_name)
-
-    df.index = clip_names
-    df.index.name = "file"
-    return df
+        df.index = clip_names
+        df.index.name = "file"
+        return df

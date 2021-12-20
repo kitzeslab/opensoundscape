@@ -214,3 +214,51 @@ def generate_clip_times_df(
         pass
 
     return pd.DataFrame({"start_time": starts, "end_time": ends})
+
+
+def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
+    """generate df of fixed-length clip times for a set of file_batch_size
+
+    Used to prepare a dataframe for ClipLoadingSpectrogramPreprocessor
+
+    A typical prediction workflow:
+    ```
+    #get list of audio files
+    files = glob('./dir/*.WAV')
+
+    #generate clip df
+    clip_df = make_clip_df(files,clip_duration=5.0,clip_overlap=0)
+
+    #create dataset
+    dataset = ClipLoadingSpectrogramPreprocessor(clip_df)
+
+    #generate predictions with a model
+    model = load_model('/path/to/saved.model')
+    scores, _, _ = model.predict(dataset)
+
+    This function creates a single dataframe with audio files as
+    the index and columns: 'start_time', 'end_time'. It will list
+    clips of a fixed duration from the beginning to end of each audio file.
+
+    Args:
+        files: list of audio file paths
+        clip_duration (float): see generate_clip_times_df
+        clip_overlap (float): see generate_clip_times_df
+        final_clip (str): see generate_clip_times_df
+    """
+
+    import librosa
+
+    clip_dfs = []
+    for f in files:
+        t = librosa.get_duration(filename=f)
+        clips = generate_clip_times_df(
+            full_duration=t,
+            clip_duration=clip_duration,
+            clip_overlap=clip_overlap,
+            final_clip=final_clip,
+        )
+        clips.index = [f] * len(clips)
+        clips.index.name = "file"
+        clip_dfs.append(clips)
+    return pd.concat(clip_dfs)

@@ -26,7 +26,7 @@ copyright = "2020, Justin Kitzes, Barry Moore, Tessa Rhinehart, Sam Lapp"
 author = "Justin Kitzes, Barry Moore, Tessa Rhinehart, Sam Lapp"
 
 # The full version, including alpha/beta/rc tags
-release = "0.6.0"
+release = "0.6.1"
 
 
 # -- General configuration ---------------------------------------------------
@@ -99,6 +99,7 @@ autodoc_mock_imports = [
     "matplotlib",
     "pywt",
     "tinytag",
+    "deprecated",
 ]
 
 master_doc = "index"

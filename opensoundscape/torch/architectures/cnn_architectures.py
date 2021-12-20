@@ -19,7 +19,7 @@ model has 10 output classes, write
 Then you can initialize a model object from
 `opensoundscape.torch.models.cnn` with your architecture:
 
-`model=PytorchModel(classes,my_arch)`
+`model=PytorchModel(my_arch,classes)`
 
 or override an existing model's architecture:
 
@@ -31,6 +31,16 @@ opensoundscape.torch.models.cnn.
 """
 from torchvision import models
 from torch import nn
+from opensoundscape.torch.architectures.utils import CompositeArchitecture
+
+ARCH_DICT = dict()
+
+
+def register_arch(func):
+    # register the model in dictionary
+    ARCH_DICT[func.__name__] = func
+    # return the function
+    return func
 
 
 def set_parameter_requires_grad(model, freeze_feature_extractor):
@@ -47,6 +57,7 @@ def set_parameter_requires_grad(model, freeze_feature_extractor):
             param.requires_grad = False
 
 
+@register_arch
 def resnet18(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for ResNet18 architecture
 
@@ -69,6 +80,7 @@ def resnet18(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     return model_ft
 
 
+@register_arch
 def resnet34(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for ResNet34 architecture
 
@@ -91,6 +103,7 @@ def resnet34(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     return model_ft
 
 
+@register_arch
 def resnet50(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for ResNet50 architecture
 
@@ -113,6 +126,7 @@ def resnet50(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     return model_ft
 
 
+@register_arch
 def resnet101(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for ResNet101 architecture
 
@@ -135,6 +149,7 @@ def resnet101(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     return model_ft
 
 
+@register_arch
 def resnet152(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for ResNet152 architecture
 
@@ -157,6 +172,7 @@ def resnet152(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     return model_ft
 
 
+@register_arch
 def alexnet(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for AlexNet architecture
 
@@ -179,6 +195,7 @@ def alexnet(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     return model_ft
 
 
+@register_arch
 def vgg11_bn(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for vgg11 architecture
 
@@ -202,6 +219,7 @@ def vgg11_bn(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     return model_ft
 
 
+@register_arch
 def squeezenet1_0(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for squeezenet architecture
 
@@ -226,6 +244,7 @@ def squeezenet1_0(num_classes, freeze_feature_extractor=False, use_pretrained=Tr
     return model_ft
 
 
+@register_arch
 def densenet121(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for densenet121 architecture
 
@@ -248,6 +267,7 @@ def densenet121(num_classes, freeze_feature_extractor=False, use_pretrained=True
     return model_ft
 
 
+@register_arch
 def inception_v3(num_classes, freeze_feature_extractor=False, use_pretrained=True):
     """Wrapper for Inception v3 architecture
 
@@ -275,3 +295,7 @@ def inception_v3(num_classes, freeze_feature_extractor=False, use_pretrained=Tru
     num_ftrs = model_ft.fc.in_features
     model_ft.fc = nn.Linear(num_ftrs, num_classes)
     return model_ft
+
+
+def list_architectures():
+    return list(ARCH_DICT.keys())

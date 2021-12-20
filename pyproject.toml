@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "opensoundscape"
-version = "0.6.0"
+version = "0.6.1"
 description = "Open source, scalable acoustic classification for ecology and conservation"
 authors = [
   "Justin Kitzes <justin.kitzes@pitt.edu>",
@@ -33,6 +33,7 @@ Jinja2 = "<3.0"
 ipython = ">=7.10"
 pywavelets = ">=1.2.0"
 tinytag = ">=1.6.0"
+Deprecated = "^1.2.13"
 
 [tool.poetry.dev-dependencies]
 black = "=19.3b0"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from opensoundscape.audio import Audio, OpsoLoadAudioInputTooLong, split_and_save
+from opensoundscape.audio import Audio, OpsoLoadAudioInputTooLong
 import pytest
 from pathlib import Path
 import io
@@ -233,13 +233,8 @@ def test_audio_constructor_should_fail_on_non_integer_sample_rate():
 
 
 def test_split_and_save_default(silence_10s_mp3_pathlib):
-    clip_df = split_and_save(
-        Audio.from_file(silence_10s_mp3_pathlib),
-        "unnecessary",
-        "unnecessary",
-        5.0,
-        dry_run=True,
-    )
+    audio = Audio.from_file(silence_10s_mp3_pathlib)
+    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5.0, dry_run=True)
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
@@ -248,14 +243,8 @@ def test_split_and_save_default(silence_10s_mp3_pathlib):
 
 
 def test_split_and_save_default_overlay(silence_10s_mp3_pathlib):
-    clip_df = split_and_save(
-        Audio.from_file(silence_10s_mp3_pathlib),
-        "unnecessary",
-        "unnecessary",
-        5.0,
-        1.0,
-        dry_run=True,
-    )
+    audio = Audio.from_file(silence_10s_mp3_pathlib)
+    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5.0, 1.0, dry_run=True)
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
@@ -264,14 +253,9 @@ def test_split_and_save_default_overlay(silence_10s_mp3_pathlib):
 
 
 def test_split_and_save_default_full(silence_10s_mp3_pathlib):
-    clip_df = split_and_save(
-        Audio.from_file(silence_10s_mp3_pathlib),
-        "unnecessary",
-        "unnecessary",
-        5.0,
-        1.0,
-        final_clip="full",
-        dry_run=True,
+    audio = Audio.from_file(silence_10s_mp3_pathlib)
+    clip_df = audio.split_and_save(
+        "unnecessary", "unnecessary", 5.0, 1.0, final_clip="full", dry_run=True
     )
     assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -283,14 +267,9 @@ def test_split_and_save_default_full(silence_10s_mp3_pathlib):
 
 
 def test_split_and_save_default_extend(silence_10s_mp3_pathlib):
-    clip_df = split_and_save(
-        Audio.from_file(silence_10s_mp3_pathlib),
-        "unnecessary",
-        "unnecessary",
-        5.0,
-        1.0,
-        final_clip="extend",
-        dry_run=True,
+    audio = Audio.from_file(silence_10s_mp3_pathlib)
+    clip_df = audio.split_and_save(
+        "unnecessary", "unnecessary", 5.0, 1.0, final_clip="extend", dry_run=True
     )
     assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -303,7 +282,7 @@ def test_split_and_save_default_extend(silence_10s_mp3_pathlib):
 
 def test_non_integer_source_split_and_save_default(silence_10s_mp3_pathlib):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
-    clip_df = split_and_save(audio, "unnecessary", "unnecessary", 5, dry_run=True)
+    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5, dry_run=True)
     assert clip_df.shape[0] == 1
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
@@ -311,8 +290,8 @@ def test_non_integer_source_split_and_save_default(silence_10s_mp3_pathlib):
 
 def test_non_integer_source_split_and_save_remainder(silence_10s_mp3_pathlib):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
-    clip_df = split_and_save(
-        audio, "unnecessary", "unnecessary", 5, dry_run=True, final_clip="remainder"
+    clip_df = audio.split_and_save(
+        "unnecessary", "unnecessary", 5, dry_run=True, final_clip="remainder"
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -323,8 +302,8 @@ def test_non_integer_source_split_and_save_remainder(silence_10s_mp3_pathlib):
 
 def test_non_integer_source_split_and_save_full(silence_10s_mp3_pathlib):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
-    clip_df = split_and_save(
-        audio, "unnecessary", "unnecessary", 5, dry_run=True, final_clip="full"
+    clip_df = audio.split_and_save(
+        "unnecessary", "unnecessary", 5, dry_run=True, final_clip="full"
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -335,8 +314,8 @@ def test_non_integer_source_split_and_save_full(silence_10s_mp3_pathlib):
 
 def test_non_integer_source_split_and_save_extend(silence_10s_mp3_pathlib):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
-    clip_df = split_and_save(
-        audio, "unnecessary", "unnecessary", 5, dry_run=True, final_clip="extend"
+    clip_df = audio.split_and_save(
+        "unnecessary", "unnecessary", 5, dry_run=True, final_clip="extend"
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -346,13 +325,8 @@ def test_non_integer_source_split_and_save_extend(silence_10s_mp3_pathlib):
 
 
 def test_non_integer_cliplen_split_and_save(silence_10s_mp3_pathlib):
-    clip_df = split_and_save(
-        Audio.from_file(silence_10s_mp3_pathlib),
-        "unnecessary",
-        "unnecessary",
-        4.5,
-        dry_run=True,
-    )
+    audio = Audio.from_file(silence_10s_mp3_pathlib)
+    clip_df = audio.split_and_save("unnecessary", "unnecessary", 4.5, dry_run=True)
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 4.5
@@ -361,14 +335,8 @@ def test_non_integer_cliplen_split_and_save(silence_10s_mp3_pathlib):
 
 
 def test_non_integer_overlaplen_split_and_save(silence_10s_mp3_pathlib):
-    clip_df = split_and_save(
-        Audio.from_file(silence_10s_mp3_pathlib),
-        "unnecessary",
-        "unnecessary",
-        5.0,
-        0.5,
-        dry_run=True,
-    )
+    audio = Audio.from_file(silence_10s_mp3_pathlib)
+    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5.0, 0.5, dry_run=True)
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0

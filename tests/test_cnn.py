@@ -1,12 +1,14 @@
 from opensoundscape.preprocess.preprocessors import (
     CnnPreprocessor,
     LongAudioPreprocessor,
+    ClipLoadingSpectrogramPreprocessor,
 )
 from opensoundscape.torch.models.cnn import (
     PytorchModel,
     Resnet18Multiclass,
     Resnet18Binary,
     InceptionV3,
+    load_model,
 )
 from opensoundscape.torch.architectures.cnn_architectures import alexnet
 import pandas as pd
@@ -16,6 +18,19 @@ import numpy as np
 import pandas as pd
 import pytest
 import shutil
+
+
+@pytest.fixture()
+def model_save_path(request):
+    path = Path("tests/models/temp.model")
+
+    # always delete this at the end
+    def fin():
+        path.unlink()
+
+    request.addfinalizer(fin)
+
+    return path
 
 
 @pytest.fixture()
@@ -37,6 +52,24 @@ def long_audio_dataset():
 
 
 @pytest.fixture()
+def clip_loading_preprocessor():
+    import librosa
+    from opensoundscape.helpers import generate_clip_times_df
+
+    # prepare a df for clip loading preprocessor: start_time, end_time columns
+    files = ["tests/audio/1min.wav"]
+    clip_dfs = []
+    for f in files:
+        t = librosa.get_duration(filename=f)
+        clips = generate_clip_times_df(t, 5, 0)
+        clips.index = [f] * len(clips)
+        clips.index.name = "file"
+        clip_dfs.append(clips)
+    clip_df = pd.concat(clip_dfs)
+    return ClipLoadingSpectrogramPreprocessor(clip_df)
+
+
+@pytest.fixture()
 def test_dataset():
     df = pd.DataFrame(
         index=["tests/audio/great_plains_toad.wav", "tests/audio/1min.wav"]
@@ -46,6 +79,10 @@ def test_dataset():
 
 def test_multiclass_object_init():
     _ = Resnet18Multiclass([0, 1, 2, 3])
+
+
+def test_init_with_str():
+    model = PytorchModel("resnet18", classes=[0, 1])
 
 
 def test_train(train_dataset):
@@ -59,10 +96,7 @@ def test_train(train_dataset):
         save_interval=10,
         num_workers=0,
     )
-    model_path = Path("tests/models/binary/best.model")
-    binary.save(model_path)
-    assert model_path.exists()
-    shutil.rmtree("tests/models/binary")
+    shutil.rmtree("tests/models/binary/")
 
 
 def test_train_multiclass(train_dataset):
@@ -76,9 +110,6 @@ def test_train_multiclass(train_dataset):
         save_interval=10,
         num_workers=0,
     )
-    model_path = Path("tests/models/multiclass/best.model")
-    model.save(model_path)
-    assert model_path.exists()
     shutil.rmtree("tests/models/multiclass/")
 
 
@@ -114,11 +145,6 @@ def test_train_predict_inception(train_dataset):
         num_workers=0,
     )
     model.predict(train_dataset, num_workers=0)
-    model_path = Path("tests/models/multiclass/best.model")
-    model.save(model_path)
-    assert model_path.exists()
-
-    InceptionV3.from_checkpoint(model_path)
     shutil.rmtree("tests/models/multiclass/")
 
 
@@ -136,9 +162,6 @@ def test_train_predict_architecture(train_dataset):
         num_workers=0,
     )
     model.predict(train_dataset, num_workers=0)
-    model_path = Path("tests/models/multiclass/best.model")
-    model.save(model_path)
-    assert model_path.exists()
     shutil.rmtree("tests/models/multiclass/")
 
 
@@ -149,3 +172,34 @@ def test_split_and_predict(long_audio_dataset):
     )
     assert len(scores) == 12
     assert len(preds) == 12
+
+
+def test_predict_with_cliploading(clip_loading_preprocessor):
+    binary = Resnet18Binary(classes=["negative", "positive"])
+    scores, _, _ = binary.predict(clip_loading_preprocessor, binary_preds=None)
+    assert len(scores) == 12
+
+
+def test_save_and_load_model(model_save_path):
+    arch = alexnet(2, use_pretrained=False)
+    classes = ["negative", "positive"]
+
+    PytorchModel(arch, classes=classes).save(model_save_path)
+    m = load_model(model_save_path)
+    assert m.classes == classes
+    assert type(m) == PytorchModel
+
+    Resnet18Binary(classes=classes, use_pretrained=False).save(model_save_path)
+    m = load_model(model_save_path)
+    assert m.classes == classes
+    assert type(m) == Resnet18Binary
+
+    Resnet18Multiclass(classes=classes, use_pretrained=False).save(model_save_path)
+    m = load_model(model_save_path)
+    assert m.classes == classes
+    assert type(m) == Resnet18Multiclass
+
+    InceptionV3(classes=classes, use_pretrained=False).save(model_save_path)
+    m = load_model(model_save_path)
+    assert m.classes == classes
+    assert type(m) == InceptionV3
