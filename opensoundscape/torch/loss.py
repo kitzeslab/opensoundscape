@@ -121,7 +121,7 @@ class ResampleLoss(nn.Module):
         self.map_beta = 0.2
         self.map_gamma = 0.1
 
-        self.class_freq = torch.from_numpy(class_freq).float()
+        self.class_freq = class_freq.float()
         self.neg_class_freq = self.class_freq.sum() - self.class_freq
         self.num_classes = self.class_freq.shape[0]
         self.train_num = self.class_freq.sum()
@@ -136,7 +136,10 @@ class ResampleLoss(nn.Module):
             * init_bias
             / self.neg_scale
         )
-        self.freq_inv = torch.ones(self.class_freq.shape) / self.class_freq
+        self.freq_inv = (
+            torch.ones(self.class_freq.shape, device=self.class_freq.device)
+            / self.class_freq
+        )
         self.propotion_inv = self.train_num / self.class_freq
 
     def forward(
