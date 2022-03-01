@@ -909,7 +909,10 @@ class CnnResampleLoss(PytorchModel):
         Note: if you change the loss function, you may need to override this
         to correctly initialize self.loss_cls
         """
-        class_frequency = np.sum(self.train_dataset.df.values, 0)
+        class_frequency = (
+            torch.tensor(self.train_dataset.df.values).sum(0).to(self.device)
+        )
+
         # initializing ResampleLoss requires us to pass class_frequency
         self.loss_fn = self.loss_cls(class_frequency)
 
