@@ -49,7 +49,7 @@ We recommend installing OpenSoundscape in a package manager. We find that the ea
 You can now manage packages with `conda`.
 
 ## Install OpenSoundscape in virtual environment
-- Create a Python 3.7 (or 3.8) conda environment for opensoundscape: `conda create --name opensoundscape pip python=3.7`
+- Create a Python 3.7.1 (or 3.8) conda environment for opensoundscape: `conda create --name opensoundscape pip python=3.7.1`
 - Activate the environment: `conda activate opensoundscape`
 - Install opensoundscape using pip: `pip install opensoundscape==0.6.1`
 
