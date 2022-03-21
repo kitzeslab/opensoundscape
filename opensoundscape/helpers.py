@@ -249,6 +249,10 @@ def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
 
     import librosa
 
+    # if user passes a string filepath, will convert it to list
+    if isinstance(files, str):
+        files = [files]
+
     clip_dfs = []
     for f in files:
         t = librosa.get_duration(filename=f)
