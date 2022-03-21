@@ -105,13 +105,13 @@ def parse_audiomoth_metadata_from_path(file_path):
     metadata = TinyTag.get(file_path)
 
     if metadata is None:
-        raise ValueError("This file does not contain metadata")
+        raise ValueError(f"{file_path} does not contain metadata")
     else:
         metadata = metadata.as_dict()
         artist = metadata["artist"]
         if not artist or (not "AudioMoth" in artist):
             raise ValueError(
-                "It looks like this file does not contain AudioMoth metadata."
+                f"It looks like the file: {file_path} does not contain AudioMoth metadata."
             )
         else:
             return parse_audiomoth_metadata(metadata)
