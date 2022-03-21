@@ -920,7 +920,18 @@ class CnnResampleLoss(PytorchModel):
 class Resnet18Multiclass(CnnResampleLoss):
     """Multi-class model with resnet18 architecture and ResampleLoss.
 
-    Can be single or multi-target.
+    Notes:
+        Allows separate parameters for feature & classifier blocks
+        via self.optimizer_params's keys: "feature" and "classifier".
+
+        If you do not need separate training parameters for the
+        feature extraction and classification blocks, you can create
+        a model with resnet18 architecture simply by using
+        PytorchModel('resnet18',classes...).
+
+        Can be single or multi-target.
+
+        Uses "ResampleLoss" loss function.
 
     Args:
         classes:
@@ -929,11 +940,6 @@ class Resnet18Multiclass(CnnResampleLoss):
             - True: model expects exactly one positive class per sample
             - False: samples can have an number of positive classes
             [default: False]
-
-    Notes
-    - Allows separate parameters for feature & classifier blocks
-        via self.optimizer_params's keys: "feature" and "classifier"
-    - Uses ResampleLoss
     """
 
     def __init__(self, classes, single_target=False, use_pretrained=True):
@@ -1001,6 +1007,11 @@ class Resnet18Binary(PytorchModel):
 
     This subclass allows separate training parameters
     for the feature extractor and classifier via optimizer_params
+
+    If you do not need separate training parameters for the
+    feature extraction and classification blocks, you can create
+    a model with resnet18 architecture simply by using
+    PytorchModel('resnet18',classes...).
 
     Args:
         classes:
