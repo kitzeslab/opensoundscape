@@ -79,16 +79,18 @@ def parse_audiomoth_metadata(metadata):
 
     comment = metadata["comment"]
     # Assume the time zone in () is compatible with pytz.timezone()
-    timezone = pytz.timezone(comment.split("(")[1].split(")")[0])
-    datetime_str = comment.split("Recorded at ")[1][:19]
-    metadata["recording_start_time"] = timezone.localize(
-        datetime.datetime.strptime(datetime_str, "%H:%M:%S %d/%m/%Y")
-    )
-    # gain setting can be written "medium gain" or "gain setting 3"
+    # timezone = pytz.timezone(comment.split("(")[1].split(")")[0])
+    datetime_str = comment.split("Recorded at ")[1].split(" by ")[0]
+
+    # parse recording start time (can have timzeone info like "UTC-5")
+    metadata["recording_start_time"] = _parse_audiomoth_comment_dt(datetime_str)
+
+    # gain setting can be written "medium gain" or "gain setting 2"
     try:
         metadata["gain_setting"] = int(comment.split("gain setting ")[1][:1])
     except ValueError:
         metadata["gain_setting"] = comment.split(" gain setting")[0].split(" ")[-1]
+    # written "3.2V" or "less than 2.5V" (or? greater than 4.5V?) #TODO
     metadata["battery_state"] = float(comment.split("battery state was ")[1][:3])
     metadata["audiomoth_id"] = metadata["artist"].split(" ")[1]
     if "temperature" in comment:
@@ -115,3 +117,36 @@ def parse_audiomoth_metadata_from_path(file_path):
             )
         else:
             return parse_audiomoth_metadata(metadata)
+
+
+def _parse_audiomoth_comment_dt(dt_str):  # ,final_tz):
+    """parses start times as written in metadata Comment field of AudioMoths
+
+    examples of Comment Field date-times:
+    19:22:55 14/12/2020 (UTC-5)
+    10:00:00 15/05/2021 (UTC)
+
+    note that UTC-5 is not parseable by datetime, hence custom parsing
+    also note day-month-year format of date
+
+    Args:
+        dt_str: string parsed from comment field of AudioMoth metadata
+        final_tz: pytz timezone of returned datetime object
+    Returns:
+        localized datetime object in timezone specified by original metadata
+    """
+    if "UTC-" in dt_str or "UTC+" in dt_str:
+        marker = "UTC-" if "UTC-" in dt_str else "UTC+"
+        dt_str_utc_offset = dt_str.split(marker)[1][:-1]
+        if len(dt_str_utc_offset) <= 2:
+            dt_str_tz_str = f"{marker}{int(dt_str_utc_offset):02n}00"
+        else:
+            dt_str_tz_str = f"{marker}{int(dt_str_utc_offset):04n}"
+
+        dt_str = f"{dt_str.split(marker)[0]}{dt_str_tz_str})"
+    else:
+        dt_str = dt_str.replace("(UTC)", "(UTC-0000)")
+    dt = datetime.datetime.strptime(
+        dt_str, "%H:%M:%S %d/%m/%Y (%Z%z)"
+    )  # .astimezone(final_tz)
+    return dt
