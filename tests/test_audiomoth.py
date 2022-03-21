@@ -137,7 +137,7 @@ def test_parse_audiomoth_metadata_with_low_battery():
     new_metadata = audiomoth.parse_audiomoth_metadata(metadata)
     assert new_metadata["gain_setting"] == "medium"
     assert new_metadata["recording_start_time"] == pytz.utc.localize(
-        datetime(2020, 12, 15, 00, 22, 55)
+        datetime(2021, 5, 15, 10, 00, 00)
     )
 
 
