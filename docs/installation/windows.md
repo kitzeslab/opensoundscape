@@ -5,10 +5,10 @@ We recommend that Windows users install and use OpenSoundscape using Windows Sub
 If you don't already use Windows Subsystem for Linux (WSL), activate it using the following:
 - Search for the "Powershell" program on your computer
 - Right click on "Powershell," then click “Run as administrator” and in the pop-up, allow it to run as administrator
-- Install WSL1 (more information: https://docs.microsoft.com/en-us/windows/wsl/install-win10):
+- Install WSL2 (more information: https://docs.microsoft.com/en-us/windows/wsl/install-win10):
 
     ```
-    dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+    wsl --install
     ```
 
 - Restart your computer
