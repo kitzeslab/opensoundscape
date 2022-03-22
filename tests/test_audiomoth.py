@@ -82,6 +82,65 @@ def test_parse_audiomoth_metadata():
     )
 
 
+def test_parse_audiomoth_metadata_with_timezone():
+    metadata = {
+        "filesize": 115200360,
+        "album": None,
+        "albumartist": None,
+        "artist": "AudioMoth 24526B065D325963",
+        "audio_offset": None,
+        "bitrate": 500.0,
+        "channels": 1,
+        "comment": "Recorded at 19:22:55 14/12/2020 (UTC-5) by AudioMoth 24E144055DDD3203 at medium gain setting while battery state was 4.0V and temperature was 24.5C.",
+        "composer": None,
+        "disc": None,
+        "disc_total": None,
+        "duration": 1800.0,
+        "extra": {},
+        "genre": None,
+        "samplerate": 32000,
+        "title": None,
+        "track": None,
+        "track_total": None,
+        "year": None,
+        "audio_offest": 352,
+    }
+    new_metadata = audiomoth.parse_audiomoth_metadata(metadata)
+    assert new_metadata["recording_start_time"] == pytz.utc.localize(
+        datetime(2020, 12, 15, 00, 22, 55)
+    )
+
+
+def test_parse_audiomoth_metadata_with_low_battery():
+    metadata = {
+        "filesize": 115200360,
+        "album": None,
+        "albumartist": None,
+        "artist": "AudioMoth 24526B065D325963",
+        "audio_offset": None,
+        "bitrate": 500.0,
+        "channels": 1,
+        "comment": "Recorded at 10:00:00 15/05/2021 (UTC) by AudioMoth 249BC3055C02FE06 at medium gain setting while battery state was less than 2.5V and temperature was 2.1C.",
+        "composer": None,
+        "disc": None,
+        "disc_total": None,
+        "duration": 1800.0,
+        "extra": {},
+        "genre": None,
+        "samplerate": 32000,
+        "title": None,
+        "track": None,
+        "track_total": None,
+        "year": None,
+        "audio_offest": 352,
+    }
+    new_metadata = audiomoth.parse_audiomoth_metadata(metadata)
+    assert new_metadata["gain_setting"] == "medium"
+    assert new_metadata["recording_start_time"] == pytz.utc.localize(
+        datetime(2021, 5, 15, 10, 00, 00)
+    )
+
+
 def test_parse_audiomoth_from_path_wrong_metadata(veryshort_wav_str):
     with pytest.raises(ValueError):
         audiomoth.parse_audiomoth_metadata_from_path(veryshort_wav_str)

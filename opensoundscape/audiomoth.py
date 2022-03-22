@@ -78,18 +78,17 @@ def parse_audiomoth_metadata(metadata):
     import pytz
 
     comment = metadata["comment"]
-    # Assume the time zone in () is compatible with pytz.timezone()
-    timezone = pytz.timezone(comment.split("(")[1].split(")")[0])
-    datetime_str = comment.split("Recorded at ")[1][:19]
-    metadata["recording_start_time"] = timezone.localize(
-        datetime.datetime.strptime(datetime_str, "%H:%M:%S %d/%m/%Y")
-    )
-    # gain setting can be written "medium gain" or "gain setting 3"
+
+    # parse recording start time (can have timzeone info like "UTC-5")
+    metadata["recording_start_time"] = _parse_audiomoth_comment_dt(comment)
+
+    # gain setting can be written "medium gain" or "gain setting 2"
     try:
         metadata["gain_setting"] = int(comment.split("gain setting ")[1][:1])
     except ValueError:
         metadata["gain_setting"] = comment.split(" gain setting")[0].split(" ")[-1]
-    metadata["battery_state"] = float(comment.split("battery state was ")[1][:3])
+    # written "3.2V" or "less than 2.5V" (or? greater than 4.5V?)
+    metadata["battery_state"] = _parse_audiomoth_battery_info(comment)
     metadata["audiomoth_id"] = metadata["artist"].split(" ")[1]
     if "temperature" in comment:
         metadata["temperature_C"] = float(
@@ -115,3 +114,59 @@ def parse_audiomoth_metadata_from_path(file_path):
             )
         else:
             return parse_audiomoth_metadata(metadata)
+
+
+def _parse_audiomoth_comment_dt(comment):
+    """parses start times as written in metadata Comment field of AudioMoths
+
+    examples of Comment Field date-times:
+    19:22:55 14/12/2020 (UTC-5)
+    10:00:00 15/05/2021 (UTC)
+
+    note that UTC-5 is not parseable by datetime, hence custom parsing
+    also note day-month-year format of date
+
+    Args:
+        comment: the full comment string from an audiomoth metadata Comment field
+    Returns:
+        localized datetime object in timezone specified by original metadata
+    """
+    # extract relevant portion of comment
+    dt_str = comment.split("Recorded at ")[1].split(" by ")[0]
+
+    # handle formats like "UTC-5" or "UTC+0130"
+    if "UTC-" in dt_str or "UTC+" in dt_str:
+        marker = "UTC-" if "UTC-" in dt_str else "UTC+"
+        dt_str_utc_offset = dt_str.split(marker)[1][:-1]
+        if len(dt_str_utc_offset) <= 2:
+            dt_str_tz_str = f"{marker}{int(dt_str_utc_offset):02n}00"
+        else:
+            dt_str_tz_str = f"{marker}{int(dt_str_utc_offset):04n}"
+
+        dt_str = f"{dt_str.split(marker)[0]}{dt_str_tz_str})"
+    else:  #
+        dt_str = dt_str.replace("(UTC)", "(UTC-0000)")
+    dt = datetime.datetime.strptime(
+        dt_str, "%H:%M:%S %d/%m/%Y (%Z%z)"
+    )  # .astimezone(final_tz)
+    return dt
+
+
+def _parse_audiomoth_battery_info(comment):
+    """attempt to parse battery info from metadata comment
+
+    examples:
+    ...battery state was 4.7V.
+    ...battery state was less than 2.5V
+    ...battery state was 3.5V and temperature....
+
+    Args:
+        comment: the full comment string from an audiomoth metadata Comment field
+    Returns:
+        float of voltage or string describing voltage, eg "less than 2.5V"
+    """
+    battery_str = comment.split("battery state was ")[1].split("V")[0] + "V"
+    if len(battery_str) == 4:
+        return float(battery_str[:-1])
+    else:
+        return battery_str
