@@ -5,7 +5,7 @@ access to the feature extraction and classification blocks. This can be
 useful, for instance, to freeze the feature extractor and only train the
 classifier layer; or to specify different learning rates for the two blocks.
 
-This implementation is used in the Resnet18Binary and Resnet18Multiclass
+This implementation is used in the ResNet18Binary and ResNet18Multiclass
 classes of opensoundscape.torch.models.cnn.
 """
 import os

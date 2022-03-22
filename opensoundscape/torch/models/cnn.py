@@ -917,7 +917,7 @@ class CnnResampleLoss(PytorchModel):
         self.loss_fn = self.loss_cls(class_frequency)
 
 
-class Resnet18Multiclass(CnnResampleLoss):
+class ResNet18Multiclass(CnnResampleLoss):
     """Multi-class model with resnet18 architecture and ResampleLoss.
 
     Can be single or multi-target.
@@ -942,10 +942,10 @@ class Resnet18Multiclass(CnnResampleLoss):
         architecture = cnn_architectures.resnet18(
             num_classes=len(self.classes), use_pretrained=use_pretrained
         )
-        super(Resnet18Multiclass, self).__init__(
+        super(ResNet18Multiclass, self).__init__(
             architecture, self.classes, single_target
         )
-        self.name = "Resnet18Multiclass"
+        self.name = "ResNet18Multiclass"
 
         # optimization parameters for parts of the networks - see
         # https://pytorch.org/docs/stable/optim.html#per-parameter-options
@@ -996,7 +996,7 @@ class Resnet18Multiclass(CnnResampleLoss):
         return self.optimizer_cls(param_dict.values())
 
 
-class Resnet18Binary(PytorchModel):
+class ResNet18Binary(PytorchModel):
     """Subclass of PytorchModel with Resnet18 architecture
 
     This subclass allows separate training parameters
@@ -1020,8 +1020,8 @@ class Resnet18Binary(PytorchModel):
         architecture = cnn_architectures.resnet18(
             num_classes=len(self.classes), use_pretrained=use_pretrained
         )
-        super(Resnet18Binary, self).__init__(architecture, self.classes, single_target)
-        self.name = "Resnet18Binary"
+        super(ResNet18Binary, self).__init__(architecture, self.classes, single_target)
+        self.name = "ResNet18Binary"
 
         # optimization parameters for separate feature extractor and classifier
         # see: https://pytorch.org/docs/stable/optim.html#per-parameter-options
@@ -1264,7 +1264,7 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
     For models created with 0.6.1 and above, use load_model(path) which is more robust.
 
     Note: If you are loading a model created with opensoundscape 0.4.x, you most likely want to specify
-    `model_class = opensoundscape.torch.models.CnnResnet18Binary`. If your model was created with
+    `model_class = opensoundscape.torch.models.CnnResNet18Binary`. If your model was created with
     opensoundscape 0.5.x or 0.6.0, you need to choose the appropriate class.
 
     Note: for future use of the loaded model, you can simply call
@@ -1274,8 +1274,8 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
     Examples:
     ```
     #load a binary resnet18 model from opso 0.4.x, 0.5.x, or 0.6.0
-    from opensoundscape.torch.models.cnn import Resnet18Binary
-    model = load_outdated_model('old_model.tar',model_class=Resnet18Binary)
+    from opensoundscape.torch.models.cnn import ResNet18Binary
+    model = load_outdated_model('old_model.tar',model_class=ResNet18Binary)
 
     #load a resnet50 model of class PytorchModel created with opso 0.5.0
     from opensoundscape.torch.models.cnn import PytorchModel
@@ -1286,11 +1286,11 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
     Args:
         path: path to model file, ie .model or .tar file
         model_class: the opensoundscape class to create,
-            eg PytorchModel, CnnResampleLoss, or Resnet18Binary from opensoundscape.torch.models.cnn
+            eg PytorchModel, CnnResampleLoss, or ResNet18Binary from opensoundscape.torch.models.cnn
         architecture_constructor: the *function* that creates desired cnn architecture
             eg opensoundscape.torch.architectures.cnn_architectures.resnet18
             Note: this is only required for classes that take the architecture as an input, for instance
-            PytorchModel or CnnResampleLoss. It's not required for e.g. Resnet18Binary or InceptionV3 which
+            PytorchModel or CnnResampleLoss. It's not required for e.g. ResNet18Binary or InceptionV3 which
             internally create a specific architecture.
         device: optionally specify a device to map tensors onto, eg 'cpu', 'cuda:0', 'cuda:1'[default: None]
             - if None, will choose cuda:0 if cuda is available, otherwise chooses cpu

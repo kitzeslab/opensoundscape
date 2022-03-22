@@ -6,8 +6,8 @@ from opensoundscape.preprocess.preprocessors import (
 from opensoundscape.torch.models.cnn import (
     PytorchModel,
     CnnResampleLoss,
-    Resnet18Multiclass,
-    Resnet18Binary,
+    ResNet18Multiclass,
+    ResNet18Binary,
     InceptionV3,
     load_model,
 )
@@ -79,7 +79,7 @@ def test_dataset():
 
 
 def test_multiclass_object_init():
-    _ = Resnet18Multiclass([0, 1, 2, 3])
+    _ = ResNet18Multiclass([0, 1, 2, 3])
 
 
 def test_init_with_str():
@@ -87,7 +87,7 @@ def test_init_with_str():
 
 
 def test_train(train_dataset):
-    binary = Resnet18Binary(classes=["negative", "positive"])
+    binary = ResNet18Binary(classes=["negative", "positive"])
     binary.train(
         train_dataset,
         train_dataset,
@@ -115,7 +115,7 @@ def test_train_resample_loss(train_dataset):
 
 
 def test_train_multiclass(train_dataset):
-    model = Resnet18Multiclass(["negative", "positive"])
+    model = ResNet18Multiclass(["negative", "positive"])
     model.train(
         train_dataset,
         train_dataset,
@@ -129,13 +129,13 @@ def test_train_multiclass(train_dataset):
 
 
 def test_single_target_prediction(train_dataset):
-    binary = Resnet18Binary(classes=["negative", "positive"])
+    binary = ResNet18Binary(classes=["negative", "positive"])
     _, preds, _ = binary.predict(train_dataset, binary_preds="single_target")
     assert np.sum(preds.iloc[0].values) == 1
 
 
 def test_multi_target_prediction(train_dataset, test_dataset):
-    binary = Resnet18Binary(classes=["negative", "positive"])
+    binary = ResNet18Binary(classes=["negative", "positive"])
     _, preds, _ = binary.predict(
         test_dataset, binary_preds="multi_target", threshold=0.1
     )
@@ -181,7 +181,7 @@ def test_train_predict_architecture(train_dataset):
 
 
 def test_split_and_predict(long_audio_dataset):
-    binary = Resnet18Binary(classes=["negative", "positive"])
+    binary = ResNet18Binary(classes=["negative", "positive"])
     scores, preds, _ = binary.split_and_predict(
         long_audio_dataset, binary_preds="single_target"
     )
@@ -190,7 +190,7 @@ def test_split_and_predict(long_audio_dataset):
 
 
 def test_predict_with_cliploading(clip_loading_preprocessor):
-    binary = Resnet18Binary(classes=["negative", "positive"])
+    binary = ResNet18Binary(classes=["negative", "positive"])
     scores, _, _ = binary.predict(clip_loading_preprocessor, binary_preds=None)
     assert len(scores) == 12
 
@@ -204,15 +204,15 @@ def test_save_and_load_model(model_save_path):
     assert m.classes == classes
     assert type(m) == PytorchModel
 
-    Resnet18Binary(classes=classes, use_pretrained=False).save(model_save_path)
+    ResNet18Binary(classes=classes, use_pretrained=False).save(model_save_path)
     m = load_model(model_save_path)
     assert m.classes == classes
-    assert type(m) == Resnet18Binary
+    assert type(m) == ResNet18Binary
 
-    Resnet18Multiclass(classes=classes, use_pretrained=False).save(model_save_path)
+    ResNet18Multiclass(classes=classes, use_pretrained=False).save(model_save_path)
     m = load_model(model_save_path)
     assert m.classes == classes
-    assert type(m) == Resnet18Multiclass
+    assert type(m) == ResNet18Multiclass
 
     InceptionV3(classes=classes, use_pretrained=False).save(model_save_path)
     m = load_model(model_save_path)
