@@ -535,6 +535,7 @@ class ClipLoadingSpectrogramPreprocessor(AudioToSpectrogramPreprocessor):
     You can quickly create such a df for a set of audio files like this:
 
     ```
+    from opensoundscape.helpers import make_clip_df
     files = glob('/path_to/*/*.WAV') #get list of full-length files
     clip_duration=5.0
     clip_overlap = 0.0
