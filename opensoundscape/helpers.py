@@ -249,6 +249,11 @@ def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
 
     import librosa
 
+    if isinstance(files, str):
+        raise TypeError(
+            "make_clip_df expects a list of files, it looks like you passed it a string"
+        )
+
     clip_dfs = []
     for f in files:
         t = librosa.get_duration(filename=f)
