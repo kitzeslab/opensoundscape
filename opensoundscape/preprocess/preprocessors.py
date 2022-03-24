@@ -535,19 +535,11 @@ class ClipLoadingSpectrogramPreprocessor(AudioToSpectrogramPreprocessor):
     You can quickly create such a df for a set of audio files like this:
 
     ```
-    import librosa
-    from opensoundscape.helpers import generate_clip_times_df
+    from opensoundscape.helpers import make_clip_df
     files = glob('/path_to/*/*.WAV') #get list of full-length files
-    clip_dfs = []
     clip_duration=5.0
     clip_overlap = 0.0
-    for f in files:
-        t = librosa.get_duration(filename=f)
-        clips = generate_clip_times_df(t,clip_duration,clip_overlap)
-        clips.index = [f]*len(clips)
-        clips.index.name = 'file'
-        clip_dfs.append(clips)
-    clip_df = pd.concat(clip_dfs) #contains clip times for all files
+    clip_df = make_clip_df(files, clip_duration, clip_overlap)
     ```
 
     If you use this preprocessor with model.predict(), it will work, but
