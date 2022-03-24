@@ -68,11 +68,18 @@ def travel_time(source, receiver, speed_of_sound):
     return distance / speed_of_sound
 
 
+from deprecated import deprecated
+
+
+@deprecated(
+    version="0.6.2",
+    reason="This function is not fully implemented and will be replaced in version 0.7.0",
+)
 def localize(
     receiver_positions,
     arrival_times,
     temperature=20.0,  # celcius
-    invert_alg="gps",  # options: 'lstsq', 'gps'
+    invert_alg="gps",  # options: 'gps'
     center=True,  # True for original Sound Finder behavior
     pseudo=True,  # False for original Sound Finder
 ):
@@ -96,7 +103,7 @@ def localize(
 
         temperature: ambient temperature in Celsius
 
-        invert_alg: what inversion algorithm to use
+        invert_alg: what inversion algorithm to use (only 'gps' is implemented)
 
         center: whether to center recorders before computing localization
           result. Computes localization relative to centered plot, then
@@ -146,10 +153,11 @@ def localize(
 
     # choose between two algorithms to invert the matrix
     if invert_alg == "lstsq":
+        raise NotImplementedError
         # Compute B+ * a and B+ * e
         # using closest equivalent to R's solve(qr(B), e)
-        Bplus_e = np.linalg.lstsq(B, e, rcond=None)[0]
-        Bplus_a = np.linalg.lstsq(B, a, rcond=None)[0]
+        # Bplus_e = np.linalg.lstsq(B, e, rcond=None)[0]
+        # Bplus_a = np.linalg.lstsq(B, a, rcond=None)[0]
 
     else:  # invert_alg == 'gps' or 'special'
         ## Compute B+ = (B^T \* B)^(-1) \* B^T
