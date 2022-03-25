@@ -17,7 +17,7 @@ Lapp, Rhinehart, Freeland-Haynes, and Kitzes, 2022. "OpenSoundscape v0.6.2".
 
 # Installation
 
-OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.7.1 and 3.8.
+OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.7 and 3.8.
 
 Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.6.2`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
 
