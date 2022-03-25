@@ -5,6 +5,7 @@ from opensoundscape.preprocess.preprocessors import (
 )
 from opensoundscape.torch.models.cnn import (
     PytorchModel,
+    CnnResampleLoss,
     Resnet18Multiclass,
     Resnet18Binary,
     InceptionV3,
@@ -88,6 +89,20 @@ def test_init_with_str():
 def test_train(train_dataset):
     binary = Resnet18Binary(classes=["negative", "positive"])
     binary.train(
+        train_dataset,
+        train_dataset,
+        save_path="tests/models/binary",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    shutil.rmtree("tests/models/binary/")
+
+
+def test_train_resample_loss(train_dataset):
+    model = CnnResampleLoss("resnet18", classes=["negative", "positive"])
+    model.train(
         train_dataset,
         train_dataset,
         save_path="tests/models/binary",

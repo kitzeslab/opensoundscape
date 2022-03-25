@@ -595,8 +595,8 @@ class ImgOverlay(BaseAction):
             - for example, if overlay_prob = 0.5 and max_overlay_num=2,
                 1/2 of images will recieve 1 overlay and 1/4 will recieve an
                 additional second overlay
-        overlay_weight: can be a float between 0-1 or range of floats (chooses
-            randomly from within range) such as [0.1,0.7].
+        overlay_weight: a float > 0 and < 1, or a list of 2 floats [min, max]
+            between which the weight will be randomly chosen. e.g. [0.1,0.7]
             An overlay_weight <0.5 means more emphasis on original image.
 
     """
@@ -652,7 +652,7 @@ class ImgOverlay(BaseAction):
         ), ("overlay_prob" f"should be in range (0,1), was {overlay_weight}")
 
         wts = self.params["overlay_weight"]
-        weight_error = f"overlay_weight should be between 0 and 1, was {wts}"
+        weight_error = f"overlay_weight should be > 0 and < 1, was {wts}"
 
         if hasattr(wts, "__iter__"):
             assert (

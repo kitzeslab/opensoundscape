@@ -5,10 +5,10 @@ We recommend that Windows users install and use OpenSoundscape using Windows Sub
 If you don't already use Windows Subsystem for Linux (WSL), activate it using the following:
 - Search for the "Powershell" program on your computer
 - Right click on "Powershell," then click “Run as administrator” and in the pop-up, allow it to run as administrator
-- Install WSL1 (more information: https://docs.microsoft.com/en-us/windows/wsl/install-win10):
+- Install WSL2 (more information: https://docs.microsoft.com/en-us/windows/wsl/install-win10):
 
     ```
-    dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+    wsl --install
     ```
 
 - Restart your computer
@@ -51,11 +51,20 @@ You can now manage packages with `conda`.
 ## Install OpenSoundscape in virtual environment
 - Create a Python 3.7 (or 3.8) conda environment for opensoundscape: `conda create --name opensoundscape pip python=3.7`
 - Activate the environment: `conda activate opensoundscape`
-- Install opensoundscape using pip: `pip install opensoundscape==0.6.1`
+- Install opensoundscape using pip: `pip install opensoundscape==0.6.2`
+
+If you see an error that says "No matching distribution found...", your
+best bet is to use these commands to download then install the package:
+```
+cd
+git clone https://github.com/kitzeslab/opensoundscape.git
+cd opensoundscape/
+pip install .
+```
 
 If you run into this error and you are on a Windows 10 machine:
 ```
-(opensoundscape_environment) username@computername:~$ pip install opensoundscape==0.6.1
+(opensoundscape_environment) username@computername:~$ pip install opensoundscape==0.6.2
 WARNING: Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f7603c5da90>: Failed to establish a new connection: [Errno -2] Name or service not known')': /simple/opensoundscape/
 ```
 You may be able to solve it by going to System Settings, searching for “Proxy Settings,” and beneath “Automatic proxy setup,” turning “Automatically detect settings” OFF. Restart your terminal for changes to take effect. Then activate the environment and install OpenSoundscape using pip.
