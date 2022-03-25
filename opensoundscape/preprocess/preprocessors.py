@@ -6,9 +6,18 @@ from pathlib import Path
 import copy
 import warnings
 
-from opensoundscape.preprocess.utils import PreprocessingError
+from opensoundscape.preprocess.utils import PreprocessingError, _run_pipeline
 from opensoundscape.preprocess import actions
-from opensoundscape.preprocess.actions import Action, Augmentation, ImgOverlay
+from opensoundscape.preprocess.actions import (
+    BaseAction,
+    Action,
+    Augmentation,
+    ImgOverlay,
+)
+
+# from opensoundscape.preprocess.overlay import ImgOverlay
+from opensoundscape.audio import Audio
+from opensoundscape.spectrogram import Spectrogram
 
 
 class BasePreprocessor(torch.utils.data.Dataset):
@@ -17,15 +26,15 @@ class BasePreprocessor(torch.utils.data.Dataset):
     Custom Preprocessor classes should subclass this class or its children
 
     Args:
-        df:
-            dataframe of audio clips. df must have audio paths in the index.
-            If df has labels, the class names should be the columns, and
+        label_df:
+            dataframe of audio clips. label_df must have audio paths in the index.
+            If label_df has labels, the class names should be the columns, and
             the values of each row should be 0 or 1.
-            If data does not have labels, df will have no columns
+            If data does not have labels, label_df will have no columns
         return_labels:
             if True, the __getitem__ method will return {X:sample,y:labels}
             If False, the __getitem__ method will return {X:sample}
-            If df has no labels (no columns), use return_labels=False
+            If label_df has no labels (no columns), use return_labels=False
             [default: True]
 
     Raises:
@@ -35,17 +44,18 @@ class BasePreprocessor(torch.utils.data.Dataset):
     def __init__(self, label_df, clip_times_df=None, return_labels=True):
 
         # give helpful warnings for incorret inputs, but don't raise Exception
-        if not Path(df.index[0]).exists():
+        if not Path(label_df.index[0]).exists():
             warnings.warn(
                 "Index of dataframe passed to "
-                f"preprocessor must be a file path. Got {df.index[0]}."
+                f"preprocessor must be a file path. Got {label_df.index[0]}."
             )
-        if return_labels and not df.values[0, 0] in (0, 1):
+        if return_labels and not label_df.values[0, 0] in (0, 1):
             warnings.warn(
-                "if return_labels=True, df must have labels that take values of 0 and 1"
+                "if return_labels=True, label_df must have labels that take values of 0 and 1"
             )
 
         self.label_df = label_df
+        self.clip_times_df = clip_times_df
         self.return_labels = return_labels
         self.classes = label_df.columns
         self.perform_augmentations = (
@@ -58,7 +68,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
     def __len__(self):
         return self.label_df.shape[0]
 
-    def __getitem__(self, item_idx):
+    def __getitem__(self, item_idx, break_on_key=None, break_on_type=None):
 
         try:
             label_df_row = self.label_df.iloc[item_idx]
@@ -67,6 +77,8 @@ class BasePreprocessor(torch.utils.data.Dataset):
                 self.pipeline,
                 label_df_row,
                 perform_augmentations=self.perform_augmentations,
+                break_on_key=break_on_key,
+                break_on_type=break_on_type,
             )
 
             # Return sample & label pairs (training/validation)
@@ -123,44 +135,6 @@ class BasePreprocessor(torch.utils.data.Dataset):
         return new_ds
 
 
-def _run_pipeline(
-    pipeline,
-    label_df_row,
-    break_on_type=None,
-    break_on_key=None,
-    perform_augmentations=True,
-    clip_times=None,
-):
-    """run the pipeline (until a break point, if specified)
-
-    optionally, can pass a dataframe row specifying the clip times (columns 'start_time' and 'end_time')
-    """
-    x = Path(label_df_row.name)  # the index contains a path to a file
-
-    # a list of additional things that an action may request from the preprocessor
-    sample_info = {
-        "_path": Path(label_df_row.name),
-        "_labels": copy.deepcopy(label_df_row),
-        "_start_time": None if clip_times is None else clip_times["start_time"],
-        "_end_time": None if clip_times is None else clip_times["end_time"],
-        "_pipeline": pipeline,
-    }
-
-    for k, action in pipeline.items():
-        if type(action) == break_on_type or k == break_on_key:
-            break
-        if issubclass(type(action), Augmentation) and not perform_augmentations:
-            continue
-        extra_args = {key: sample_info[key] for key in action.extra_args}
-        if action.returns_labels:
-            x, labels = action.go(x, **extra_args)
-            sample_info["_labels"] = labels
-        else:
-            x = action.go(x, **extra_args)
-
-    return x, sample_info
-
-
 class AudioLoadingPreprocessor(BasePreprocessor):
     """creates Audio objects from file paths
 
@@ -186,10 +160,14 @@ class AudioLoadingPreprocessor(BasePreprocessor):
         super(AudioLoadingPreprocessor, self).__init__(
             label_df, return_labels=return_labels
         )
+        self.audio_length = (
+            audio_length
+        )  # TODO: may get out of date with trim_audio.params.audio_length
 
+        # TODO: should the Action get parameters from the function as attributes or put them in .params?
         self.pipeline = {
             "load_audio": Action(Audio.from_file),
-            "trim_audio": Action(actions.trim_audio, audio_length=audio_length),
+            "trim_audio": Action(actions.trim_audio, audio_length=self.audio_length),
         }
 
 
@@ -292,6 +270,7 @@ class AlphaSampleGenerator(BasePreprocessor):
         super(AlphaSampleGenerator, self).__init__(
             label_df, return_labels=return_labels
         )
+        self.audio_length = audio_length  # TODO can get out of date
 
         self.pipeline = {
             "load_audio": Action(Audio.from_file),
@@ -301,14 +280,17 @@ class AlphaSampleGenerator(BasePreprocessor):
                 Spectrogram.bandpass, min_f=0, max_f=11025, out_of_bounds_ok=False
             ),
             "to_img": Action(Spectrogram.to_image, shape=out_shape),
-            "overlay": ImgOverlay(overlay_df, update_labels=False),
+            "overlay": BaseAction()
+            if overlay_df is None
+            else ImgOverlay(overlay_df=overlay_df, update_labels=False),
             "to_tensor": Action(actions.image_to_tensor),
             "time_mask": Augmentation(actions.time_mask),
             "frequency_mask": Augmentation(actions.frequency_mask),
             "add_noise": Augmentation(actions.tensor_add_noise, std=0.005),
             "normalize": Action(actions.tensor_normalize),
-            "random_affine": Augmentation(actions.random_affine),
+            "random_affine": Augmentation(actions.torch_random_affine),
         }
+        # TODO: remove overlay action if overlay_df is None?
 
 
 class PredictionPreprocessor(BasePreprocessor):
@@ -349,9 +331,8 @@ class PredictionPreprocessor(BasePreprocessor):
         assert clip_times_df.columns[0] == "start_time"
         assert clip_times_df.columns[1] == "end_time"
         super(ClipLoadingSpectrogramPreprocessor, self).__init__(
-            clip_times_df[[]], return_labels=False
+            clip_times_df[[]], return_labels=False, clip_times_df=clip_times_df
         )
-        self.clip_times_df = clip_times_df
 
         self.pipeline = {
             "load_audio": AudioClipLoader(),

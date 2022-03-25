@@ -23,6 +23,7 @@ from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram, MelSpectrogram
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
+from opensoundscape.preprocess.utils import _run_pipeline
 
 
 class BaseAction:
@@ -41,6 +42,10 @@ class BaseAction:
         self.params = {}
         self.extra_args = []
         self.returns_labels = False
+        self.is_augmentation = False
+
+    def __repr__(self):
+        return f"Action"
 
     def go(self, x, **kwargs):
         return x
@@ -72,13 +77,12 @@ class Action(BaseAction):
     """
 
     def __init__(self, fn, extra_args=[], **kwargs):
+        super(Action, self).__init__()
 
         # if you need sample-specific args, you should write a subclass? or leave it as an input list? #DISCUSS #TODO
         self.action_fn = fn
-        self.extra_args = (
-            extra_args
-        )  # arguments that vary for each sample, should be passed from preprocessor
-        self.returns_labels = False
+        # args that vary for each sample, will be passed from preprocessor
+        self.extra_args = extra_args
 
         # query action_fn for arguments and default values
         self.params = get_args(self.action_fn)
@@ -87,16 +91,22 @@ class Action(BaseAction):
         # we remove it from the params dict
         self.params.pop(next(iter(self.params)))
 
-        # pass any user-provided parameters as kwargs
+        # update self.params with any user-provided parameters
         self.set(**kwargs)
 
         # make sure all required args are given (skipping the first, which will be provided by go)
-        unmatched_reqd_args = set(get_reqd_args(self.action_fn)[1:]) - set(
-            list(kwargs.keys())
+        unmatched_reqd_args = (
+            set(get_reqd_args(self.action_fn)[1:])
+            - set(list(kwargs.keys()))
+            - set(self.extra_args)
         )
+
         assert unmatched_reqd_args == set(
             []
         ), f"These required arguments were not provided: {unmatched_reqd_args}"
+
+    def __repr__(self):
+        return f"Action calling {self.action_fn}"
 
     def go(self, x, **kwargs):
         # incidentally(?), the syntax is the same regardless of whether
@@ -106,7 +116,8 @@ class Action(BaseAction):
 
 class Augmentation(Action):
     def __init__(self, fn, extra_args=[], **kwargs):
-        super(Augmentation, self).__init__(fn, extra_args=[], **kwargs)
+        super(Augmentation, self).__init__(fn, extra_args=extra_args, **kwargs)
+        self.is_augmentation = True
 
 
 class AudioClipLoader(Action):
@@ -132,7 +143,7 @@ class AudioClipLoader(Action):
         )
 
 
-def trim_audio(extend=False, random_trim=False, audio_length=None):
+def trim_audio(audio, extend=False, random_trim=False, audio_length=None):
     """Action child class for trimming audio (Audio -> Audio)
 
     Trims an audio file to desired length
@@ -155,7 +166,7 @@ def trim_audio(extend=False, random_trim=False, audio_length=None):
     if audio_length is not None:
         if audio.duration() <= audio_length:
             # input audio is not as long as desired length
-            if self.params["extend"]:  # extend clip by looping
+            if extend:  # extend clip by looping
                 audio = audio.extend(audio_length)
             else:
                 raise ValueError(
@@ -256,10 +267,10 @@ def torch_random_affine(tensor, degrees=0, translate=(0.3, 0.1), fill=0):
     transform = transforms.Compose(
         [transforms.RandomAffine(degrees=degrees, translate=translate, fill=fill)]
     )
-    return transform(x)
+    return transform(tensor)
 
 
-def img_to_tensor(img, greyscale=False):
+def image_to_tensor(img, greyscale=False):
     """Convert PIL image to RGB or greyscale Tensor (PIL.Image -> Tensor)
 
     convert PIL.Image w/range [0,255] to torch Tensor w/range [0,1]
@@ -331,7 +342,7 @@ def tensor_normalize(tensor, mean=0.5, std=0.5):
 #         return x
 #
 #
-def time_mask(tensor, max_masks, max_width):
+def time_mask(tensor, max_masks=3, max_width=0.2):
     """add random vertical bars over image (Tensor -> Tensor)
 
     Args:
@@ -431,11 +442,12 @@ def tensor_add_noise(tensor, std=1):
     Note: be aware that scaling before/after this action will change the
     effect of a fixed stdev Gaussian noise
     """
-    noise = torch.empty_like(tensor).normal_(mean=0, std=self.params["std"])
+    noise = torch.empty_like(tensor).normal_(mean=0, std=std)
     return tensor + noise
 
 
 class ImgOverlay(Augmentation):
+    # TODO: it is unclear how this class should be initialized / instantiated
     def __init__(self, **kwargs):
 
         super(ImgOverlay, self).__init__(
@@ -463,7 +475,6 @@ class ImgOverlay(Augmentation):
         self.params.pop("overlay_df")  # removes it
 
     def go(self, x, **kwargs):
-        # overwrite default go() to use self.overlay_df rather than self.params['overlay_df']
         return self.action_fn(
             x, overlay_df=self.overlay_df, **dict(self.params, **kwargs)
         )
@@ -618,6 +629,7 @@ def overlay_image(
             )
 
         # now we need to run the pipeline to do everything up until the ImgOverlay step
+        # create a preprocessor for loading the overlay samples
         x2, sample_info = _run_pipeline(
             _pipeline, overlay_row, break_on_type=ImgOverlay
         )
