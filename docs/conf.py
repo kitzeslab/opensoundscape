@@ -26,7 +26,7 @@ copyright = "2022 Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Justin Kitze
 author = "Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Justin Kitzes"
 
 # The full version, including alpha/beta/rc tags
-release = "0.6.1"
+release = "0.6.2"
 
 
 # -- General configuration ---------------------------------------------------
