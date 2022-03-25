@@ -9,6 +9,12 @@ These utilities can be strung together to create data analysis pipelines. OpenSo
 
 OpenSoundscape is currently in active development. If you find a bug, please submit an issue. If you have another question about OpenSoundscape, please email Sam Lapp (`sam.lapp` at `pitt.edu`) or Tessa Rhinehart (`tessa.rhinehart` at `pitt.edu`).
 
+
+#### Suggested Citation
+```
+Lapp, Rhinehart, Freeland-Haynes, and Kitzes, 2022. "OpenSoundscape v0.6.1".
+```
+
 # Installation
 
 OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.7.1 and 3.8.

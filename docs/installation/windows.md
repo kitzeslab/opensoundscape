@@ -53,6 +53,15 @@ You can now manage packages with `conda`.
 - Activate the environment: `conda activate opensoundscape`
 - Install opensoundscape using pip: `pip install opensoundscape==0.6.1`
 
+If you see an error that says "No matching distribution found...", your
+best bet is to use these commands to download then install the package:
+```
+cd
+git clone https://github.com/kitzeslab/opensoundscape.git
+cd opensoundscape/
+pip install .
+```
+
 If you run into this error and you are on a Windows 10 machine:
 ```
 (opensoundscape_environment) username@computername:~$ pip install opensoundscape==0.6.1
