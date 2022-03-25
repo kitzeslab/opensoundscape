@@ -39,7 +39,7 @@ For full API documentation and tutorials on how to use OpenSoundscape to work wi
 # Quick Start
 
 Using Audio and Spectrogram classes #tldr
-```
+```python
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 
@@ -53,7 +53,7 @@ my_spec.plot()
 ```
 
 Using a pre-trained CNN to make predictions on long audio files
-```
+```python
 from opensoundscape.torch.models.cnn import load_model
 from opensoundscape.preprocess.preprocessors import ClipLoadingSpectrogramPreprocessor
 from opensoundscape.helpers import make_clip_df
@@ -78,7 +78,7 @@ scores, _, _ = model.predict(dataset)
 ```
 
 Training a CNN with labeled audio data
-```
+```python
 from opensoundscape.torch.models.cnn import PytorchModel
 from opensoundscape.preprocess.preprocessors import CnnPreprocessor
 
