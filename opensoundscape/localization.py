@@ -2,6 +2,7 @@ import numpy as np
 import warnings
 from statsmodels.api import OLS as OLS
 
+
 def calc_speed_of_sound(temperature=20):
     """
     Calculate speed of sound in meters per second
@@ -67,15 +68,19 @@ def travel_time(source, receiver, speed_of_sound):
     distance = np.linalg.norm(np.array(source) - np.array(receiver))
     return distance / speed_of_sound
 
-def localize_lstsq(receivers = list,
-            tdoa = list,
-            temp = 20,
-             exact = True,
-             summary = False,
-             confint = False,
-             alpha = 0.05,
-             m = 0
-            ):
+
+def localize(
+    receivers=list,
+    tdoa=list,
+    temp=20,
+    exact=True,
+    summary=False,
+    confint=False,
+    alpha=0.05,
+    m=0,
+    td_error=False,
+    total_td_error=False,
+):
     """
     Calculate the estimated location of a sound's source using the
     algorithm laid out in Gillette and Silverman (2008)
@@ -91,52 +96,67 @@ def localize_lstsq(receivers = list,
         The first item in this list should be 0, with all other
         entries centered around that.
         temp: ambient temperature in Celsius. Defaults to 20.
-        exact: computes an exact solution if True, computes estimates with uncertainty if false. Defaults to True
-        summary: displays a summary of the estimates if True. Defaults to false.
-        confint: outputs confidence intervals for the estimated coordinates if true. Defaults to false.
-        alpha: Determines confidence level of the confidence intervals. Defaults to 0.05.
+        exact: computes an exact solution if True, computes estimates
+        with uncertainty if false. Defaults to True
+        summary: displays a summary of the estimates if True. Defaults
+        to false.
+        confint: outputs confidence intervals for the estimated
+        coordinates if true. Defaults to false.
+        alpha: Determines confidence level of the confidence intervals.
+        Defaults to 0.05.
         m: the index of the reference mic. Defaults to 0.
+        td_error: Computes the expected time delay from the estimated
+        source location, centered around the reference mic, for each
+        microphone.
+        total_td_error: Computes the euclidean norm of the errors
+        provided by td_error.
     Returns:
         an array with the estimated coordinates and the estimated
         distance from the reference mic. (One reference mic and two
         additional mics, this is a 2 item array containing an estima
         -ted x coordinate and a distance.)
     """
-    #Calculate the speed of sound
-    C = calc_speed_of_sound(temperature = temp)
-    #Use the speed of sound to convert time delays to "distance delays"
+    # Calculate the speed of sound
+    C = loc.calc_speed_of_sound(temperature=temp)
+    # Use the speed of sound to convert time delays to "distance delays"
     diffs = []
     for delay in tdoa:
-        diffs.append(float(delay*C))
-    #Compile know receiver locations and distance delays into an output vector
+        diffs.append(float(delay * C))
+    # Compile know receiver locations and distance delays into an output vector
     out_knowns = []
     for i in range(1, len(receivers)):
-        w = diffs[i]**2
+        w = diffs[i] ** 2
         for j in range(len(receivers[i])):
-            w = w - receivers[i,j]**2 + receivers[m,j]**2
-        w = w/2
+            w = w - receivers[i, j] ** 2 + receivers[m, j] ** 2
+        w = w / 2
         out_knowns.append(w)
 
-    #Compile known receiver locations and distance delays into an input vector
+    # Compile known receiver locations and distance delays into an input vector
     in_knowns = []
-    for i in range(1,len(receivers)):
+    for i in range(1, len(receivers)):
         row = []
         for j in range(len(receivers[i])):
-            z = receivers[m,j] - receivers[i,j]
+            z = receivers[m, j] - receivers[i, j]
             row.append(z)
         if exact == False:
             row.append(0)
         row.append(-diffs[i])
         in_knowns.append(row)
-    #Using least squares, compute the final estimated location of source
-    location = OLS(out_knowns, in_knowns).fit()
-    #return estimated location
+    # Using least squares, compute the final estimated location of source
+    location = sm.OLS(out_knowns, in_knowns).fit()
+    # return estimated location
+    result = [location.params]
     if summary == True:
         print(location.summary())
     if confint == True:
-        return location.params, location.conf_int(alpha)[0:-1]
-    else:
-        return location.params
+        result.append(location.conf_int(alpha)[0:-1])
+    td_est = [np.linalg.norm(mic - location.params[0:-1]) / C for mic in receivers]
+    td_est += -td_est[m]
+    if td_error == True:
+        result.append((tdoa - td_est) * C)
+    if total_td_error == True:
+        result.append(np.linalg.norm((tdoa - td_est) * C))
+    return result
 
 
 def localize(
