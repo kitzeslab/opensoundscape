@@ -15,6 +15,7 @@ based on an implementation by @msamogh in nonechucks
 """
 import torch
 import torch.utils.data
+import warnings
 
 
 class SafeDataset:
@@ -104,6 +105,23 @@ class SafeDataset:
     def _reset_index(self):
         """Resets the safe and unsafe samples indices."""
         self._safe_indices = self._unsafe_indices = []
+
+    def report(self, log=None):
+        unsafe_samples = []
+        if len(self._unsafe_indices) > 0:
+            unsafe_samples = list(
+                set(self.dataset.label_df.index[self._unsafe_indices].values)
+            )
+            msg = (
+                f"There were {len(unsafe_samples)} "
+                "samples that raised errors during preprocessing. "
+            )
+            if log is not None:
+                msg += f"Their file paths are logged in {unsafe_sample_log}"
+                with open(unsafe_sample_log, "w") as f:
+                    [f.write(p + "\n") for p in unsafe_samples]
+            warnings.warn(msg)
+        return unsafe_samples
 
     @property
     def is_index_built(self):

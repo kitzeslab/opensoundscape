@@ -121,29 +121,52 @@ class Augmentation(Action):
 
 
 class AudioClipLoader(Action):
-    """Action to load only a specific segment of an audio file
+    """Action to load clips from an audio file
 
-    Loads an audio file or part of a file.
+    Loads an audio file or part of a file to an Audio object.
+    Will load entire audio file if _start_time and _end_time are None.
     see Audio.from_file() for documentation.
 
     Args:
         see Audio.from_file()
-
-    Note: default sample_rate=None means use file's sample rate, don't resample
     """
 
     def __init__(self, **kwargs):
         super(AudioClipLoader, self).__init__(
-            extra_args=["_start_time", "_end_time"], **kwargs
+            Audio.from_file, extra_args=["_start_time", "_sample_duration"], **kwargs
         )
 
-    def go(self, path, _start_time, _end_time):
-        return Audio.from_file(
-            path, offset=start_time, duration=end_time - start_time, **self.params
+    def go(self, path, _start_time, _sample_duration, **kwargs):
+        offset = 0 if _start_time is None else _start_time
+        # only trim to _sample_duration if _start_time is provided
+        # ie, we are loading clips from a long audio file
+        duration = None if _start_time is None else _sample_duration
+        return self.action_fn(path, offset=offset, duration=duration, **kwargs)
+
+
+class AudioTrim(Action):
+    """Action to trim/extend audio to desired length
+    """
+
+    def __init__(self, **kwargs):
+        super(AudioTrim, self).__init__(
+            trim_audio, extra_args=["_sample_duration"], **kwargs
         )
 
 
-def trim_audio(audio, extend=False, random_trim=False, audio_length=None):
+class AudioRandomTrim(Augmentation):
+    """Augmentation to trim a random section from a longer audio clip
+
+    Randomly selects a section of a longer audio clip.
+    """
+
+    def __init__(self, **kwargs):
+        super(AudioRandomTrim, self).__init__(
+            trim_audio, extra_args=["_sample_duration"], random_trim=True, **kwargs
+        )
+
+
+def trim_audio(audio, _sample_duration, extend=True, random_trim=False):
     """Action child class for trimming audio (Audio -> Audio)
 
     Trims an audio file to desired length
@@ -152,37 +175,39 @@ def trim_audio(audio, extend=False, random_trim=False, audio_length=None):
 
     Args:
         audio: Audio object
-        audio_length: desired final length (sec); if None, no trim is performed
-        extend: if True, clips shorter than audio_length are
+        _sample_duration: desired final length (sec); if None, no trim is performed
+        extend: if True, clips shorter than _sample_duration are
             extended with silence to required length
-        random_trim: if True, a random segment of length audio_length is chosen
+        random_trim: if True, a random segment of length _sample_duration is chosen
             from the input audio. If False, the file is trimmed from 0 seconds
-            to audio_length seconds.
+            to _sample_duration seconds.
 
     Returns:
         trimmed audio
     """
+    if len(audio.samples) == 0:
+        raise ValueError("recieved zero-length audio")
 
-    if audio_length is not None:
-        if audio.duration() <= audio_length:
+    if _sample_duration is not None:
+        if audio.duration() <= _sample_duration:
             # input audio is not as long as desired length
-            if extend:  # extend clip by looping
-                audio = audio.extend(audio_length)
+            if extend:  # extend clip sith silence
+                audio = audio.extend(_sample_duration)
             else:
                 raise ValueError(
                     f"the length of the original file ({audio.duration()} "
                     f"sec) was less than the length to extract "
-                    f"({audio_length} sec). To extend short "
+                    f"({_sample_duration} sec). To extend short "
                     f"clips, use extend=True"
                 )
         if random_trim:
             # uniformly randomly choose clip time from full audio
-            extra_time = audio.duration() - audio_length
+            extra_time = audio.duration() - _sample_duration
             start_time = np.random.uniform() * extra_time
         else:
             start_time = 0
 
-        end_time = start_time + audio_length
+        end_time = start_time + _sample_duration
         audio = audio.trim(start_time, end_time)
 
     return audio
@@ -447,7 +472,7 @@ def tensor_add_noise(tensor, std=1):
 
 
 class ImgOverlay(Augmentation):
-    # TODO: it is unclear how this class should be initialized / instantiated
+    # TODO: it is unclear how an instance of this class should be initialized
     def __init__(self, **kwargs):
 
         super(ImgOverlay, self).__init__(
