@@ -111,6 +111,9 @@ class BasePreprocessor(torch.utils.data.Dataset):
                 f"failed to preprocess sample from path: {self.label_df.index[item_idx]}"
             )
 
+    def __repr__(self):
+        return f"{self.__class__} object with pipeline: {self.pipeline}"
+
     def class_counts(self):
         """count number of each label"""
         labels = self.label_df.columns
@@ -258,7 +261,7 @@ class SpecPreprocessor(BasePreprocessor):
                 "time_mask": Augmentation(actions.time_mask),
                 "frequency_mask": Augmentation(actions.frequency_mask),
                 "add_noise": Augmentation(actions.tensor_add_noise, std=0.005),
-                "normalize": Action(actions.tensor_normalize),
+                "rescale": Action(actions.scale_tensor),
                 "random_affine": Augmentation(actions.torch_random_affine),
             }
         )

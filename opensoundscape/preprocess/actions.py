@@ -115,6 +115,8 @@ class Action(BaseAction):
 
 
 class Augmentation(Action):
+    """Subclass of Action with self.is_augmentation=True"""
+
     def __init__(self, fn, extra_args=[], **kwargs):
         super(Augmentation, self).__init__(fn, extra_args=extra_args, **kwargs)
         self.is_augmentation = True
@@ -146,6 +148,9 @@ class AudioClipLoader(Action):
 
 class AudioTrim(Action):
     """Action to trim/extend audio to desired length
+
+    Args:
+        see actions.trim_audio
     """
 
     def __init__(self, **kwargs):
@@ -158,6 +163,10 @@ class AudioRandomTrim(Augmentation):
     """Augmentation to trim a random section from a longer audio clip
 
     Randomly selects a section of a longer audio clip.
+
+    Args:
+        see actions.trim_audio
+        do not specify `random_trim`, it is set to True by default
     """
 
     def __init__(self, **kwargs):
@@ -167,7 +176,7 @@ class AudioRandomTrim(Augmentation):
 
 
 def trim_audio(audio, _sample_duration, extend=True, random_trim=False):
-    """Action child class for trimming audio (Audio -> Audio)
+    """trim audio clips (Audio -> Audio)
 
     Trims an audio file to desired length
     Allows audio to be trimmed from start or from a random time
@@ -242,7 +251,7 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False):
 
 
 def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue=0):
-    """Action class for torchvision.transforms.ColorJitter
+    """Wraps torchvision.transforms.ColorJitter
 
     (Tensor -> Tensor) or (PIL Img -> PIL Img)
 
@@ -267,7 +276,7 @@ def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue
 
 
 def torch_random_affine(tensor, degrees=0, translate=(0.3, 0.1), fill=0):
-    """Action class for torchvision.transforms.RandomAffine
+    """Wraps for torchvision.transforms.RandomAffine
 
     (Tensor -> Tensor) or (PIL Img -> PIL Img)
 
@@ -299,10 +308,11 @@ def image_to_tensor(img, greyscale=False):
     """Convert PIL image to RGB or greyscale Tensor (PIL.Image -> Tensor)
 
     convert PIL.Image w/range [0,255] to torch Tensor w/range [0,1]
+
     Args:
         img: PIL.Image
-        greyscale: if False, converts image to RGB (3 channels)
-            (if True, converts image to one channel)
+        greyscale: if False, converts image to RGB (3 channels).
+            If True, converts image to one channel.
     """
     if greyscale:
         img = img.convert("L")
@@ -313,8 +323,8 @@ def image_to_tensor(img, greyscale=False):
     return transform(img)
 
 
-def tensor_normalize(tensor, mean=0.5, std=0.5):
-    """torchvision.transforms.Normalize (WARNING: FIXED shift and scale)
+def scale_tensor(tensor, input_mean=0.5, input_std=0.5):
+    """linear scaling of tensor values using torch.transforms.Normalize
 
     (Tensor->Tensor)
 
@@ -323,9 +333,10 @@ def tensor_normalize(tensor, mean=0.5, std=0.5):
     and performs X=(X-u)/s.
 
     Args:
-        mean=0.5
-        std=0.5
-        (these are NOT the target mu and sd, but the assumed mu and sd of img->)
+        input_mean=0.5
+        input_std=0.5
+        (these are NOT the target mu and sd, but the original mu and sd of img
+        for which the output will have mu=0, std=1)
 
     Returns:
         modified tensor
@@ -334,39 +345,29 @@ def tensor_normalize(tensor, mean=0.5, std=0.5):
     return transform(tensor)
 
 
-# class TimeWarp(BaseAction):
+# def time_warp(tensor, warp_amount=5):
 #     """Time warp is an experimental augmentation that creates a tilted image.
 #
 #     Args:
+#         tensor: sample to augment
 #         warp_amount: use higher values for more skew and offset (experimental)
 #
-#     Note: this augmentation reduces the image to greyscale and duplicates the
-#     result across the 3 channels.
+#     Note: this augmentation reduces multi-channel images to greyscale and duplicates the
+#     result across the channels.
 #
 #     """
-#
-#     def __init__(self, **kwargs):
-#         super(TimeWarp, self).__init__(**kwargs)
-#
-#         # default parameters
-#         self.params["warp_amount"] = 5
-#
-#         # add parameters passed to __init__
-#         self.params.update(kwargs)
-#
-#     def go(self, x):
-#
-#         # add "batch" dimension to tensor and use just first channel
-#         x = x[0, :, :].unsqueeze(0).unsqueeze(0)
-#         # perform transform
-#         x = tensaug.time_warp(x.clone(), W=self.params["warp_amount"])
-#         # remove "batch" dimension
-#         x = x[0, :]
-#         # Copy 1 channel to 3 RGB channels
-#         x = torch.cat([x] * 3, dim=0)  # dim=1)
-#         return x
-#
-#
+#     channels = tensor.shape[0]
+#     # add "batch" dimension to tensor and use just first channel
+#     tensor = tensor[0, :, :].unsqueeze(0).unsqueeze(0)
+#     # perform transform
+#     tensor = tensaug.time_warp(tensor.clone(), W=self.params["warp_amount"])
+#     # remove "batch" dimension
+#     tensor = tensor[0, :]
+#     # Copy 1 channel to 3 RGB channels
+#     tensor = torch.cat([tensor] * n_channels, dim=0)  # dim=1)
+#     return tensor
+
+
 def time_mask(tensor, max_masks=3, max_width=0.2):
     """add random vertical bars over image (Tensor -> Tensor)
 
@@ -472,7 +473,16 @@ def tensor_add_noise(tensor, std=1):
 
 
 class ImgOverlay(Augmentation):
-    # TODO: it is unclear how an instance of this class should be initialized
+    """Action Class for augmentation that overlays images on eachother
+
+    Required Args:
+        overlay_df: dataframe of audio files (index) and labels to use for overlay
+        update_labels (bool): if True, labels of sample are updated to include
+            labels of overlayed sample
+
+    See overlay_image() for other arguments and default values.
+    """
+
     def __init__(self, **kwargs):
 
         super(ImgOverlay, self).__init__(
@@ -483,6 +493,8 @@ class ImgOverlay(Augmentation):
 
         overlay_df = kwargs["overlay_df"]
         overlay_df = overlay_df[~overlay_df.index.duplicated()]  # remove duplicates
+
+        # warn the user if using "different" as overlay_class and "different" is one of the model classes
         if (
             "different" in overlay_df.columns
             and "overlay_class" in kwargs
