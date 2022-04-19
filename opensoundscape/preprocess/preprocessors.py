@@ -196,6 +196,12 @@ class BasePreprocessor(torch.utils.data.Dataset):
         """
         self.pipeline = self.pipeline.drop(action_index)
 
+    def make_dataset(self, label_df):
+        """Generates a copy of itself, with `self.label_df = label_df`"""
+        new_dataset = self.sample(n=0)
+        new_dataset.label_df = label_df
+        return new_dataset
+
 
 class SpecPreprocessor(BasePreprocessor):
     """Child of BasePreprocessor that creates specrograms with augmentation

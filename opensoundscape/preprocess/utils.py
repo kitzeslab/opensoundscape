@@ -77,3 +77,22 @@ def insert_after(series, idx, name, value):
     part1 = series[0 : i + 1]
     part2 = series[i + 1 :]
     return part1.append(pd.Series([value], index=[name])).append(part2)
+
+
+def show_tensor(tensor, channel=None):
+    """helper function for displaying a sample as an image
+
+    Args:
+        tensor: torch.Tensor of shape [c,w,h] with values centered around zero
+        channel: specify an integer to plot only one channel, otherwise will
+            attempt to plot all channels
+    """
+    from matplotlib import pyplot as plt
+
+    if channel is None:
+        plt.imshow(tensor.detach().numpy().transpose([1, 2, 0]) / 2 + 0.5)
+    else:
+        plt.imshow(
+            tensor.detach().numpy().transpose([1, 2, 0])[:, :, channel] / 2 + 0.5
+        )
+    plt.show()

@@ -31,7 +31,6 @@ from opensoundscape.torch.models.utils import (
 from opensoundscape.preprocess.preprocessors import SpecPreprocessor
 from opensoundscape.helpers import make_clip_df
 
-from opensoundscape.metrics import multiclass_metrics, binary_metrics
 from opensoundscape.torch.loss import (
     BCEWithLogitsLoss_hot,
     CrossEntropyLoss_hot,
@@ -43,7 +42,7 @@ import opensoundscape
 
 class CNN(BaseModule):
     """
-    Generic Pytorch Model with .train(), .predict(), and .save()
+    Generic CNN Model with .train(), .predict(), and .save()
 
     flexible architecture, optimizer, loss function, parameters
 
@@ -61,7 +60,7 @@ class CNN(BaseModule):
             list of class names. Must match with training dataset classes if training.
         single_target:
             - True: model expects exactly one positive class per sample
-            - False: samples can have an number of positive classes
+            - False: samples can have any number of positive classes
             [default: False]
     """
 
@@ -72,7 +71,7 @@ class CNN(BaseModule):
         sample_duration,
         single_target=False,
         preprocessor_class=SpecPreprocessor,
-        sample_shape=[224, 224],  # TODO: maybe [1,224,224]
+        sample_shape=[224, 224],
     ):
 
         super(CNN, self).__init__()
@@ -84,7 +83,6 @@ class CNN(BaseModule):
         self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
-        print(f"created {self.name} model object with {len(self.classes)} classes")
 
         ### data loading parameters ###
         self.sampler = None  # can be "imbalanced" for ImbalancedDatasetSmpler
@@ -151,13 +149,27 @@ class CNN(BaseModule):
         self.lr_cooling_factor = 0.7  # multiply learning rates by # on each update
 
         ### metrics ###
-        self.metrics_fn = multiclass_metrics  # or binary_metrics #TODO: remove?
         self.prediction_threshold = 0.5
+        # override self.eval() to change what metrics are
+        # computed and displayed during training/validation
+
+        ### Logging ###
+        self.log_file = None  # specify a path to save output to a text file
+        self.logging_level = 1  # 0 for nothing, 1,2,3 for increasing logged info
+        self.verbose = 1  # 0 for nothing, 1,2,3 for increasing printed output
 
         # dictionaries to store accuracy metrics & loss for each epoch
         self.train_metrics = {}
         self.valid_metrics = {}
         self.loss_hist = {}  # could add TensorBoard tracking
+
+    def _log(self, input, level=1):
+        txt = str(input)
+        if self.logging_level >= level and self.log_file is not None:
+            with open(self.log_file, "w") as logfile:
+                logfile.write(txt + "\n")
+        if self.verbose >= level:
+            print(txt)
 
     def _init_optimizer(self):
         """initialize an instance of self.optimizer
@@ -289,21 +301,22 @@ class CNN(BaseModule):
             if batch_idx % self.log_interval == 0:
                 """show some basic progress metrics during the epoch"""
                 N = len(train_loader)
-                print(
+                self._log(
                     "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
                         self.current_epoch, batch_idx, N, 100 * batch_idx / N
                     )
                 )
 
                 # Log the Jaccard score and Hamming loss, and Loss function
+                epoch_loss_avg = np.mean(batch_loss)
+                self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
+
+                # TODO use .eval()
                 tgts = batch_labels.int().detach().cpu().numpy()
                 preds = batch_preds.int().detach().cpu().numpy()
                 jac = jaccard_score(tgts, preds, average="macro")
                 ham = hamming_loss(tgts, preds)
-                epoch_loss_avg = np.mean(batch_loss)
-                print(
-                    f"\tJacc: {jac:0.3f} Hamm: {ham:0.3f} DistLoss: {epoch_loss_avg:.3f}"
-                )
+                self._log(f"Jacc: {jac:0.3f} Hamm: {ham:0.3f} ", level=2)
 
         # update learning parameters each epoch
         self.scheduler.step()
@@ -318,19 +331,21 @@ class CNN(BaseModule):
 
         return total_tgts, total_preds, total_scores
 
-    def _validation(self, validation_df):  # TODO: this is out of date
-        pass
+    def _validation(self, validation_loader):
+
+        return targets, preds, scores
 
     def train(
         self,
         train_df,
-        validation_df,
+        validation_df=None,
         epochs=1,
         batch_size=1,
         num_workers=0,
         save_path=".",
         save_interval=1,  # save weights every n epochs
         log_interval=10,  # print metrics every n batches
+        validation_interval=1,  # compute validation metrics every n epochs
         unsafe_samples_log="./unsafe_samples.log",
     ):
         """train the model on samples from train_dataset
@@ -343,8 +358,9 @@ class CNN(BaseModule):
                 a dataframe of files and labels for training the model
             validation_df:
                 a dataframe of files and labels for evaluating the model
+                [default: None means no validation is performed]
             epochs:
-                number of epochs to train for [default=1]
+                number of epochs to train for
                 (1 epoch constitutes 1 view of each training sample)
             batch_size:
                 number of training files simultaneously passed through
@@ -362,7 +378,11 @@ class CNN(BaseModule):
             log_interval:
                 interval in epochs to evaluate model with validation
                 dataset and print metrics to the log
-            _unsafe_samples_log:
+            validation_interval:
+                interval in epochs to test the model on the validation set
+                Note that model will only update it's best score and save best.model
+                file on epochs that it performs validation.
+            unsafe_samples_log:
                 file path: log all samples that failed in preprocessing
                 (file written when training completes)
                 - if None,  does not write a file
@@ -373,7 +393,8 @@ class CNN(BaseModule):
             "and class order as model object."
         )
         assert list(self.classes) == list(train_df.columns), class_err
-        assert list(self.classes) == list(validation_df.columns), class_err
+        if validation_df is not None:
+            assert list(self.classes) == list(validation_df.columns), class_err
 
         self.log_interval = log_interval
         self.save_interval = save_interval
@@ -385,8 +406,7 @@ class CNN(BaseModule):
         # Dataloader setup #
         ######################
 
-        train_dataset = self.preprocessor.sample(n=0)  # TODO: helper fn?
-        train_dataset.label_df = train_df
+        train_dataset = self.preprocessor.make_dataset(train_df)
 
         # SafeDataset loads a new sample if loading a sample throws an error
         # indices of bad samples are appended to ._unsafe_indices
@@ -401,7 +421,7 @@ class CNN(BaseModule):
             sampler=self.sampler,
         )
 
-        self.best_validation_score = 0.0  # TODO: should allow any metric
+        self.best_score = 0.0  # TODO: should allow any metric (use .metrics_fn)
         self.best_epoch = 0
 
         for epoch in range(epochs):
@@ -409,63 +429,99 @@ class CNN(BaseModule):
             # loss fn & backpropogation occurs after each batch
 
             ### Training ###
+            self._log(f"\nTraining Epoch {self.current_epoch}")
             train_targets, train_preds, train_scores = self._train_epoch(
                 self.train_loader
             )
 
-            #### Validation ### #TODO what should be moved to a function?
-            print("\nValidation.")
-            validation_scores, validation_preds, unsafe_val_samples = self.predict(
+            train_score, self.train_metrics[self.current_epoch] = self.eval(
+                train_targets, train_scores
+            )
+
+            #### Validation ###
+            self._log("\nValidation.")
+            validation_scores, _, unsafe_val_samples = self.predict(
                 validation_df,
                 batch_size=batch_size,
-                num_workers=num_workers,  # TODO: should we make these attributes?
+                num_workers=num_workers,
                 activation_layer="softmax_and_logit" if self.single_target else None,
-                binary_preds="single_target" if self.single_target else "multi_target",
-                threshold=self.prediction_threshold,
+                split_files_into_clips=False,
             )
             validation_targets = validation_df.values
             validation_scores = validation_scores.values
-            validation_preds = validation_preds.values
 
             ### Metrics ###
-            self.valid_metrics[self.current_epoch] = self.metrics_fn(
-                validation_targets, validation_preds, self.classes
+            validation_score, self.valid_metrics[self.current_epoch] = self.eval(
+                validation_targets, validation_scores
             )
-            self.train_metrics[self.current_epoch] = self.metrics_fn(
-                train_targets, train_preds, self.classes
-            )
-            # print basic metrics (this could  break if metrics_fn changes)
-            print(
-                f"\t Precision: {self.valid_metrics[self.current_epoch]['precision']}"
-            )
-            print(f"\t Recall: {self.valid_metrics[self.current_epoch]['recall']}")
-            print(f"\t F1: {self.valid_metrics[self.current_epoch]['f1']}")
-
-            validation_score = self.valid_metrics[self.current_epoch]["f1"]
 
             ### Save ###
             if (
                 self.current_epoch + 1
-            ) % self.save_interval == 0 or epoch >= epochs - 1:
-                print("Saving weights, metrics, and train/valid scores.")
+            ) % self.save_interval == 0 or epoch == epochs - 1:
+                self._log("Saving weights, metrics, and train/valid scores.", level=2)
 
                 self.save(f"{self.save_path}/epoch-{self.current_epoch}.model")
 
-            # if best model (by F1 score), update & save weights to best.model
-            if validation_score > self.best_validation_score:
-                self.best_validation_score = validation_score
+            # Evaluate using validation score unless validation_df is None
+            score = train_score if validation_df is None else validation_score
+            # if best score, update & save weights to best.model
+            if validation_score > self.best_score:
+                self.best_score = validation_score
                 self.best_epoch = self.current_epoch
-                print("Updating best model")
+                self._log("Updating best model", level=2)
                 self.save(f"{self.save_path}/best.model")
 
             self.current_epoch += 1
 
-        print(
-            f"\nBest Model Appears at Epoch {self.best_epoch} with Validation score {self.best_validation_score:.3f}."
+        self._log("Training complete", level=2)
+        self._log(
+            f"\nBest Model Appears at Epoch {self.best_epoch} with Validation score {self.best_score:.3f}."
         )
 
         # warn the user if there were unsafe samples (failed to preprocess)
-        _ = train_safe_dataset.report(log=unsafe_samples_log)
+        unsafe_samples = train_safe_dataset.report(log=unsafe_samples_log)
+        self._log(
+            f"{len(unsafe_samples)} of {len(train_df)} total training "
+            f"samples failed to preprocess",
+            level=2,
+        )
+
+    def eval(self, targets, scores):
+        """compute single-target or multi-target metrics from targets and scores"""
+        from opensoundscape.metrics import single_target_metrics, multi_target_metrics
+
+        # remove all samples with NaN for a prediction
+        targets = targets[~np.isnan(scores).any(axis=1), :]
+        scores = scores[~np.isnan(scores).any(axis=1), :]
+
+        if len(scores) < 1:
+            warnings.warn("Recieved empty list of predictions (or all nan)")
+            return np.nan, np.nan
+
+        if self.single_target:
+            score, metrics_dict = single_target_metrics(targets, scores, self.classes)
+        else:
+            score, metrics_dict = multi_target_metrics(
+                targets, scores, self.classes, self.prediction_threshold
+            )
+
+        # decide what to print/log:
+        self._log(f"Metrics:")
+        self._log(f"\tMAP: {metrics_dict['map']:0.3f}", level=1)
+        self._log(f"\tAU_ROC: {metrics_dict['au_roc']:0.3f} ", level=2)
+        self._log(
+            f"\tJacc: {metrics_dict['jaccard']:0.3f} "
+            f"Hamm: {metrics_dict['hamming_loss']:0.3f} ",
+            level=2,
+        )
+        self._log(
+            f"\tPrec: {metrics_dict['precision']:0.3f} "
+            f"Rec: {metrics_dict['recall']:0.3f} "
+            f"F1: {metrics_dict['f1']:0.3f}",
+            level=2,
+        )
+        return score, metrics_dict
 
     def save(self, path, save_datasets=True):
         import copy
@@ -497,12 +553,11 @@ class CNN(BaseModule):
         samples,
         batch_size=1,
         num_workers=0,
-        activation_layer=None,  # softmax','sigmoid','softmax_and_logit', None
-        binary_preds=None,  #'single_target','multi_target', None
+        activation_layer=None,
+        binary_preds=None,
         threshold=0.5,
-        error_log=None,
         split_files_into_clips=True,
-        overlap_fraction=0,  # overlap between consecutive clips, eg 0.5
+        overlap_fraction=0,
         final_clip=None,
         augmentation_on=False,
         unsafe_samples_log=None,
@@ -544,9 +599,6 @@ class CNN(BaseModule):
             threshold:
                 prediction threshold(s) for sigmoid scores. Only relevant when
                 binary_preds == 'multi_target'
-            error_log:
-                if not None, saves a list of files that raised errors to
-                the specified file location [default: None]
             overlap_fraction: fraction of overlap between consecutive clips when
                 predicting on clips of longer audio files. For instance, 0.5
                 gives 50% overlap between consecutive clips.
@@ -589,11 +641,11 @@ class CNN(BaseModule):
             return None, None, None
         # TODO: write test for zero length warning
 
-        prediction_dataset = self.preprocessor.sample(n=0)  # TODO make/use helper
-        prediction_dataset.label_df = prediction_df
+        prediction_dataset = self.preprocessor.make_dataset(prediction_df)
         prediction_dataset.augmentation_on = augmentation_on
-        if split_files_into_clips:  # TODO: handle missing files?
-            prediction_dataset.clip_times_df = make_clip_df(
+        unsafe_paths = []
+        if split_files_into_clips:
+            prediction_dataset.clip_times_df, unsafe_paths = make_clip_df(
                 prediction_df.index.values,
                 prediction_dataset.sample_duration,
                 overlap_fraction * prediction_dataset.sample_duration,
@@ -602,6 +654,9 @@ class CNN(BaseModule):
             # update "label_df" so that index matches clip_times_df
             prediction_dataset.label_df = prediction_dataset.clip_times_df[[]]
         # TODO: add method 'eval()': runs predict then compares to labels
+        if len(prediction_dataset) < 1:
+            warnings.warn("prediction_dataset has zero samples. Returning None.")
+            return None, None, None
 
         # move network to device
         self.network.to(self.device)
@@ -615,7 +670,7 @@ class CNN(BaseModule):
         # however, returning None would break the batching of samples
         safe_dataset = SafeDataset(prediction_dataset, unsafe_behavior="substitute")
 
-        self.dataloader = torch.utils.data.DataLoader(
+        dataloader = torch.utils.data.DataLoader(
             safe_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
@@ -623,6 +678,8 @@ class CNN(BaseModule):
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=torch.cuda.is_available(),
         )
+        # add any paths that failed to generate a clip df to _unsafe_samples
+        dataloader.dataset._unsafe_samples += unsafe_paths  # TODO check if working
 
         ### Prediction ###
         total_scores = []
@@ -634,7 +691,7 @@ class CNN(BaseModule):
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
 
-            for batch in self.dataloader:
+            for batch in dataloader:
                 # get batch of Tensors
                 batch_tensors = batch["X"].to(self.device)
                 batch_tensors.requires_grad = False
@@ -686,48 +743,24 @@ class CNN(BaseModule):
                 )
 
         # warn the user if there were unsafe samples (failed to preprocess)
+        # and log them to a file
         unsafe_samples = safe_dataset.report(log=unsafe_samples_log)
 
         return score_df, pred_df, unsafe_samples
 
 
-class CnnResampleLoss(CNN):
-    """Subclass of CNN with ResampleLoss.
+def use_resample_loss(model):
+    """Modify a model to use ResampleLoss for multi-target training
 
     ResampleLoss may perform better than BCE Loss for multitarget problems
     in some scenarios.
-
-    Args:
-        architecture:
-            a model architecture object, for example one generated
-            with the torch.architectures.cnn_architectures module
-        classes:
-            list of class names. Must match with training dataset classes.
-        single_target:
-            - True: model expects exactly one positive class per sample
-            - False: samples can have an number of positive classes
-            [default: False]
     """
 
-    def __init__(self, architecture, classes, single_target=False):
-
-        self.classes = classes
-
-        super(CnnResampleLoss, self).__init__(architecture, self.classes, single_target)
-        self.name = "CnnResampleLoss"
-        self.loss_cls = ResampleLoss
+    model.loss_cls = ResampleLoss
 
     def _init_loss_fn(self):
-        """initialize an instance of self.loss_cls
-
-        We override the parent method because we need to pass class frequency
+        """overrides the parent method because we need to pass class frequency
         to the ResampleLoss constructor
-
-        This function is called during .train() so that the user
-        has a chance to change the loss function before training.
-
-        Note: if you change the loss function, you may need to override this
-        to correctly initialize self.loss_cls
         """
         class_frequency = (
             torch.tensor(self.train_dataset.label_df.values).sum(0).to(self.device)
@@ -736,71 +769,43 @@ class CnnResampleLoss(CNN):
         # initializing ResampleLoss requires us to pass class_frequency
         self.loss_fn = self.loss_cls(class_frequency)
 
+    model._init_loss_fn = _init_loss_fn
 
-class Resnet18Multiclass(CnnResampleLoss):
-    """Multi-class model with resnet18 architecture and ResampleLoss.
 
-    Can be single or multi-target.
+def seperate_resnet_feat_clf(model):
+    """Seperate feature/classifier training params for a ResNet model
 
     Args:
-        classes:
-            list of class names. Must match with training dataset classes.
-        single_target:
-            - True: model expects exactly one positive class per sample
-            - False: samples can have an number of positive classes
-            [default: False]
+        model: an opso model object with a pytorch resnet architecture
 
-    Notes
-    - Allows separate parameters for feature & classifier blocks
-        via self.optimizer_params's keys: "feature" and "classifier"
-    - Uses ResampleLoss
+    Returs:
+        model with modified .optimizer_params and ._init_optimizer() method
     """
+    # optimization parameters for parts of the networks - see
+    # https://pytorch.org/docs/stable/optim.html#per-parameter-options
+    model.optimizer_params = {
+        "feature": {  # optimizer parameters for feature extraction layers
+            # "params": self.network.feature.parameters(),
+            "lr": 0.001,
+            "momentum": 0.9,
+            "weight_decay": 0.0005,
+        },
+        "classifier": {  # optimizer parameters for classification layers
+            # "params": self.network.classifier.parameters(),
+            "lr": 0.01,
+            "momentum": 0.9,
+            "weight_decay": 0.0005,
+        },
+    }
 
-    def __init__(self, classes, single_target=False, use_pretrained=True):
-
-        self.classes = classes
-        architecture = cnn_architectures.resnet18(
-            num_classes=len(self.classes), use_pretrained=use_pretrained
-        )
-        super(Resnet18Multiclass, self).__init__(
-            architecture, self.classes, single_target
-        )
-        self.name = "Resnet18Multiclass"
-
-        # optimization parameters for parts of the networks - see
-        # https://pytorch.org/docs/stable/optim.html#per-parameter-options
-        self.optimizer_params = {
-            "feature": {  # optimizer parameters for feature extraction layers
-                # "params": self.network.feature.parameters(),
-                "lr": 0.001,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-            "classifier": {  # optimizer parameters for classification layers
-                # "params": self.network.classifier.parameters(),
-                "lr": 0.01,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-        }
-
+    # We override the parent method because we need to pass a list of
+    # separate optimizer_params for different parts of the network
+    # - ie we now have a dictionary of param dictionaries instead of just a
+    # param dictionary.
     def _init_optimizer(self):
-        """initialize an instance of self.optimizer
-
-        We override the parent method because we need to pass a list of
-        separate optimizer_params for different parts of the network
-        - ie we now have a dictionary of param dictionaries instead of just a
-        param dictionary.
-
-        This function is called during .train() so that the user
-        has a chance to swap/modify the optimizer before training.
-
-        To modify the optimizer, change the value of
-        self.optimizer_cls and/or self.optimizer_params
-        prior to calling .train().
-        """
+        """override parent method to pass separate parameters to feat/clf"""
         param_dict = self.optimizer_params
-        # in torch's resnet18, the classifier layer is called "fc"
+        # in torch's resnet classes, the classifier layer is called "fc"
         feature_extractor_params_list = [
             param
             for name, param in self.network.named_parameters()
@@ -815,83 +820,10 @@ class Resnet18Multiclass(CnnResampleLoss):
         param_dict["classifier"]["params"] = classifier_params_list
         return self.optimizer_cls(param_dict.values())
 
-
-class Resnet18Binary(CNN):
-    """Subclass of CNN with Resnet18 architecture
-
-    This subclass allows separate training parameters
-    for the feature extractor and classifier via optimizer_params
-
-    Args:
-        classes:
-            list of class names. Must match with training dataset classes.
-        single_target:
-            - True: model expects exactly one positive class per sample
-            - False: samples can have an number of positive classes
-            [default: False]
-
-    """
-
-    def __init__(self, classes, use_pretrained=True):
-        assert len(classes) == 2, "binary model must have 2 classes"
-
-        single_target = True  # binary model is always single-target
-        self.classes = classes
-        architecture = cnn_architectures.resnet18(
-            num_classes=len(self.classes), use_pretrained=use_pretrained
-        )
-        super(Resnet18Binary, self).__init__(architecture, self.classes, single_target)
-        self.name = "Resnet18Binary"
-
-        # optimization parameters for separate feature extractor and classifier
-        # see: https://pytorch.org/docs/stable/optim.html#per-parameter-options
-        self.optimizer_params = {
-            "feature": {  # optimizer parameters for feature extraction layers
-                # "params": self.network.feature.parameters(),
-                "lr": 0.001,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-            "classifier": {  # optimizer parameters for classification layers
-                # "params": self.network.classifier.parameters(),
-                "lr": 0.01,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-        }
-
-    def _init_optimizer(self):
-        """initialize an instance of self.optimizer
-
-        We override the parent method because we need to pass a list of
-        separate optimizer_params for different parts of the network
-        - ie we now have a dictionary of param dictionaries instead of just a
-        param dictionary.
-
-        This function is called during .train() so that the user
-        has a chance to swap/modify the optimizer before training.
-
-        To modify the optimizer, change the value of
-        self.optimizer_cls and/or self.optimizer_params
-        prior to calling .train().
-        """
-        param_dict = self.optimizer_params
-        feature_extractor_params_list = [
-            param
-            for name, param in self.network.named_parameters()
-            if not name.split(".")[0] == "fc"
-        ]
-        classifier_params_list = [
-            param
-            for name, param in self.network.named_parameters()
-            if name.split(".")[0] == "fc"
-        ]
-        param_dict["feature"]["params"] = feature_extractor_params_list
-        param_dict["classifier"]["params"] = classifier_params_list
-        return self.optimizer_cls(param_dict.values())
+    model._init_optimizer = _init_optimizer
 
 
-class InceptionV3(CNN):
+class InceptionV3(CNN):  # TODO fix inception
     def __init__(
         self,
         classes,
@@ -899,7 +831,7 @@ class InceptionV3(CNN):
         use_pretrained=True,
         single_target=False,
     ):
-        """Model object for InceptionV3 architecture.
+        """Model object for InceptionV3 architecture subclassing CNN
 
         See opensoundscape.org for exaple use.
 
@@ -993,7 +925,7 @@ class InceptionV3(CNN):
             if batch_idx % self.log_interval == 0:
                 """show some basic progress metrics during the epoch"""
                 N = len(train_loader)
-                print(
+                self._log(
                     "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
                         self.current_epoch, batch_idx, N, 100 * batch_idx / N
                     )

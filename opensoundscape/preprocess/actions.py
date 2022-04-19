@@ -330,18 +330,18 @@ def scale_tensor(tensor, input_mean=0.5, input_std=0.5):
 
     WARNING: This does not perform per-image normalization. Instead,
     it takes as arguments a fixed u and s, ie for the entire dataset,
-    and performs X=(X-u)/s.
+    and performs X=(X-input_mean)/input_std.
 
     Args:
-        input_mean=0.5
-        input_std=0.5
+        input_mean: mean of input sample pixels (average across dataset)
+        input_std: standard deviation of input sample pixels (average across dataset)
         (these are NOT the target mu and sd, but the original mu and sd of img
         for which the output will have mu=0, std=1)
 
     Returns:
         modified tensor
     """
-    transform = transforms.Compose([transforms.Normalize(mean, std)])
+    transform = transforms.Compose([transforms.Normalize(input_mean, input_std)])
     return transform(tensor)
 
 

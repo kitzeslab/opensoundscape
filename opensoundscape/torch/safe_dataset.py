@@ -62,9 +62,10 @@ class SafeDataset:
         self.eager_eval = eager_eval
         # These will contain indices over the original dataset. The indices of
         # the safe samples will go into _safe_indices and similarly for unsafe
-        # samples in _unsafe_samples
+        # samples in _unsafe_indices. _unsafe_samples holds the actual names
         self._safe_indices = []
         self._unsafe_indices = []
+        self._unsafe_samples = []
 
         # If eager_eval is True, we build the full index of safe/unsafe samples
         # by attempting to access every sample in self.dataset.
@@ -88,14 +89,19 @@ class SafeDataset:
                 self._safe_indices.append(idx)
             return sample
         except Exception as e:
-            if isinstance(e, IndexError):
-                if invalid_idx:
-                    raise
+            if isinstance(e, IndexError) and invalid_idx:
+                raise
             if idx not in self._unsafe_indices:
                 self._unsafe_indices.append(idx)
+            # store the actual sample names also?
+            sample = self.dataset.label_df.index[idx]
+            if sample not in self._unsafe_samples:
+                self._unsafe_samples.append(sample)
+
             return None
 
     def _build_index(self):
+        """load every sample to determine if each is safe"""
         for idx in range(len(self.dataset)):
             # The returned sample is deliberately discarded because
             # self._safe_get_item(idx) is called only to classify every index
@@ -103,25 +109,21 @@ class SafeDataset:
             _ = self._safe_get_item(idx)
 
     def _reset_index(self):
-        """Resets the safe and unsafe samples indices."""
-        self._safe_indices = self._unsafe_indices = []
+        """Resets the safe and unsafe samples indices, & unsafe sample list."""
+        self._safe_indices = self._unsafe_indices = self._unsafe_samples = []
 
     def report(self, log=None):
-        unsafe_samples = []
-        if len(self._unsafe_indices) > 0:
-            unsafe_samples = list(
-                set(self.dataset.label_df.index[self._unsafe_indices].values)
-            )
+        if len(self._unsafe_samples) > 0:
             msg = (
-                f"There were {len(unsafe_samples)} "
-                "samples that raised errors during preprocessing. "
+                f"There were {len(self._unsafe_samples)} "
+                "sample(s) that raised errors and were skipped."
             )
             if log is not None:
-                msg += f"Their file paths are logged in {unsafe_sample_log}"
                 with open(unsafe_sample_log, "w") as f:
-                    [f.write(p + "\n") for p in unsafe_samples]
+                    [f.write(p + "\n") for p in self._unsafe_samples]
+                msg += f"The unsafe file paths are logged in {unsafe_sample_log}"
             warnings.warn(msg)
-        return unsafe_samples
+        return self._unsafe_samples
 
     @property
     def is_index_built(self):

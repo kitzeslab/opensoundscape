@@ -219,22 +219,7 @@ def generate_clip_times_df(
 def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
     """generate df of fixed-length clip times for a set of file_batch_size
 
-    Used to prepare a dataframe for ClipLoadingSpectrogramPreprocessor
-
-    A typical prediction workflow:
-    ```
-    #get list of audio files
-    files = glob('./dir/*.WAV')
-
-    #generate clip df
-    clip_df = make_clip_df(files,clip_duration=5.0,clip_overlap=0)
-
-    #create dataset
-    dataset = ClipLoadingSpectrogramPreprocessor(clip_df)
-
-    #generate predictions with a model
-    model = load_model('/path/to/saved.model')
-    scores, _, _ = model.predict(dataset)
+    Used internally to prepare a dataframe listing clips of longer audio files
 
     This function creates a single dataframe with audio files as
     the index and columns: 'start_time', 'end_time'. It will list
@@ -245,20 +230,30 @@ def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
         clip_duration (float): see generate_clip_times_df
         clip_overlap (float): see generate_clip_times_df
         final_clip (str): see generate_clip_times_df
+
+    Returns:
+        clip_df: dataframe with columns 'start_time', 'end_time' and
+            file paths as index
+        unsafe_samples: list of file paths that did not exist or failed to
+            produce a valid list of clips
     """
 
     import librosa
 
     clip_dfs = []
+    unsafe_samples = []
     for f in files:
-        t = librosa.get_duration(filename=f)
-        clips = generate_clip_times_df(
-            full_duration=t,
-            clip_duration=clip_duration,
-            clip_overlap=clip_overlap,
-            final_clip=final_clip,
-        )
-        clips.index = [f] * len(clips)
-        clips.index.name = "file"
-        clip_dfs.append(clips)
-    return pd.concat(clip_dfs)
+        try:
+            t = librosa.get_duration(filename=f)
+            clips = generate_clip_times_df(
+                full_duration=t,
+                clip_duration=clip_duration,
+                clip_overlap=clip_overlap,
+                final_clip=final_clip,
+            )
+            clips.index = [f] * len(clips)
+            clips.index.name = "file"
+            clip_dfs.append(clips)
+        except:
+            unsafe_samples.append(f)
+    return pd.concat(clip_dfs), unsafe_samples
