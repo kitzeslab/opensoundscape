@@ -576,7 +576,7 @@ def overlay_image(
         f"got {overlay_class}"
     )
     assert (overlay_prob <= 1) and (overlay_prob >= 0), (
-        "overlay_prob" f"should be in range (0,1), was {overlay_weight}"
+        "overlay_prob" f"should be in range (0,1), was {overlay_prob}"
     )
 
     weight_error = f"overlay_weight should be between 0 and 1, was {overlay_weight}"
