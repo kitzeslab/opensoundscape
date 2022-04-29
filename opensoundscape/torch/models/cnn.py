@@ -346,7 +346,7 @@ class CNN(BaseModule):
         save_interval=1,  # save weights every n epochs
         log_interval=10,  # print metrics every n batches
         validation_interval=1,  # compute validation metrics every n epochs
-        unsafe_samples_log="./unsafe_samples.log",
+        unsafe_samples_log="./unsafe_training_samples.log",
     ):
         """train the model on samples from train_dataset
 
@@ -486,6 +486,7 @@ class CNN(BaseModule):
             f"samples failed to preprocess",
             level=2,
         )
+        self._log(f"List of unsafe sampels: {unsafe_samples}", level=3)
 
     def eval(self, targets, scores):
         """compute single-target or multi-target metrics from targets and scores"""
