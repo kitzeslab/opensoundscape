@@ -174,6 +174,15 @@ class Audio:
         )
         warnings.resetwarnings()
 
+        # warn user if no samples or if shorter than expected
+        if len(samples) == 0:
+            warnings.warn("audio object has zero samples")
+        elif duration is not None and len(samples) < duration * sr:
+            warnings.warn(
+                f"Audio object is shorter than requested duration: "
+                f"{len(samples)/sr} sec instead of {duration} sec"
+            )
+
         ## Load Metadata ##
         try:
             metadata = TinyTag.get(path).as_dict()
