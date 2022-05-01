@@ -193,7 +193,7 @@ class CNN(BaseModule):
         """
         self.loss_fn = self.loss_cls()
 
-    def _set_train(self, batch_size, num_workers):
+    def _set_train(self, train_df, batch_size, num_workers):
         """Prepare network for training on train_dataset
 
         Args:
@@ -209,6 +209,24 @@ class CNN(BaseModule):
         # Move network to device  #
         ###########################
         self.network.to(self.device)
+
+        ######################
+        # Dataloader setup #
+        ######################
+        train_dataset = self.preprocessor.make_dataset(train_df)
+
+        # SafeDataset loads a new sample if loading a sample throws an error
+        # indices of bad samples are appended to ._unsafe_indices
+        train_safe_dataset = SafeDataset(train_dataset, unsafe_behavior="substitute")
+
+        # train_loader samples batches of images + labels from training set
+        self.train_loader = get_dataloader(
+            train_safe_dataset,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            shuffle=True,
+            sampler=self.sampler,
+        )
 
         ###########################
         # Setup loss function     #
@@ -400,28 +418,12 @@ class CNN(BaseModule):
         self.save_interval = save_interval
         self.save_path = save_path
 
-        self._set_train(batch_size, num_workers)
+        ####################
+        # Set Up Loss, Opt #
+        ####################
+        self._set_train(train_df, batch_size, num_workers)
 
-        ######################
-        # Dataloader setup #
-        ######################
-
-        train_dataset = self.preprocessor.make_dataset(train_df)
-
-        # SafeDataset loads a new sample if loading a sample throws an error
-        # indices of bad samples are appended to ._unsafe_indices
-        train_safe_dataset = SafeDataset(train_dataset, unsafe_behavior="substitute")
-
-        # train_loader samples batches of images + labels from training set
-        self.train_loader = get_dataloader(
-            train_safe_dataset,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            shuffle=True,
-            sampler=self.sampler,
-        )
-
-        self.best_score = 0.0  # TODO: should allow any metric (use .metrics_fn)
+        self.best_score = 0.0
         self.best_epoch = 0
 
         for epoch in range(epochs):
@@ -480,7 +482,7 @@ class CNN(BaseModule):
         )
 
         # warn the user if there were unsafe samples (failed to preprocess)
-        unsafe_samples = train_safe_dataset.report(log=unsafe_samples_log)
+        unsafe_samples = self.train_loader.dataset.report(log=unsafe_samples_log)
         self._log(
             f"{len(unsafe_samples)} of {len(train_df)} total training "
             f"samples failed to preprocess",
@@ -489,7 +491,12 @@ class CNN(BaseModule):
         self._log(f"List of unsafe sampels: {unsafe_samples}", level=3)
 
     def eval(self, targets, scores):
-        """compute single-target or multi-target metrics from targets and scores"""
+        """compute single-target or multi-target metrics from targets and scores
+
+        Override this function to use a different set of metrics.
+        It should always return (1) a single score (float) used as an overall
+        metric of model quality and (2) a dictionary of computed metrics
+        """
         from opensoundscape.metrics import single_target_metrics, multi_target_metrics
 
         # remove all samples with NaN for a prediction
@@ -537,12 +544,7 @@ class CNN(BaseModule):
         os.makedirs(Path(path).parent, exist_ok=True)
         model_copy = copy.deepcopy(self)
         if not save_datasets:
-            for atr in [  # TODO update
-                "train_dataset",
-                "train_loader",
-                "train_safe_dataset",
-                "valid_dataset",
-            ]:
+            for atr in ["train_loader"]:  # attributes to remove
                 try:
                     delattr(model_copy, atr)
                 except AttributeError:
@@ -756,6 +758,7 @@ def use_resample_loss(model):
     ResampleLoss may perform better than BCE Loss for multitarget problems
     in some scenarios.
     """
+    import types
 
     model.loss_cls = ResampleLoss
 
@@ -764,24 +767,32 @@ def use_resample_loss(model):
         to the ResampleLoss constructor
         """
         class_frequency = (
-            torch.tensor(self.train_dataset.label_df.values).sum(0).to(self.device)
+            torch.tensor(self.train_loader.dataset.dataset.label_df.values)
+            .sum(0)
+            .to(self.device)
         )
 
         # initializing ResampleLoss requires us to pass class_frequency
         self.loss_fn = self.loss_cls(class_frequency)
 
-    model._init_loss_fn = _init_loss_fn
+    model._init_loss_fn = types.MethodType(_init_loss_fn, model)
 
 
-def seperate_resnet_feat_clf(model):
-    """Seperate feature/classifier training params for a ResNet model
+def separate_resnet_feat_clf(model):
+    """Separate feature/classifier training params for a ResNet model
 
     Args:
         model: an opso model object with a pytorch resnet architecture
 
     Returs:
         model with modified .optimizer_params and ._init_optimizer() method
+
+    Effects:
+        creates a new self.opt_net object that replaces the old one
+        resets self.current_epoch to 0
     """
+    import types
+
     # optimization parameters for parts of the networks - see
     # https://pytorch.org/docs/stable/optim.html#per-parameter-options
     model.optimizer_params = {
@@ -821,7 +832,9 @@ def seperate_resnet_feat_clf(model):
         param_dict["classifier"]["params"] = classifier_params_list
         return self.optimizer_cls(param_dict.values())
 
-    model._init_optimizer = _init_optimizer
+    model._init_optimizer = types.MethodType(_init_optimizer, model)
+    model.opt_net = None  # clears existing opt_net and its parameters
+    model.current_epoch = 0  # resets the epoch to 0
 
 
 class InceptionV3(CNN):  # TODO fix inception
