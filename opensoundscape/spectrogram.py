@@ -480,7 +480,7 @@ class Spectrogram:
     #         with open(destination,'wb') as file:
     #             pickle.dump(self,file)
 
-    def to_image(self, shape=None, mode="RGB", colormap=None):
+    def to_image(self, shape=None, channels=1, colormap=None, return_type="pil"):
         """Create a Pillow Image from spectrogram
 
         Linearly rescales values in the spectrogram from
@@ -490,41 +490,67 @@ class Spectrogram:
         -20 db is loudest -> black, -100 db is quietest -> white
 
         Args:
-            destination: a file path (string)
-            shape=None: tuple of image dimensions as (height, width),
-            mode="RGB": RGB for 3-channel output "L" for 1-channel output
-            colormap=None:
+            shape: tuple of output dimensions as (height, width)
+                - if None, retains original shape of self.spectrogram
+            channels: eg 3 for rgb, 1 for greyscale
+                - must be 3 to use colormap
+            colormap:
                 if None, greyscale spectrogram is generated
                 Can be any matplotlib colormap name such as 'jet'
-                Note: if mode="L", colormap will have no effect on output
-
+            return_type: type of returned object
+                - 'pil': PIL.Image
+                - 'np': numpy.ndarray
+                - 'torch': torch.tensor
         Returns:
-            Pillow Image object
+            Image with type depending on `return_type`:
+            - PIL.Image with c channels and shape w,h given by `shape`
+            - np.ndarray with shape [c,h,w]
+            - or torch.tensor with shape [c,h,w]
         """
-        from PIL import Image
+        from skimage.transform import resize as skresize
 
-        # rescale spec_range to [255, 0]
+        assert return_type in [
+            "pil",
+            "np",
+            "torch",
+        ], f"Arg `return_type` must be one of 'pil', 'np', 'torch'. Got {return_type}."
+        if colormap is not None:
+            # it doesn't make sense to use a colormap with #channels != 3
+            assert (
+                channels == 3
+            ), f"Channels must be 3 to use colormap. Specified {channels}"
+
+        # rescale spec_range to [1, 0]
         # note the backwards range: we want white=silence and black=loudest
         array = linear_scale(
             self.spectrogram, in_range=self.decibel_limits, out_range=(1, 0)
         )
+        # flip so that frequency increases from bottom to top
+        array = array[::-1, :]
 
-        # apply a colormap if desired
-        if mode == "RGB" and colormap is not None:
+        # apply colormaps
+        if colormap is not None:  # apply a colormap to get RGB channels
             cm = get_cmap(colormap)
             array = cm(1 - array)  # take 1-array bc its currently inverted
 
-        # use correct type for img, and scale from 0-1 to 0-255
-        array = np.uint8(array * 255)
+        # resize and change channel dims
+        if shape is None:
+            shape = np.shape(array)
+        out_shape = [shape[0], shape[1], channels]
+        array = skresize(array, out_shape)
 
-        # create PIL Image
-        # pass the array upside-down to create right-side-up image
-        image = Image.fromarray(array[::-1, :])
-        image = image.convert(mode)  #'RGB' 3 channel, 'L' 1 channel
+        if return_type == "pil":  # expected shape of input is [h,w,c]
+            from PIL import Image
 
-        # reshape to desired dimensions
-        if shape is not None:
-            image = image.resize(shape[::-1])
+            # use correct type for img, and scale from 0-1 to 0-255
+            array = np.uint8(array * 255)
+            image = Image.fromarray(array)
+
+        elif return_type == "np":  # shape should be c,h,w
+            image = array.transpose(2, 0, 1)
+
+        elif return_type == "torch":  # shape should be c,h,w
+            image = torch.Tensor(array.transpose(2, 0, 1))
 
         return image
 
