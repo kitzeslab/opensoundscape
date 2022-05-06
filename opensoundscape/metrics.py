@@ -66,10 +66,22 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     metrics_dict["recall"] = class_rec.mean()
     metrics_dict["f1"] = class_f1.mean()
 
-    metrics_dict["jaccard"] = jaccard_score(targets, preds, average="macro")
-    metrics_dict["hamming_loss"] = hamming_loss(targets, preds)
-    metrics_dict["map"] = average_precision_score(targets, preds, average="macro")
-    metrics_dict["au_roc"] = roc_auc_score(targets, preds, average="macro")
+    try:
+        metrics_dict["jaccard"] = jaccard_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["jaccard"] = np.nan
+    try:
+        metrics_dict["hamming_loss"] = hamming_loss(targets, preds)
+    except ValueError:
+        metrics_dict["hamming_loss"] = np.nan
+    try:
+        metrics_dict["map"] = average_precision_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["map"] = np.nan
+    try:
+        metrics_dict["au_roc"] = roc_auc_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["au_roc"] = np.nan
 
     # choose one metric to be used for the overall evaluation
     score = metrics_dict["map"]
@@ -100,10 +112,23 @@ def single_target_metrics(targets, scores, class_names):
     )
     metrics_dict.update({"precision": pre[1], "recall": rec[1], "f1": f1[1]})
 
-    metrics_dict["jaccard"] = jaccard_score(targets, preds, average="macro")
-    metrics_dict["hamming_loss"] = hamming_loss(targets, preds)
-    metrics_dict["map"] = average_precision_score(targets, preds, average="macro")
-    metrics_dict["au_roc"] = roc_auc_score(targets, preds, average="macro")
+    try:
+        metrics_dict["jaccard"] = jaccard_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["jaccard"] = np.nan
+    try:
+        metrics_dict["hamming_loss"] = hamming_loss(targets, preds)
+    except ValueError:
+        metrics_dict["hamming_loss"] = np.nan
+    try:
+        metrics_dict["map"] = average_precision_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["map"] = np.nan
+    try:
+        metrics_dict["au_roc"] = roc_auc_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["au_roc"] = np.nan
 
-    score = metrics_dict["f1"]
+    score = metrics_dict["map"]
+
     return score, metrics_dict
