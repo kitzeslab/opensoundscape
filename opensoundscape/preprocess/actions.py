@@ -473,7 +473,7 @@ def tensor_add_noise(tensor, std=1):
 
 
 class ImgOverlay(Augmentation):
-    """Action Class for augmentation that overlays images on eachother
+    """Action Class for augmentation that overlays samples on eachother
 
     Required Args:
         overlay_df: dataframe of audio files (index) and labels to use for overlay
@@ -671,14 +671,17 @@ def overlay_image(
             _pipeline, overlay_row, break_on_type=ImgOverlay
         )
 
-        # now we blend the two images together
+        # now we blend the two tensors together with a weighted average
         # Select weight of overlay; <0.5 means more emphasis on original image
         # Supports uniform-random selection from a range of weights eg [0.1,0.7]
         weight = overlay_weight
         if hasattr(weight, "__iter__"):
+            assert (
+                len(weight) == 2
+            ), f"overlay_weight must specify a single value or range of 2 values, got {overlay_weight}"
             weight = random.uniform(weight[0], weight[1])
 
         # use a weighted sum to overlay (blend) the images
-        x = Image.blend(x, x2, weight)
+        x = x * (1 - weight) + x2 * weight
 
     return x, _labels

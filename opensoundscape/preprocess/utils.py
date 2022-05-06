@@ -79,20 +79,43 @@ def insert_after(series, idx, name, value):
     return part1.append(pd.Series([value], index=[name])).append(part2)
 
 
-def show_tensor(tensor, channel=None):
+def show_tensor(tensor, channel=None, transform_from_zero_centered=False, invert=False):
     """helper function for displaying a sample as an image
 
     Args:
         tensor: torch.Tensor of shape [c,w,h] with values centered around zero
         channel: specify an integer to plot only one channel, otherwise will
             attempt to plot all channels
+        transform_from_zero_centered: if True, transforms values from [-1,1] to [0,1]
+        invert:
+            if true, flips value range via x=1-x
     """
     from matplotlib import pyplot as plt
+    import matplotlib
+    import copy
 
-    if channel is None:
-        plt.imshow(tensor.detach().numpy().transpose([1, 2, 0]) / 2 + 0.5)
+    tensor = copy.deepcopy(tensor)
+
+    if transform_from_zero_centered:
+        tensor = tensor / 2 + 0.5
+
+    if invert:
+        tensor = 1 - tensor
+
+    if channel is not None or tensor.shape[0] == 1:
+        cmap = "Greys"
     else:
-        plt.imshow(
-            tensor.detach().numpy().transpose([1, 2, 0])[:, :, channel] / 2 + 0.5
-        )
+        cmap = None
+
+    # this avoids stretching the color range to the min/max of the tensor
+    normalize = matplotlib.colors.Normalize(vmin=0, vmax=1)
+
+    sample = (
+        tensor.detach().numpy().transpose([1, 2, 0])
+    )  # re-arrange dimensions for img plotting
+
+    if channel is not None:
+        sample = sample[:, :, channel]
+
+    plt.imshow(sample, cmap=cmap, norm=normalize)
     plt.show()

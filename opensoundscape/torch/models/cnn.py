@@ -71,7 +71,7 @@ class CNN(BaseModule):
         sample_duration,
         single_target=False,
         preprocessor_class=SpecPreprocessor,
-        sample_shape=[224, 224],
+        sample_shape=[224, 224, 3],
     ):
 
         super(CNN, self).__init__()
@@ -86,6 +86,8 @@ class CNN(BaseModule):
 
         ### data loading parameters ###
         self.sampler = None  # can be "imbalanced" for ImbalancedDatasetSmpler
+
+        ##TODO: handle different # channels
 
         ### architecture ###
         # (feature extraction + classifier + loss fn)
@@ -835,6 +837,7 @@ def separate_resnet_feat_clf(model):
     model._init_optimizer = types.MethodType(_init_optimizer, model)
     model.opt_net = None  # clears existing opt_net and its parameters
     model.current_epoch = 0  # resets the epoch to 0
+    # model.opt_net will be created when .train() calls ._set_train()
 
 
 class InceptionV3(CNN):  # TODO fix inception

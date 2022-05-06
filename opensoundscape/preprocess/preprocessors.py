@@ -227,17 +227,12 @@ class SpecPreprocessor(BasePreprocessor):
             shorter clips will be extended (modify random_trim_audio and
             trim_audio to change behavior).
         out_shape:
-            output shape of tensor in pixels [default: [224,224]]
+            output shape of tensor h,w,channels [default: [224,224,3]]
         return_labels:
             if True, the __getitem__ method will return {X:sample,y:labels}
             If False, the __getitem__ method will return {X:sample}
             If label_df has no labels (no columns), use return_labels=False
             [default: True]
-        # debug:
-        #     If a path is provided, generated samples (after all augmentation)
-        #     will be saved to the path as an image. This is useful for checking
-        #     that the sample provided to the model matches expectations.
-        #     [default: None]
     """
 
     def __init__(
@@ -245,9 +240,8 @@ class SpecPreprocessor(BasePreprocessor):
         label_df,
         sample_duration,
         return_labels=True,
-        # debug=None,
         overlay_df=None,
-        out_shape=[224, 224],
+        out_shape=[224, 224, 3],
     ):
         self.sample_duration = sample_duration
         super(SpecPreprocessor, self).__init__(
@@ -262,8 +256,12 @@ class SpecPreprocessor(BasePreprocessor):
                 "bandpass": Action(
                     Spectrogram.bandpass, min_f=0, max_f=11025, out_of_bounds_ok=False
                 ),
-                "to_img": Action(Spectrogram.to_image, shape=out_shape),
-                "to_tensor": Action(actions.image_to_tensor),
+                "to_img": Action(
+                    Spectrogram.to_image,
+                    shape=out_shape[0:2],
+                    channels=out_shape[2],
+                    return_type="torch",
+                ),
                 "time_mask": Augmentation(actions.time_mask),
                 "frequency_mask": Augmentation(actions.frequency_mask),
                 "add_noise": Augmentation(actions.tensor_add_noise, std=0.005),
