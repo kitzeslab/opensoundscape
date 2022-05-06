@@ -12,7 +12,7 @@ from sklearn.metrics import (
 import numpy as np
 
 
-def predict(scores, single_target=False, threshold=0.5):  # TODO rename
+def binary_predictions(scores, single_target=False, threshold=0.5):  # TODO rename
     """convert numeric scores to binary predictions
 
     return 0/1 for an array of scores: samples (rows) x classes (columns)
@@ -43,7 +43,7 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     """generate various metrics for a set of scores and labels (targets)"""
     metrics_dict = {}
 
-    preds = predict(scores, single_target=False, threshold=threshold)
+    preds = binary_predictions(scores, single_target=False, threshold=threshold)
 
     # Store per-class precision, recall, and f1
     class_pre, class_rec, class_f1, _ = precision_recall_fscore_support(
@@ -99,7 +99,7 @@ def single_target_metrics(targets, scores, class_names):
 
     metrics_dict = {}
 
-    preds = predict(scores, single_target=True)
+    preds = binary_predictions(scores, single_target=True)
 
     # Confusion matrix requires numbered-class not one-hot labels
     t = np.argmax(targets, 1)
