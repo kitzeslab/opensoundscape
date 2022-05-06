@@ -337,12 +337,11 @@ class CNN(BaseModule):
                 epoch_loss_avg = np.mean(batch_loss)
                 self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
 
-                # TODO use .eval()
+                # Evaluate with model's eval function
                 tgts = batch_labels.int().detach().cpu().numpy()
-                preds = batch_preds.int().detach().cpu().numpy()
-                jac = jaccard_score(tgts, preds, average="macro")
-                ham = hamming_loss(tgts, preds)
-                self._log(f"Jacc: {jac:0.3f} Hamm: {ham:0.3f} ", level=2)
+                # preds = batch_preds.int().detach().cpu().numpy()
+                scores = logits.int().detach().cpu().numpy()
+                self.eval(tgts, scores, logging_offset=-1)
 
         # update learning parameters each epoch
         self.scheduler.step()
@@ -498,12 +497,18 @@ class CNN(BaseModule):
         )
         self._log(f"List of unsafe sampels: {unsafe_samples}", level=3)
 
-    def eval(self, targets, scores):
+    def eval(self, targets, scores, logging_offset=0):
         """compute single-target or multi-target metrics from targets and scores
 
         Override this function to use a different set of metrics.
         It should always return (1) a single score (float) used as an overall
         metric of model quality and (2) a dictionary of computed metrics
+
+        Args:
+            targets: 0/1 for each sample and each class
+            scores: continuous values in 0/1 for each sample and class
+            logging_offset: modify verbosity - for example, -1 will reduce
+                the amount of printing/logging by 1 level
         """
         from opensoundscape.metrics import single_target_metrics, multi_target_metrics
 
@@ -524,18 +529,18 @@ class CNN(BaseModule):
 
         # decide what to print/log:
         self._log(f"Metrics:")
-        self._log(f"\tMAP: {metrics_dict['map']:0.3f}", level=1)
-        self._log(f"\tAU_ROC: {metrics_dict['au_roc']:0.3f} ", level=2)
+        self._log(f"\tMAP: {metrics_dict['map']:0.3f}", level=1 - logging_offset)
+        self._log(f"\tAU_ROC: {metrics_dict['au_roc']:0.3f} ", level=2 - logging_offset)
         self._log(
             f"\tJacc: {metrics_dict['jaccard']:0.3f} "
             f"Hamm: {metrics_dict['hamming_loss']:0.3f} ",
-            level=2,
+            level=2 - logging_offset,
         )
         self._log(
             f"\tPrec: {metrics_dict['precision']:0.3f} "
             f"Rec: {metrics_dict['recall']:0.3f} "
             f"F1: {metrics_dict['f1']:0.3f}",
-            level=2,
+            level=2 - logging_offset,
         )
         return score, metrics_dict
 
@@ -850,9 +855,12 @@ class InceptionV3(CNN):  # TODO fix inception
     def __init__(
         self,
         classes,
+        sample_duration,
+        single_target=False,
+        preprocessor_class=SpecPreprocessor,
         freeze_feature_extractor=False,
         use_pretrained=True,
-        single_target=False,
+        sample_shape=[299, 299, 3],
     ):
         """Model object for InceptionV3 architecture subclassing CNN
 
@@ -880,7 +888,14 @@ class InceptionV3(CNN):  # TODO fix inception
             use_pretrained=use_pretrained,
         )
 
-        super(InceptionV3, self).__init__(architecture, self.classes, single_target)
+        super(InceptionV3, self).__init__(
+            architecture,
+            classes,
+            sample_duration,
+            single_target=single_target,
+            preprocessor_class=preprocessor_class,
+            sample_shape=sample_shape,
+        )
         self.name = "InceptionV3"
 
     def _train_epoch(self, train_loader):
@@ -891,11 +906,13 @@ class InceptionV3(CNN):  # TODO fix inception
 
         Returns: (targets, predictions, scores) on training files
         """
+
         self.network.train()
 
         total_tgts = []
         total_preds = []
         total_scores = []
+        batch_loss = []
 
         for batch_idx, batch_data in enumerate(train_loader):
             # load a batch of images and labels from the train loader
@@ -929,7 +946,10 @@ class InceptionV3(CNN):  # TODO fix inception
             loss1 = self.loss_fn(logits, batch_labels)
             loss2 = self.loss_fn(aux_logits, batch_labels)
             loss = loss1 + 0.4 * loss2
-            self.loss_hist[self.current_epoch] = loss.detach().cpu().numpy()
+
+            # save loss for each batch; later take average for epoch
+
+            batch_loss.append(loss.detach().cpu().numpy())
 
             #############################
             # Backward and optimization #
@@ -944,7 +964,7 @@ class InceptionV3(CNN):  # TODO fix inception
             ###########
             # Logging #
             ###########
-            # log basic train info
+            # log basic train info (used to print every batch)
             if batch_idx % self.log_interval == 0:
                 """show some basic progress metrics during the epoch"""
                 N = len(train_loader)
@@ -954,15 +974,21 @@ class InceptionV3(CNN):  # TODO fix inception
                     )
                 )
 
-                # Log the Jaccard score and Hamming loss
+                # Log the Jaccard score and Hamming loss, and Loss function
+                epoch_loss_avg = np.mean(batch_loss)
+                self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
+
+                # Evaluate with model's eval function
                 tgts = batch_labels.int().detach().cpu().numpy()
-                preds = batch_preds.int().detach().cpu().numpy()
-                jac = jaccard_score(tgts, preds, average="macro")
-                ham = hamming_loss(tgts, preds)
-                print(f"\tJacc: {jac:0.3f} Hamm: {ham:0.3f} DistLoss: {loss:.3f}")
+                # preds = batch_preds.int().detach().cpu().numpy()
+                scores = logits.int().detach().cpu().numpy()
+                self.eval(tgts, scores, logging_offset=-1)
 
         # update learning parameters each epoch
         self.scheduler.step()
+
+        # save the loss averaged over all batches
+        self.loss_hist[self.current_epoch] = np.mean(batch_loss)
 
         # return targets, preds, scores
         total_tgts = np.concatenate(total_tgts, axis=0)
@@ -970,46 +996,6 @@ class InceptionV3(CNN):  # TODO fix inception
         total_scores = np.concatenate(total_scores, axis=0)
 
         return total_tgts, total_preds, total_scores
-
-
-class InceptionV3ResampleLoss(InceptionV3):
-    def __init__(
-        self,
-        classes,
-        freeze_feature_extractor=False,
-        use_pretrained=True,
-        single_target=False,
-    ):
-        """Subclass of InceptionV3 with ResampleLoss.
-
-        May perform better than BCE for multitarget problems.
-        """
-        self.classes = classes
-
-        super(InceptionV3ResampleLoss, self).__init__(
-            classes,
-            freeze_feature_extractor=False,
-            use_pretrained=True,
-            single_target=single_target,
-        )
-        self.name = "InceptionV3ResampleLoss"
-        self.loss_cls = ResampleLoss
-
-    def _init_loss_fn(self):
-        """initialize an instance of self.loss_cls
-
-        We override the parent method because we need to pass class frequency
-        to the ResampleLoss constructor
-
-        This function is called during .train() so that the user
-        has a chance to change the loss function before training.
-
-        Note: if you change the loss function, you may need to override this
-        to correctly initialize self.loss_cls
-        """
-        class_frequency = np.sum(self.train_dataset.df.values, 0)
-        # initializing ResampleLoss requires us to pass class_frequency
-        self.loss_fn = self.loss_cls(class_frequency)
 
 
 def load_model(path, device=None):
