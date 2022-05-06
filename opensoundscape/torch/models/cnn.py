@@ -85,9 +85,7 @@ class CNN(BaseModule):
         self.opensoundscape_version = opensoundscape.__version__
 
         ### data loading parameters ###
-        self.sampler = None  # can be "imbalanced" for ImbalancedDatasetSmpler
-
-        ##TODO: handle different # channels
+        self.sampler = None  # can be "imbalanced" for ImbalancedDatasetSampler
 
         ### architecture ###
         # (feature extraction + classifier + loss fn)
@@ -95,16 +93,24 @@ class CNN(BaseModule):
         # must have .forward(), .train(), .eval(), .to(), .state_dict()
         # for convenience, allow user to provide string matching
         # a key from cnn_architectures.ARCH_DICT
+        num_channels = sample_shape[2]
         if type(architecture) == str:
             assert architecture in cnn_architectures.list_architectures(), (
                 f"architecture must be a pytorch model object or string matching "
                 f"one of cnn_architectures.list_architectures() options. Got {architecture}"
             )
-            architecture = cnn_architectures.ARCH_DICT[architecture](len(classes))
+            architecture = cnn_architectures.ARCH_DICT[architecture](
+                len(classes), num_channels=num_channels
+            )
         else:
             assert issubclass(
                 type(architecture), torch.nn.Module
             ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
+            if num_channels != 3:
+                warnings.warn(
+                    f"Make sure your architecture expects the number of channels in your input sampels ({num_channels}). "
+                    "Pytorch architectures expect 3 channels by default."
+                )
         self.network = architecture
 
         ### network device ###
@@ -658,7 +664,7 @@ class CNN(BaseModule):
             )
             # update "label_df" so that index matches clip_times_df
             prediction_dataset.label_df = prediction_dataset.clip_times_df[[]]
-        # TODO: add method 'eval()': runs predict then compares to labels
+
         if len(prediction_dataset) < 1:
             warnings.warn("prediction_dataset has zero samples. Returning None.")
             return None, None, None
@@ -684,7 +690,7 @@ class CNN(BaseModule):
             pin_memory=torch.cuda.is_available(),
         )
         # add any paths that failed to generate a clip df to _unsafe_samples
-        dataloader.dataset._unsafe_samples += unsafe_paths  # TODO check if working
+        dataloader.dataset._unsafe_samples += unsafe_paths  # TODO add test
 
         ### Prediction ###
         total_scores = []
