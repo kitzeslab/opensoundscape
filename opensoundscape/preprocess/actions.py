@@ -79,7 +79,6 @@ class Action(BaseAction):
     def __init__(self, fn, extra_args=[], **kwargs):
         super(Action, self).__init__()
 
-        # if you need sample-specific args, you should write a subclass? or leave it as an input list? #DISCUSS #TODO
         self.action_fn = fn
         # args that vary for each sample, will be passed from preprocessor
         self.extra_args = extra_args

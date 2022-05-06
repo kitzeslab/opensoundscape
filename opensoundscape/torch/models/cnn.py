@@ -618,7 +618,7 @@ class CNN(BaseModule):
             overlap_fraction: fraction of overlap between consecutive clips when
                 predicting on clips of longer audio files. For instance, 0.5
                 gives 50% overlap between consecutive clips.
-            final_clip: see [#TODO?]
+            final_clip: see `opensoundscape.helpers.generate_clip_times_df`
             augmentation_on: default False. preprocessor.augmentation_on
                 will be set to this value. If True, any Augmentations in
                 preprocessor will be performed. If False, they will be skipped.
