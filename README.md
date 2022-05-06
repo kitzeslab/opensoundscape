@@ -9,11 +9,17 @@ These utilities can be strung together to create data analysis pipelines. OpenSo
 
 OpenSoundscape is currently in active development. If you find a bug, please submit an issue. If you have another question about OpenSoundscape, please email Sam Lapp (`sam.lapp` at `pitt.edu`) or Tessa Rhinehart (`tessa.rhinehart` at `pitt.edu`).
 
+
+#### Suggested Citation
+```
+Lapp, Rhinehart, Freeland-Haynes, and Kitzes, 2022. "OpenSoundscape v0.6.2".
+```
+
 # Installation
 
-OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.7.1 and 3.8.
+OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.7 and 3.8.
 
-Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.6.1`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
+Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.6.2`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
 
 For more detailed instructions on how to install OpenSoundscape and use it in Jupyter, see the [documentation](http://opensoundscape.org).
 
@@ -33,7 +39,7 @@ For full API documentation and tutorials on how to use OpenSoundscape to work wi
 # Quick Start
 
 Using Audio and Spectrogram classes #tldr
-```
+```python
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 
@@ -47,7 +53,7 @@ my_spec.plot()
 ```
 
 Using a pre-trained CNN to make predictions on long audio files
-```
+```python
 from opensoundscape.torch.models.cnn import load_model
 from opensoundscape.preprocess.preprocessors import ClipLoadingSpectrogramPreprocessor
 from opensoundscape.helpers import make_clip_df
@@ -72,7 +78,7 @@ scores, _, _ = model.predict(dataset)
 ```
 
 Training a CNN with labeled audio data
-```
+```python
 from opensoundscape.torch.models.cnn import PytorchModel
 from opensoundscape.preprocess.preprocessors import CnnPreprocessor
 
