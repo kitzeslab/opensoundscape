@@ -408,3 +408,50 @@ def detect_peak_sequence_cwt(
             detection_df.seq_start_time + detection_df.seq_end_time
         ) / 2
     return detection_df
+
+
+def _get_ones_sequences(x):
+    """Find lengths and positions of contiguous 1s in vector of 0s & 1s"""
+    starts = []
+    lengths = []
+    seq_len = 0
+    for i, xi in enumerate(x):
+        assert xi in [0, 1], "values must be 0 or 1"
+        if xi == 0:
+            if seq_len > 0:
+                lengths.append(seq_len)
+            seq_len = 0
+        else:
+            if seq_len == 0:
+                starts.append(i)
+            seq_len += 1
+    if seq_len > 0:
+        lengths.append(seq_len)
+    return starts, lengths
+
+
+def thresholded_event_durations(x, threshold, normalize=False, sr=1):
+    """Detect positions and durations of events over threshold in 1D signal
+
+    This function takes a 1D numeric vector and searches for segments that
+    are continuously greater than a threshold value. The input signal
+    can optionally be normalized, and if a sample rate is provided the
+    start positions will be in the units of [sr]^-1 (ie if sr is Hz,
+    start positions will be in seconds).
+
+    Args:
+        x: 1d input signal, a vector of numeric values
+        threshold: minimum value of signal to be a detection
+        normalize: if True, performs x=x/max(x)
+        sr: sample rate of input signal
+
+    Returns:
+        start_times: start time of each detected event
+        durations: duration (# samples/sr) of each detected event
+    """
+    if normalize:
+        x = x / np.max(x)
+    x_01 = (np.array(x) >= threshold).astype(int)
+    starts, lengths = _get_ones_sequences(x_01)
+
+    return np.array(starts) / sr, np.array(lengths) / sr
