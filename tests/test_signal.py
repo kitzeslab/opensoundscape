@@ -170,3 +170,6 @@ def test_detect_peak_sequence_cwt_uneven_length_results(rugr_wav_str):
         plot=False,
     )
     assert len(detections) == 2
+
+
+# TODO def test_thresholded_event_durations
