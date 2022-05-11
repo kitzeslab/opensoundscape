@@ -209,7 +209,10 @@ class Audio:
                 metadata is not None
                 and "recording_start_time" in metadata
                 and type(metadata["recording_start_time"]) == datetime
-            ), "metadata did not contain start time stamp"
+            ), (
+                "metadata did not contain start time timestamp in key `recording_start_time`. "
+                "This key is automatically created when parsing AudioMoth metadata."
+            )
             audio_start = metadata["recording_start_time"]
             offset = (start_timestamp - audio_start).total_seconds()
             if offset < 0:
