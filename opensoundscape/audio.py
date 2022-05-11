@@ -269,7 +269,8 @@ class Audio:
                 metadata["filesize"] = np.nan
 
             # if the offset > 0, we need to update the timestamp
-            metadata["recording_start_time"] += timedelta(seconds=offset)
+            if "recording_start_time" in metadata:
+                metadata["recording_start_time"] += timedelta(seconds=offset)
 
         return cls(samples, sr, resample_type=resample_type, metadata=metadata)
 
