@@ -554,3 +554,38 @@ class Audio:
         df.index = clip_names
         df.index.name = "file"
         return df
+
+
+def load_channels_as_audio(
+    path, sample_rate=None, resample_type="kaiser_fast", offset=0, duration=None
+):
+    """Load each channel of an audio file to a separate Audio object
+
+    Provides a way to access individual channels, since Audio.from_file
+    mixes down to mono by default
+
+    args:
+        see Audio.from_file()
+
+    returns:
+        list of Audio objects (one per channel)
+    """
+    path = str(path)  # Pathlib path can have dependency issues - use string
+
+    ## Load samples ##
+    warnings.filterwarnings("ignore")
+    samples, sr = librosa.load(
+        path,
+        sr=sample_rate,
+        res_type=resample_type,
+        mono=False,
+        offset=offset,
+        duration=duration,
+    )
+    warnings.resetwarnings()
+    audio_objects = [
+        Audio(samples=samples_channel, sample_rate=sr, resample_type=resample_type)
+        for samples_channel in samples
+    ]
+
+    return audio_objects
