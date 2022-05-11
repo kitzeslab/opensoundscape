@@ -10,6 +10,11 @@ import numpy.testing as npt
 
 
 @pytest.fixture()
+def empty_wav_str():
+    return "tests/audio/empty_2c.wav"
+
+
+@pytest.fixture()
 def veryshort_wav_str():
     return "tests/audio/veryshort.wav"
 
@@ -79,6 +84,16 @@ def saved_mp3(request, tmp_dir):
 
     request.addfinalizer(fin)
     return path
+
+
+def test_load_empty_wav(empty_wav_str):
+    with pytest.warns(UserWarning):
+        s = Audio.from_file(empty_wav_str)
+
+
+def test_load_duration_too_long(veryshort_wav_str):
+    with pytest.warns(UserWarning):
+        s = Audio.from_file(veryshort_wav_str, duration=5)
 
 
 def test_load_veryshort_wav_str_44100(veryshort_wav_str):
