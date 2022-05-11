@@ -108,8 +108,11 @@ class Spectrogram:
         cls,
         audio,
         window_type="hann",
-        window_samples=512,
-        overlap_samples=256,
+        window_samples=None,
+        window_length_sec=None,
+        overlap_samples=None,
+        overlap_fraction=None,
+        fft_size=None,
         decibel_limits=(-100, -20),
         dB_scale=True,
     ):
@@ -118,10 +121,22 @@ class Spectrogram:
 
         Args:
             window_type="hann": see scipy.signal.spectrogram docs for description of window parameter
-            window_samples=512: number of audio samples per spectrogram window (pixel)
-            overlap_samples=256: number of samples shared by consecutive windows
-            decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
-            dB_scale=True : If True, rescales values to decibels, x=10*log10(x)
+            window_samples: number of audio samples per spectrogram window (pixel)
+                - Defaults to 512 if window_samples and window_length_sec are None
+                - Note: cannot specify both window_samples and window_length_sec
+            window_length_sec: length of a single window in seconds
+                - Note: cannot specify both window_samples and window_length_sec
+                - Warning: specifying this parameter often results in less efficient
+                    spectrogram computation because window_samples will not be
+                    a power of 2.
+            overlap_samples: number of samples shared by consecutive windows
+                - Note: must not specify both overlap_samples and overlap_fraction
+            overlap_fraction: fractional temporal overlap between consecutive windows
+                - Defaults to 0.5 if overlap_samples and overlap_fraction are None
+                - Note: cannot specify both overlap_samples and overlap_fraction
+            fft_size: see scipy.signal.spectrogram's `nfft` parameter
+            decibel_limits: limit the dB values to (min,max) (lower values set to min, higher values set to max)
+            dB_scale: If True, rescales values to decibels, x=10*log10(x)
                 - if dB_scale is False, decibel_limits is ignored
 
         Returns:
@@ -130,12 +145,39 @@ class Spectrogram:
         if not isinstance(audio, Audio):
             raise TypeError("Class method expects Audio class as input")
 
+        # determine window_samples
+        if window_samples is not None and window_length_sec is not None:
+            raise ValueError(
+                "You may not specify both `window_samples` and `window_length_sec`"
+            )
+        elif window_samples is None and window_length_sec is None:
+            window_samples = 512  # defaults to 512 samples
+        elif window_length_sec is not None:
+            window_samples = int(audio.sample_rate * window_length_sec)
+        # else: use user-provided window_samples argument
+
+        # determine overlap_samples
+        if overlap_samples is not None and overlap_fraction is not None:
+            raise ValueError(
+                "You may not specify both `overlap_samples` and `overlap_fraction`"
+            )
+        elif overlap_samples is None and overlap_fraction is None:
+            # default is 50% overlap
+            overlap_samples = window_samples // 2
+        elif overlap_fraction is not None:
+            assert (
+                overlap_fraction >= 0 and overlap_fraction < 1
+            ), "overlap_fraction must be >=0 and <1"
+            overlap_samples = int(window_samples * overlap_fraction)
+        # else: use the provided overlap_samples argument
+
         frequencies, times, spectrogram = signal.spectrogram(
             audio.samples,
             audio.sample_rate,
             window=window_type,
             nperseg=window_samples,
             noverlap=overlap_samples,
+            nfft=fft_size,
             scaling="spectrum",
         )
 
@@ -229,7 +271,6 @@ class Spectrogram:
 
     def min_max_scale(self, feature_range=(0, 1)):
         """
-
         Linearly rescale spectrogram values to a range of values using
         in_range as minimum and maximum
 
@@ -257,7 +298,6 @@ class Spectrogram:
 
     def linear_scale(self, feature_range=(0, 1)):
         """
-
         Linearly rescale spectrogram values to a range of values
         using in_range as decibel_limits
 
