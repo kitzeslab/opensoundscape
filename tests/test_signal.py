@@ -172,4 +172,26 @@ def test_detect_peak_sequence_cwt_uneven_length_results(rugr_wav_str):
     assert len(detections) == 2
 
 
-# TODO def test_thresholded_event_durations
+def test_get_ones_sequence():
+    starts, lengths = sig._get_ones_sequences(np.array([1, 1, 1, 0, 1, 1, 0, 1]))
+    assert starts == [0, 4, 7]
+    assert lengths == [3, 2, 1]
+    print(starts, lengths)
+
+
+def test_thresholded_event_durations():
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([1, 1, 1, 0, 1, 1, 0, 1]), threshold=0
+    )
+    assert np.array_equal(starts, np.array([0]))
+    assert np.array_equal(lengths, np.array([8]))
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([1, 1, 1, 0, 1, 1, 0, 1]), threshold=10
+    )
+    assert np.array_equal(starts, np.array([]))
+    assert np.array_equal(lengths, np.array([]))
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([-1, -1, -1, 0, 1, -1, 0, 1]), threshold=-0.1
+    )
+    assert np.array_equal(starts, np.array([3, 6]))
+    assert np.array_equal(lengths, np.array([2, 2]))
