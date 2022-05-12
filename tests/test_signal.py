@@ -186,7 +186,7 @@ def test_thresholded_event_durations():
     assert np.array_equal(starts, np.array([0]))
     assert np.array_equal(lengths, np.array([8]))
     starts, lengths = sig.thresholded_event_durations(
-        np.array([1, 1, 1, 0, 1, 1, 0, 1]), threshold=10
+        np.array([1, 1, 1, 0, 1, 1, 0, 1]), threshold=np.array(10)
     )
     assert np.array_equal(starts, np.array([]))
     assert np.array_equal(lengths, np.array([]))
@@ -195,3 +195,18 @@ def test_thresholded_event_durations():
     )
     assert np.array_equal(starts, np.array([3, 6]))
     assert np.array_equal(lengths, np.array([2, 2]))
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([]), threshold=np.array(0.99)
+    )
+    assert np.array_equal(starts, np.array([]))
+    assert np.array_equal(lengths, np.array([]))
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([0, 0, 0]), threshold=np.nan
+    )
+    assert np.array_equal(starts, np.array([]))
+    assert np.array_equal(lengths, np.array([]))
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([0, np.nan, 0]), threshold=-1
+    )
+    assert np.array_equal(starts, np.array([0, 2]))
+    assert np.array_equal(lengths, np.array([1, 1]))
