@@ -16,7 +16,6 @@ from opensoundscape.preprocess import actions
 from opensoundscape.preprocess.actions import (
     BaseAction,
     Action,
-    Augmentation,
     ImgOverlay,
     AudioClipLoader,
     AudioTrim,
@@ -68,7 +67,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
         self.return_labels = return_labels
         self.classes = label_df.columns
         self.sample_duration = sample_duration
-        # if augmentation_on False, skips Actions that subclass Augmentation
+        # if augmentation_on False, skips Actions with .is_augmentation=True
         self.augmentation_on = True
 
         # pipeline: a dictionary listing operations to conduct on each sample
@@ -250,7 +249,7 @@ class SpecPreprocessor(BasePreprocessor):
         self.pipeline = pd.Series(
             {
                 "load_audio": AudioClipLoader(),
-                "random_trim_audio": AudioRandomTrim(),  # random trim augmentation
+                "random_trim_audio": AudioRandomTrim(is_augmentation=True),
                 "trim_audio": AudioTrim(),  # trim clips to correct length
                 "to_spec": Action(Spectrogram.from_audio),
                 "bandpass": Action(
@@ -262,14 +261,20 @@ class SpecPreprocessor(BasePreprocessor):
                     channels=out_shape[2],
                     return_type="torch",
                 ),
-                "time_mask": Augmentation(actions.time_mask),
-                "frequency_mask": Augmentation(actions.frequency_mask),
-                "add_noise": Augmentation(actions.tensor_add_noise, std=0.005),
+                "time_mask": Action(actions.time_mask, is_augmentation=True),
+                "frequency_mask": Action(actions.frequency_mask, is_augmentation=True),
+                "add_noise": Action(
+                    actions.tensor_add_noise, is_augmentation=True, std=0.005
+                ),
                 "rescale": Action(actions.scale_tensor),
-                "random_affine": Augmentation(actions.torch_random_affine),
+                "random_affine": Action(
+                    actions.torch_random_affine, is_augmentation=True
+                ),
             }
         )
         # add overlay augmentation if overlay_df is provided
         if overlay_df is not None:
-            overlay = ImgOverlay(overlay_df=overlay_df, update_labels=False)
+            overlay = ImgOverlay(
+                is_augmentation=True, overlay_df=overlay_df, update_labels=False
+            )
             self.insert_action("overlay", overlay, after_key="to_img")

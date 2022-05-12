@@ -51,6 +51,8 @@ def _run_pipeline(
     for k, action in pipeline.items():
         if type(action) == break_on_type or k == break_on_key:
             break
+        if action.bypass:
+            continue
         if action.is_augmentation and not augmentation_on:
             continue
         extra_args = {key: sample_info[key] for key in action.extra_args}

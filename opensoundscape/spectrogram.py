@@ -572,6 +572,10 @@ class Spectrogram:
         # flip so that frequency increases from bottom to top
         array = array[::-1, :]
 
+        # invert if desired
+        if invert:
+            array = 1 - array
+
         # apply colormaps
         if colormap is not None:  # apply a colormap to get RGB channels
             cm = get_cmap(colormap)
@@ -588,6 +592,9 @@ class Spectrogram:
 
             # use correct type for img, and scale from 0-1 to 0-255
             array = np.uint8(array * 255)
+            if array.shape[-1] == 1:
+                # PIL doesnt like [x,y,1] shape, wants [x,y] instead
+                array = array[:, :, 0]
             image = Image.fromarray(array)
 
         elif return_type == "np":  # shape should be c,h,w
