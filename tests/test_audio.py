@@ -87,13 +87,13 @@ def saved_mp3(request, tmp_dir):
 
 
 def test_load_empty_wav(empty_wav_str):
-    with pytest.warns(UserWarning):
-        s = Audio.from_file(empty_wav_str)
+    with pytest.raises(AudioOutOfBoundsError):
+        s = Audio.from_file(empty_wav_str, out_of_bounds_mode="raise")
 
 
 def test_load_duration_too_long(veryshort_wav_str):
-    with pytest.warns(UserWarning):
-        s = Audio.from_file(veryshort_wav_str, duration=5)
+    with pytest.raises(AudioOutOfBoundsError):
+        s = Audio.from_file(veryshort_wav_str, duration=5, out_of_bounds_mode="raise")
 
 
 def test_load_veryshort_wav_str_44100(veryshort_wav_str):
