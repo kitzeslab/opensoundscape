@@ -83,9 +83,7 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     except ValueError:
         metrics_dict["au_roc"] = np.nan
 
-    # choose one metric to be used for the overall evaluation
-    score = metrics_dict["map"]
-    return score, metrics_dict
+    return metrics_dict
 
 
 def single_target_metrics(targets, scores, class_names):
@@ -129,6 +127,4 @@ def single_target_metrics(targets, scores, class_names):
     except ValueError:
         metrics_dict["au_roc"] = np.nan
 
-    score = metrics_dict["map"]
-
-    return score, metrics_dict
+    return metrics_dict
