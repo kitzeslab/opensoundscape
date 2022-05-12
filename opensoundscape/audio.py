@@ -37,12 +37,6 @@ class OpsoLoadAudioInputError(Exception):
     pass
 
 
-class OpsoLoadAudioInputTooLong(Exception):
-    """Custom exception indicating length of audio is too long"""
-
-    pass
-
-
 class AudioOutOfBoundsError(Exception):
     """Custom exception indicating the user tried to load audio
     outside of the time period that exists in the audio object"""

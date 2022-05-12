@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from opensoundscape.audio import Audio, OpsoLoadAudioInputTooLong
+from opensoundscape.audio import Audio
 import pytest
 import numpy as np
 from opensoundscape import signal as sig
