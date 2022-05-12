@@ -28,7 +28,7 @@ from math import ceil
 from opensoundscape.helpers import generate_clip_times_df
 from opensoundscape.audiomoth import parse_audiomoth_metadata
 from tinytag import TinyTag
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -39,6 +39,13 @@ class OpsoLoadAudioInputError(Exception):
 
 class OpsoLoadAudioInputTooLong(Exception):
     """Custom exception indicating length of audio is too long"""
+
+    pass
+
+
+class AudioOutOfBoundsError(Exception):
+    """Custom exception indicating the user tried to load audio
+    outside of the time period that exists in the audio object"""
 
     pass
 
@@ -57,29 +64,19 @@ class Audio:
         samples (np.array):     The audio samples
         sample_rate (integer):  The sampling rate for the audio samples
         resample_type (str):    The resampling method to use [default: "kaiser_fast"]
-        max_duration (None or integer):
-            The maximum duration in seconds allowed for the audio file
-            (longer files will raise an exception)[default: None]
-            If None, no limit is enforced
 
     Returns:
         An initialized `Audio` object
     """
 
-    __slots__ = ("samples", "sample_rate", "resample_type", "max_duration", "metadata")
+    __slots__ = ("samples", "sample_rate", "resample_type", "metadata")
 
     def __init__(
-        self,
-        samples,
-        sample_rate,
-        resample_type="kaiser_fast",
-        max_duration=None,
-        metadata=None,
+        self, samples, sample_rate, resample_type="kaiser_fast", metadata=None
     ):
         self.samples = samples
         self.sample_rate = sample_rate
         self.resample_type = resample_type
-        self.max_duration = max_duration
         self.metadata = metadata
 
         samples_error = None
@@ -109,10 +106,11 @@ class Audio:
         path,
         sample_rate=None,
         resample_type="kaiser_fast",
-        max_duration=None,
         metadata=True,
-        offset=0,
+        offset=None,
         duration=None,
+        start_timestamp=None,
+        out_of_bounds_mode="warn",
     ):
         """Load audio from files
 
@@ -135,8 +133,6 @@ class Audio:
             sample_rate (int, None): resample audio with value and resample_type,
                 if None use source sample_rate (default: None)
             resample_type: method used to resample_type (default: kaiser_fast)
-            max_duration: the maximum length of an input file,
-                None is no maximum (default: None)
             metadata (bool): if True, attempts to load metadata from the audio
                 file. If an exception occurs, self.metadata will be `None`.
                 Otherwise self.metadata is a dictionary.
@@ -145,22 +141,90 @@ class Audio:
                 The parsing function for AudioMoth is likely to break when new
                 firmware versions change the `comment` metadata field.
             offset: load audio starting at this time (seconds) after the
-                start of the file. Default: 0 seconds.
+                start of the file. Defaults to 0 seconds.
+                - cannot specify both `offset` and `start_timestamp`
             duration: load audio of this duration (seconds) starting at
                 `offset`. If None, loads all the way to the end of the file.
+            start_timestamp: load audio starting at this localized datetime.datetime timestamp
+                - cannot specify both `offset` and `start_timestamp`
+                - will only work if loading metadata results in localized datetime
+                    object for 'recording_start_time' key
+                - will raise AudioOutOfBoundsError if requested time period
+                is not full contained within the audio file
+                Example of creating localized timestamp:
+                ```
+                import pytz; from datetime import datetime;
+                local_timestamp = datetime(2020,12,25,23,59,59)
+                local_timezone = pytz.timezone('US/Eastern')
+                timestamp = local_timezone.localize(local_timestamp)
+                ```
+            out_of_bounds_mode:
+                - 'warn': generate a warning [default]
+                - 'raise': raise an AudioOutOfBoundsError
+                - 'ignore': return any available audio with no warning/error
 
         Returns:
             Audio object with attributes: samples, sample_rate, resample_type,
-            max_duration, metadata (dict or None)
+            metadata (dict or None)
 
-        Note: default sample_rate=None means use file's sample rate, don't
+        Note: default sample_rate=None means use file's sample rate, does not
         resample
 
         """
+        assert out_of_bounds_mode in ["raise", "warn", "ignore"]
+
         path = str(path)  # Pathlib path can have dependency issues - use string
-        if max_duration:
-            if librosa.get_duration(filename=path) > max_duration:
-                raise OpsoLoadAudioInputTooLong()
+
+        ## Load Metadata ##
+        try:
+            metadata = TinyTag.get(path).as_dict()
+            # if this is an AudioMoth file, try to parse out additional
+            # metadata from the comment field
+            if metadata["artist"] and "AudioMoth" in metadata["artist"]:
+                try:
+                    metadata = parse_audiomoth_metadata(metadata)
+                except Exception as e:
+                    warnings.warn(
+                        "This seems to be an AudioMoth file, "
+                        f"but parse_audiomoth_metadata() raised: {e}"
+                    )
+
+            ## Update metadata ##
+            metadata["channels"] = 1
+
+        except Exception as e:
+            warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
+            metadata = None
+
+        ## Determine start time / offset ##
+        if start_timestamp is not None:
+            # user should have provied a localized timestamp as the start_timestamp
+            assert (
+                offset is None
+            ), "You must not specify both `start_timestamp` and `offset`"
+            assert (
+                type(start_timestamp) == datetime and start_timestamp.tzinfo is not None
+            ), "start_timestamp must be a localized datetime object"
+            assert (
+                metadata is not None
+                and "recording_start_time" in metadata
+                and type(metadata["recording_start_time"]) == datetime
+            ), (
+                "metadata did not contain start time timestamp in key `recording_start_time`. "
+                "This key is automatically created when parsing AudioMoth metadata."
+            )
+            audio_start = metadata["recording_start_time"]
+            offset = (start_timestamp - audio_start).total_seconds()
+            if offset < 0:
+                error_msg = "requested time period begins before start of recording"
+                if out_of_bounds_mode == "raise":
+                    raise AudioOutOfBoundsError(error_msg)
+                elif out_of_bounds_mode == "warn":
+                    warnings.warn(error_msg)
+                # else: pass
+
+        elif offset is None:  # default offset is 0
+            offset = 0
 
         ## Load samples ##
         warnings.filterwarnings("ignore")
@@ -174,34 +238,28 @@ class Audio:
         )
         warnings.resetwarnings()
 
-        # warn user if no samples or if shorter than expected
+        # out of bounds warning/exception user if no samples or too short
         if len(samples) == 0:
-            warnings.warn("audio object has zero samples")
+            error_msg = "audio object has zero samples"
+            if out_of_bounds_mode == "raise":
+                raise AudioOutOfBoundsError(error_msg)
+            elif out_of_bounds_mode == "warn":
+                warnings.warn(error_msg)
         elif duration is not None and len(samples) < duration * sr:
-            warnings.warn(
-                f"Audio object is shorter than requested duration: "
-                f"{len(samples)/sr} sec instead of {duration} sec"
-            )
+            if offset < 0:
+                error_msg = "requested time period begins before start of recording"
+            else:
+                error_msg = (
+                    f"Audio object is shorter than requested duration: "
+                    f"{len(samples)/sr} sec instead of {duration} sec"
+                )
+            if out_of_bounds_mode == "raise":
+                raise AudioOutOfBoundsError(error_msg)
+            elif out_of_bounds_mode == "warn":
+                warnings.warn(error_msg)
 
-        ## Load Metadata ##
-        try:
-            metadata = TinyTag.get(path).as_dict()
-            # if this is an AudioMoth file, try to parse out additional
-            # metadata from the comment field
-            if metadata["artist"] and "AudioMoth" in metadata["artist"]:
-                try:
-                    metadata = parse_audiomoth_metadata(metadata)
-                    # if the offset > 0, we need to update the timestamp
-                    metadata["recording_start_time"] += timedelta(seconds=round(offset))
-                except Exception as e:
-                    warnings.warn(
-                        "This seems to be an AudioMoth file, "
-                        f"but parse_audiomoth_metadata() raised: {e}"
-                    )
-
-            ## Update metadata ##
-            metadata["channels"] = 1
-
+        ## Update metadata ##
+        if metadata is not None:
             # update the duration because we may have only loaded
             # a piece of the entire audio file.
             metadata["duration"] = len(samples) / sr
@@ -210,25 +268,17 @@ class Audio:
             metadata["samplerate"] = sr
 
             # if we loaded part we don't know the file size anymore
-            if offset > 0 or duration is not None:
+            if offset != 0 or duration is not None:
                 metadata["filesize"] = np.nan
 
-        except Exception as e:
-            warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
-            metadata = None
+            # if the offset > 0, we need to update the timestamp
+            if "recording_start_time" in metadata and offset > 0:
+                metadata["recording_start_time"] += timedelta(seconds=offset)
 
-        return cls(
-            samples,
-            sr,
-            resample_type=resample_type,
-            max_duration=max_duration,
-            metadata=metadata,
-        )
+        return cls(samples, sr, resample_type=resample_type, metadata=metadata)
 
     @classmethod
-    def from_bytesio(
-        cls, bytesio, sample_rate=None, max_duration=None, resample_type="kaiser_fast"
-    ):
+    def from_bytesio(cls, bytesio, sample_rate=None, resample_type="kaiser_fast"):
         """Read from bytesio object
 
         Read an Audio object from a BytesIO object. This is primarily used for
@@ -237,7 +287,6 @@ class Audio:
         Args:
             bytesio: Contents of WAV file as BytesIO
             sample_rate: The final sampling rate of Audio object [default: None]
-            max_duration: The maximum duration of the audio file [default: None]
             resample_type: The librosa method to do resampling [default: "kaiser_fast"]
 
         Returns:
@@ -248,7 +297,7 @@ class Audio:
             samples = librosa.resample(samples, sr, sample_rate, res_type=resample_type)
             sr = sample_rate
 
-        return cls(samples, sr, resample_type=resample_type, max_duration=max_duration)
+        return cls(samples, sr, resample_type=resample_type)
 
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
@@ -274,12 +323,7 @@ class Audio:
             res_type=resample_type,
         )
 
-        return Audio(
-            samples_resampled,
-            sample_rate,
-            resample_type=resample_type,
-            max_duration=self.max_duration,
-        )
+        return Audio(samples_resampled, sample_rate, resample_type=resample_type)
 
     def trim(self, start_time, end_time):
         """Trim Audio object in time
@@ -292,15 +336,14 @@ class Audio:
             end_time: time in seconds for end of extracted clip
         Returns:
             a new Audio object containing samples from start_time to end_time
+
+        Warning: metadata is lost during this operation
         """
         start_sample = max(0, self.time_to_sample(start_time))
         end_sample = self.time_to_sample(end_time)
         samples_trimmed = self.samples[start_sample:end_sample]
         return Audio(
-            samples_trimmed,
-            self.sample_rate,
-            resample_type=self.resample_type,
-            max_duration=self.max_duration,
+            samples_trimmed, self.sample_rate, resample_type=self.resample_type
         )
 
     def loop(self, length=None, n=None):
@@ -330,10 +373,7 @@ class Audio:
         else:  # loop the audio n times
             samples_extended = np.tile(self.samples, n)
         return Audio(
-            samples_extended,
-            self.sample_rate,
-            resample_type=self.resample_type,
-            max_duration=self.max_duration,
+            samples_extended, self.sample_rate, resample_type=self.resample_type
         )
 
     def extend(self, length):
@@ -351,10 +391,7 @@ class Audio:
             self.samples, pad_width=(0, total_samples_needed - len(self.samples))
         )
         return Audio(
-            samples_extended,
-            self.sample_rate,
-            resample_type=self.resample_type,
-            max_duration=self.max_duration,
+            samples_extended, self.sample_rate, resample_type=self.resample_type
         )
 
     def time_to_sample(self, time):
@@ -391,10 +428,7 @@ class Audio:
             self.samples, low_f, high_f, self.sample_rate, order=order
         )
         return Audio(
-            filtered_samples,
-            self.sample_rate,
-            resample_type=self.resample_type,
-            max_duration=self.max_duration,
+            filtered_samples, self.sample_rate, resample_type=self.resample_type
         )
 
     def spectrum(self):
