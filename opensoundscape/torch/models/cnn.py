@@ -174,7 +174,7 @@ class CNN(BaseModule):
     def _log(self, input, level=1):
         txt = str(input)
         if self.logging_level >= level and self.log_file is not None:
-            with open(self.log_file, "w") as logfile:
+            with open(self.log_file, "a") as logfile:
                 logfile.write(txt + "\n")
         if self.verbose >= level:
             print(txt)
@@ -542,6 +542,10 @@ class CNN(BaseModule):
             f"F1: {metrics_dict['f1']:0.3f}",
             level=2 - logging_offset,
         )
+
+        # choose one metric to be used for the overall model evaluation
+        score = metrics_dict["map"]
+
         return score, metrics_dict
 
     def save(self, path, save_datasets=True):
@@ -620,8 +624,8 @@ class CNN(BaseModule):
                 gives 50% overlap between consecutive clips.
             final_clip: see `opensoundscape.helpers.generate_clip_times_df`
             augmentation_on: default False. preprocessor.augmentation_on
-                will be set to this value. If True, any Augmentations in
-                preprocessor will be performed. If False, they will be skipped.
+                will be set to this value. If False, Actions with
+                is_augmentation==True are skipped.
             unsafe_samples_log: if not None, samples that failed to preprocess
                 will be listed in this text file.
 
@@ -1022,7 +1026,7 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
     """load a CNN saved with a previous version of OpenSoundscape
 
     This function enables you to load models saved with opso 0.4.x, 0.5.x, and 0.6.0 when using >=0.6.1.
-    For models created with 0.6.1 and above, use load_model(path) which is more robust.
+    For models created with 0.7.0 and above, use load_model(path) which is more robust.
 
     Note: If you are loading a model created with opensoundscape 0.4.x, you most likely want to specify
     `model_class = opensoundscape.torch.models.CnnResnet18Binary`. If your model was created with
@@ -1030,7 +1034,8 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
 
     Note: for future use of the loaded model, you can simply call
     `model.save(path)` after creating it, then reload it with
-    `model = load_model(path)`. The saved model will be fully compatible with opensoundscape >=0.6.1.
+    `model = load_model(path)`.
+    The saved model will be fully compatible with opensoundscape >=0.7.0.
 
     Examples:
     ```
