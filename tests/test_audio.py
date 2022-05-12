@@ -7,6 +7,18 @@ import numpy as np
 from random import uniform
 from math import isclose
 import numpy.testing as npt
+import pytz
+from datetime import datetime
+
+
+@pytest.fixture()
+def metadata_wav_str():
+    return "tests/audio/metadata.wav"
+
+
+@pytest.fixture()
+def onemin_wav_str():
+    return "tests/audio/1min.wav"
 
 
 @pytest.fixture()
@@ -84,6 +96,53 @@ def saved_mp3(request, tmp_dir):
 
     request.addfinalizer(fin)
     return path
+
+
+def test_load_incorrect_timestamp(onemin_wav_str):
+    with pytest.raises(AssertionError):
+        timestamp = "NotATimestamp"
+        s = Audio.from_file(onemin_wav_str, start_timestamp=timestamp)
+
+
+def test_load_timestamp_notanaudiomothrecording(veryshort_wav_str):
+    with pytest.raises(AssertionError):  # file doesn't have audiomoth metadata
+        local_timestamp = datetime(2018, 4, 5, 9, 32, 0)
+        local_timezone = pytz.timezone("US/Eastern")
+        timestamp = local_timezone.localize(local_timestamp)
+        s = Audio.from_file(veryshort_wav_str, start_timestamp=timestamp)
+
+
+def test_load_timestamp_after_end_of_recording(metadata_wav_str):
+    with pytest.raises(AudioOutOfBoundsError):
+        local_timestamp = datetime(2021, 4, 4, 0, 0, 0)  # 1 year after recording
+        local_timezone = pytz.timezone("US/Eastern")
+        timestamp = local_timezone.localize(local_timestamp)
+        s = Audio.from_file(
+            metadata_wav_str, start_timestamp=timestamp, out_of_bounds_mode="raise"
+        )
+
+
+def test_load_timestamp_before_recording(metadata_wav_str):
+    with pytest.raises(AudioOutOfBoundsError):
+        local_timestamp = datetime(2018, 4, 4, 0, 0, 0)  # 1 year before recording
+        local_timezone = pytz.timezone("UTC")
+        timestamp = local_timezone.localize(local_timestamp)
+        s = Audio.from_file(
+            metadata_wav_str, start_timestamp=timestamp, out_of_bounds_mode="raise"
+        )
+
+
+def test_load_timestamp_before_warnmode(metadata_wav_str):
+    with pytest.warns(UserWarning):
+        correct_ts = Audio.from_file(metadata_wav_str).metadata["recording_start_time"]
+        local_timestamp = datetime(2018, 4, 4, 0, 0, 0)  # 1 year before recording
+        local_timezone = pytz.timezone("UTC")
+        timestamp = local_timezone.localize(local_timestamp)
+        s = Audio.from_file(
+            metadata_wav_str, start_timestamp=timestamp, out_of_bounds_mode="warn"
+        )
+        # Assert the start time is the correct, original timestamp and has not been changed
+        assert s.metadata["recording_start_time"] == correct_ts
 
 
 def test_load_empty_wav(empty_wav_str):
