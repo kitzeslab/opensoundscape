@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from opensoundscape.audio import Audio, AudioOutOfBoundsError
+from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
 import pytest
 from pathlib import Path
 import io
@@ -96,6 +96,17 @@ def saved_mp3(request, tmp_dir):
 
     request.addfinalizer(fin)
     return path
+
+
+@pytest.fixture()
+def stereo_wav_str():
+    return "tests/audio/stereo.wav"
+
+
+def test_load_channels_as_audio(stereo_wav_str):
+    s = load_channels_as_audio(stereo_wav_str)
+    assert max(s[0].samples) == 0  # channel 1 of stereo.wav is all 0
+    assert max(s[1].samples) == 1  # channel 2 of stereo.wav is all 1
 
 
 def test_load_incorrect_timestamp(onemin_wav_str):
