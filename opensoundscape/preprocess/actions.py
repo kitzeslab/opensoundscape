@@ -43,9 +43,13 @@ class BaseAction:
         self.extra_args = []
         self.returns_labels = False
         self.is_augmentation = False
+        self.bypass = False
 
     def __repr__(self):
-        return f"Action"
+        if self.bypass:
+            return f"Bypassed Action"
+        else:
+            return f"Action"
 
     def go(self, x, **kwargs):
         return x
@@ -76,10 +80,12 @@ class Action(BaseAction):
     Other arguments are an arbitrary list of kwargs.
     """
 
-    def __init__(self, fn, extra_args=[], **kwargs):
+    def __init__(self, fn, is_augmentation=False, extra_args=[], **kwargs):
         super(Action, self).__init__()
 
         self.action_fn = fn
+        self.is_augmentation = is_augmentation
+
         # args that vary for each sample, will be passed from preprocessor
         self.extra_args = extra_args
 
@@ -105,20 +111,15 @@ class Action(BaseAction):
         ), f"These required arguments were not provided: {unmatched_reqd_args}"
 
     def __repr__(self):
-        return f"Action calling {self.action_fn}"
+        if self.bypass:
+            return f"### Bypassed Action calling {self.action_fn}###"
+        else:
+            return f"Action calling {self.action_fn}"
 
     def go(self, x, **kwargs):
-        # incidentally(?), the syntax is the same regardless of whether
+        # the syntax is the same regardless of whether
         # first argument is "self" (for a class method) or not
         return self.action_fn(x, **dict(self.params, **kwargs))
-
-
-class Augmentation(Action):
-    """Subclass of Action with self.is_augmentation=True"""
-
-    def __init__(self, fn, extra_args=[], **kwargs):
-        super(Augmentation, self).__init__(fn, extra_args=extra_args, **kwargs)
-        self.is_augmentation = True
 
 
 class AudioClipLoader(Action):
@@ -158,8 +159,8 @@ class AudioTrim(Action):
         )
 
 
-class AudioRandomTrim(Augmentation):
-    """Augmentation to trim a random section from a longer audio clip
+class AudioRandomTrim(Action):
+    """Action to trim a random section from a longer audio clip
 
     Randomly selects a section of a longer audio clip.
 
@@ -168,9 +169,13 @@ class AudioRandomTrim(Augmentation):
         do not specify `random_trim`, it is set to True by default
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, is_augmentation, **kwargs):
         super(AudioRandomTrim, self).__init__(
-            trim_audio, extra_args=["_sample_duration"], random_trim=True, **kwargs
+            trim_audio,
+            is_augmentation=is_augmentation,
+            extra_args=["_sample_duration"],
+            random_trim=True,
+            **kwargs,
         )
 
 
@@ -471,7 +476,7 @@ def tensor_add_noise(tensor, std=1):
     return tensor + noise
 
 
-class ImgOverlay(Augmentation):
+class ImgOverlay(Action):
     """Action Class for augmentation that overlays samples on eachother
 
     Required Args:
@@ -482,10 +487,13 @@ class ImgOverlay(Augmentation):
     See overlay_image() for other arguments and default values.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, is_augmentation, **kwargs):
 
         super(ImgOverlay, self).__init__(
-            overlay_image, extra_args=["_labels", "_pipeline"], **kwargs
+            overlay_image,
+            is_augmentation=is_augmentation,
+            extra_args=["_labels", "_pipeline"],
+            **kwargs,
         )
 
         self.returns_labels = True
