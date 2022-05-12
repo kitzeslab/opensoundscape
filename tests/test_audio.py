@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from opensoundscape.audio import Audio, OpsoLoadAudioInputTooLong
+from opensoundscape.audio import Audio, AudioOutOfBoundsError
 import pytest
 from pathlib import Path
 import io
@@ -7,6 +7,11 @@ import numpy as np
 from random import uniform
 from math import isclose
 import numpy.testing as npt
+
+
+@pytest.fixture()
+def empty_wav_str():
+    return "tests/audio/empty_2c.wav"
 
 
 @pytest.fixture()
@@ -81,6 +86,16 @@ def saved_mp3(request, tmp_dir):
     return path
 
 
+def test_load_empty_wav(empty_wav_str):
+    with pytest.raises(AudioOutOfBoundsError):
+        s = Audio.from_file(empty_wav_str, out_of_bounds_mode="raise")
+
+
+def test_load_duration_too_long(veryshort_wav_str):
+    with pytest.raises(AudioOutOfBoundsError):
+        s = Audio.from_file(veryshort_wav_str, duration=5, out_of_bounds_mode="raise")
+
+
 def test_load_veryshort_wav_str_44100(veryshort_wav_str):
     s = Audio.from_file(veryshort_wav_str)
     assert s.samples.shape == (6266,)
@@ -107,11 +122,6 @@ def test_load_pathlib_and_bytesio_are_almost_equal(
     s_pathlib = Audio.from_file(veryshort_wav_pathlib)
     s_bytesio = Audio.from_bytesio(veryshort_wav_bytesio)
     np.testing.assert_allclose(s_pathlib.samples, s_bytesio.samples, atol=1e-7)
-
-
-def test_load_silence_10s_mp3_str_asserts_too_long(silence_10s_mp3_str):
-    with pytest.raises(OpsoLoadAudioInputTooLong):
-        Audio.from_file(silence_10s_mp3_str, max_duration=5)
 
 
 def test_load_not_a_file_asserts_not_a_file(not_a_file_str):
