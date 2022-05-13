@@ -17,6 +17,8 @@ from deprecated import deprecated
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
+
 from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore_support
 
 from opensoundscape.torch.architectures import cnn_architectures
@@ -84,14 +86,10 @@ class CNN(BaseModule):
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
 
-        ### data loading parameters ###
-        self.sampler = None  # can be "imbalanced" for ImbalancedDatasetSampler
-
         ### architecture ###
-        # (feature extraction + classifier + loss fn)
         # can be a pytorch CNN such as Resnet18, or RNN, etc
         # must have .forward(), .train(), .eval(), .to(), .state_dict()
-        # for convenience, allow user to provide string matching
+        # for convenience, allows user to provide string matching
         # a key from cnn_architectures.ARCH_DICT
         num_channels = sample_shape[2]
         if type(architecture) == str:
@@ -201,6 +199,21 @@ class CNN(BaseModule):
         """
         self.loss_fn = self.loss_cls()
 
+    def _init_dataloader(
+        self, safe_dataset, batch_size=64, num_workers=1, shuffle=False
+    ):
+        """initialize dataloader for training
+
+        Override this function to use a different DataLoader or sampler
+        """
+        return DataLoader(
+            safe_dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
+
     def _set_train(self, train_df, batch_size, num_workers):
         """Prepare network for training on train_dataset
 
@@ -228,12 +241,11 @@ class CNN(BaseModule):
         train_safe_dataset = SafeDataset(train_dataset, unsafe_behavior="substitute")
 
         # train_loader samples batches of images + labels from training set
-        self.train_loader = get_dataloader(
+        self.train_loader = _init_dataloader(
             train_safe_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
             shuffle=True,
-            sampler=self.sampler,
         )
 
         ###########################

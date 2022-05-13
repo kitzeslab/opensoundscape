@@ -22,7 +22,6 @@ from opensoundscape.preprocess.actions import (
     AudioRandomTrim,
 )
 
-# from opensoundscape.preprocess.overlay import ImgOverlay
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 

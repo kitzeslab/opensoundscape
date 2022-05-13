@@ -36,39 +36,6 @@ class BaseModule(nn.Module):
         pass
 
 
-def get_dataloader(
-    safe_dataset, batch_size=64, num_workers=1, shuffle=False, sampler=""
-):
-    """
-    Create a DataLoader from a DataSet
-    - chooses between normal pytorch DataLoader and ImbalancedDatasetSampler.
-    - Sampler: None -> default DataLoader; 'imbalanced'->ImbalancedDatasetSampler
-
-    """
-    if len(safe_dataset) == 0:
-        return None
-
-    if sampler == "imbalanced":
-        loader = DataLoader(
-            safe_dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers,
-            sampler=ImbalancedDatasetSampler(safe_dataset.dataset),
-        )
-    # could implement other sampler options here
-    else:  # just use a regular Pytorch DataLoader
-        loader = DataLoader(
-            safe_dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            pin_memory=True,
-        )
-
-    return loader
-
-
 def cas_dataloader(dataset, batch_size, num_workers):
     """
     Return a dataloader that uses the class aware sampler
