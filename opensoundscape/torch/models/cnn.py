@@ -521,9 +521,9 @@ class CNN(BaseModule):
             return np.nan, np.nan
 
         if self.single_target:
-            score, metrics_dict = single_target_metrics(targets, scores, self.classes)
+            metrics_dict = single_target_metrics(targets, scores, self.classes)
         else:
-            score, metrics_dict = multi_target_metrics(
+            metrics_dict = multi_target_metrics(
                 targets, scores, self.classes, self.prediction_threshold
             )
 
