@@ -24,7 +24,6 @@ from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore
 from opensoundscape.torch.architectures import cnn_architectures
 from opensoundscape.torch.models.utils import (
     BaseModule,
-    get_dataloader,
     get_batch,
     apply_activation_layer,
     tensor_binary_predictions,
@@ -87,9 +86,9 @@ class CNN(BaseModule):
         self.opensoundscape_version = opensoundscape.__version__
 
         ### architecture ###
-        # can be a pytorch CNN such as Resnet18, or RNN, etc
+        # can be a pytorch CNN such as Resnet18 or a custom object
         # must have .forward(), .train(), .eval(), .to(), .state_dict()
-        # for convenience, allows user to provide string matching
+        # for convenience, also allows user to provide string matching
         # a key from cnn_architectures.ARCH_DICT
         num_channels = sample_shape[2]
         if type(architecture) == str:
@@ -241,7 +240,7 @@ class CNN(BaseModule):
         train_safe_dataset = SafeDataset(train_dataset, unsafe_behavior="substitute")
 
         # train_loader samples batches of images + labels from training set
-        self.train_loader = _init_dataloader(
+        self.train_loader = self._init_dataloader(
             train_safe_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
@@ -1057,15 +1056,21 @@ def load_model(path, device=None):
     return model
 
 
-def load_outdated_model(path, model_class, architecture_constructor=None, device=None):
+def load_outdated_model(
+    path, architecture, sample_duration, model_class=CNN, device=None
+):
     """load a CNN saved with a previous version of OpenSoundscape
 
-    This function enables you to load models saved with opso 0.4.x, 0.5.x, and 0.6.0 when using >=0.6.1.
-    For models created with 0.7.0 and above, use load_model(path) which is more robust.
+    This function enables you to load models saved with opso 0.4.x and 0.5.x.
+    If your model was saved with .save() in a previous version of OpenSoundscape
+    >=0.6.0, you must re-load the model
+    using the original package version and save it's network's state dict, i.e.,
+    `torch.save(model.network.state_dict(),path)`, then load the state dict
+    to a new model object with model.load_weights(). See the
+    `Predict with pre-trained CNN` tutorial for details.
 
-    Note: If you are loading a model created with opensoundscape 0.4.x, you most likely want to specify
-    `model_class = opensoundscape.torch.models.CnnResnet18Binary`. If your model was created with
-    opensoundscape 0.5.x or 0.6.0, you need to choose the appropriate class.
+    For models created with the same version of OpenSoundscape as the one
+    you are using, simply use opensoundscape.torch.models.cnn.load_model().
 
     Note: for future use of the loaded model, you can simply call
     `model.save(path)` after creating it, then reload it with
@@ -1075,24 +1080,20 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
     Examples:
     ```
     #load a binary resnet18 model from opso 0.4.x, 0.5.x, or 0.6.0
-    from opensoundscape.torch.models.cnn import Resnet18Binary
-    model = load_outdated_model('old_model.tar',model_class=Resnet18Binary)
+    from opensoundscape.torch.models.cnn import CNN
+    model = load_outdated_model('old_model.tar',architecture='resnet18')
 
     #load a resnet50 model of class CNN created with opso 0.5.0
     from opensoundscape.torch.models.cnn import CNN
-    from opensoundscape.torch.architectures.cnn_architectures import resnet50
-    model_050 = load_outdated_model('opso050_pytorch_model_r50.model',model_class=CNN,architecture_constructor=resnet50)
+    model_050 = load_outdated_model('opso050_pytorch_model_r50.model',architecture='resnet50')
     ```
 
     Args:
         path: path to model file, ie .model or .tar file
-        model_class: the opensoundscape class to create,
-            eg CNN, CnnResampleLoss, or Resnet18Binary from opensoundscape.torch.models.cnn
-        architecture_constructor: the *function* that creates desired cnn architecture
-            eg opensoundscape.torch.architectures.cnn_architectures.resnet18
-            Note: this is only required for classes that take the architecture as an input, for instance
-            CNN or CnnResampleLoss. It's not required for e.g. Resnet18Binary or InceptionV3 which
-            internally create a specific architecture.
+        architecture: see CNN docs
+            (pass None if the class __init__ does not take architecture as an argument)
+        sample_duration: length of samples in seconds
+        model_class: class to construct. Normally CNN.
         device: optionally specify a device to map tensors onto, eg 'cpu', 'cuda:0', 'cuda:1'[default: None]
             - if None, will choose cuda:0 if cuda is available, otherwise chooses cpu
 
@@ -1104,13 +1105,20 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
             torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
         )
 
-    # use torch to load the saved model object
-    model_dict = torch.load(path, map_location=device)
+    try:
+        # use torch to load the saved model object
+        model_dict = torch.load(path, map_location=device)
+    except AttributeError as e:
+        raise Exception(
+            "This model could not be loaded in this version of "
+            "OpenSoundscape. You may need to load the model with the version "
+            "of OpenSoundscape that created it and torch.save() the "
+            "model.network.state_dict(), then load the weights with model.load_weights"
+        )
 
     if type(model_dict) != dict:
         raise ValueError(
-            "This model was saved with a version of opensoundscape >=0.6.1. "
-            "Use opensoundcape.torch.models.cnn.load_model() instead of this function."
+            "This model was saved as a complete object. Try using load_model() instead."
         )
 
     # get the list of classes
@@ -1124,13 +1132,12 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
         raise ValueError("Could not get a list of classes from the saved model.")
 
     # try to construct a model object
-    try:
-        model = model_class(classes=classes)
-    except TypeError:  # may require us to specify the architecture
-        architecture = architecture_constructor(
-            num_classes=len(classes), use_pretrained=False
+    if architecture is None:
+        model = model_class(classes=classes, sample_duration=sample_duration)
+    else:
+        model = model_class(
+            architecture=architecture, classes=classes, sample_duration=sample_duration
         )
-        model = model_class(architecture=architecture, classes=classes)
 
     # rename keys of resnet18 architecture from 0.4.x-0.6.0 to match pytorch resnet18 keys
     model_dict["model_state_dict"] = {
@@ -1142,6 +1149,7 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
     mismatched_keys = model.network.load_state_dict(
         model_dict["model_state_dict"], strict=False
     )
+    print("mismatched keys:")
     print(mismatched_keys)
 
     # if there's no record of single-tartet vs multitarget, it' single target from opso 0.4.x
@@ -1151,5 +1159,11 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
         single_target = True
 
     model.single_target = single_target
+
+    warnings.warn(
+        "After loading a model, you still need to ensure that your "
+        "preprocessing (model.preprocessor) matches the settings used to create"
+        "the original model."
+    )
 
     return model
