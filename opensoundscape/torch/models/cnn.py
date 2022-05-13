@@ -568,6 +568,29 @@ class CNN(BaseModule):
                     pass
         torch.save(model_copy, path)
 
+    def save_weights(self, path):
+        """save just the weights of the network
+
+        This allows the saved weights to be used more flexibly than model.save()
+        which will pickle the entire object. The weights are saved in a pickled
+        dictionary using torch.save(self.network.state_dict())
+
+        Args:
+            path: location to save weights file
+        """
+        torch.save(self.architecture.state_dict(), path)
+
+    def load_weights(self, path, strict=True):
+        """load network weights from a file
+
+        For instance, load weights saved with .save_weights()
+
+        Args:
+            path: file path with saved weights
+            strict: (bool) see torch.load()
+        """
+        self.network.load_state_dict(torch.load(path))
+
     def predict(
         self,
         samples,
