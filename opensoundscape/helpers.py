@@ -261,4 +261,9 @@ def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
             clip_dfs.append(clips)
         except:
             unsafe_samples.append(f)
-    return pd.concat(clip_dfs), unsafe_samples
+
+    if len(clip_dfs) > 0:
+        clip_df = pd.concat(clip_dfs)
+    else:
+        clip_df = None
+    return clip_df, unsafe_samples
