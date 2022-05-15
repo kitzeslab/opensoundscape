@@ -159,26 +159,6 @@ class AudioTrim(Action):
         )
 
 
-class AudioRandomTrim(Action):
-    """Action to trim a random section from a longer audio clip
-
-    Randomly selects a section of a longer audio clip.
-
-    Args:
-        see actions.trim_audio
-        do not specify `random_trim`, it is set to True by default
-    """
-
-    def __init__(self, is_augmentation, **kwargs):
-        super(AudioRandomTrim, self).__init__(
-            trim_audio,
-            is_augmentation=is_augmentation,
-            extra_args=["_sample_duration"],
-            random_trim=True,
-            **kwargs,
-        )
-
-
 def trim_audio(audio, _sample_duration, extend=True, random_trim=False):
     """trim audio clips (Audio -> Audio)
 
@@ -188,10 +168,11 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False):
 
     Args:
         audio: Audio object
-        _sample_duration: desired final length (sec); if None, no trim is performed
+        _sample_duration: desired final length (sec)
+            - if None, no trim is performed
         extend: if True, clips shorter than _sample_duration are
             extended with silence to required length
-        random_trim: if True, a random segment of length _sample_duration is chosen
+        random_trim: if True, chooses a random segment of length _sample_duration
             from the input audio. If False, the file is trimmed from 0 seconds
             to _sample_duration seconds.
 

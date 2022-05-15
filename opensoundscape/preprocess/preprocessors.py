@@ -247,8 +247,10 @@ class SpecPreprocessor(BasePreprocessor):
         self.pipeline = pd.Series(
             {
                 "load_audio": AudioClipLoader(),
-                "random_trim_audio": AudioRandomTrim(is_augmentation=True),
-                "trim_audio": AudioTrim(),  # trim clips to correct length
+                # if we are augmenting and get a long file, take a random trim from it
+                "random_trim_audio": AudioTrim(is_augmentation=True, random_trim=True),
+                # otherwise, we expect to get the correct duration. no random trim
+                "trim_audio": AudioTrim(),  # trim or extend (w/silence) clips to correct length
                 "to_spec": Action(Spectrogram.from_audio),
                 "bandpass": Action(
                     Spectrogram.bandpass, min_f=0, max_f=11025, out_of_bounds_ok=False
