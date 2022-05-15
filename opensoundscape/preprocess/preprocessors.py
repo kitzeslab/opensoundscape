@@ -19,7 +19,6 @@ from opensoundscape.preprocess.actions import (
     ImgOverlay,
     AudioClipLoader,
     AudioTrim,
-    AudioRandomTrim,
 )
 
 from opensoundscape.audio import Audio
