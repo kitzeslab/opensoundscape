@@ -130,7 +130,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
         new_ds = copy.deepcopy(self)
         new_ds.label_df = new_ds.label_df.sample(**kwargs)
         if new_ds.clip_times_df is not None:
-            new_ds.clip_times_df = new_ds.clip_times_df[new_ds.label_df.index]
+            new_ds.clip_times_df = new_ds.clip_times_df.loc[new_ds.label_df.index]
         return new_ds
 
     def head(self, n=5):
@@ -148,7 +148,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
         new_ds = copy.deepcopy(self)
         new_ds.label_df = new_ds.label_df.head(n)
         if new_ds.clip_times_df is not None:
-            new_ds.clip_times_df = new_ds.clip_times_df[new_ds.label_df.index]
+            new_ds.clip_times_df = new_ds.clip_times_df.loc[new_ds.label_df.index]
         return new_ds
 
     def insert_action(self, action_index, action, after_key=None, before_key=None):
