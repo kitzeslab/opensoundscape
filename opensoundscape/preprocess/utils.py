@@ -36,7 +36,14 @@ def _run_pipeline(
     """run the pipeline (until a break point, if specified)
 
     optionally, can pass a clip_times Series specifying 'start_time' 'end_time'
+
+    #TODO better documentation
     """
+    if break_on_key is not None:
+        assert (
+            break_on_key in pipeline
+        ), f"break_on_key was {break_on_key} but no matching action found in pipeline"
+
     x = Path(label_df_row.name)  # the index contains a path to a file
 
     # a list of additional things that an action may request from the preprocessor
