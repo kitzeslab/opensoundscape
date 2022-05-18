@@ -40,87 +40,78 @@ def img():
 ## Tests ##
 
 
-def test_audio_loader(short_wav_path):
-    action = actions.AudioLoader()
-    audio = action.go(short_wav_path)
+def test_audio_clip_loader_file(short_wav_path):
+    action = actions.AudioClipLoader()
+    audio = action.go(short_wav_path, _start_time=None, _sample_duration=None)
     assert audio.sample_rate == 44100
 
 
-def test_audio_loader_resample(short_wav_path):
-    action = actions.AudioLoader(sample_rate=32000)
-    audio = action.go(short_wav_path)
+def test_audio_clip_loader_resample(short_wav_path):
+    action = actions.AudioClipLoader(sample_rate=32000)
+    audio = action.go(short_wav_path, _start_time=None, _sample_duration=None)
     assert audio.sample_rate == 32000
 
 
-def test_audio_trimmer(audio_10s):
-    action = actions.AudioTrimmer(audio_length=1.0)
-    audio = action.go(audio_10s)
+def test_audio_clip_loader_clip(audio_10s):
+    action = actions.AudioClipLoader(sample_rate=32000)
+    audio = action.go(short_wav_path, _start_time=0, _sample_duration=2)
+    assert isclose(audio.duration, 2, abs_tol=1e-4)
+
+
+def test_action_trim(audio_10s):
+    action = actions.AudioTrim()
+    audio = action.go(audio_10s, _sample_duration=1.0)
     assert isclose(audio.duration(), 1.0, abs_tol=1e-4)
 
 
-def test_audio_trimmer_random_trim(audio_10s):
-    action = actions.AudioTrimmer(audio_length=0.1, random_trim=True)
-    audio = action.go(audio_10s)
-    audio2 = action.go(audio_10s)
+def test_action_random_trim(audio_10s):  # TODO are the arrays all zeros?
+    action = actions.AudioTrim()
+    audio = action.go(audio_10s, _sample_duration=0.1)
+    audio2 = action.go(audio_10s, _sample_duration=0.1)
     assert isclose(audio.duration(), 0.1, abs_tol=1e-4)
     assert not np.array_equal(audio.samples, audio2.samples)
 
 
 def test_audio_trimmer_default(audio_10s):
-    action = actions.AudioTrimmer()
-    audio = action.go(audio_10s)
+    """should not trim if no extra args"""
+    action = actions.AudioTrim()
+    audio = action.go(audio_10s, _sample_duration=None)
     assert isclose(audio.duration(), 10, abs_tol=1e-4)
 
 
 def test_audio_trimmer_raises_error_on_short_clip(audio_short):
-    action = actions.AudioTrimmer(audio_length=1.0)
+    action = actions.AudioTrim()
     with pytest.raises(ValueError):
-        audio = action.go(audio_short)
+        audio = action.go(audio_short, _sample_duration=10, extend=False)
 
 
 def test_audio_trimmer_extend_short_clip(audio_short):
-    action = actions.AudioTrimmer(audio_length=1.0, extend=True)
-    audio = action.go(audio_short)
-    assert isclose(audio.duration(), 1, abs_tol=1e-4)
-
-
-# def test_save_tensor_to_disk(tensor):
-# action = SaveTensorToDisk('.')
+    action = actions.AudioTrim()
+    audio = action.go(audio_short, _sample_duration=1.0)  # extend=True is default
+    assert isclose(audio.duration(), 1.0, abs_tol=1e-4)
 
 
 def test_color_jitter(tensor):
     """test that color jitter changes the tensor so that channels differ"""
-    action = actions.TorchColorJitter()
-    tensor = action.go(tensor)
+    tensor = actions.torch_color_jitter(tensor)
     assert not np.array_equal(tensor[0, :, :].numpy(), tensor[1, :, :].numpy())
 
 
-def test_img_to_tensor(img):
-    """result should have 3 channels"""
-    action = actions.ImgToTensor()
-    result = action.go(img)
-    assert type(result) == torch.Tensor
-    assert result.shape[0] == 3
-
-
-def test_img_to_tensor_grayscale(img):
-    """result should have 1 channel"""
-    action = actions.ImgToTensorGrayscale()
-    result = action.go(img)
-    assert type(result) == torch.Tensor
-    assert result.shape[0] == 1
-
-
-def test_tensor_torch_normalize(tensor):
-    action = actions.TensorNormalize(mean=0, std=1)
-    result = action.go(tensor)
+def test_scale_tensor(tensor):
+    """scale_tensor with 0,1 parameters should have no impact"""
+    result = actions.scale_tensor(tensor, input_mean=0, input_std=1)
     assert np.array_equal(tensor.numpy(), result.numpy())
 
 
-# def test_time_warp
+def test_generic_action(tensor):
+    """should be able to provide function to Action plus kwargs"""
+    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    result = action.go(tensor)
+    assert result.max() * 2 == tensor.max()
 
-# def test_time_mask
+
+# test ImgOverlay class
+
+# others tested implicitly through preprocessor and cnn tests
 
 # def test_frequency_mask
-
-# def test_tensor_augment
