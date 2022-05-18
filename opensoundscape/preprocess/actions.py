@@ -235,7 +235,7 @@ def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue
             )
         ]
     )
-    return transform(x)
+    return transform(tensor)
 
 
 def torch_random_affine(tensor, degrees=0, translate=(0.3, 0.1), fill=0):
