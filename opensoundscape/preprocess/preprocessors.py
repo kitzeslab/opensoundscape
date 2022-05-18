@@ -16,7 +16,7 @@ from opensoundscape.preprocess import actions
 from opensoundscape.preprocess.actions import (
     BaseAction,
     Action,
-    ImgOverlay,
+    Overlay,
     AudioClipLoader,
     AudioTrim,
 )
@@ -274,7 +274,7 @@ class SpecPreprocessor(BasePreprocessor):
         )
         # add overlay augmentation if overlay_df is provided
         if overlay_df is not None:
-            overlay = ImgOverlay(
+            overlay = Overlay(
                 is_augmentation=True, overlay_df=overlay_df, update_labels=False
             )
             self.insert_action("overlay", overlay, after_key="to_img")

@@ -9,6 +9,8 @@ from opensoundscape.preprocess import actions
 from PIL import Image
 import torch
 
+## Fixtures: prepare objects that can be used by tests ##
+
 
 @pytest.fixture()
 def short_wav_path():
@@ -40,6 +42,16 @@ def tensor():
 def img():
     x = np.random.uniform(0, 255, [10, 10, 3])
     return Image.fromarray(x, mode="RGB")
+
+
+@pytest.fixture()
+def train_dataset():
+    df = pd.DataFrame(
+        index=["tests/audio/great_plains_toad.wav", "tests/audio/1min.wav"],
+        data=[[0, 1], [1, 0]],
+        columns=["negative", "positive"],
+    )
+    return CnnPreprocessor(df, overlay_df=None)
 
 
 ## Tests ##
@@ -115,8 +127,4 @@ def test_generic_action(tensor):
     assert result.max() * 2 == tensor.max()
 
 
-# test ImgOverlay class
-
 # others tested implicitly through preprocessor and cnn tests
-
-# def test_frequency_mask

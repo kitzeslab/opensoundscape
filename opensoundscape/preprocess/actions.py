@@ -35,7 +35,7 @@ class BaseAction:
     instead of (X). y is a row of a dataframe (a pd.Series) with index (.name)
     = original file path, columns=class names, values=labels (0,1). X is the
     sample, and can be of various types (path, Audio, Spectrogram, Tensor, etc).
-    See ImgOverlay for an example of an Action that uses labels.
+    See Overlay for an example of an Action that uses labels.
     """
 
     def __init__(self):
@@ -309,18 +309,18 @@ def scale_tensor(tensor, input_mean=0.5, input_std=0.5):
 
 
 def time_mask(tensor, max_masks=3, max_width=0.2):
-    """add random vertical bars over image (Tensor -> Tensor)
+    """add random vertical bars over sample (Tensor -> Tensor)
 
     Args:
         tensor: input Torch.tensor sample
         max_masks: maximum number of vertical bars [default: 3]
-        max_width: maximum size of bars as fraction of image width
+        max_width: maximum size of bars as fraction of sample width
 
     Returns:
         augmented tensor
     """
 
-    # convert max_width from fraction of image to pixels
+    # convert max_width from fraction of sample to pixels
     max_width_px = int(tensor.shape[-1] * max_width)
 
     # add "batch" dimension expected by tensaug
@@ -341,13 +341,13 @@ def frequency_mask(tensor, max_masks=3, max_width=0.2):
     Args:
         tensor: input Torch.tensor sample
         max_masks: max number of horizontal bars [default: 3]
-        max_width: maximum size of horizontal bars as fraction of image height
+        max_width: maximum size of horizontal bars as fraction of sample height
 
     Returns:
         augmented tensor
     """
 
-    # convert max_width from fraction of image to pixels
+    # convert max_width from fraction of sample to pixels
     max_width_px = int(tensor.shape[-2] * max_width)
 
     # add "batch" dimension expected by tensaug
@@ -375,7 +375,7 @@ def tensor_add_noise(tensor, std=1):
     return tensor + noise
 
 
-class ImgOverlay(Action):
+class Overlay(Action):
     """Action Class for augmentation that overlays samples on eachother
 
     Required Args:
@@ -383,13 +383,13 @@ class ImgOverlay(Action):
         update_labels (bool): if True, labels of sample are updated to include
             labels of overlayed sample
 
-    See overlay_image() for other arguments and default values.
+    See overlay() for other arguments and default values.
     """
 
     def __init__(self, is_augmentation, **kwargs):
 
-        super(ImgOverlay, self).__init__(
-            overlay_image,
+        super(Overlay, self).__init__(
+            overlay,
             is_augmentation=is_augmentation,
             extra_args=["_labels", "_pipeline"],
             **kwargs,
@@ -423,24 +423,22 @@ class ImgOverlay(Action):
         )
 
 
-def overlay_image(
+def overlay(
     x,
     _labels,
     _pipeline,
     overlay_df,
     update_labels,
-    # default overlay parameters
-    overlay_class=None,  # or 'different' or specific class
+    overlay_class=None,
     overlay_prob=1,
     max_overlay_num=1,
-    overlay_weight=0.5,  # allows float or range)
+    overlay_weight=0.5,
 ):
-    """iteratively overlay images on top of eachother
+    """iteratively overlay 2d samples on top of eachother
 
-    Overlays images from overlay_df on top of the sample with probability
-    overlay_prob until stopping condition.
+    Overlays (blends) image-like samples from overlay_df on top of
+    the sample with probability `overlay_prob` until stopping condition.
     If necessary, trims overlay audio to the length of the input audio.
-    Overlays the images on top of each other with a weight.
 
     Overlays can be used in a few general ways:
         1. a separate df where any file can be overlayed (overlay_class=None)
@@ -453,7 +451,7 @@ def overlay_image(
         overlay_df: a labels dataframe with audio files as the index and
             classes as columns
         _labels: labels of the original sample
-        _pipeline: the preprocessing pipeline to load audio -> image
+        _pipeline: the preprocessing pipeline
         update_labels: if True, add overlayed sample's labels to original sample
         overlay_class: how to choose files from overlay_df to overlay
             Options [default: "different"]:
@@ -464,11 +462,11 @@ def overlay_image(
         overlay_prob: the probability of applying each subsequent overlay
         max_overlay_num: the maximum number of samples to overlay on original
             - for example, if overlay_prob = 0.5 and max_overlay_num=2,
-                1/2 of images will recieve 1 overlay and 1/4 will recieve an
+                1/2 of samples will recieve 1 overlay and 1/4 will recieve an
                 additional second overlay
         overlay_weight: a float > 0 and < 1, or a list of 2 floats [min, max]
             between which the weight will be randomly chosen. e.g. [0.1,0.7]
-            An overlay_weight <0.5 means more emphasis on original image.
+            An overlay_weight <0.5 means more emphasis on original sample.
 
     Returns:
         overlayed sample, (possibly updated) labels
@@ -571,14 +569,16 @@ def overlay_image(
                 int
             )
 
-        # now we need to run the pipeline to do everything up until the ImgOverlay step
+        # now we need to run the pipeline to do everything up until the Overlay step
         # create a preprocessor for loading the overlay samples
-        x2, sample_info = _run_pipeline(
-            _pipeline, overlay_row, break_on_type=ImgOverlay
-        )
+        # note that if there are multiple Overlay objects in a pipeline,
+        # it will cut off the preprocessing of the overlayed sample before
+        # the first Overlay object. This may or may not be the desired behavior,
+        # but it will at least "work".
+        x2, sample_info = _run_pipeline(_pipeline, overlay_row, break_on_type=Overlay)
 
         # now we blend the two tensors together with a weighted average
-        # Select weight of overlay; <0.5 means more emphasis on original image
+        # Select weight of overlay; <0.5 means more emphasis on original sample
         # Supports uniform-random selection from a range of weights eg [0.1,0.7]
         weight = overlay_weight
         if hasattr(weight, "__iter__"):
@@ -587,7 +587,7 @@ def overlay_image(
             ), f"overlay_weight must specify a single value or range of 2 values, got {overlay_weight}"
             weight = random.uniform(weight[0], weight[1])
 
-        # use a weighted sum to overlay (blend) the images
+        # use a weighted sum to overlay (blend) the samples
         x = x * (1 - weight) + x2 * weight
 
     return x, _labels
