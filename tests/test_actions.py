@@ -26,6 +26,11 @@ def audio_10s():
 
 
 @pytest.fixture()
+def audio_10s_path():
+    return "tests/audio/silence_10s.mp3"
+
+
+@pytest.fixture()
 def tensor():
     x = np.random.uniform(0, 1, [3, 10, 10])
     return torch.Tensor(x)
@@ -52,24 +57,24 @@ def test_audio_clip_loader_resample(short_wav_path):
     assert audio.sample_rate == 32000
 
 
-def test_audio_clip_loader_clip(audio_10s):
-    action = actions.AudioClipLoader(sample_rate=32000)
-    audio = action.go(short_wav_path, _start_time=0, _sample_duration=2)
-    assert isclose(audio.duration, 2, abs_tol=1e-4)
+def test_audio_clip_loader_clip(audio_10s_path):
+    action = actions.AudioClipLoader()
+    audio = action.go(audio_10s_path, _start_time=0, _sample_duration=2)
+    assert isclose(audio.duration(), 2, abs_tol=1e-4)
 
 
-def test_action_trim(audio_10s):
+def test_action_trim(audio_short):
     action = actions.AudioTrim()
-    audio = action.go(audio_10s, _sample_duration=1.0)
+    audio = action.go(audio_short, _sample_duration=1.0)
     assert isclose(audio.duration(), 1.0, abs_tol=1e-4)
 
 
-def test_action_random_trim(audio_10s):  # TODO are the arrays all zeros?
-    action = actions.AudioTrim()
-    audio = action.go(audio_10s, _sample_duration=0.1)
-    audio2 = action.go(audio_10s, _sample_duration=0.1)
-    assert isclose(audio.duration(), 0.1, abs_tol=1e-4)
-    assert not np.array_equal(audio.samples, audio2.samples)
+def test_action_random_trim(audio_short):
+    action = actions.AudioTrim(random_trim=True)
+    a = action.go(audio_short, _sample_duration=0.01)
+    a2 = action.go(audio_short, _sample_duration=0.01)
+    assert isclose(a.duration(), 0.01, abs_tol=1e-4)
+    assert not np.array_equal(a.samples, a2.samples)
 
 
 def test_audio_trimmer_default(audio_10s):
