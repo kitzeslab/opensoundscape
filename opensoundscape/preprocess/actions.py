@@ -119,6 +119,7 @@ class Action(BaseAction):
     def go(self, x, **kwargs):
         # the syntax is the same regardless of whether
         # first argument is "self" (for a class method) or not
+        # we pass self.params to kwargs along with any additional kwargs
         return self.action_fn(x, **dict(self.params, **kwargs))
 
 
@@ -137,13 +138,18 @@ class AudioClipLoader(Action):
         super(AudioClipLoader, self).__init__(
             Audio.from_file, extra_args=["_start_time", "_sample_duration"], **kwargs
         )
+        # two params are replaced by "_start_time" and "_sample_duration"
+        self.params.pop("offset")
+        self.params.pop("duration")
 
     def go(self, path, _start_time, _sample_duration, **kwargs):
         offset = 0 if _start_time is None else _start_time
         # only trim to _sample_duration if _start_time is provided
         # ie, we are loading clips from a long audio file
         duration = None if _start_time is None else _sample_duration
-        return self.action_fn(path, offset=offset, duration=duration, **kwargs)
+        return self.action_fn(
+            path, offset=offset, duration=duration, **dict(self.params, **kwargs)
+        )
 
 
 class AudioTrim(Action):
