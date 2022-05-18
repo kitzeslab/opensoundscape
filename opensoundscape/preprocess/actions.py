@@ -207,34 +207,6 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False):
     return audio
 
 
-#
-# class SaveTensorToDisk(BaseAction):
-#     """save a torch Tensor to disk (Tensor -> Tensor)
-#
-#     Requires x_labels because the index of the label-row (.name)
-#     gives the original file name for this sample.
-#
-#     Uses torchvision.utils.save_image. Creates save_path dir if it doesn't exist
-#
-#     Args:
-#         save_path: a directory where tensor will be saved
-#     """
-#
-#     def __init__(self, save_path, **kwargs):
-#         super(SaveTensorToDisk, self).__init__(**kwargs)
-#         self.requires_labels = True
-#         # make this directory if it doesnt exist yet
-#         self.save_path = Path(save_path)
-#         self.save_path.mkdir(parents=True, exist_ok=True)
-#
-#     def go(self, x, x_labels):
-#         """we require x_labels because the .name gives origin file name"""
-#         filename = os.path.basename(x_labels.name) + f"_{time()}.png"
-#         path = Path.joinpath(self.save_path, filename)
-#         save_image(x, path)
-#         return x, x_labels
-
-
 def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue=0):
     """Wraps torchvision.transforms.ColorJitter
 
@@ -330,29 +302,6 @@ def scale_tensor(tensor, input_mean=0.5, input_std=0.5):
     return transform(tensor)
 
 
-# def time_warp(tensor, warp_amount=5):
-#     """Time warp is an experimental augmentation that creates a tilted image.
-#
-#     Args:
-#         tensor: sample to augment
-#         warp_amount: use higher values for more skew and offset (experimental)
-#
-#     Note: this augmentation reduces multi-channel images to greyscale and duplicates the
-#     result across the channels.
-#
-#     """
-#     channels = tensor.shape[0]
-#     # add "batch" dimension to tensor and use just first channel
-#     tensor = tensor[0, :, :].unsqueeze(0).unsqueeze(0)
-#     # perform transform
-#     tensor = tensaug.time_warp(tensor.clone(), W=self.params["warp_amount"])
-#     # remove "batch" dimension
-#     tensor = tensor[0, :]
-#     # Copy 1 channel to 3 RGB channels
-#     tensor = torch.cat([tensor] * n_channels, dim=0)  # dim=1)
-#     return tensor
-
-
 def time_mask(tensor, max_masks=3, max_width=0.2):
     """add random vertical bars over image (Tensor -> Tensor)
 
@@ -405,43 +354,6 @@ def frequency_mask(tensor, max_masks=3, max_width=0.2):
     tensor = tensor.squeeze(0)
 
     return tensor
-
-
-# class TensorAugment(BaseAction):
-#     """combination of 3 augmentations with hard-coded parameters
-#
-#     time warp, time mask, and frequency mask
-#
-#     use (bool) time_warp, time_mask, freq_mask to turn each on/off
-#
-#     Note: This function reduces the image to greyscale then duplicates the
-#     image across the 3 channels
-#     """
-#
-#     def __init__(self, **kwargs):
-#         super(TensorAugment, self).__init__(**kwargs)
-#
-#         # default parameters
-#         self.params["time_warp"] = True
-#         self.params["time_mask"] = True
-#         self.params["freq_mask"] = True
-#
-#         # add parameters passed to __init__
-#         self.params.update(kwargs)
-#
-#     def go(self, x):
-#         """torch Tensor in, torch Tensor out"""
-#         # add "batch" dimension to tensor and keep just first channel
-#         x = x[0, :, :].unsqueeze(0).unsqueeze(0)  # was: X = X[:,0].unsqueeze(1)
-#         x = tensaug.time_warp(x.clone(), W=10)
-#         x = tensaug.time_mask(x, T=50, max_masks=5)
-#         x = tensaug.freq_mask(x, F=50, max_masks=5)
-#         # remove "batch" dimension
-#         x = x[0, :]
-#         # Copy 1 channel to 3 RGB channels
-#         x = torch.cat([x] * 3, dim=0)  # dim=1)
-#
-#         return x
 
 
 def tensor_add_noise(tensor, std=1):
