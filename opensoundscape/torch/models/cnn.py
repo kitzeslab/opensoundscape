@@ -559,7 +559,7 @@ class CNN(BaseModule):
 
         return score, metrics_dict
 
-    def save(self, path, save_datasets=True):
+    def save(self, path, save_datasets=False):
         import copy
 
         """save model with weights using torch.save()
