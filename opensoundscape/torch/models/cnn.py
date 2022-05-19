@@ -5,33 +5,26 @@ For tutorials, see notebooks on opensoundscape.org
 
 import os
 import numpy as np
-from datetime import datetime
 import pandas as pd
-import numpy as np
 from pathlib import Path
-from collections import OrderedDict
 import warnings
-import random
 from deprecated import deprecated
+
 
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore_support
 
 from opensoundscape.torch.architectures import cnn_architectures
 from opensoundscape.torch.models.utils import (
     BaseModule,
-    get_batch,
     apply_activation_layer,
     tensor_binary_predictions,
-    collate_lists_of_audio_clips,
 )
 from opensoundscape.preprocess.preprocessors import SpecPreprocessor
 from opensoundscape.helpers import make_clip_df
-
 from opensoundscape.torch.loss import (
     BCEWithLogitsLoss_hot,
     CrossEntropyLoss_hot,
