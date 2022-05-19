@@ -127,4 +127,39 @@ def test_generic_action(tensor):
     assert result.max() * 2 == tensor.max()
 
 
+def test_action_get_set():
+    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    assert action.get("input_std") == 2
+    action.set(input_mean=1)
+    assert action.params.get("input_mean") == 1
+
+
+def test_unexpected_param_raises_error():
+    with pytest.raises(AssertionError):
+        actions.Action(actions.scale_tensor, not_a_param=0)
+    with pytest.raises(AssertionError):
+        action = actions.Action(actions.scale_tensor)
+        action.set(not_a_param=0)
+
+
+def test_extra_arg():
+    def me(x, _add):
+        return x + _add
+
+    action = actions.Action(me, extra_args=["_add"])
+    assert action.go(0, _add=1) == 1
+    with pytest.raises(TypeError):
+        """raises error if we don't pass the extra arg"""
+        action.go(0)
+
+
+def test_modify_parameter_with_series_magic(tensor):
+    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    assert action.params["input_mean"] == 0
+    assert action.params.input_mean == 0  # access with . syntax
+    action.params.input_mean = 1  # set with . syntax
+    assert action.params["input_mean"] == 1
+    action.go(tensor)
+
+
 # others tested implicitly through preprocessor and cnn tests
