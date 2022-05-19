@@ -97,6 +97,9 @@ class Action(BaseAction):
         # we remove it from the params dict
         self.params = self.params[1:]
 
+        # remove "extra_args" from self.params if they are present:
+        self.params = self.params.drop([p for p in extra_args if p in self.params])
+
         # update self.params with any user-provided parameters
         self.set(**kwargs)
 
