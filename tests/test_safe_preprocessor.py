@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from opensoundscape.preprocess.preprocessors import CnnPreprocessor
+from opensoundscape.preprocess.preprocessors import SpecPreprocessor
 from opensoundscape.torch.safe_dataset import SafeDataset
 
 
@@ -10,7 +10,7 @@ def preprocessor():
     paths = ["tests/audio/veryshort.wav", "tests/audio/silence_10s.mp3"]
     labels = [[0, 1], [1, 0]]
     df = pd.DataFrame(index=paths, data=labels, columns=[0, 1])
-    return CnnPreprocessor(df, audio_length=5.0)
+    return SpecPreprocessor(df, sample_duration=5.0)
 
 
 def test_safe_preprocessor_handles_short_file(preprocessor):
