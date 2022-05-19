@@ -28,6 +28,18 @@ def test_spectrogram_shape_of_veryshort(veryshort_wav_str):
     assert isclose(spec.window_start_times()[0], 0, abs_tol=1e-4)
 
 
+def test_spectrogram_shape_of_windowlengths_overlapfraction(veryshort_wav_str):
+    # test spectrogram construction using window length in s and overlap fraction
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    spec = Spectrogram.from_audio(
+        audio, window_length_sec=0.02321995465, overlap_fraction=0.75
+    )
+
+    assert spec.spectrogram.shape == (257, 21)
+    assert spec.frequencies.shape == (257,)
+    assert spec.times.shape == (21,)
+
+
 def test_construct_spectrogram_spectrogram_str_raises():
     with pytest.raises(TypeError):
         Spectrogram("raises", np.zeros((5)), np.zeros((10)), (-100, -20))
@@ -203,21 +215,35 @@ def test_melspectrogram_to_image_works(veryshort_wav_str):
     assert mel_spec.to_image()
 
 
-def test_melspectrogram_to_image_with_reshape(veryshort_wav_str):
+def test_melspectrogram_to_image_numchannels(veryshort_wav_str):
     audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
     mel_spec = MelSpectrogram.from_audio(audio)
-    img = mel_spec.to_image(shape=(10, 20))
+    img = mel_spec.to_image(shape=(10, 20), channels=4)
     assert img.size == (20, 10)
     arr = np.array(img)
-    assert arr.shape == (10, 20, 3)
+    assert arr.shape == (10, 20, 4)
 
 
-def test_melspectrogram_to_image_with_mode(veryshort_wav_str):
+def test_melspectrogram_to_image_alltypes(veryshort_wav_str):
+    from PIL.Image import Image
+    from torch import Tensor
+
     audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
     mel_spec = MelSpectrogram.from_audio(audio)
-    img = mel_spec.to_image(shape=(10, 20), mode="L")
-    arr = np.array(img)
-    assert arr.shape == (10, 20)
+    img = mel_spec.to_image(shape=(10, 20), return_type="pil")
+    assert isinstance(img, Image)
+    img = mel_spec.to_image(shape=(10, 20), return_type="np")
+    assert isinstance(img, np.ndarray)
+    img = mel_spec.to_image(shape=(10, 20), return_type="torch")
+    assert isinstance(img, Tensor)
+
+
+def test_melspectrogram_to_image_with_invert(veryshort_wav_str):
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    mel_spec = MelSpectrogram.from_audio(audio)
+    positive = mel_spec.to_image(shape=(10, 20), invert=False, return_type="np")
+    negative = mel_spec.to_image(shape=(10, 20), invert=True, return_type="np")
+    assert np.array_equal(negative, 1 - positive)
 
 
 def test_melspectrogram_trim_works(veryshort_wav_str):
