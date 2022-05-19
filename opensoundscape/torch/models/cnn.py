@@ -669,10 +669,13 @@ class CNN(BaseModule):
         )
         prediction_dataset.augmentation_on = augmentation_on
 
-        # TODO: test valid clips but None for clip_df?
-        if len(prediction_dataset) < 1:
-            warnings.warn("prediction_dataset has zero samples. Returning None.")
-            return None, None, None
+        if prediction_dataset is None or len(prediction_dataset) < 1:
+            warnings.warn(
+                "prediction_dataset has zero samples. No predictions were generated."
+            )
+            scores = pd.DataFrame(columns=self.classes)
+            preds = None if binary_preds is None else pd.DataFrame(columns=self.classes)
+            return scores, preds, []
 
         # SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores

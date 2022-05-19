@@ -37,6 +37,11 @@ def test_df():
     return pd.DataFrame(index=["tests/audio/silence_10s.mp3"])
 
 
+@pytest.fixture()
+def short_file_df():
+    return pd.DataFrame(index=["tests/audio/veryshort.wav"])
+
+
 def test_init_with_str():
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
 
@@ -170,6 +175,12 @@ def test_predict_without_splitting(test_df):
     )
     assert len(scores) == len(test_df)
     assert len(preds) == len(test_df)
+
+
+def test_predict_splitting_short_file(short_file_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    scores, _, _ = model.predict(short_file_df)
+    assert len(scores) == 0
 
 
 def test_save_and_load_model(model_save_path):
