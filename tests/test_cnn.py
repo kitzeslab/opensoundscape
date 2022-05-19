@@ -150,6 +150,14 @@ def test_predict_missing_file_is_unsafe_sample(missing_file_df):
     assert len(unsafe_samples) == 1
 
 
+def test_predict_wrong_input_error(test_df):
+    """cannot pass a preprocessor to predict. only file paths as list or df"""
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    with pytest.raises(AssertionError):
+        pre = SpecPreprocessor(test_df, 2)
+        model.predict(pre)
+
+
 def test_train_predict_inception(train_df):
     model = cnn.InceptionV3([0, 1], 5.0, use_pretrained=False)
     model.train(

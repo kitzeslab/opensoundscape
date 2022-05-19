@@ -693,8 +693,7 @@ class CNN(BaseModule):
             pin_memory=torch.cuda.is_available(),
         )
         # add any paths that failed to generate a clip df to _unsafe_samples
-        dataloader.dataset._unsafe_samples += unsafe_paths  # TODO add test
-        print(dataloader.dataset._unsafe_samples)
+        dataloader.dataset._unsafe_samples += unsafe_paths
 
         ### Prediction ###
 
@@ -838,15 +837,16 @@ class CNN(BaseModule):
                 if split_files_into_clips=True
         """
         # validate type of samples: list, np array, or df
+        assert type(samples) in (
+            list,
+            np.ndarray,
+            pd.DataFrame,
+        ), f"samples must be type list/np.ndarray of file paths, or pd.DataFrame with paths as index. Got {type(samples)}."
         if type(samples) == list or type(samples) == np.ndarray:
             df = pd.DataFrame(index=samples)
         elif type(samples) == pd.DataFrame:
             df = samples
-        else:
-            raise ValueError(
-                f"samples must be type list, np.ndarray, or pd.DataFrame, was {type(samples)}."
-            )
-        # TODO: write test for type handling
+
         if len(df.columns) > 0:
             if not list(self.classes) == list(df.columns):
                 warnings.warn(
