@@ -669,13 +669,13 @@ class CNN(BaseModule):
         )
         prediction_dataset.augmentation_on = augmentation_on
 
-        if prediction_dataset is None or len(prediction_dataset) < 1:
+        if len(prediction_dataset) < 1:
             warnings.warn(
-                "prediction_dataset has zero samples. No predictions were generated."
+                "prediction_dataset has zero samples. No predictions will be generated."
             )
             scores = pd.DataFrame(columns=self.classes)
             preds = None if binary_preds is None else pd.DataFrame(columns=self.classes)
-            return scores, preds, []
+            return scores, preds, unsafe_paths
 
         # SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
@@ -694,6 +694,7 @@ class CNN(BaseModule):
         )
         # add any paths that failed to generate a clip df to _unsafe_samples
         dataloader.dataset._unsafe_samples += unsafe_paths  # TODO add test
+        print(dataloader.dataset._unsafe_samples)
 
         ### Prediction ###
 
@@ -735,9 +736,9 @@ class CNN(BaseModule):
         # replace scores/preds with nan for samples that failed in preprocessing
         # this feels hacky (we predicted on substitute-samples rather than
         # skipping the samples that failed preprocessing)
-        total_scores[safe_dataset._unsafe_indices, :] = np.nan
+        total_scores[dataloader.dataset._unsafe_indices, :] = np.nan
         if binary_preds is not None:
-            total_preds[safe_dataset._unsafe_indices, :] = np.nan
+            total_preds[dataloader.dataset._unsafe_indices, :] = np.nan
 
         # return 2 DataFrames with same index/columns as prediction_dataset's df
         # use None for placeholder if no preds
@@ -759,9 +760,11 @@ class CNN(BaseModule):
                     prediction_dataset.clip_times_df.reset_index()
                 )
 
+        print(dataloader.dataset._unsafe_samples)
+
         # warn the user if there were unsafe samples (failed to preprocess)
         # and log them to a file
-        unsafe_samples = safe_dataset.report(log=unsafe_samples_log)
+        unsafe_samples = dataloader.dataset.report(log=unsafe_samples_log)
 
         return score_df, pred_df, unsafe_samples
 
@@ -850,7 +853,7 @@ class CNN(BaseModule):
                     "The columns of input samples df differ from `model.classes`."
                 )
 
-        # TODO: write test for zero length warning
+        # make a copy of self.preprocessor that includes samples from df
         dataset = self.preprocessor.make_dataset(df)
         unsafe_paths = []
         if split_files_into_clips:
@@ -859,7 +862,10 @@ class CNN(BaseModule):
                 dataset.sample_duration,
                 overlap_fraction * dataset.sample_duration,
                 final_clip,
-            )
+            )  # clip_times_df might be None if no files succeeded
+            if dataset.clip_times_df is None:
+                dataset.clip_times_df = pd.DataFrame(columns=self.classes)
+
             # update "label_df" so that index matches clip_times_df
             dataset.label_df = dataset.clip_times_df[[]]
 

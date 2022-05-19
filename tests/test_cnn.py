@@ -44,6 +44,11 @@ def short_file_df():
     return pd.DataFrame(index=["tests/audio/veryshort.wav"])
 
 
+@pytest.fixture()
+def missing_file_df():
+    return pd.DataFrame(index=["tests/audio/not_a_file.wav"])
+
+
 def test_init_with_str():
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
 
@@ -129,13 +134,20 @@ def test_prediction_overlap(test_df):
 
 def test_multi_target_prediction(train_df, test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    _, preds, _ = model.predict(test_df, binary_preds="multi_target", threshold=0.1)
     scores, preds, _ = model.predict(
         test_df, binary_preds="multi_target", threshold=0.1
     )
 
     assert len(scores) == 2
     assert len(preds) == 2
+
+
+def test_predict_missing_file_is_unsafe_sample(missing_file_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    scores, _, unsafe_samples = model.predict(missing_file_df, threshold=0.1)
+
+    assert len(scores) == 0
+    assert len(unsafe_samples) == 1
 
 
 def test_train_predict_inception(train_df):
