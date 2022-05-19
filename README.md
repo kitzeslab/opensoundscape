@@ -38,7 +38,7 @@ For full API documentation and tutorials on how to use OpenSoundscape to work wi
 
 # Quick Start
 
-Using Audio and Spectrogram classes #tldr
+Using Audio and Spectrogram classes
 ```python
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
@@ -50,6 +50,17 @@ clip_5s = my_audio.trim(0,5)
 #create a spectrogram and plot it
 my_spec = Spectrogram.from_audio(clip_5s)
 my_spec.plot()
+```
+
+Load audio starting at a real-world timestamp
+```python
+from datetime import datetime; import pytz
+
+start_time = pytz.timezone('UTC').localize(datetime(2020,4,4,10,25))
+audio_length = 5 #seconds  
+path = '/Users/SML161/sample_audio/metadata.WAV' #an AudioMoth recording
+
+Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 ```
 
 Using a pre-trained CNN to make predictions on long audio files
