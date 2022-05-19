@@ -143,8 +143,7 @@ class AudioClipLoader(Action):
             Audio.from_file, extra_args=["_start_time", "_sample_duration"], **kwargs
         )
         # two params are replaced by "_start_time" and "_sample_duration"
-        self.params.pop("offset")
-        self.params.pop("duration")
+        self.params = self.params.drop(["offset", "duration"])
 
     def go(self, path, _start_time, _sample_duration, **kwargs):
         offset = 0 if _start_time is None else _start_time
@@ -390,7 +389,7 @@ class Overlay(Action):
     See overlay() for other arguments and default values.
     """
 
-    def __init__(self, is_augmentation, **kwargs):
+    def __init__(self, is_augmentation=True, **kwargs):
 
         super(Overlay, self).__init__(
             overlay,
@@ -419,7 +418,7 @@ class Overlay(Action):
 
         # move overlay_df from params to its own space, so that it doesn't display with print(params)
         self.overlay_df = overlay_df
-        self.params.pop("overlay_df")  # removes it
+        self.params = self.params.drop("overlay_df")  # removes it
 
     def go(self, x, **kwargs):
         return self.action_fn(
@@ -520,78 +519,93 @@ def overlay(
     # each time, there is an overlay_prob probability of another overlay
     # up to a max number of max_overlay_num overlays
     overlays_performed = 0
+
     while overlay_prob > np.random.uniform() and overlays_performed < max_overlay_num:
-        overlays_performed += 1
 
-        # lets pick a sample based on rules
-        if overlay_class is None:
-            # choose any file from the overlay_df
-            overlay_path = random.choice(overlay_df.index)
+        try:
 
-        elif overlay_class == "different":
-            # Select a random file containing none of the classes this file contains
-            # because the overlay_df might be huge and sparse, we randomly
-            # choose row until one fits criterea rather than filtering overlay_df
-            # TODO: revisit this choice
-            good_choice = False
-            attempt_counter = 0
-            max_attempts = 100  # if we try this many times, raise error
-            while (not good_choice) and (attempt_counter < max_attempts):
-                attempt_counter += 1
+            # lets pick a sample based on rules
+            if overlay_class is None:
+                # choose any file from the overlay_df
+                overlay_path = random.choice(overlay_df.index)
 
-                # choose a random sample from the overlay df
-                candidate_idx = random.randint(0, len(overlay_df) - 1)
+            elif overlay_class == "different":
+                # Select a random file containing none of the classes this file contains
+                # because the overlay_df might be huge and sparse, we randomly
+                # choose row until one fits criterea rather than filtering overlay_df
+                # TODO: revisit this choice
+                good_choice = False
+                attempt_counter = 0
+                max_attempts = 100  # if we try this many times, raise error
+                while (not good_choice) and (attempt_counter < max_attempts):
+                    attempt_counter += 1
 
-                # check if this candidate sample has zero overlapping labels
-                label_intersection = np.logical_and(
-                    overlay_df.values[candidate_idx, :], _labels.values
-                )
-                good_choice = sum(label_intersection) == 0
+                    # choose a random sample from the overlay df
+                    candidate_idx = random.randint(0, len(overlay_df) - 1)
 
-            if not good_choice:  # tried max_attempts samples, none worked
-                warnings.warn("No samples found with non-overlapping labels")
-                continue
+                    # check if this candidate sample has zero overlapping labels
+                    label_intersection = np.logical_and(
+                        overlay_df.values[candidate_idx, :], _labels.values
+                    )
+                    good_choice = sum(label_intersection) == 0
 
-            overlay_path = overlay_df.index[candidate_idx]
+                if not good_choice:  # tried max_attempts samples, none worked
+                    raise ValueError(
+                        "No samples found with non-overlapping labels after 100 random draws"
+                    )
 
-        else:
-            # Select a random file from a class of choice (may be slow -
-            # however, in the case of a fixed overlay class, we could
-            # pass an overlay_df containing only that class)
-            choose_from = overlay_df[overlay_df[overlay_class] == 1]
-            overlay_path = np.random.choice(choose_from.index.values)
+                overlay_path = overlay_df.index[candidate_idx]
 
-        # now we have picked a file to overlay (overlay_path)
-        # we also know its labels, if we need them
-        overlay_row = overlay_df.loc[overlay_path]
-        overlay_labels = overlay_row.values
+            else:
+                # Select a random file from a class of choice (may be slow -
+                # however, in the case of a fixed overlay class, we could
+                # pass an overlay_df containing only that class)
+                choose_from = overlay_df[overlay_df[overlay_class] == 1]
+                overlay_path = np.random.choice(choose_from.index.values)
 
-        # update the labels with new classes
-        if update_labels and len(overlay_labels) > 0:
-            # update labels as union of both files' labels
-            _labels.values[:] = np.logical_or(_labels.values, overlay_labels).astype(
-                int
+            # now we have picked a file to overlay (overlay_path)
+            # we also know its labels, if we need them
+            overlay_row = overlay_df.loc[overlay_path]
+            overlay_labels = overlay_row.values
+
+            # now we need to run the pipeline to do everything up until the Overlay step
+            # create a preprocessor for loading the overlay samples
+            # note that if there are multiple Overlay objects in a pipeline,
+            # it will cut off the preprocessing of the overlayed sample before
+            # the first Overlay object. This may or may not be the desired behavior,
+            # but it will at least "work".
+            x2, sample_info = _run_pipeline(
+                _pipeline, overlay_row, break_on_type=Overlay
             )
 
-        # now we need to run the pipeline to do everything up until the Overlay step
-        # create a preprocessor for loading the overlay samples
-        # note that if there are multiple Overlay objects in a pipeline,
-        # it will cut off the preprocessing of the overlayed sample before
-        # the first Overlay object. This may or may not be the desired behavior,
-        # but it will at least "work".
-        x2, sample_info = _run_pipeline(_pipeline, overlay_row, break_on_type=Overlay)
+            # now we blend the two tensors together with a weighted average
+            # Select weight of overlay; <0.5 means more emphasis on original sample
+            # Supports uniform-random selection from a range of weights eg [0.1,0.7]
+            weight = overlay_weight
+            if hasattr(weight, "__iter__"):
+                assert (
+                    len(weight) == 2
+                ), f"overlay_weight must specify a single value or range of 2 values, got {overlay_weight}"
+                weight = random.uniform(weight[0], weight[1])
 
-        # now we blend the two tensors together with a weighted average
-        # Select weight of overlay; <0.5 means more emphasis on original sample
-        # Supports uniform-random selection from a range of weights eg [0.1,0.7]
-        weight = overlay_weight
-        if hasattr(weight, "__iter__"):
-            assert (
-                len(weight) == 2
-            ), f"overlay_weight must specify a single value or range of 2 values, got {overlay_weight}"
-            weight = random.uniform(weight[0], weight[1])
+            # use a weighted sum to overlay (blend) the samples
+            x = x * (1 - weight) + x2 * weight
 
-        # use a weighted sum to overlay (blend) the samples
-        x = x * (1 - weight) + x2 * weight
+            # update the labels with new classes
+            if update_labels and len(overlay_labels) > 0:
+                # update labels as union of both files' labels
+                _labels.values[:] = np.logical_or(
+                    _labels.values, overlay_labels
+                ).astype(int)
+
+            # overlay was successful, update count:
+            overlays_performed += 1
+
+        except PreprocessingError:
+            # don't try to load this sample again: remove from overlay df
+            overlay_df = overlay_df.drop(overlay_path)
+            warnings.warn(f"unsafe overlay sample: {overlay_path}")
+            if len(overlay_df) < 1:
+                raise ValueError("tried all overlay_df samples, none were safe")
 
     return x, _labels

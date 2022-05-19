@@ -55,19 +55,25 @@ def _run_pipeline(
         "_pipeline": pipeline,
     }
 
-    for k, action in pipeline.items():
-        if type(action) == break_on_type or k == break_on_key:
-            break
-        if action.bypass:
-            continue
-        if action.is_augmentation and not augmentation_on:
-            continue
-        extra_args = {key: sample_info[key] for key in action.extra_args}
-        if action.returns_labels:
-            x, labels = action.go(x, **extra_args)
-            sample_info["_labels"] = labels
-        else:
-            x = action.go(x, **extra_args)
+    try:
+        for k, action in pipeline.items():
+            if type(action) == break_on_type or k == break_on_key:
+                break
+            if action.bypass:
+                continue
+            if action.is_augmentation and not augmentation_on:
+                continue
+            extra_args = {key: sample_info[key] for key in action.extra_args}
+            if action.returns_labels:
+                x, labels = action.go(x, **extra_args)
+                sample_info["_labels"] = labels
+            else:
+                x = action.go(x, **extra_args)
+    except:
+        # treat any exceptions raised during the pipeline as PreprocessingErrors
+        raise PreprocessingError(
+            f"failed to preprocess sample from path: {label_df_row.name}"
+        )
 
     return x, sample_info
 

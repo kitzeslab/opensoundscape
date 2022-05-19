@@ -55,7 +55,11 @@ class BasePreprocessor(torch.utils.data.Dataset):
                 "Index of dataframe passed to "
                 f"preprocessor must be a file path. Got {label_df.index[0]}."
             )
-        if len(label_df) > 0 and return_labels and not label_df.values[0, 0] in (0, 1):
+        if return_labels and len(label_df.columns) == 0:
+            warnings.warn("return_labels=True but df has no columns!")
+        elif (
+            len(label_df) > 0 and return_labels and not label_df.values[0, 0] in (0, 1)
+        ):
             warnings.warn(
                 "if return_labels=True, label_df must have labels that take values of 0 and 1"
             )
@@ -76,37 +80,30 @@ class BasePreprocessor(torch.utils.data.Dataset):
 
     def __getitem__(self, item_idx, break_on_key=None, break_on_type=None):
 
-        try:
-            label_df_row = self.label_df.iloc[item_idx]
+        label_df_row = self.label_df.iloc[item_idx]
 
-            clip_times = (
-                None
-                if self.clip_times_df is None
-                else self.clip_times_df.iloc[item_idx]
-            )
+        clip_times = (
+            None if self.clip_times_df is None else self.clip_times_df.iloc[item_idx]
+        )
 
-            x, sample_info = _run_pipeline(
-                self.pipeline,
-                label_df_row,
-                augmentation_on=self.augmentation_on,
-                break_on_key=break_on_key,
-                break_on_type=break_on_type,
-                clip_times=clip_times,
-                sample_duration=self.sample_duration,
-            )
+        # _run_pipeline will raise PreprocessingError if something fails
+        x, sample_info = _run_pipeline(
+            self.pipeline,
+            label_df_row,
+            augmentation_on=self.augmentation_on,
+            break_on_key=break_on_key,
+            break_on_type=break_on_type,
+            clip_times=clip_times,
+            sample_duration=self.sample_duration,
+        )
 
-            # Return sample & label pairs (training/validation)
-            if self.return_labels:
-                labels = torch.from_numpy(sample_info["_labels"].values)
-                return {"X": x, "y": labels}
+        # Return sample & label pairs (training/validation)
+        if self.return_labels:
+            labels = torch.from_numpy(sample_info["_labels"].values)
+            return {"X": x, "y": labels}
 
-            # Return sample only (prediction)
-            return {"X": x}
-
-        except:
-            raise PreprocessingError(
-                f"failed to preprocess sample from path: {self.label_df.index[item_idx]}"
-            )
+        # Return sample only (prediction)
+        return {"X": x}
 
     def __repr__(self):
         return f"{self.__class__} object with pipeline: {self.pipeline}"
