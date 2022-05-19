@@ -85,6 +85,21 @@ def test_train_resample_loss(train_df):
     shutil.rmtree("tests/models/")
 
 
+def test_train_one_class(train_df):
+    model = cnn.CNN("resnet18", classes=[0], sample_duration=5.0)
+    model.single_target = True
+    model.train(
+        train_df[[0]],
+        train_df[[0]],
+        save_path="tests/models",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    shutil.rmtree("tests/models/")
+
+
 def test_single_target_prediction(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     model.single_target = True

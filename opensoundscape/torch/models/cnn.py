@@ -284,7 +284,8 @@ class CNN(BaseModule):
             # all augmentation occurs in the Preprocessor (train_loader)
             batch_tensors = batch_data["X"].to(self.device)
             batch_labels = batch_data["y"].to(self.device)
-            batch_labels = batch_labels.squeeze(1)
+            if len(self.classes) > 1:  # squeeze one dimension [1,2] -> [1,1]
+                batch_labels = batch_labels.squeeze(1)
 
             ####################
             # Forward and loss #
@@ -305,9 +306,7 @@ class CNN(BaseModule):
             total_preds.append(batch_preds.int().detach().cpu().numpy())
 
             # calculate loss
-            loss = self.loss_fn(
-                logits, batch_labels
-            )  # TODO: fails when there's only 1 class
+            loss = self.loss_fn(logits, batch_labels)
 
             # save loss for each batch; later take average for epoch
 
@@ -950,7 +949,7 @@ def separate_resnet_feat_clf(model):
     # model.opt_net will be created when .train() calls ._set_train()
 
 
-class InceptionV3(CNN):  # TODO fix inception
+class InceptionV3(CNN):
     def __init__(
         self,
         classes,
