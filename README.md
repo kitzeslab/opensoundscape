@@ -55,23 +55,13 @@ my_spec.plot()
 Using a pre-trained CNN to make predictions on long audio files
 ```python
 from opensoundscape.torch.models.cnn import load_model
-from opensoundscape.preprocess.preprocessors import ClipLoadingSpectrogramPreprocessor
-from opensoundscape.helpers import make_clip_df
-from glob import glob
 
 #get list of audio files
 files = glob('./dir/*.WAV')
 
-#generate clip df
-clip_df = make_clip_df(files,clip_duration=5.0,clip_overlap=0)
-
-#create dataset
-dataset = ClipLoadingSpectrogramPreprocessor(clip_df)
-#you may need to change preprocessing params to match model
-
 #generate predictions with a model
 model = load_model('/path/to/saved.model')
-scores, _, _ = model.predict(dataset)
+scores, _, _ = model.predict(files)
 
 #scores is a dataframe with MultiIndex: file, start_time, end_time
 #containing inference scores for each class and each audio window
@@ -79,23 +69,26 @@ scores, _, _ = model.predict(dataset)
 
 Training a CNN with labeled audio data
 ```python
-from opensoundscape.torch.models.cnn import PytorchModel
-from opensoundscape.preprocess.preprocessors import CnnPreprocessor
+from opensoundscape.torch.models.cnn import CNN
+from sklearn.model_selection import train_test_split
+from opensoundscape.preprocess.utils import show_tensor_grid
 
 #load a DataFrame of one-hot audio clip labels
-#(index: file paths, columns: classes)
+#(index: file paths; columns: classes)
 df = pd.read_csv('my_labels.csv')
+train_df, validation_df = train_test_split(df,test_size=0.2)
 
-#create a preprocessor that will create and augment samples for the CNN
-train_dataset = CnnPreprocessor(df)
+# optional: inspect a few preprocessed samples
+samples = model.make_samples(train_df.sample(n=9),augmentation_on=True)
+fig = show_tensor_grid(samples,3)
 
 #create a CNN and train for 2 epochs
 #for simplicity, using the training set as validation (not recommended!)
 #the best model is automatically saved to `./best.model`
-model = PytorchModel('resnet18',classes=df.columns)
+model = PytorchModel('resnet18',classes=df.columns,sample_duration=0.2)
 model.train(
-  train_dataset=train_dataset,
-  valid_dataset=train_dataset,
+  train_df,
+  validation_df,
   epochs=2
 )
 ```
