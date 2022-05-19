@@ -22,9 +22,7 @@ audio_object = audio_object.resample(22050)
 import librosa
 import soundfile
 import numpy as np
-import pandas as pd
 import warnings
-from math import ceil
 from opensoundscape.helpers import generate_clip_times_df
 from opensoundscape.audiomoth import parse_audiomoth_metadata
 from tinytag import TinyTag

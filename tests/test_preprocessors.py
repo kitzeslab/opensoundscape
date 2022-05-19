@@ -1,13 +1,8 @@
 import pytest
-from pathlib import Path
 import numpy as np
 import pandas as pd
-from opensoundscape.audio import Audio
-from numpy.testing import assert_allclose
-from opensoundscape.preprocess import actions
 from opensoundscape.preprocess.preprocessors import SpecPreprocessor, PreprocessingError
 import warnings
-import torch
 
 
 @pytest.fixture()
@@ -98,14 +93,14 @@ def test_cnn_preprocessor_overlay(dataset_df, overlay_df):
 def test_overlay_tries_different_sample(dataset_df, bad_good_df):
     dataset = SpecPreprocessor(dataset_df, sample_duration=2.0, overlay_df=bad_good_df)
     # should try to load the bad sample, then load the good one
-    sample1 = dataset[0]["X"]
+    dataset[0]["X"]
 
 
 def test_overlay_different_class(dataset_df, overlay_df):
     """just make sure it runs and doesn't hang"""
     dataset = SpecPreprocessor(dataset_df, sample_duration=2.0, overlay_df=overlay_df)
     dataset.pipeline.overlay.set(overlay_class="different")
-    sample1 = dataset[0]["X"]
+    dataset[0]["X"]
 
 
 def test_overlay_no_valid_samples(dataset_df, overlay_df_all_positive):
@@ -121,7 +116,7 @@ def test_return_labels_no_columns_warning(dataset_df):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         # raises warning bc return_labels=True but no columns in df
-        dataset = SpecPreprocessor(dataset_df[[]], sample_duration=2.0)
+        SpecPreprocessor(dataset_df[[]], sample_duration=2.0)
         assert "return_labels" in str(w[0].message)
 
 
@@ -129,14 +124,14 @@ def test_overlay_specific_class(dataset_df, overlay_df):
     """just make sure it runs and doesn't hang"""
     dataset = SpecPreprocessor(dataset_df, sample_duration=2.0, overlay_df=overlay_df)
     dataset.pipeline.overlay.set(overlay_class=1)
-    sample1 = dataset[0]["X"]
+    dataset[0]["X"]
 
 
 def test_overlay_with_weight_range(dataset_df, overlay_df):
     """overlay should allow range [min,max] for overlay_weight"""
     dataset = SpecPreprocessor(dataset_df, sample_duration=2.0, overlay_df=overlay_df)
     dataset.pipeline.overlay.set(overlay_weight=[0.3, 0.7])
-    sample1 = dataset[0]["X"]
+    dataset[0]["X"]
 
 
 def test_overlay_with_invalid_weight_range(dataset_df, overlay_df):
@@ -147,7 +142,7 @@ def test_overlay_with_invalid_weight_range(dataset_df, overlay_df):
         sample1 = dataset[0]["X"]
     with pytest.raises(PreprocessingError):
         dataset.pipeline.overlay.set(overlay_weight=[0.1, 0.5, 0.9])
-        sample1 = dataset[0]["X"]
+        dataset[0]["X"]
 
 
 def test_overlay_update_labels(dataset_df, overlay_df):
@@ -176,7 +171,7 @@ def test_cnn_preprocessor_fails_on_short_file(short_file_df):
     dataset = SpecPreprocessor(short_file_df, sample_duration=2.0)
     dataset.pipeline.trim_audio.set(extend=False)
     with pytest.raises(PreprocessingError):
-        sample = dataset[0]["X"]
+        dataset[0]["X"]
 
 
 def test_preprocess_file_as_clips(dataset_df):

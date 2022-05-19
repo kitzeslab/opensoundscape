@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from opensoundscape.torch.sampling import ClassAwareSampler, ImbalancedDatasetSampler
+from opensoundscape.torch.sampling import ClassAwareSampler
 from torch.utils.data import DataLoader
 from torch.nn.functional import softmax
 import pandas as pd
@@ -108,7 +108,6 @@ def collate_lists_of_audio_clips(batch):
     dfs = [d["df"] for d in batch]
 
     elem = data[0]
-    elem_type = type(elem)
     if isinstance(elem, torch.Tensor):
         out = None
         if torch.utils.data.get_worker_info() is not None:

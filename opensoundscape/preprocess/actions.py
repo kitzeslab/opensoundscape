@@ -9,19 +9,13 @@ See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
 import numpy as np
-from PIL import Image
 import random
-from pathlib import Path
-from time import time
-import os
 from torchvision import transforms
 import torch
-from torchvision.utils import save_image
 import warnings
 import pandas as pd
 
 from opensoundscape.audio import Audio
-from opensoundscape.spectrogram import Spectrogram, MelSpectrogram
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 from opensoundscape.preprocess.utils import _run_pipeline

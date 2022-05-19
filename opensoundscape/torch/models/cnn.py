@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import warnings
-from deprecated import deprecated
 
 
 import torch
@@ -359,10 +358,6 @@ class CNN(BaseModule):
         total_scores = np.concatenate(total_scores, axis=0)
 
         return total_tgts, total_preds, total_scores
-
-    def _validation(self, validation_loader):
-
-        return targets, preds, scores
 
     def train(
         self,
@@ -1174,7 +1169,7 @@ def load_outdated_model(
     try:
         # use torch to load the saved model object
         model_dict = torch.load(path, map_location=device)
-    except AttributeError as e:
+    except AttributeError:
         raise Exception(
             "This model could not be loaded in this version of "
             "OpenSoundscape. You may need to load the model with the version "

@@ -80,9 +80,9 @@ def _run_pipeline(
 
 def insert_before(series, idx, name, value):
     """insert an item before a spcific index in a series"""
-    i = list(x.index).index(idx)
-    part1 = x[0:i]
-    part2 = x[i:]
+    i = list(series.index).index(idx)
+    part1 = series[0:i]
+    part2 = series[i:]
     return part1.append(pd.Series([value], index=[name])).append(part2)
 
 

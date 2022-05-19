@@ -13,8 +13,6 @@ a SafeDataset.
 based on an implementation by @msamogh in nonechucks
 (github.com/msamogh/nonechucks/)
 """
-import torch
-import torch.utils.data
 import warnings
 
 
@@ -119,9 +117,9 @@ class SafeDataset:
                 "sample(s) that raised errors and were skipped."
             )
             if log is not None:
-                with open(unsafe_sample_log, "w") as f:
+                with open(log, "w") as f:
                     [f.write(p + "\n") for p in self._unsafe_samples]
-                msg += f"The unsafe file paths are logged in {unsafe_sample_log}"
+                msg += f"The unsafe file paths are logged in {log}"
             warnings.warn(msg)
         return self._unsafe_samples
 
