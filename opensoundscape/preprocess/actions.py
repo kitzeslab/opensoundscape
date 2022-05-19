@@ -18,6 +18,7 @@ from torchvision import transforms
 import torch
 from torchvision.utils import save_image
 import warnings
+import pandas as pd
 
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram, MelSpectrogram
@@ -39,7 +40,7 @@ class BaseAction:
     """
 
     def __init__(self):
-        self.params = {}
+        self.params = pd.Series(dtype=object)
         self.extra_args = []
         self.returns_labels = False
         self.is_augmentation = False
@@ -59,7 +60,7 @@ class BaseAction:
         unmatched_args = set(list(kwargs.keys())) - set(list(self.params.keys()))
         assert unmatched_args == set(
             []
-        ), f"unexpected arguments: {unmatched_args}. The valid arguments are: \n{self.params}"
+        ), f"unexpected arguments: {unmatched_args}. The valid arguments and current values are: \n{self.params}"
         self.params.update(kwargs)
 
     def get(self, arg):
@@ -90,11 +91,11 @@ class Action(BaseAction):
         self.extra_args = extra_args
 
         # query action_fn for arguments and default values
-        self.params = get_args(self.action_fn)
+        self.params = pd.Series(get_args(self.action_fn))
 
         # whether the first argument is 'self' or the incoming object,
         # we remove it from the params dict
-        self.params.pop(next(iter(self.params)))
+        self.params = self.params[1:]
 
         # update self.params with any user-provided parameters
         self.set(**kwargs)
