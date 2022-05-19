@@ -769,36 +769,3 @@ class MelSpectrogram(Spectrogram):
                 warnings.warn("MPLBACKEND is 'None' in os.environ. Skipping plot.")
             else:
                 plt.show()
-
-    # def to_pcen(self, gain=0.8, bias=10.0, power=0.25, time_constant=0.06):
-    #     """ Create PCEN from MelSpectrogram
-    #
-    #     Argument descriptions come from https://librosa.org/doc/latest/generated/librosa.pcen.html?highlight=pcen#librosa-pcen
-    #
-    #     Args:
-    #         gain: The gain factor. Typical values should be slightly less than 1 [default: 0.8]
-    #         bias: The bias point of the nonlinear compression [default: 10.0]
-    #         power: The compression exponent. Typical values should be between 0
-    #             and 0.5. Smaller values of power result in stronger compression. At
-    #             the limit power=0, polynomial compression becomes logarithmic
-    #             [default: 0.25]
-    #         time_constant: The time constant for IIR filtering, measured in seconds [default: 0.06]
-    #
-    #     Returns:
-    #         The per-channel energy normalized version of MelSpectrogram.S
-    #     """
-    #     return MelSpectrogram(
-    #         pcen(
-    #             self.S,
-    #             sr=self.sample_rate,
-    #             hop_length=self.hop_length,
-    #             gain=gain,
-    #             bias=bias,
-    #             power=power,
-    #             time_constant=time_constant,
-    #         ),
-    #         self.sample_rate,
-    #         self.hop_length,
-    #         self.fmin,
-    #         self.fmax,
-    #     )

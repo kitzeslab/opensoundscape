@@ -36,7 +36,14 @@ def _run_pipeline(
     """run the pipeline (until a break point, if specified)
 
     optionally, can pass a clip_times Series specifying 'start_time' 'end_time'
+
+    #TODO better documentation
     """
+    if break_on_key is not None:
+        assert (
+            break_on_key in pipeline
+        ), f"break_on_key was {break_on_key} but no matching action found in pipeline"
+
     x = Path(label_df_row.name)  # the index contains a path to a file
 
     # a list of additional things that an action may request from the preprocessor
@@ -81,7 +88,7 @@ def insert_after(series, idx, name, value):
     return part1.append(pd.Series([value], index=[name])).append(part2)
 
 
-def show_tensor(tensor, channel=None, transform_from_zero_centered=False, invert=False):
+def show_tensor(tensor, channel=None, transform_from_zero_centered=True, invert=True):
     """helper function for displaying a sample as an image
 
     Args:
@@ -120,4 +127,22 @@ def show_tensor(tensor, channel=None, transform_from_zero_centered=False, invert
         sample = sample[:, :, channel]
 
     plt.imshow(sample, cmap=cmap, norm=normalize)
-    plt.show()
+
+
+def show_tensor_grid(
+    tensors, columns, channel=None, transform_from_zero_centered=True, invert=True
+):
+    """create image of nxn tensors
+
+    Args:
+        tensors:list of samples
+        columns: number of columns in grid
+        for other args, see show_tensor()
+    """
+    from matplotlib import pyplot as plt
+
+    fig, _ = plt.subplots(figsize=[5 * columns, 5 * (len(tensors) // columns + 1)])
+    for i, s in enumerate(tensors):
+        plt.subplot(len(tensors) // columns + 1, columns, i + 1)
+        show_tensor(s, channel, transform_from_zero_centered, invert)
+    return fig

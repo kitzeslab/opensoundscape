@@ -5,32 +5,26 @@ For tutorials, see notebooks on opensoundscape.org
 
 import os
 import numpy as np
-from datetime import datetime
 import pandas as pd
-import numpy as np
 from pathlib import Path
-from collections import OrderedDict
 import warnings
-import random
 from deprecated import deprecated
+
 
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore_support
+from torch.utils.data import DataLoader
+
 
 from opensoundscape.torch.architectures import cnn_architectures
 from opensoundscape.torch.models.utils import (
     BaseModule,
-    get_dataloader,
-    get_batch,
     apply_activation_layer,
     tensor_binary_predictions,
-    collate_lists_of_audio_clips,
 )
 from opensoundscape.preprocess.preprocessors import SpecPreprocessor
 from opensoundscape.helpers import make_clip_df
-
 from opensoundscape.torch.loss import (
     BCEWithLogitsLoss_hot,
     CrossEntropyLoss_hot,
@@ -84,14 +78,10 @@ class CNN(BaseModule):
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
 
-        ### data loading parameters ###
-        self.sampler = None  # can be "imbalanced" for ImbalancedDatasetSampler
-
         ### architecture ###
-        # (feature extraction + classifier + loss fn)
-        # can be a pytorch CNN such as Resnet18, or RNN, etc
+        # can be a pytorch CNN such as Resnet18 or a custom object
         # must have .forward(), .train(), .eval(), .to(), .state_dict()
-        # for convenience, allow user to provide string matching
+        # for convenience, also allows user to provide string matching
         # a key from cnn_architectures.ARCH_DICT
         num_channels = sample_shape[2]
         if type(architecture) == str:
@@ -201,6 +191,21 @@ class CNN(BaseModule):
         """
         self.loss_fn = self.loss_cls()
 
+    def _init_dataloader(
+        self, safe_dataset, batch_size=64, num_workers=1, shuffle=False
+    ):
+        """initialize dataloader for training
+
+        Override this function to use a different DataLoader or sampler
+        """
+        return DataLoader(
+            safe_dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
+
     def _set_train(self, train_df, batch_size, num_workers):
         """Prepare network for training on train_dataset
 
@@ -228,12 +233,11 @@ class CNN(BaseModule):
         train_safe_dataset = SafeDataset(train_dataset, unsafe_behavior="substitute")
 
         # train_loader samples batches of images + labels from training set
-        self.train_loader = get_dataloader(
+        self.train_loader = self._init_dataloader(
             train_safe_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
             shuffle=True,
-            sampler=self.sampler,
         )
 
         ###########################
@@ -521,9 +525,9 @@ class CNN(BaseModule):
             return np.nan, np.nan
 
         if self.single_target:
-            score, metrics_dict = single_target_metrics(targets, scores, self.classes)
+            metrics_dict = single_target_metrics(targets, scores, self.classes)
         else:
-            score, metrics_dict = multi_target_metrics(
+            metrics_dict = multi_target_metrics(
                 targets, scores, self.classes, self.prediction_threshold
             )
 
@@ -548,7 +552,7 @@ class CNN(BaseModule):
 
         return score, metrics_dict
 
-    def save(self, path, save_datasets=True):
+    def save(self, path, save_datasets=False):
         import copy
 
         """save model with weights using torch.save()
@@ -567,6 +571,29 @@ class CNN(BaseModule):
                 except AttributeError:
                     pass
         torch.save(model_copy, path)
+
+    def save_weights(self, path):
+        """save just the weights of the network
+
+        This allows the saved weights to be used more flexibly than model.save()
+        which will pickle the entire object. The weights are saved in a pickled
+        dictionary using torch.save(self.network.state_dict())
+
+        Args:
+            path: location to save weights file
+        """
+        torch.save(self.architecture.state_dict(), path)
+
+    def load_weights(self, path, strict=True):
+        """load network weights from a file
+
+        For instance, load weights saved with .save_weights()
+
+        Args:
+            path: file path with saved weights
+            strict: (bool) see torch.load()
+        """
+        self.network.load_state_dict(torch.load(path))
 
     def predict(
         self,
@@ -640,48 +667,18 @@ class CNN(BaseModule):
         Note: if no return type is selected for `binary_preds`, returns None
         instead of a DataFrame for `predictions`
         """
-        # validate type of samples: list, np array, or df
-        if type(samples) == list or type(samples) == np.ndarray:
-            prediction_df = pd.DataFrame(index=samples)
-        elif type(samples) == pd.DataFrame:
-            prediction_df = samples
-        else:
-            raise ValueError(
-                f"samples must be type list, np.ndarray, or pd.DataFrame, was {type(samples)}."
-            )
-        # TODO: write test for type handling
-        if len(prediction_df.columns) > 0:
-            if not list(self.classes) == list(prediction_df.columns):
-                warnings.warn(
-                    "The columns of input samples df differ from `model.classes`."
-                )
-
-        if len(prediction_df) < 1:
-            warnings.warn("prediction_df has zero samples. Returning None.")
-            return None, None, None
-        # TODO: write test for zero length warning
-
-        prediction_dataset = self.preprocessor.make_dataset(prediction_df)
+        prediction_dataset, unsafe_paths = self._prep_dataset(
+            samples=samples,
+            split_files_into_clips=split_files_into_clips,
+            overlap_fraction=overlap_fraction,
+            final_clip=final_clip,
+        )
         prediction_dataset.augmentation_on = augmentation_on
-        unsafe_paths = []
-        if split_files_into_clips:
-            prediction_dataset.clip_times_df, unsafe_paths = make_clip_df(
-                prediction_df.index.values,
-                prediction_dataset.sample_duration,
-                overlap_fraction * prediction_dataset.sample_duration,
-                final_clip,
-            )
-            # update "label_df" so that index matches clip_times_df
-            prediction_dataset.label_df = prediction_dataset.clip_times_df[[]]
 
+        # TODO: test valid clips but None for clip_df?
         if len(prediction_dataset) < 1:
             warnings.warn("prediction_dataset has zero samples. Returning None.")
             return None, None, None
-
-        # move network to device
-        self.network.to(self.device)
-
-        self.network.eval()
 
         # SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
@@ -702,11 +699,14 @@ class CNN(BaseModule):
         dataloader.dataset._unsafe_samples += unsafe_paths  # TODO add test
 
         ### Prediction ###
+
+        # move network to device
+        self.network.to(self.device)
+        self.network.eval()
+
+        # initialize scores and preds
         total_scores = []
         total_preds = []
-        total_tgts = []
-
-        failed_files = []  # keep list of any samples that raise errors
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
@@ -767,6 +767,106 @@ class CNN(BaseModule):
         unsafe_samples = safe_dataset.report(log=unsafe_samples_log)
 
         return score_df, pred_df, unsafe_samples
+
+    def make_samples(
+        self,
+        samples,
+        augmentation_on=False,
+        break_on_key=None,
+        split_files_into_clips=False,
+        overlap_fraction=0,
+        final_clip=None,
+        return_labels=False,
+    ):
+        """return preprocessed samples from list or DataFrame
+
+        Runs preprocessing pipeline on file paths and returns samples
+        Also measures the time each sample takes to create
+        Optionally:
+            - turn on augmentation
+            - interrupt the preprocessing pipeline at a specific Action
+            - split files into clips
+
+        Note: this function does not parallelize sample generation with
+        a DataLoader and should be used as a quick way to inspect a few
+        samples. Use a DataLoader to generate large numbers of samples.
+
+        Args:
+            samples: list or dataframe of sample paths
+            break_on_key: if not None, preprocessing will stop at (before)
+                the pipeline action with name == break_on_key
+            split_files_into_clips, overlap_fraction, final_clip: see .predict()
+
+        Returns:
+            list of preprocessed samples as [{X:sample, y:labels},]
+            if return_samples is True, otherwise [samples]
+        """
+        dataset, unsafe_paths = self._prep_dataset(
+            samples=samples,
+            split_files_into_clips=split_files_into_clips,
+            overlap_fraction=overlap_fraction,
+            final_clip=final_clip,
+        )
+        dataset.augmentation_on = augmentation_on
+
+        # generate samples
+        samples = [
+            dataset.__getitem__(i, break_on_key=break_on_key)
+            for i in range(len(dataset))
+        ]
+
+        if not return_labels:
+            samples = [s["X"] for s in samples]
+
+        return samples
+
+    def _prep_dataset(
+        self, samples, split_files_into_clips=False, overlap_fraction=0, final_clip=None
+    ):
+        """validate input samples and create dataset with samples
+
+        if splitting into clips, adds the necessary attributes into
+        the dataset with clip start/end times
+
+        Args:
+            see .predict()
+
+        Returns:
+            dataset: copy of .preprocessor w/samples and clip info
+            unsafe_paths: list of paths that did not successfully
+                produce a list of clips with start/end times,
+                if split_files_into_clips=True
+        """
+        # validate type of samples: list, np array, or df
+        if type(samples) == list or type(samples) == np.ndarray:
+            df = pd.DataFrame(index=samples)
+        elif type(samples) == pd.DataFrame:
+            df = samples
+        else:
+            raise ValueError(
+                f"samples must be type list, np.ndarray, or pd.DataFrame, was {type(samples)}."
+            )
+        # TODO: write test for type handling
+        if len(df.columns) > 0:
+            if not list(self.classes) == list(df.columns):
+                warnings.warn(
+                    "The columns of input samples df differ from `model.classes`."
+                )
+
+        # TODO: write test for zero length warning
+        dataset = self.preprocessor.make_dataset(df)
+        unsafe_paths = []
+        if split_files_into_clips:
+            dataset.clip_times_df, unsafe_paths = make_clip_df(
+                df.index.values,
+                dataset.sample_duration,
+                overlap_fraction * dataset.sample_duration,
+                final_clip,
+            )
+            # update "label_df" so that index matches clip_times_df
+            dataset.label_df = dataset.clip_times_df[[]]
+
+        return dataset, unsafe_paths
 
 
 def use_resample_loss(model):
@@ -1022,15 +1122,21 @@ def load_model(path, device=None):
     return model
 
 
-def load_outdated_model(path, model_class, architecture_constructor=None, device=None):
+def load_outdated_model(
+    path, architecture, sample_duration, model_class=CNN, device=None
+):
     """load a CNN saved with a previous version of OpenSoundscape
 
-    This function enables you to load models saved with opso 0.4.x, 0.5.x, and 0.6.0 when using >=0.6.1.
-    For models created with 0.7.0 and above, use load_model(path) which is more robust.
+    This function enables you to load models saved with opso 0.4.x and 0.5.x.
+    If your model was saved with .save() in a previous version of OpenSoundscape
+    >=0.6.0, you must re-load the model
+    using the original package version and save it's network's state dict, i.e.,
+    `torch.save(model.network.state_dict(),path)`, then load the state dict
+    to a new model object with model.load_weights(). See the
+    `Predict with pre-trained CNN` tutorial for details.
 
-    Note: If you are loading a model created with opensoundscape 0.4.x, you most likely want to specify
-    `model_class = opensoundscape.torch.models.CnnResnet18Binary`. If your model was created with
-    opensoundscape 0.5.x or 0.6.0, you need to choose the appropriate class.
+    For models created with the same version of OpenSoundscape as the one
+    you are using, simply use opensoundscape.torch.models.cnn.load_model().
 
     Note: for future use of the loaded model, you can simply call
     `model.save(path)` after creating it, then reload it with
@@ -1040,24 +1146,20 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
     Examples:
     ```
     #load a binary resnet18 model from opso 0.4.x, 0.5.x, or 0.6.0
-    from opensoundscape.torch.models.cnn import Resnet18Binary
-    model = load_outdated_model('old_model.tar',model_class=Resnet18Binary)
+    from opensoundscape.torch.models.cnn import CNN
+    model = load_outdated_model('old_model.tar',architecture='resnet18')
 
     #load a resnet50 model of class CNN created with opso 0.5.0
     from opensoundscape.torch.models.cnn import CNN
-    from opensoundscape.torch.architectures.cnn_architectures import resnet50
-    model_050 = load_outdated_model('opso050_pytorch_model_r50.model',model_class=CNN,architecture_constructor=resnet50)
+    model_050 = load_outdated_model('opso050_pytorch_model_r50.model',architecture='resnet50')
     ```
 
     Args:
         path: path to model file, ie .model or .tar file
-        model_class: the opensoundscape class to create,
-            eg CNN, CnnResampleLoss, or Resnet18Binary from opensoundscape.torch.models.cnn
-        architecture_constructor: the *function* that creates desired cnn architecture
-            eg opensoundscape.torch.architectures.cnn_architectures.resnet18
-            Note: this is only required for classes that take the architecture as an input, for instance
-            CNN or CnnResampleLoss. It's not required for e.g. Resnet18Binary or InceptionV3 which
-            internally create a specific architecture.
+        architecture: see CNN docs
+            (pass None if the class __init__ does not take architecture as an argument)
+        sample_duration: length of samples in seconds
+        model_class: class to construct. Normally CNN.
         device: optionally specify a device to map tensors onto, eg 'cpu', 'cuda:0', 'cuda:1'[default: None]
             - if None, will choose cuda:0 if cuda is available, otherwise chooses cpu
 
@@ -1069,13 +1171,20 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
             torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
         )
 
-    # use torch to load the saved model object
-    model_dict = torch.load(path, map_location=device)
+    try:
+        # use torch to load the saved model object
+        model_dict = torch.load(path, map_location=device)
+    except AttributeError as e:
+        raise Exception(
+            "This model could not be loaded in this version of "
+            "OpenSoundscape. You may need to load the model with the version "
+            "of OpenSoundscape that created it and torch.save() the "
+            "model.network.state_dict(), then load the weights with model.load_weights"
+        )
 
     if type(model_dict) != dict:
         raise ValueError(
-            "This model was saved with a version of opensoundscape >=0.6.1. "
-            "Use opensoundcape.torch.models.cnn.load_model() instead of this function."
+            "This model was saved as a complete object. Try using load_model() instead."
         )
 
     # get the list of classes
@@ -1089,13 +1198,12 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
         raise ValueError("Could not get a list of classes from the saved model.")
 
     # try to construct a model object
-    try:
-        model = model_class(classes=classes)
-    except TypeError:  # may require us to specify the architecture
-        architecture = architecture_constructor(
-            num_classes=len(classes), use_pretrained=False
+    if architecture is None:
+        model = model_class(classes=classes, sample_duration=sample_duration)
+    else:
+        model = model_class(
+            architecture=architecture, classes=classes, sample_duration=sample_duration
         )
-        model = model_class(architecture=architecture, classes=classes)
 
     # rename keys of resnet18 architecture from 0.4.x-0.6.0 to match pytorch resnet18 keys
     model_dict["model_state_dict"] = {
@@ -1107,6 +1215,7 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
     mismatched_keys = model.network.load_state_dict(
         model_dict["model_state_dict"], strict=False
     )
+    print("mismatched keys:")
     print(mismatched_keys)
 
     # if there's no record of single-tartet vs multitarget, it' single target from opso 0.4.x
@@ -1116,5 +1225,11 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
         single_target = True
 
     model.single_target = single_target
+
+    warnings.warn(
+        "After loading a model, you still need to ensure that your "
+        "preprocessing (model.preprocessor) matches the settings used to create"
+        "the original model."
+    )
 
     return model

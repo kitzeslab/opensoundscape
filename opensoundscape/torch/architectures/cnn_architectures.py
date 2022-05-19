@@ -88,7 +88,7 @@ def resnet18(
     """
     model_ft = models.resnet18(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        model_ft = freeze_params(model_ft)
+        freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
     return model_ft
 
@@ -115,7 +115,7 @@ def resnet34(
     """
     model_ft = models.resnet34(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        model_ft = freeze_params(model_ft)
+        freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
     return model_ft
 
@@ -142,7 +142,7 @@ def resnet50(
     """
     model_ft = models.resnet50(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        model_ft = freeze_params(model_ft)
+        freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
     return model_ft
 
@@ -169,7 +169,7 @@ def resnet101(
     """
     model_ft = models.resnet101(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        model_ft = freeze_params(model_ft)
+        freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
     return model_ft
 
@@ -196,7 +196,7 @@ def resnet152(
     """
     model_ft = models.resnet152(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        model_ft = freeze_params(model_ft)
+        freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
     return model_ft
 
@@ -223,7 +223,7 @@ def alexnet(
     """
     model_ft = models.alexnet(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        model_ft = freeze_params(model_ft)
+        freeze_params(model_ft)
     # change output shape
     num_ftrs = model_ft.classifier[6].in_features
     model_ft.classifier[6] = nn.Linear(num_ftrs, num_classes)
@@ -260,7 +260,7 @@ def vgg11_bn(
         )
     model_ft = models.vgg11_bn(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        model_ft = freeze_params(model_ft)
+        freeze_params(model_ft)
     num_ftrs = model_ft.classifier[6].in_features
     model_ft.classifier[6] = nn.Linear(num_ftrs, num_classes)
     return model_ft
@@ -288,7 +288,7 @@ def squeezenet1_0(
     """
     model_ft = models.squeezenet1_0(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        model_ft = freeze_params(model_ft)
+        freeze_params(model_ft)
     model_ft.classifier[1] = nn.Conv2d(
         512, num_classes, kernel_size=(1, 1), stride=(1, 1)
     )
@@ -322,7 +322,7 @@ def densenet121(
     """
     model_ft = models.densenet121(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        model_ft = freeze_params(model_ft)
+        freeze_params(model_ft)
     num_ftrs = model_ft.classifier.in_features
     model_ft.classifier = nn.Linear(num_ftrs, num_classes)
     # change input shape num_channels
@@ -358,7 +358,7 @@ def inception_v3(
     """
     model_ft = models.inception_v3(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        model_ft = freeze_params(model_ft)
+        freeze_params(model_ft)
     # Handle the auxilary net
     num_ftrs = model_ft.AuxLogits.fc.in_features
     model_ft.AuxLogits.fc = nn.Linear(num_ftrs, num_classes)

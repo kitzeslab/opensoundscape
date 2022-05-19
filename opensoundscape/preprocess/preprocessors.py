@@ -16,13 +16,11 @@ from opensoundscape.preprocess import actions
 from opensoundscape.preprocess.actions import (
     BaseAction,
     Action,
-    ImgOverlay,
+    Overlay,
     AudioClipLoader,
     AudioTrim,
-    AudioRandomTrim,
 )
 
-# from opensoundscape.preprocess.overlay import ImgOverlay
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 
@@ -132,7 +130,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
         new_ds = copy.deepcopy(self)
         new_ds.label_df = new_ds.label_df.sample(**kwargs)
         if new_ds.clip_times_df is not None:
-            new_ds.clip_times_df = new_ds.clip_times_df[new_ds.label_df.index]
+            new_ds.clip_times_df = new_ds.clip_times_df.loc[new_ds.label_df.index]
         return new_ds
 
     def head(self, n=5):
@@ -150,7 +148,7 @@ class BasePreprocessor(torch.utils.data.Dataset):
         new_ds = copy.deepcopy(self)
         new_ds.label_df = new_ds.label_df.head(n)
         if new_ds.clip_times_df is not None:
-            new_ds.clip_times_df = new_ds.clip_times_df[new_ds.label_df.index]
+            new_ds.clip_times_df = new_ds.clip_times_df.loc[new_ds.label_df.index]
         return new_ds
 
     def insert_action(self, action_index, action, after_key=None, before_key=None):
@@ -249,8 +247,10 @@ class SpecPreprocessor(BasePreprocessor):
         self.pipeline = pd.Series(
             {
                 "load_audio": AudioClipLoader(),
-                "random_trim_audio": AudioRandomTrim(is_augmentation=True),
-                "trim_audio": AudioTrim(),  # trim clips to correct length
+                # if we are augmenting and get a long file, take a random trim from it
+                "random_trim_audio": AudioTrim(is_augmentation=True, random_trim=True),
+                # otherwise, we expect to get the correct duration. no random trim
+                "trim_audio": AudioTrim(),  # trim or extend (w/silence) clips to correct length
                 "to_spec": Action(Spectrogram.from_audio),
                 "bandpass": Action(
                     Spectrogram.bandpass, min_f=0, max_f=11025, out_of_bounds_ok=False
@@ -274,7 +274,7 @@ class SpecPreprocessor(BasePreprocessor):
         )
         # add overlay augmentation if overlay_df is provided
         if overlay_df is not None:
-            overlay = ImgOverlay(
+            overlay = Overlay(
                 is_augmentation=True, overlay_df=overlay_df, update_labels=False
             )
             self.insert_action("overlay", overlay, after_key="to_img")
