@@ -23,6 +23,10 @@ class SafeDataset:
     a DataLoader, finds the next good sample and uses it for
     the current index (see __getitem__).
 
+    Note that this class does not subclass DataSet. Instead, it contains a
+    `.dataset` attribute that is a DataSet (or a Preprocessor, which subclasses
+    DataSet).
+
     Args:
         dataset: a torch Dataset instance or child such as a Preprocessor
         eager_eval: If True, checks if every file is able to be loaded during
