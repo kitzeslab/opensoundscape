@@ -85,8 +85,7 @@ from sklearn.model_selection import train_test_split
 from opensoundscape.preprocess.utils import show_tensor_grid
 
 #load a DataFrame of one-hot audio clip labels
-#(index: file paths; columns: classes)
-df = pd.read_csv('my_labels.csv')
+df = pd.read_csv('my_labels.csv') #index: paths; columns: classes
 train_df, validation_df = train_test_split(df,test_size=0.2)
 
 # optional: inspect a few preprocessed samples
@@ -94,12 +93,11 @@ samples = model.make_samples(train_df.sample(n=9),augmentation_on=True)
 fig = show_tensor_grid(samples,3)
 
 #create a CNN and train for 2 epochs
-#for simplicity, using the training set as validation (not recommended!)
-#the best model is automatically saved to `./best.model`
 model = PytorchModel('resnet18',classes=df.columns,sample_duration=0.2)
 model.train(
   train_df,
   validation_df,
   epochs=2
 )
+#the best model is automatically saved to a file `./best.model`
 ```
