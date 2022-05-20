@@ -136,19 +136,30 @@ def show_tensor(tensor, channel=None, transform_from_zero_centered=True, invert=
 
 
 def show_tensor_grid(
-    tensors, columns, channel=None, transform_from_zero_centered=True, invert=True
+    tensors,
+    columns,
+    channel=None,
+    transform_from_zero_centered=True,
+    invert=True,
+    labels=None,
 ):
     """create image of nxn tensors
 
     Args:
         tensors:list of samples
         columns: number of columns in grid
+        labels: title of each subplot
         for other args, see show_tensor()
     """
     from matplotlib import pyplot as plt
 
+    if labels is not None:
+        assert len(labels) == len(tensors)
+
     fig, _ = plt.subplots(figsize=[5 * columns, 5 * (len(tensors) // columns + 1)])
     for i, s in enumerate(tensors):
-        plt.subplot(len(tensors) // columns + 1, columns, i + 1)
+        ax = plt.subplot(len(tensors) // columns + 1, columns, i + 1)
         show_tensor(s, channel, transform_from_zero_centered, invert)
+        if labels is not None:
+            ax.set_title(labels[i])
     return fig
