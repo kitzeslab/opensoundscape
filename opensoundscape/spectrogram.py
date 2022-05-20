@@ -175,8 +175,8 @@ class Spectrogram:
             audio.samples,
             audio.sample_rate,
             window=window_type,
-            nperseg=window_samples,
-            noverlap=overlap_samples,
+            nperseg=int(window_samples),
+            noverlap=int(overlap_samples),
             nfft=fft_size,
             scaling="spectrum",
         )
