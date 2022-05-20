@@ -41,10 +41,11 @@ class BaseAction:
         self.bypass = False
 
     def __repr__(self):
-        if self.bypass:
-            return f"Bypassed Action"
-        else:
-            return f"Action"
+        return (
+            f"{'Bypassed ' if self.bypass else ''}"
+            f"{'Augmentation ' if self.is_augmentation else ''}"
+            "Action"
+        )
 
     def go(self, x, **kwargs):
         return x
@@ -109,10 +110,11 @@ class Action(BaseAction):
         ), f"These required arguments were not provided: {unmatched_reqd_args}"
 
     def __repr__(self):
-        if self.bypass:
-            return f"### Bypassed Action calling {self.action_fn}###"
-        else:
-            return f"Action calling {self.action_fn}"
+        return (
+            f"{'## Bypassed ## ' if self.bypass else ''}"
+            f"{'Augmentation ' if self.is_augmentation else ''}"
+            f"Action calling {self.action_fn}"
+        )
 
     def go(self, x, **kwargs):
         # the syntax is the same regardless of whether
