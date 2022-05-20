@@ -1,7 +1,8 @@
 import pytest
 import numpy as np
 import pandas as pd
-from opensoundscape.preprocess.preprocessors import SpecPreprocessor, PreprocessingError
+from opensoundscape.preprocess.preprocessors import SpecPreprocessor
+from opensoundscape.preprocess.utils import PreprocessingError
 import warnings
 
 
