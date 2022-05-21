@@ -22,14 +22,14 @@ from opensoundscape.torch.models.utils import (
     apply_activation_layer,
     tensor_binary_predictions,
 )
-from opensoundscape.preprocess.preprocessors import SpecPreprocessor
-from opensoundscape.helpers import make_clip_df
+from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.torch.loss import (
     BCEWithLogitsLoss_hot,
     CrossEntropyLoss_hot,
     ResampleLoss,
 )
 from opensoundscape.torch.safe_dataset import SafeDataset
+from opensoundscape.torch.datasets import AudioFileDataset, AudioClipDataset
 import opensoundscape
 
 
@@ -63,7 +63,7 @@ class CNN(BaseModule):
         classes,
         sample_duration,
         single_target=False,
-        preprocessor_class=SpecPreprocessor,
+        preprocessor_class=SpectrogramPreprocessor,
         sample_shape=[224, 224, 3],
     ):
 
@@ -114,9 +114,7 @@ class CNN(BaseModule):
 
         ### sample loading/preprocessing ###
         self.preprocessor = preprocessor_class(
-            label_df=pd.DataFrame(columns=self.classes),
-            sample_duration=sample_duration,
-            out_shape=sample_shape,
+            sample_duration=sample_duration, out_shape=sample_shape
         )
 
         ### loss function ###
@@ -206,7 +204,7 @@ class CNN(BaseModule):
         )
 
     def _set_train(self, train_df, batch_size, num_workers):
-        """Prepare network for training on train_dataset
+        """Prepare network for training on train_df
 
         Args:
             batch_size: number of training files to load/process before
@@ -225,7 +223,8 @@ class CNN(BaseModule):
         ######################
         # Dataloader setup #
         ######################
-        train_dataset = self.preprocessor.make_dataset(train_df)
+        train_dataset = AudioFileDataset(train_df, self.preprocessor)
+        train_dataset.bypass_augmentations = False
 
         # SafeDataset loads a new sample if loading a sample throws an error
         # indices of bad samples are appended to ._unsafe_indices
@@ -661,21 +660,32 @@ class CNN(BaseModule):
         Note: if no return type is selected for `binary_preds`, returns None
         instead of a DataFrame for `predictions`
         """
-        prediction_dataset, unsafe_paths = self._prep_dataset(
-            samples=samples,
-            split_files_into_clips=split_files_into_clips,
-            overlap_fraction=overlap_fraction,
-            final_clip=final_clip,
-        )
+        if split_files_into_clips:
+            prediction_dataset = AudioClipDataset(
+                samples=samples,
+                preprocessor=self.preprocessor,
+                overlap_fraction=overlap_fraction,
+                final_clip=final_clip,
+                return_labels=False,
+            )
+        else:
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor, return_labels=False
+            )
         prediction_dataset.augmentation_on = augmentation_on
 
-        if len(prediction_dataset) < 1:
+        if not list(self.classes) == list(prediction_dataset.classes):
             warnings.warn(
-                "prediction_dataset has zero samples. No predictions will be generated."
-            )
-            scores = pd.DataFrame(columns=self.classes)
-            preds = None if binary_preds is None else pd.DataFrame(columns=self.classes)
-            return scores, preds, unsafe_paths
+                "The columns of input samples df differ from `model.classes`."
+            )  # TODO test this
+        #
+        # if len(prediction_dataset) < 1:
+        #     warnings.warn(
+        #         "prediction_dataset has zero samples. No predictions will be generated."
+        #     )
+        #     scores = pd.DataFrame(columns=self.classes)
+        #     preds = None if binary_preds is None else pd.DataFrame(columns=self.classes)
+        #     return scores, preds, unsafe_paths
 
         # SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
@@ -693,7 +703,7 @@ class CNN(BaseModule):
             pin_memory=torch.cuda.is_available(),
         )
         # add any paths that failed to generate a clip df to _unsafe_samples
-        dataloader.dataset._unsafe_samples += unsafe_paths
+        dataloader.dataset._unsafe_samples += prediction_dataset.unsafe_samples
 
         ### Prediction ###
 
@@ -766,110 +776,6 @@ class CNN(BaseModule):
         unsafe_samples = dataloader.dataset.report(log=unsafe_samples_log)
 
         return score_df, pred_df, unsafe_samples
-
-    def make_samples(
-        self,
-        samples,
-        augmentation_on=False,
-        break_on_key=None,
-        split_files_into_clips=False,
-        overlap_fraction=0,
-        final_clip=None,
-        return_labels=False,
-    ):
-        """return preprocessed samples from list or DataFrame
-
-        Runs preprocessing pipeline on file paths and returns samples
-        Also measures the time each sample takes to create
-        Optionally:
-            - turn on augmentation
-            - interrupt the preprocessing pipeline at a specific Action
-            - split files into clips
-
-        Note: this function does not parallelize sample generation with
-        a DataLoader and should be used as a quick way to inspect a few
-        samples. Use a DataLoader to generate large numbers of samples.
-
-        Args:
-            samples: list or dataframe of sample paths
-            break_on_key: if not None, preprocessing will stop at (before)
-                the pipeline action with name == break_on_key
-            split_files_into_clips, overlap_fraction, final_clip: see .predict()
-
-        Returns:
-            list of preprocessed samples as [{X:sample, y:labels},]
-            if return_samples is True, otherwise [samples]
-        """
-        dataset, unsafe_paths = self._prep_dataset(
-            samples=samples,
-            split_files_into_clips=split_files_into_clips,
-            overlap_fraction=overlap_fraction,
-            final_clip=final_clip,
-        )
-        dataset.augmentation_on = augmentation_on
-
-        # generate samples
-        samples = [
-            dataset.__getitem__(i, break_on_key=break_on_key)
-            for i in range(len(dataset))
-        ]
-
-        if not return_labels:
-            samples = [s["X"] for s in samples]
-
-        return samples
-
-    def _prep_dataset(
-        self, samples, split_files_into_clips=False, overlap_fraction=0, final_clip=None
-    ):
-        """validate input samples and create dataset with samples
-
-        if splitting into clips, adds the necessary attributes into
-        the dataset with clip start/end times
-
-        Args:
-            see .predict()
-
-        Returns:
-            dataset: copy of .preprocessor w/samples and clip info
-            unsafe_paths: list of paths that did not successfully
-                produce a list of clips with start/end times,
-                if split_files_into_clips=True
-        """
-        # validate type of samples: list, np array, or df
-        assert type(samples) in (
-            list,
-            np.ndarray,
-            pd.DataFrame,
-        ), f"samples must be type list/np.ndarray of file paths, or pd.DataFrame with paths as index. Got {type(samples)}."
-        if type(samples) == list or type(samples) == np.ndarray:
-            df = pd.DataFrame(index=samples)
-        elif type(samples) == pd.DataFrame:
-            df = samples
-
-        if len(df.columns) > 0:
-            if not list(self.classes) == list(df.columns):
-                warnings.warn(
-                    "The columns of input samples df differ from `model.classes`."
-                )
-
-        # make a copy of self.preprocessor that includes samples from df
-        dataset = self.preprocessor.make_dataset(df)
-        unsafe_paths = []
-        if split_files_into_clips:
-            dataset.clip_times_df, unsafe_paths = make_clip_df(
-                df.index.values,
-                dataset.sample_duration,
-                overlap_fraction * dataset.sample_duration,
-                final_clip,
-            )  # clip_times_df might be None if no files succeeded
-            if dataset.clip_times_df is None:
-                dataset.clip_times_df = pd.DataFrame(columns=self.classes)
-
-            # update "label_df" so that index matches clip_times_df
-            dataset.label_df = dataset.clip_times_df[[]]
-
-        return dataset, unsafe_paths
 
 
 def use_resample_loss(model):
@@ -964,7 +870,7 @@ class InceptionV3(CNN):
         classes,
         sample_duration,
         single_target=False,
-        preprocessor_class=SpecPreprocessor,
+        preprocessor_class=SpectrogramPreprocessor,
         freeze_feature_extractor=False,
         use_pretrained=True,
         sample_shape=[299, 299, 3],

@@ -5,7 +5,7 @@ from pathlib import Path
 import copy
 import warnings
 
-from opensoundscape.preprocess.utils import _run_pipeline, insert_before, insert_after
+from opensoundscape.preprocess.utils import PreprocessingError
 from opensoundscape.preprocess import actions
 from opensoundscape.preprocess.actions import (
     Action,
@@ -17,222 +17,165 @@ from opensoundscape.preprocess.actions import (
 from opensoundscape.spectrogram import Spectrogram
 
 
-class BasePreprocessor(torch.utils.data.Dataset):
-    """Base class for Preprocessing pipelines (use in place of torch Dataset)
+class BasePreprocessor:
+    """Class for defining an ordered set of Actions and a way to run them
 
     Custom Preprocessor classes should subclass this class or its children
 
-    Args:
-        label_df:
-            dataframe of audio clips. label_df must have audio paths in the index.
-            If label_df has labels, the class names should be the columns, and
-            the values of each row should be 0 or 1.
-            If data does not have labels, label_df will have no columns
-        return_labels:
-            if True, the __getitem__ method will return {X:sample,y:labels}
-            If False, the __getitem__ method will return {X:sample}
-            If label_df has no labels (no columns), use return_labels=False
-            [default: True]
-        sample_duration: duration of samples in seconds [default: None will
-            load full length samples]
+    Preprocessors have one job: to transform samples from some input (eg
+    a file path) to some output (eg a torch.Tensor) using a specific procedure.
+    The procedure consists of Actions ordered by the Preprocessor's index.
+    Preprocessors have a forward() method which runs the set of Actions
+    specified in the index.
 
-    Raises:
-        PreprocessingError if exception is raised during __getitem__
+    Args:
+        action_dict: dictionary of name:Action actions to perform sequentially
+        sample_duration: length of audio samples to generate (seconds)
     """
 
-    def __init__(self, label_df, return_labels=True, sample_duration=None):
-        # give helpful warnings for incorret inputs, but don't raise Exception
-        if len(label_df) > 0 and not Path(label_df.index[0]).exists():
-            warnings.warn(
-                "Index of dataframe passed to "
-                f"preprocessor must be a file path. Got {label_df.index[0]}."
-            )
-        if return_labels and len(label_df.columns) == 0:
-            warnings.warn("return_labels=True but df has no columns!")
-        elif (
-            len(label_df) > 0 and return_labels and not label_df.values[0, 0] in (0, 1)
-        ):
-            warnings.warn(
-                "if return_labels=True, label_df must have labels that take values of 0 and 1"
-            )
-
-        self.label_df = label_df
-        self.clip_times_df = None
-        self.return_labels = return_labels
-        self.classes = label_df.columns
+    def __init__(self, sample_duration=None):
+        self.pipeline = pd.Series({}, dtype=object)
         self.sample_duration = sample_duration
-        # if augmentation_on False, skips Actions with .is_augmentation=True
-        self.augmentation_on = True
-
-        # pipeline: a dictionary listing operations to conduct on each sample
-        self.pipeline = pd.Series(dtype="object")
-
-    def __len__(self):
-        return self.label_df.shape[0]
-
-    def __getitem__(self, item_idx, break_on_key=None, break_on_type=None):
-
-        label_df_row = self.label_df.iloc[item_idx]
-
-        clip_times = (
-            None if self.clip_times_df is None else self.clip_times_df.iloc[item_idx]
-        )
-
-        # _run_pipeline will raise PreprocessingError if something fails
-        x, sample_info = _run_pipeline(
-            self.pipeline,
-            label_df_row,
-            augmentation_on=self.augmentation_on,
-            break_on_key=break_on_key,
-            break_on_type=break_on_type,
-            clip_times=clip_times,
-            sample_duration=self.sample_duration,
-        )
-
-        # Return sample & label pairs (training/validation)
-        if self.return_labels:
-            labels = torch.from_numpy(sample_info["_labels"].values)
-            return {"X": x, "y": labels}
-
-        # Return sample only (prediction)
-        return {"X": x}
 
     def __repr__(self):
-        return f"{self.__class__} object with pipeline: {self.pipeline}"
-
-    def class_counts(self):
-        """count number of each label"""
-        labels = self.label_df.columns
-        counts = np.sum(self.label_df.values, 0)
-        return labels, counts
-
-    def sample(self, **kwargs):
-        """out-of-place random sample
-
-        creates copy of object with n rows randomly sampled from dataframe
-
-        Args: see pandas.DataFrame.sample()
-
-        Returns:
-            a new dataset object
-        """
-        new_ds = copy.deepcopy(self)
-        new_ds.label_df = new_ds.label_df.sample(**kwargs)
-        if new_ds.clip_times_df is not None:
-            new_ds.clip_times_df = new_ds.clip_times_df.loc[new_ds.label_df.index]
-        return new_ds
-
-    def head(self, n=5):
-        """out-of-place copy of first n samples
-
-        performs df.head(n) on self.label_df
-
-        Args:
-            n: number of first samples to return, see pandas.DataFrame.head()
-            [default: 5]
-
-        Returns:
-            a new dataset object
-        """
-        new_ds = copy.deepcopy(self)
-        new_ds.label_df = new_ds.label_df.head(n)
-        if new_ds.clip_times_df is not None:
-            new_ds.clip_times_df = new_ds.clip_times_df.loc[new_ds.label_df.index]
-        return new_ds
+        return f"Preprocessor with pipeline: {self.pipeline}"
 
     def insert_action(self, action_index, action, after_key=None, before_key=None):
-        """insert an action into the pipeline in specific specific position
+        """insert an action in specific specific position
 
         This is an in-place operation
 
         Inserts a new action before or after a specific key. If after_key and
-        before_key are both None, action is appended to the end of the pipeline.
+        before_key are both None, action is appended to the end of the index.
 
         Args:
-            action_index: string key for new action in pipeline dictionary
+            action_index: string key for new action in index
             action: the action object, must be subclass of BaseAction
-            after_key: insert the action immediately after this key in pipeline
-            before_key: insert the action immediately before this key in pipeline
+            after_key: insert the action immediately after this key in index
+            before_key: insert the action immediately before this key in index
                 Note: only one of (after_key, before_key) can be specified
         """
         if after_key is not None and before_key is not None:
             raise ValueError("Specifying both before_key and after_key is not allowed")
 
-        assert (
-            not action_index in self.pipeline.index
-        ), f"action_index must be unique, but {action_index} is already in the pipeline. Provide a different name for this action."
+        assert not action_index in self.pipeline, (
+            f"action_index must be unique, but {action_index} is already"
+            "in the pipeline. Provide a different name for this action."
+        )
 
         if after_key is None and before_key is None:
-            # put this action at the end of the pipeline
-            self.pipeline[action_index] = action
+            # put this action at the end of the index
+            self.pipeline = self.pipeline.append(pd.Series({action_index: action}))
         elif before_key is not None:
-            self.pipeline = insert_before(
-                self.pipeline, after_key, action_index, action
-            )
+            self.insert_action_before(before_key, action_index, action)
         elif after_key is not None:
-            self.pipeline = insert_after(self.pipeline, after_key, action_index, action)
+            self.insert_action_after(after_key, action_index, action)
 
     def remove_action(self, action_index):
-        """remove an action into the pipeline based on its index (name)
+        """alias for self.drop(...,inplace=True), removes an action
 
         This is an in-place operation
 
         Args:
-            action_index: index of action to remove in pipeline
+            action_index: index of action to remove
         """
-        self.pipeline = self.pipeline.drop(action_index)
+        self.drop(action_index, inplace=True)
 
-    def make_dataset(self, label_df):
-        """Generates a copy of itself, with `self.label_df = label_df`"""
-        new_dataset = self.sample(n=0)
-        new_dataset.label_df = label_df
-        return new_dataset
+    def forward(
+        self,
+        label_df_row,
+        break_on_type=None,
+        break_on_key=None,
+        clip_times=None,
+        bypass_augmentations=False,
+    ):
+        """perform actions in self.index on a sample (until a break point)
+
+        optionally, can pass a clip_times Series specifying 'start_time' 'end_time'
+        #TODO add docstring
+        """
+        if break_on_key is not None:
+            assert (
+                break_on_key in pipeline
+            ), f"break_on_key was {break_on_key} but no matching action found in pipeline"
+
+        x = Path(label_df_row.name)  # the index contains a path to a file
+
+        # a list of additional things that an action may request from the preprocessor
+        sample_info = {
+            "_path": Path(label_df_row.name),
+            "_labels": copy.deepcopy(label_df_row),
+            "_start_time": None if clip_times is None else clip_times["start_time"],
+            "_sample_duration": self.sample_duration,
+            "_preprocessor": self,
+        }
+
+        try:
+            for k, action in self.pipeline.items():
+                if type(action) == break_on_type or k == break_on_key:
+                    break
+                if action.bypass:
+                    continue
+                if action.is_augmentation and bypass_augmentations:
+                    continue
+                extra_args = {key: sample_info[key] for key in action.extra_args}
+                if action.returns_labels:
+                    x, labels = action.go(x, **extra_args)
+                    sample_info["_labels"] = labels
+                else:
+                    x = action.go(x, **extra_args)
+        except:
+            # treat any exceptions raised during forward as PreprocessingErrors
+            raise PreprocessingError(
+                f"failed to preprocess sample from path: {label_df_row.name}"
+            )
+
+        return x, sample_info
+
+    def insert_action_before(self, idx, name, value):
+        """insert an item before a spcific index in a series"""
+        i = list(self.pipeline.index).index(idx)
+        part1 = series[0:i]
+        part2 = series[i:]
+        self = part1.append(pd.Series([value], index=[name])).append(part2)
+
+    def insert_action_after(self, idx, name, value):
+        """insert an item after a spcific index in a series"""
+        i = list(self.pipeline.index).index(idx)
+        part1 = self[0 : i + 1]
+        part2 = self[i + 1 :]
+        self = part1.append(pd.Series([value], index=[name])).append(part2)
 
 
-class SpecPreprocessor(BasePreprocessor):
-    """Child of BasePreprocessor that creates specrograms with augmentation
+class SpectrogramPreprocessor(BasePreprocessor):
+    """Child of BasePreprocessor that creates specrogram Tensors w/augmentation
 
     loads audio, creates spectrogram, performs augmentations, returns tensor
 
     by default, does not resample audio, but bandpasses to 0-11.025 kHz
     (to ensure all outputs have same scale in y-axis)
-    can change with .actions.load_audio.set(sample_rate=sr)
+    can change with .load_audio.set(sample_rate=sr)
 
     during prediction, will load clips from long audio files rather than entire
     audio files.
 
     Args:
-        label_df:
-            dataframe of audio clips. label_df must have audio paths in the index.
-            If label_df has labels, the class names should be the columns, and
-            the values of each row should be 0 or 1.
-            If data does not have labels, label_df will have no columns
         sample_duration:
             length in seconds of audio samples generated
             If not None, longer clips trimmed to this length. By default,
             shorter clips will be extended (modify random_trim_audio and
             trim_audio to change behavior).
+        overlay_df: if not None, will include an overlay action drawing
+            samples from this df
         out_shape:
             output shape of tensor h,w,channels [default: [224,224,3]]
-        return_labels:
-            if True, the __getitem__ method will return {X:sample,y:labels}
-            If False, the __getitem__ method will return {X:sample}
-            If label_df has no labels (no columns), use return_labels=False
-            [default: True]
     """
 
-    def __init__(
-        self,
-        label_df,
-        sample_duration,
-        return_labels=True,
-        overlay_df=None,
-        out_shape=[224, 224, 3],
-    ):
-        self.sample_duration = sample_duration
-        super(SpecPreprocessor, self).__init__(
-            label_df, return_labels=return_labels, sample_duration=sample_duration
-        )
+    def __init__(self, sample_duration, overlay_df=None, out_shape=[224, 224, 3]):
+
+        super(SpectrogramPreprocessor, self).__init__(sample_duration=sample_duration)
+
+        # define a default set of Actions
         self.pipeline = pd.Series(
             {
                 "load_audio": AudioClipLoader(),
@@ -250,6 +193,11 @@ class SpecPreprocessor(BasePreprocessor):
                     channels=out_shape[2],
                     return_type="torch",
                 ),
+                "overlay": Overlay(
+                    is_augmentation=True, overlay_df=overlay_df, update_labels=False
+                )
+                if overlay_df is not None
+                else None,
                 "time_mask": Action(actions.time_mask, is_augmentation=True),
                 "frequency_mask": Action(actions.frequency_mask, is_augmentation=True),
                 "add_noise": Action(
@@ -261,9 +209,7 @@ class SpecPreprocessor(BasePreprocessor):
                 ),
             }
         )
-        # add overlay augmentation if overlay_df is provided
-        if overlay_df is not None:
-            overlay = Overlay(
-                is_augmentation=True, overlay_df=overlay_df, update_labels=False
-            )
-            self.insert_action("overlay", overlay, after_key="to_img")
+
+        # remove overlay if overlay_df was not specified
+        if overlay_df is None:
+            self.pipeline.drop("overlay", inplace=True)

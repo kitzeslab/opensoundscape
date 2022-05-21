@@ -18,7 +18,6 @@ import pandas as pd
 from opensoundscape.audio import Audio
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
-from opensoundscape.preprocess.utils import _run_pipeline
 
 
 class BaseAction:
@@ -390,7 +389,7 @@ class Overlay(Action):
         super(Overlay, self).__init__(
             overlay,
             is_augmentation=is_augmentation,
-            extra_args=["_labels", "_pipeline"],
+            extra_args=["_labels", "_preprocessor"],
             **kwargs,
         )
 
@@ -425,7 +424,7 @@ class Overlay(Action):
 def overlay(
     x,
     _labels,
-    _pipeline,
+    _preprocessor,
     overlay_df,
     update_labels,
     overlay_class=None,
@@ -450,7 +449,7 @@ def overlay(
         overlay_df: a labels dataframe with audio files as the index and
             classes as columns
         _labels: labels of the original sample
-        _pipeline: the preprocessing pipeline
+        _preprocessor: the preprocessing pipeline
         update_labels: if True, add overlayed sample's labels to original sample
         overlay_class: how to choose files from overlay_df to overlay
             Options [default: "different"]:
@@ -570,9 +569,7 @@ def overlay(
             # it will cut off the preprocessing of the overlayed sample before
             # the first Overlay object. This may or may not be the desired behavior,
             # but it will at least "work".
-            x2, sample_info = _run_pipeline(
-                _pipeline, overlay_row, break_on_type=Overlay
-            )
+            x2, sample_info = _preprocessor.forward(overlay_row, break_on_type=Overlay)
 
             # now we blend the two tensors together with a weighted average
             # Select weight of overlay; <0.5 means more emphasis on original sample
