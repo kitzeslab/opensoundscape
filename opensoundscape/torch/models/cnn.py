@@ -29,7 +29,7 @@ from opensoundscape.torch.loss import (
     ResampleLoss,
 )
 from opensoundscape.torch.safe_dataset import SafeDataset
-from opensoundscape.torch.datasets import AudioFileDataset, AudioClipDataset
+from opensoundscape.torch.datasets import AudioFileDataset, AudioSplittingDataset
 import opensoundscape
 
 
@@ -410,6 +410,8 @@ class CNN(BaseModule):
                 - if None,  does not write a file
 
         """
+
+        ### Input Validation ###
         class_err = (
             "Train and validation datasets must have same classes "
             "and class order as model object."
@@ -418,6 +420,14 @@ class CNN(BaseModule):
         if validation_df is not None:
             assert list(self.classes) == list(validation_df.columns), class_err
 
+        # Validation: warn user if no validation set
+        if validation_df is None:
+            warnings.warn(
+                "No validation set was provided. Model will be "
+                "evaluated using the performance on the training set."
+            )
+
+        # Initialize attributes
         self.log_interval = log_interval
         self.save_interval = save_interval
         self.save_path = save_path
@@ -440,26 +450,32 @@ class CNN(BaseModule):
                 self.train_loader
             )
 
+            ### Evaluate ###
             train_score, self.train_metrics[self.current_epoch] = self.eval(
                 train_targets, train_scores
             )
 
             #### Validation ###
-            self._log("\nValidation.")
-            validation_scores, _, unsafe_val_samples = self.predict(
-                validation_df,
-                batch_size=batch_size,
-                num_workers=num_workers,
-                activation_layer="softmax_and_logit" if self.single_target else None,
-                split_files_into_clips=False,
-            )
-            validation_targets = validation_df.values
-            validation_scores = validation_scores.values
+            if validation_df is not None:
+                self._log("\nValidation.")
+                validation_scores, _, unsafe_val_samples = self.predict(
+                    validation_df,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    activation_layer="softmax_and_logit"
+                    if self.single_target
+                    else None,
+                    split_files_into_clips=False,
+                )
+                validation_targets = validation_df.values
+                validation_scores = validation_scores.values
 
-            ### Metrics ###
-            validation_score, self.valid_metrics[self.current_epoch] = self.eval(
-                validation_targets, validation_scores
-            )
+                validation_score, self.valid_metrics[self.current_epoch] = self.eval(
+                    validation_targets, validation_scores
+                )
+                score = validation_score
+            else:  # Evaluate model w/validation score unless no validation
+                score = train_score
 
             ### Save ###
             if (
@@ -469,17 +485,16 @@ class CNN(BaseModule):
 
                 self.save(f"{self.save_path}/epoch-{self.current_epoch}.model")
 
-            # Evaluate using validation score unless validation_df is None
-            score = train_score if validation_df is None else validation_score
-            # if best score, update & save weights to best.model
-            if validation_score > self.best_score:
-                self.best_score = validation_score
+            # if this is the best score, update & save weights to best.model
+            if score > self.best_score:
+                self.best_score = score
                 self.best_epoch = self.current_epoch
                 self._log("Updating best model", level=2)
                 self.save(f"{self.save_path}/best.model")
 
             self.current_epoch += 1
 
+        ### Logging ###
         self._log("Training complete", level=2)
         self._log(
             f"\nBest Model Appears at Epoch {self.best_epoch} with Validation score {self.best_score:.3f}."
@@ -575,12 +590,13 @@ class CNN(BaseModule):
         Args:
             path: location to save weights file
         """
-        torch.save(self.architecture.state_dict(), path)
+        torch.save(self.network.state_dict(), path)
 
     def load_weights(self, path, strict=True):
-        """load network weights from a file
+        """load network weights state dict from a file
 
         For instance, load weights saved with .save_weights()
+        in-place operation
 
         Args:
             path: file path with saved weights
@@ -660,8 +676,9 @@ class CNN(BaseModule):
         Note: if no return type is selected for `binary_preds`, returns None
         instead of a DataFrame for `predictions`
         """
+        # set up prediction Dataset
         if split_files_into_clips:
-            prediction_dataset = AudioClipDataset(
+            prediction_dataset = AudioSplittingDataset(
                 samples=samples,
                 preprocessor=self.preprocessor,
                 overlap_fraction=overlap_fraction,
@@ -674,18 +691,21 @@ class CNN(BaseModule):
             )
         prediction_dataset.augmentation_on = augmentation_on
 
-        if not list(self.classes) == list(prediction_dataset.classes):
+        ## Input Validation ##
+        if len(prediction_dataset.classes) > 0 and not list(self.classes) == list(
+            prediction_dataset.classes
+        ):
             warnings.warn(
                 "The columns of input samples df differ from `model.classes`."
-            )  # TODO test this
-        #
-        # if len(prediction_dataset) < 1:
-        #     warnings.warn(
-        #         "prediction_dataset has zero samples. No predictions will be generated."
-        #     )
-        #     scores = pd.DataFrame(columns=self.classes)
-        #     preds = None if binary_preds is None else pd.DataFrame(columns=self.classes)
-        #     return scores, preds, unsafe_paths
+            )
+
+        if len(prediction_dataset) < 1:
+            warnings.warn(
+                "prediction_dataset has zero samples. No predictions will be generated."
+            )
+            scores = pd.DataFrame(columns=self.classes)
+            preds = None if binary_preds is None else pd.DataFrame(columns=self.classes)
+            return scores, preds, prediction_dataset.unsafe_samples
 
         # SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
@@ -705,7 +725,7 @@ class CNN(BaseModule):
         # add any paths that failed to generate a clip df to _unsafe_samples
         dataloader.dataset._unsafe_samples += prediction_dataset.unsafe_samples
 
-        ### Prediction ###
+        ### Prediction/Inference ###
 
         # move network to device
         self.network.to(self.device)
