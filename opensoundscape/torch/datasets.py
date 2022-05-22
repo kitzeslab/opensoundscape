@@ -42,11 +42,13 @@ class AudioFileDataset(torch.utils.data.Dataset):
         PreprocessingError if exception is raised during __getitem__
 
     Effects:
-        self.unsafe_paths will contain a list of paths that did not successfully
+        self.unsafe_samples will contain a list of paths that did not successfully
             produce a list of clips with start/end times, if split_files_into_clips=True
     """
 
-    def __init__(self, samples, preprocessor, return_labels=True):
+    def __init__(
+        self, samples, preprocessor, return_labels=True, bypass_augmentations=False
+    ):
 
         ## Input Validation ##
 
@@ -84,8 +86,8 @@ class AudioFileDataset(torch.utils.data.Dataset):
         self.preprocessor = preprocessor
         self.unsafe_samples = []
 
-        # if bypass_augmentations, skips Actions with .is_augmentation=True
-        self.bypass_augmentations = False
+        # if True skips Actions with .is_augmentation=True
+        self.bypass_augmentations = bypass_augmentations
 
     def __len__(self):
         return self.label_df.shape[0]
@@ -158,7 +160,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
         return new_ds
 
 
-class AudioClipDataset(AudioFileDataset):
+class AudioSplittingDataset(AudioFileDataset):
     """class to load clips of longer files rather than one sample per file
 
     Args:
@@ -173,12 +175,12 @@ class AudioClipDataset(AudioFileDataset):
         overlap_fraction=0,
         final_clip=None,
     ):
-        super(AudioClipDataset, self).__init__(
+        super(AudioSplittingDataset, self).__init__(
             samples=samples, preprocessor=preprocessor, return_labels=return_labels
         )
 
         # create clip df
-        self.clip_times_df, self.unsafe_paths = make_clip_df(
+        self.clip_times_df, self.unsafe_samples = make_clip_df(
             self.label_df.index.values,
             preprocessor.sample_duration,
             overlap_fraction * preprocessor.sample_duration,
@@ -190,18 +192,3 @@ class AudioClipDataset(AudioFileDataset):
 
         # update "label_df" so that index matches clip_times_df
         self.label_df = self.clip_times_df[[]]
-
-
-def CNN():
-    self.preprocessor = SpectrogramPreprocessor()
-
-    def train(train_df):
-        train_dataset = AudioFileDataset(train_df, self.preprocessor)
-        train_dataset.augmentation_on = True
-
-    def predict(samples):
-        if split_files_into_clips:
-            prediction_dataset = AudioClipDataset(samples)
-        else:
-            prediction_datset = AudioFileDataset(samples)
-        prediction_dataset.augmentation_on = False
