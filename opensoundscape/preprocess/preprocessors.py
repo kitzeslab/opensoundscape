@@ -79,29 +79,59 @@ class BasePreprocessor:
         Args:
             action_index: index of action to remove
         """
-        self.drop(action_index, inplace=True)
+        self.pipeline.drop(action_index, inplace=True)
 
     def forward(
         self,
-        label_df_row,
+        sample,
         break_on_type=None,
         break_on_key=None,
         clip_times=None,
         bypass_augmentations=False,
     ):
-        """perform actions in self.index on a sample (until a break point)
+        """perform actions in self.pipeline on a sample (until a break point)
 
-        optionally, can pass a clip_times Series specifying 'start_time' 'end_time'
-        #TODO add docstring
+        Actions with .bypass = True are skipped. Actions with .is_augmentation
+        = True can be skipped by passing bypass_augmentations=True.
+
+        Args:
+            sample: either:
+                - pd.Series with file path as index (.name) and labels
+                - OR a file path as pathlib.Path or string
+            break_on_type: if not None, the pipeline will be stopped when it
+                reaches an Action of this class. The matching action is not
+                performed.
+            break_on_key: if not None, the pipeline will be stopped when it
+                reaches an Action whose index equals this value. The matching
+                action is not performed.
+            bypass_augmentations: if True, actions with .is_augmentatino=True
+                are skipped
+
+        Returns:
+            {'X':preprocessed sample, 'y':labels} if return_labels==True,
+            otherwise {'X':preprocessed sample}
+
         """
         if break_on_key is not None:
             assert (
-                break_on_key in pipeline
+                break_on_key in self.pipeline
             ), f"break_on_key was {break_on_key} but no matching action found in pipeline"
 
-        x = Path(label_df_row.name)  # the index contains a path to a file
+        # handle paths or pd.Series as input for `sample`
+        if type(sample) == str or issubclass(type(sample), Path):
+            label_df_row = pd.Series(dtype=object, name=sample)
+        else:
+            assert type(sample) == pd.Series, (
+                "sample must be pd.Series with "
+                "path as .name OR file path (str or pathlib.Path), "
+                f"was {type(sample)}"
+            )
+            label_df_row = sample
 
-        # a list of additional things that an action may request from the preprocessor
+        # Series.name (dataframe index) contains a path to a file
+        x = Path(label_df_row.name)
+
+        # a list of additional variables that an action may request from the preprocessor
         sample_info = {
             "_path": Path(label_df_row.name),
             "_labels": copy.deepcopy(label_df_row),
@@ -111,6 +141,7 @@ class BasePreprocessor:
         }
 
         try:
+            # perform each action in the pipeline
             for k, action in self.pipeline.items():
                 if type(action) == break_on_type or k == break_on_key:
                     break
