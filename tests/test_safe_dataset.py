@@ -1,21 +1,23 @@
 import pytest
 import pandas as pd
 import numpy as np
-from opensoundscape.preprocess.preprocessors import SpecPreprocessor
+from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
+from opensoundscape.torch.datasets import AudioFileDataset
 from opensoundscape.torch.safe_dataset import SafeDataset
 
 
 @pytest.fixture()
-def preprocessor():
+def dataset():
     paths = ["tests/audio/veryshort.wav", "tests/audio/silence_10s.mp3"]
     labels = [[0, 1], [1, 0]]
     df = pd.DataFrame(index=paths, data=labels, columns=[0, 1])
-    return SpecPreprocessor(df, sample_duration=5.0)
+    pre = SpectrogramPreprocessor(sample_duration=5.0)
+    return AudioFileDataset(df, pre)
 
 
-def test_safe_preprocessor_handles_short_file(preprocessor):
+def test_safe_dataset_handles_short_file(dataset):
     """should raise warning but not fail"""
-    dataset = SafeDataset(preprocessor, unsafe_behavior="substitute")
+    dataset = SafeDataset(dataset, unsafe_behavior="substitute")
 
     sample = dataset[0]
 
@@ -25,7 +27,7 @@ def test_safe_preprocessor_handles_short_file(preprocessor):
     assert len(dataset._unsafe_indices) == 1
 
 
-def test_safe_preprocessor_returns_none(preprocessor):
+def test_safe_dataset_returns_none(preprocessor):
     """should give None for the sample"""
     dataset = SafeDataset(preprocessor, unsafe_behavior="none")
 

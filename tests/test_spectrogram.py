@@ -243,7 +243,7 @@ def test_melspectrogram_to_image_with_invert(veryshort_wav_str):
     mel_spec = MelSpectrogram.from_audio(audio)
     positive = mel_spec.to_image(shape=(10, 20), invert=False, return_type="np")
     negative = mel_spec.to_image(shape=(10, 20), invert=True, return_type="np")
-    assert np.array_equal(negative, 1 - positive)
+    assert np.allclose(negative, 1 - positive, 1e-4)
 
 
 def test_melspectrogram_trim_works(veryshort_wav_str):

@@ -1,7 +1,8 @@
-from opensoundscape.preprocess.preprocessors import SpecPreprocessor
+from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
+from opensoundscape.torch.datasets import AudioFileDataset
 from opensoundscape.torch.models import cnn
 
-from opensoundscape.torch.architectures.cnn_architectures import alexnet
+from opensoundscape.torch.architectures.cnn_architectures import alexnet, resnet18
 import pandas as pd
 from pathlib import Path
 
@@ -151,11 +152,14 @@ def test_predict_missing_file_is_unsafe_sample(missing_file_df):
 
 
 def test_predict_wrong_input_error(test_df):
-    """cannot pass a preprocessor to predict. only file paths as list or df"""
+    """cannot pass a preprocessor or dataset to predict. only file paths as list or df"""
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    pre = SpectrogramPreprocessor(2.0)
     with pytest.raises(AssertionError):
-        pre = SpecPreprocessor(test_df, 2)
         model.predict(pre)
+    with pytest.raises(AssertionError):
+        ds = AudioFileDataset(test_df, pre)
+        model.predict(ds)
 
 
 def test_train_predict_inception(train_df):
@@ -223,13 +227,47 @@ def test_save_and_load_model(model_save_path):
     assert type(m) == cnn.InceptionV3
 
 
-# def test_save_and_load_weights():
+def test_prediction_warns_different_classes(train_df):
+    model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        # raises warning bc test_df columns != model.classes
+        model.predict(train_df)
+        all_warnings = ""
+        for wi in w:
+            all_warnings += str(wi.message)
+        assert "classes" in all_warnings
 
-# def test_eval
 
-# def test make_samples
+def test_save_and_load_weights(model_save_path):
+    arch = resnet18(2, use_pretrained=False)
+    model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)
+    model.save_weights(model_save_path)
+    model1 = cnn.CNN(arch, classes=["a", "b"], sample_duration=5.0)
+    model1.load_weights(model_save_path)
+    assert np.array_equal(
+        model.network.state_dict()["conv1.weight"].numpy(),
+        model1.network.state_dict()["conv1.weight"].numpy(),
+    )
 
-# def test_split_resnet_feat_clf
+
+def test_eval(train_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
+    scores, _, _ = model.predict(train_df, split_files_into_clips=False)
+    model.eval(train_df.values, scores.values)
+
+
+def test_split_resnet_feat_clf(train_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
+    cnn.separate_resnet_feat_clf(model)
+    assert "feature" in model.optimizer_params
+    model.optimizer_params["feature"]["lr"] = 0.1
+    model.train(train_df, epochs=0)
+
+
 # test load_outdated_model?
 
-# TODO: allow training w no validation? if so, its broken. if not, raise error.
+
+def test_train_no_validation(train_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
+    model.train(train_df)
