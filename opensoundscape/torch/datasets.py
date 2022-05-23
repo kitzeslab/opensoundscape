@@ -164,20 +164,15 @@ class AudioFileDataset(torch.utils.data.Dataset):
 class AudioSplittingDataset(AudioFileDataset):
     """class to load clips of longer files rather than one sample per file
 
+    Currently does not support returning labels.
+
     Args:
         see AudioFileDataset and make_clip_df
     """
 
-    def __init__(
-        self,
-        samples,
-        preprocessor,
-        return_labels=True,
-        overlap_fraction=0,
-        final_clip=None,
-    ):
+    def __init__(self, samples, preprocessor, overlap_fraction=0, final_clip=None):
         super(AudioSplittingDataset, self).__init__(
-            samples=samples, preprocessor=preprocessor, return_labels=return_labels
+            samples=samples, preprocessor=preprocessor, return_labels=False
         )
 
         # create clip df

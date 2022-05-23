@@ -683,7 +683,6 @@ class CNN(BaseModule):
                 preprocessor=self.preprocessor,
                 overlap_fraction=overlap_fraction,
                 final_clip=final_clip,
-                return_labels=False,
             )
         else:
             prediction_dataset = AudioFileDataset(
