@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from opensoundscape.audio import Audio, OpsoLoadAudioInputTooLong
+from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
 import pytest
 from pathlib import Path
 import io
@@ -7,6 +7,23 @@ import numpy as np
 from random import uniform
 from math import isclose
 import numpy.testing as npt
+import pytz
+from datetime import datetime
+
+
+@pytest.fixture()
+def metadata_wav_str():
+    return "tests/audio/metadata.wav"
+
+
+@pytest.fixture()
+def onemin_wav_str():
+    return "tests/audio/1min.wav"
+
+
+@pytest.fixture()
+def empty_wav_str():
+    return "tests/audio/empty_2c.wav"
 
 
 @pytest.fixture()
@@ -81,6 +98,74 @@ def saved_mp3(request, tmp_dir):
     return path
 
 
+@pytest.fixture()
+def stereo_wav_str():
+    return "tests/audio/stereo.wav"
+
+
+def test_load_channels_as_audio(stereo_wav_str):
+    s = load_channels_as_audio(stereo_wav_str)
+    assert max(s[0].samples) == 0  # channel 1 of stereo.wav is all 0
+    assert max(s[1].samples) == 1  # channel 2 of stereo.wav is all 1
+
+
+def test_load_incorrect_timestamp(onemin_wav_str):
+    with pytest.raises(AssertionError):
+        timestamp = "NotATimestamp"
+        s = Audio.from_file(onemin_wav_str, start_timestamp=timestamp)
+
+
+def test_load_timestamp_notanaudiomothrecording(veryshort_wav_str):
+    with pytest.raises(AssertionError):  # file doesn't have audiomoth metadata
+        local_timestamp = datetime(2018, 4, 5, 9, 32, 0)
+        local_timezone = pytz.timezone("US/Eastern")
+        timestamp = local_timezone.localize(local_timestamp)
+        s = Audio.from_file(veryshort_wav_str, start_timestamp=timestamp)
+
+
+def test_load_timestamp_after_end_of_recording(metadata_wav_str):
+    with pytest.raises(AudioOutOfBoundsError):
+        local_timestamp = datetime(2021, 4, 4, 0, 0, 0)  # 1 year after recording
+        local_timezone = pytz.timezone("US/Eastern")
+        timestamp = local_timezone.localize(local_timestamp)
+        s = Audio.from_file(
+            metadata_wav_str, start_timestamp=timestamp, out_of_bounds_mode="raise"
+        )
+
+
+def test_load_timestamp_before_recording(metadata_wav_str):
+    with pytest.raises(AudioOutOfBoundsError):
+        local_timestamp = datetime(2018, 4, 4, 0, 0, 0)  # 1 year before recording
+        local_timezone = pytz.timezone("UTC")
+        timestamp = local_timezone.localize(local_timestamp)
+        s = Audio.from_file(
+            metadata_wav_str, start_timestamp=timestamp, out_of_bounds_mode="raise"
+        )
+
+
+def test_load_timestamp_before_warnmode(metadata_wav_str):
+    with pytest.warns(UserWarning):
+        correct_ts = Audio.from_file(metadata_wav_str).metadata["recording_start_time"]
+        local_timestamp = datetime(2018, 4, 4, 0, 0, 0)  # 1 year before recording
+        local_timezone = pytz.timezone("UTC")
+        timestamp = local_timezone.localize(local_timestamp)
+        s = Audio.from_file(
+            metadata_wav_str, start_timestamp=timestamp, out_of_bounds_mode="warn"
+        )
+        # Assert the start time is the correct, original timestamp and has not been changed
+        assert s.metadata["recording_start_time"] == correct_ts
+
+
+def test_load_empty_wav(empty_wav_str):
+    with pytest.raises(AudioOutOfBoundsError):
+        s = Audio.from_file(empty_wav_str, out_of_bounds_mode="raise")
+
+
+def test_load_duration_too_long(veryshort_wav_str):
+    with pytest.raises(AudioOutOfBoundsError):
+        s = Audio.from_file(veryshort_wav_str, duration=5, out_of_bounds_mode="raise")
+
+
 def test_load_veryshort_wav_str_44100(veryshort_wav_str):
     s = Audio.from_file(veryshort_wav_str)
     assert s.samples.shape == (6266,)
@@ -107,11 +192,6 @@ def test_load_pathlib_and_bytesio_are_almost_equal(
     s_pathlib = Audio.from_file(veryshort_wav_pathlib)
     s_bytesio = Audio.from_bytesio(veryshort_wav_bytesio)
     np.testing.assert_allclose(s_pathlib.samples, s_bytesio.samples, atol=1e-7)
-
-
-def test_load_silence_10s_mp3_str_asserts_too_long(silence_10s_mp3_str):
-    with pytest.raises(OpsoLoadAudioInputTooLong):
-        Audio.from_file(silence_10s_mp3_str, max_duration=5)
 
 
 def test_load_not_a_file_asserts_not_a_file(not_a_file_str):

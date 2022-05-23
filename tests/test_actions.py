@@ -9,6 +9,8 @@ from opensoundscape.preprocess import actions
 from PIL import Image
 import torch
 
+## Fixtures: prepare objects that can be used by tests ##
+
 
 @pytest.fixture()
 def short_wav_path():
@@ -26,6 +28,11 @@ def audio_10s():
 
 
 @pytest.fixture()
+def audio_10s_path():
+    return "tests/audio/silence_10s.mp3"
+
+
+@pytest.fixture()
 def tensor():
     x = np.random.uniform(0, 1, [3, 10, 10])
     return torch.Tensor(x)
@@ -40,87 +47,109 @@ def img():
 ## Tests ##
 
 
-def test_audio_loader(short_wav_path):
-    action = actions.AudioLoader()
-    audio = action.go(short_wav_path)
+def test_audio_clip_loader_file(short_wav_path):
+    action = actions.AudioClipLoader()
+    audio = action.go(short_wav_path, _start_time=None, _sample_duration=None)
     assert audio.sample_rate == 44100
 
 
-def test_audio_loader_resample(short_wav_path):
-    action = actions.AudioLoader(sample_rate=32000)
-    audio = action.go(short_wav_path)
+def test_audio_clip_loader_resample(short_wav_path):
+    action = actions.AudioClipLoader(sample_rate=32000)
+    audio = action.go(short_wav_path, _start_time=None, _sample_duration=None)
     assert audio.sample_rate == 32000
 
 
-def test_audio_trimmer(audio_10s):
-    action = actions.AudioTrimmer(audio_length=1.0)
-    audio = action.go(audio_10s)
+def test_audio_clip_loader_clip(audio_10s_path):
+    action = actions.AudioClipLoader()
+    audio = action.go(audio_10s_path, _start_time=0, _sample_duration=2)
+    assert isclose(audio.duration(), 2, abs_tol=1e-4)
+
+
+def test_action_trim(audio_short):
+    action = actions.AudioTrim()
+    audio = action.go(audio_short, _sample_duration=1.0)
     assert isclose(audio.duration(), 1.0, abs_tol=1e-4)
 
 
-def test_audio_trimmer_random_trim(audio_10s):
-    action = actions.AudioTrimmer(audio_length=0.1, random_trim=True)
-    audio = action.go(audio_10s)
-    audio2 = action.go(audio_10s)
-    assert isclose(audio.duration(), 0.1, abs_tol=1e-4)
-    assert not np.array_equal(audio.samples, audio2.samples)
+def test_action_random_trim(audio_short):
+    action = actions.AudioTrim(random_trim=True)
+    a = action.go(audio_short, _sample_duration=0.01)
+    a2 = action.go(audio_short, _sample_duration=0.01)
+    assert isclose(a.duration(), 0.01, abs_tol=1e-4)
+    assert not np.array_equal(a.samples, a2.samples)
 
 
 def test_audio_trimmer_default(audio_10s):
-    action = actions.AudioTrimmer()
-    audio = action.go(audio_10s)
+    """should not trim if no extra args"""
+    action = actions.AudioTrim()
+    audio = action.go(audio_10s, _sample_duration=None)
     assert isclose(audio.duration(), 10, abs_tol=1e-4)
 
 
 def test_audio_trimmer_raises_error_on_short_clip(audio_short):
-    action = actions.AudioTrimmer(audio_length=1.0)
+    action = actions.AudioTrim()
     with pytest.raises(ValueError):
-        audio = action.go(audio_short)
+        audio = action.go(audio_short, _sample_duration=10, extend=False)
 
 
 def test_audio_trimmer_extend_short_clip(audio_short):
-    action = actions.AudioTrimmer(audio_length=1.0, extend=True)
-    audio = action.go(audio_short)
-    assert isclose(audio.duration(), 1, abs_tol=1e-4)
-
-
-# def test_save_tensor_to_disk(tensor):
-# action = SaveTensorToDisk('.')
+    action = actions.AudioTrim()
+    audio = action.go(audio_short, _sample_duration=1.0)  # extend=True is default
+    assert isclose(audio.duration(), 1.0, abs_tol=1e-4)
 
 
 def test_color_jitter(tensor):
     """test that color jitter changes the tensor so that channels differ"""
-    action = actions.TorchColorJitter()
-    tensor = action.go(tensor)
+    tensor = actions.torch_color_jitter(tensor)
     assert not np.array_equal(tensor[0, :, :].numpy(), tensor[1, :, :].numpy())
 
 
-def test_img_to_tensor(img):
-    """result should have 3 channels"""
-    action = actions.ImgToTensor()
-    result = action.go(img)
-    assert type(result) == torch.Tensor
-    assert result.shape[0] == 3
-
-
-def test_img_to_tensor_grayscale(img):
-    """result should have 1 channel"""
-    action = actions.ImgToTensorGrayscale()
-    result = action.go(img)
-    assert type(result) == torch.Tensor
-    assert result.shape[0] == 1
-
-
-def test_tensor_torch_normalize(tensor):
-    action = actions.TensorNormalize(mean=0, std=1)
-    result = action.go(tensor)
+def test_scale_tensor(tensor):
+    """scale_tensor with 0,1 parameters should have no impact"""
+    result = actions.scale_tensor(tensor, input_mean=0, input_std=1)
     assert np.array_equal(tensor.numpy(), result.numpy())
 
 
-# def test_time_warp
+def test_generic_action(tensor):
+    """should be able to provide function to Action plus kwargs"""
+    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    result = action.go(tensor)
+    assert result.max() * 2 == tensor.max()
 
-# def test_time_mask
 
-# def test_frequency_mask
+def test_action_get_set():
+    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    assert action.get("input_std") == 2
+    action.set(input_mean=1)
+    assert action.params.get("input_mean") == 1
 
-# def test_tensor_augment
+
+def test_unexpected_param_raises_error():
+    with pytest.raises(AssertionError):
+        actions.Action(actions.scale_tensor, not_a_param=0)
+    with pytest.raises(AssertionError):
+        action = actions.Action(actions.scale_tensor)
+        action.set(not_a_param=0)
+
+
+def test_extra_arg():
+    def me(x, _add):
+        return x + _add
+
+    action = actions.Action(me, extra_args=["_add"])
+    assert action.go(0, _add=1) == 1
+    with pytest.raises(TypeError):
+        """raises error if we don't pass the extra arg"""
+        action.go(0)
+
+
+def test_modify_parameter_with_series_magic(tensor):
+    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    assert action.params["input_mean"] == 0
+    assert action.params.input_mean == 0  # access with . syntax
+    action.params.input_mean = 1  # set with . syntax
+    assert action.params["input_mean"] == 1
+    action.go(tensor)
+
+
+# others tested implicitly through preprocessor and cnn tests

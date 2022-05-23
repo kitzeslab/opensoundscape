@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from opensoundscape.torch.sampling import ClassAwareSampler, ImbalancedDatasetSampler
+from opensoundscape.torch.sampling import ClassAwareSampler
 from torch.utils.data import DataLoader
 from torch.nn.functional import softmax
 import pandas as pd
@@ -34,39 +34,6 @@ class BaseModule(nn.Module):
 
     def update_best(self):
         pass
-
-
-def get_dataloader(
-    safe_dataset, batch_size=64, num_workers=1, shuffle=False, sampler=""
-):
-    """
-    Create a DataLoader from a DataSet
-    - chooses between normal pytorch DataLoader and ImbalancedDatasetSampler.
-    - Sampler: None -> default DataLoader; 'imbalanced'->ImbalancedDatasetSampler
-
-    """
-    if len(safe_dataset) == 0:
-        return None
-
-    if sampler == "imbalanced":
-        loader = DataLoader(
-            safe_dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers,
-            sampler=ImbalancedDatasetSampler(safe_dataset.dataset),
-        )
-    # could implement other sampler options here
-    else:  # just use a regular Pytorch DataLoader
-        loader = DataLoader(
-            safe_dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            pin_memory=True,
-        )
-
-    return loader
 
 
 def cas_dataloader(dataset, batch_size, num_workers):
@@ -141,7 +108,6 @@ def collate_lists_of_audio_clips(batch):
     dfs = [d["df"] for d in batch]
 
     elem = data[0]
-    elem_type = type(elem)
     if isinstance(elem, torch.Tensor):
         out = None
         if torch.utils.data.get_worker_info() is not None:

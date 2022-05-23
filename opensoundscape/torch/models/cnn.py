@@ -2,47 +2,40 @@
 
 For tutorials, see notebooks on opensoundscape.org
 """
-# originally based on zhmiao's BirdMultiLabel
 
 import os
 import numpy as np
-from datetime import datetime
 import pandas as pd
-import numpy as np
 from pathlib import Path
-from collections import OrderedDict
 import warnings
-import random
-from deprecated import deprecated
+
 
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-from sklearn.metrics import jaccard_score, hamming_loss, precision_recall_fscore_support
+from torch.utils.data import DataLoader
+
 
 from opensoundscape.torch.architectures import cnn_architectures
 from opensoundscape.torch.models.utils import (
     BaseModule,
-    get_dataloader,
-    get_batch,
     apply_activation_layer,
     tensor_binary_predictions,
-    collate_lists_of_audio_clips,
 )
-
-from opensoundscape.metrics import multiclass_metrics, binary_metrics
+from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.torch.loss import (
     BCEWithLogitsLoss_hot,
     CrossEntropyLoss_hot,
     ResampleLoss,
 )
 from opensoundscape.torch.safe_dataset import SafeDataset
+from opensoundscape.torch.datasets import AudioFileDataset, AudioSplittingDataset
 import opensoundscape
 
 
-class PytorchModel(BaseModule):
+class CNN(BaseModule):
     """
-    Generic Pytorch Model with .train(), .predict(), and .save()
+    Generic CNN Model with .train(), .predict(), and .save()
 
     flexible architecture, optimizer, loss function, parameters
 
@@ -60,42 +53,53 @@ class PytorchModel(BaseModule):
             list of class names. Must match with training dataset classes if training.
         single_target:
             - True: model expects exactly one positive class per sample
-            - False: samples can have an number of positive classes
+            - False: samples can have any number of positive classes
             [default: False]
     """
 
-    def __init__(self, architecture, classes, single_target=False):
+    def __init__(
+        self,
+        architecture,
+        classes,
+        sample_duration,
+        single_target=False,
+        preprocessor_class=SpectrogramPreprocessor,
+        sample_shape=[224, 224, 3],
+    ):
 
-        super(PytorchModel, self).__init__()
+        super(CNN, self).__init__()
 
-        self.name = "PytorchModel"
+        self.name = "CNN"
 
         # model characteristics
         self.current_epoch = 0
         self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
-        print(f"created {self.name} model object with {len(self.classes)} classes")
-
-        ### data loading parameters ###
-        self.sampler = None  # can be "imbalanced" for ImbalancedDatasetSmpler
 
         ### architecture ###
-        # (feature extraction + classifier + loss fn)
-        # can by a pytorch CNN such as Resnet18, or RNN, etc
+        # can be a pytorch CNN such as Resnet18 or a custom object
         # must have .forward(), .train(), .eval(), .to(), .state_dict()
-        # for convenience, allow user to provide string matching
+        # for convenience, also allows user to provide string matching
         # a key from cnn_architectures.ARCH_DICT
+        num_channels = sample_shape[2]
         if type(architecture) == str:
             assert architecture in cnn_architectures.list_architectures(), (
                 f"architecture must be a pytorch model object or string matching "
                 f"one of cnn_architectures.list_architectures() options. Got {architecture}"
             )
-            architecture = cnn_architectures.ARCH_DICT[architecture](len(classes))
+            architecture = cnn_architectures.ARCH_DICT[architecture](
+                len(classes), num_channels=num_channels
+            )
         else:
             assert issubclass(
                 type(architecture), torch.nn.Module
             ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
+            if num_channels != 3:
+                warnings.warn(
+                    f"Make sure your architecture expects the number of channels in your input sampels ({num_channels}). "
+                    "Pytorch architectures expect 3 channels by default."
+                )
         self.network = architecture
 
         ### network device ###
@@ -108,6 +112,11 @@ class PytorchModel(BaseModule):
         else:
             self.device = torch.device("cpu")
 
+        ### sample loading/preprocessing ###
+        self.preprocessor = preprocessor_class(
+            sample_duration=sample_duration, out_shape=sample_shape
+        )
+
         ### loss function ###
         if self.single_target:  # use cross entropy loss by default
             self.loss_cls = CrossEntropyLoss_hot
@@ -115,7 +124,6 @@ class PytorchModel(BaseModule):
             self.loss_cls = BCEWithLogitsLoss_hot
 
         ### training parameters ###
-        # defaults partially from  zhmiao's BirdMultiLabel
         # optimizer
         self.opt_net = None  # don't set directly. initialized during training
         self.optimizer_cls = optim.SGD  # or torch.optim.Adam, etc
@@ -124,7 +132,7 @@ class PytorchModel(BaseModule):
         # _init_optimizer, just before initializing the optimizers
         # this avoids an issue when re-loading a model of
         # having the wrong .parameters() list
-        self.optimizer_params = {  # optimizer parameters for classification layers
+        self.optimizer_params = {
             # "params": self.network.parameters(),
             "lr": 0.01,
             "momentum": 0.9,
@@ -136,12 +144,27 @@ class PytorchModel(BaseModule):
         self.lr_cooling_factor = 0.7  # multiply learning rates by # on each update
 
         ### metrics ###
-        self.metrics_fn = multiclass_metrics  # or binary_metrics
-        self.prediction_threshold = 0.25
+        self.prediction_threshold = 0.5
+        # override self.eval() to change what metrics are
+        # computed and displayed during training/validation
+
+        ### Logging ###
+        self.log_file = None  # specify a path to save output to a text file
+        self.logging_level = 1  # 0 for nothing, 1,2,3 for increasing logged info
+        self.verbose = 1  # 0 for nothing, 1,2,3 for increasing printed output
+
         # dictionaries to store accuracy metrics & loss for each epoch
         self.train_metrics = {}
         self.valid_metrics = {}
         self.loss_hist = {}  # could add TensorBoard tracking
+
+    def _log(self, input, level=1):
+        txt = str(input)
+        if self.logging_level >= level and self.log_file is not None:
+            with open(self.log_file, "a") as logfile:
+                logfile.write(txt + "\n")
+        if self.verbose >= level:
+            print(txt)
 
     def _init_optimizer(self):
         """initialize an instance of self.optimizer
@@ -155,7 +178,6 @@ class PytorchModel(BaseModule):
         """
         param_dict = self.optimizer_params
         param_dict["params"] = self.network.parameters()
-        # TODO: make sure this doesn't change self.optimizer_params
         return self.optimizer_cls([param_dict])
 
     def _init_loss_fn(self):
@@ -166,8 +188,23 @@ class PytorchModel(BaseModule):
         """
         self.loss_fn = self.loss_cls()
 
-    def _set_train(self, batch_size, num_workers):
-        """Prepare network for training on train_dataset
+    def _init_dataloader(
+        self, safe_dataset, batch_size=64, num_workers=1, shuffle=False
+    ):
+        """initialize dataloader for training
+
+        Override this function to use a different DataLoader or sampler
+        """
+        return DataLoader(
+            safe_dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
+
+    def _set_train(self, train_df, batch_size, num_workers):
+        """Prepare network for training on train_df
 
         Args:
             batch_size: number of training files to load/process before
@@ -175,14 +212,31 @@ class PytorchModel(BaseModule):
             num_workers: parallelization (number of cores or cpus)
 
         Effects:
-            Sets up the optimization, loss function, and network.
-            Creates self.train_loader
+            Sets up the optimization, loss function, and network
         """
 
         ###########################
         # Move network to device  #
         ###########################
         self.network.to(self.device)
+
+        ######################
+        # Dataloader setup #
+        ######################
+        train_dataset = AudioFileDataset(train_df, self.preprocessor)
+        train_dataset.bypass_augmentations = False
+
+        # SafeDataset loads a new sample if loading a sample throws an error
+        # indices of bad samples are appended to ._unsafe_indices
+        train_safe_dataset = SafeDataset(train_dataset, unsafe_behavior="substitute")
+
+        # train_loader samples batches of images + labels from training set
+        self.train_loader = self._init_dataloader(
+            train_safe_dataset,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            shuffle=True,
+        )
 
         ###########################
         # Setup loss function     #
@@ -212,26 +266,7 @@ class PytorchModel(BaseModule):
             last_epoch=self.current_epoch - 1,
         )
 
-        ######################
-        # Dataloader setup #
-        ######################
-
-        # SafeDataset loads a new sample if loading a sample throws an error
-        # indices of bad samples are appended to ._unsafe_indices
-        self.train_safe_dataset = SafeDataset(
-            self.train_dataset, unsafe_behavior="substitute"
-        )
-
-        # train_loader samples batches of images + labels from train_dataset
-        self.train_loader = get_dataloader(
-            self.train_safe_dataset,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            shuffle=True,
-            sampler=self.sampler,
-        )
-
-    def train_epoch(self):
+    def _train_epoch(self, train_loader):
         """perform forward pass, loss, backpropagation for one epoch
 
         Returns: (targets, predictions, scores) on training files
@@ -243,12 +278,13 @@ class PytorchModel(BaseModule):
         total_scores = []
         batch_loss = []
 
-        for batch_idx, batch_data in enumerate(self.train_loader):
+        for batch_idx, batch_data in enumerate(train_loader):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
             batch_tensors = batch_data["X"].to(self.device)
             batch_labels = batch_data["y"].to(self.device)
-            batch_labels = batch_labels.squeeze(1)
+            if len(self.classes) > 1:  # squeeze one dimension [1,2] -> [1,1]
+                batch_labels = batch_labels.squeeze(1)
 
             ####################
             # Forward and loss #
@@ -291,22 +327,22 @@ class PytorchModel(BaseModule):
             # log basic train info (used to print every batch)
             if batch_idx % self.log_interval == 0:
                 """show some basic progress metrics during the epoch"""
-                N = len(self.train_loader)
-                print(
+                N = len(train_loader)
+                self._log(
                     "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
                         self.current_epoch, batch_idx, N, 100 * batch_idx / N
                     )
                 )
 
                 # Log the Jaccard score and Hamming loss, and Loss function
-                tgts = batch_labels.int().detach().cpu().numpy()
-                preds = batch_preds.int().detach().cpu().numpy()
-                jac = jaccard_score(tgts, preds, average="macro")
-                ham = hamming_loss(tgts, preds)
                 epoch_loss_avg = np.mean(batch_loss)
-                print(
-                    f"\tJacc: {jac:0.3f} Hamm: {ham:0.3f} DistLoss: {epoch_loss_avg:.3f}"
-                )
+                self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
+
+                # Evaluate with model's eval function
+                tgts = batch_labels.int().detach().cpu().numpy()
+                # preds = batch_preds.int().detach().cpu().numpy()
+                scores = logits.int().detach().cpu().numpy()
+                self.eval(tgts, scores, logging_offset=-1)
 
         # update learning parameters each epoch
         self.scheduler.step()
@@ -323,15 +359,16 @@ class PytorchModel(BaseModule):
 
     def train(
         self,
-        train_dataset,
-        valid_dataset,
+        train_df,
+        validation_df=None,
         epochs=1,
         batch_size=1,
         num_workers=0,
         save_path=".",
         save_interval=1,  # save weights every n epochs
         log_interval=10,  # print metrics every n batches
-        unsafe_sample_log="./unsafe_samples.log",
+        validation_interval=1,  # compute validation metrics every n epochs
+        unsafe_samples_log="./unsafe_training_samples.log",
     ):
         """train the model on samples from train_dataset
 
@@ -339,19 +376,19 @@ class PytorchModel(BaseModule):
         are desired, modify the respective attributes before calling .train().
 
         Args:
-            train_dataset:
-                a Preprocessor that loads sample (audio file + label)
-                to Tensor in batches (see docs/tutorials for details)
-            valid_dataset:
-                a Preprocessor for evaluating performance
+            train_df:
+                a dataframe of files and labels for training the model
+            validation_df:
+                a dataframe of files and labels for evaluating the model
+                [default: None means no validation is performed]
             epochs:
-                number of epochs to train for [default=1]
+                number of epochs to train for
                 (1 epoch constitutes 1 view of each training sample)
             batch_size:
-                number of training files to load/process before
-                re-calculating the loss function and backpropagation
+                number of training files simultaneously passed through
+                forward pass, loss function, and backpropagation
             num_workers:
-                parallelization (ie, cores or cpus)
+                number of parallel CPU tasks for preprocessing
                 Note: use 0 for single (root) process (not 1)
             save_path:
                 location to save intermediate and best model objects
@@ -363,28 +400,44 @@ class PytorchModel(BaseModule):
             log_interval:
                 interval in epochs to evaluate model with validation
                 dataset and print metrics to the log
-            unsafe_sample_log:
+            validation_interval:
+                interval in epochs to test the model on the validation set
+                Note that model will only update it's best score and save best.model
+                file on epochs that it performs validation.
+            unsafe_samples_log:
                 file path: log all samples that failed in preprocessing
                 (file written when training completes)
                 - if None,  does not write a file
 
         """
+
+        ### Input Validation ###
         class_err = (
             "Train and validation datasets must have same classes "
             "and class order as model object."
         )
-        assert list(self.classes) == list(train_dataset.df.columns), class_err
-        assert list(self.classes) == list(valid_dataset.df.columns), class_err
+        assert list(self.classes) == list(train_df.columns), class_err
+        if validation_df is not None:
+            assert list(self.classes) == list(validation_df.columns), class_err
 
+        # Validation: warn user if no validation set
+        if validation_df is None:
+            warnings.warn(
+                "No validation set was provided. Model will be "
+                "evaluated using the performance on the training set."
+            )
+
+        # Initialize attributes
         self.log_interval = log_interval
         self.save_interval = save_interval
-        self.train_dataset = train_dataset
-        self.valid_dataset = valid_dataset
         self.save_path = save_path
 
-        self._set_train(batch_size, num_workers)
+        ####################
+        # Set Up Loss, Opt #
+        ####################
+        self._set_train(train_df, batch_size, num_workers)
 
-        self.best_f1 = 0.0
+        self.best_score = 0.0
         self.best_epoch = 0
 
         for epoch in range(epochs):
@@ -392,78 +445,122 @@ class PytorchModel(BaseModule):
             # loss fn & backpropogation occurs after each batch
 
             ### Training ###
-            train_targets, train_preds, train_scores = self.train_epoch()
+            self._log(f"\nTraining Epoch {self.current_epoch}")
+            train_targets, train_preds, train_scores = self._train_epoch(
+                self.train_loader
+            )
+
+            ### Evaluate ###
+            train_score, self.train_metrics[self.current_epoch] = self.eval(
+                train_targets, train_scores
+            )
 
             #### Validation ###
-            print("\nValidation.")
-            valid_scores, valid_preds, valid_targets = [
-                df.values
-                for df in self.predict(
-                    self.valid_dataset,
+            if validation_df is not None:
+                self._log("\nValidation.")
+                validation_scores, _, unsafe_val_samples = self.predict(
+                    validation_df,
                     batch_size=batch_size,
                     num_workers=num_workers,
                     activation_layer="softmax_and_logit"
                     if self.single_target
                     else None,
-                    binary_preds="single_target"
-                    if self.single_target
-                    else "multi_target",
-                    threshold=self.prediction_threshold,
+                    split_files_into_clips=False,
                 )
-            ]
+                validation_targets = validation_df.values
+                validation_scores = validation_scores.values
 
-            ### Metrics ###
-            self.valid_metrics[self.current_epoch] = self.metrics_fn(
-                valid_targets, valid_preds, self.classes
-            )
-            self.train_metrics[self.current_epoch] = self.metrics_fn(
-                train_targets, train_preds, self.classes
-            )
-            # print basic metrics (this could  break if metrics_fn changes)
-            print(
-                f"\t Precision: {self.valid_metrics[self.current_epoch]['precision']}"
-            )
-            print(f"\t Recall: {self.valid_metrics[self.current_epoch]['recall']}")
-            print(f"\t F1: {self.valid_metrics[self.current_epoch]['f1']}")
+                validation_score, self.valid_metrics[self.current_epoch] = self.eval(
+                    validation_targets, validation_scores
+                )
+                score = validation_score
+            else:  # Evaluate model w/validation score unless no validation
+                score = train_score
 
             ### Save ###
             if (
                 self.current_epoch + 1
-            ) % self.save_interval == 0 or epoch >= epochs - 1:
-                print("Saving weights, metrics, and train/valid scores.")
+            ) % self.save_interval == 0 or epoch == epochs - 1:
+                self._log("Saving weights, metrics, and train/valid scores.", level=2)
 
                 self.save(f"{self.save_path}/epoch-{self.current_epoch}.model")
 
-            # if best model (by F1 score), update & save weights to best.model
-            f1 = self.valid_metrics[self.current_epoch]["f1"]
-            if f1 > self.best_f1:
-                self.best_f1 = f1
+            # if this is the best score, update & save weights to best.model
+            if score > self.best_score:
+                self.best_score = score
                 self.best_epoch = self.current_epoch
-                print("Updating best model")
+                self._log("Updating best model", level=2)
                 self.save(f"{self.save_path}/best.model")
 
             self.current_epoch += 1
 
-        print(
-            f"\nBest Model Appears at Epoch {self.best_epoch} with F1 {self.best_f1:.3f}."
+        ### Logging ###
+        self._log("Training complete", level=2)
+        self._log(
+            f"\nBest Model Appears at Epoch {self.best_epoch} with Validation score {self.best_score:.3f}."
         )
 
         # warn the user if there were unsafe samples (failed to preprocess)
-        if len(self.train_safe_dataset._unsafe_indices) > 0:
-            bad_paths = self.train_safe_dataset.dataset.df.index[
-                self.train_safe_dataset._unsafe_indices
-            ].values
-            msg = (
-                f"There were {len(bad_paths)} "
-                "samples that raised errors during preprocessing. "
-            )
-            if unsafe_sample_log is not None:
-                msg += f"Their file paths are logged in {unsafe_sample_log}"
-                with open(unsafe_sample_log, "w") as f:
-                    [f.write(p + "\n") for p in bad_paths]
-            warnings.warn(msg)
+        unsafe_samples = self.train_loader.dataset.report(log=unsafe_samples_log)
+        self._log(
+            f"{len(unsafe_samples)} of {len(train_df)} total training "
+            f"samples failed to preprocess",
+            level=2,
+        )
+        self._log(f"List of unsafe sampels: {unsafe_samples}", level=3)
 
-    def save(self, path, save_datasets=True):
+    def eval(self, targets, scores, logging_offset=0):
+        """compute single-target or multi-target metrics from targets and scores
+
+        Override this function to use a different set of metrics.
+        It should always return (1) a single score (float) used as an overall
+        metric of model quality and (2) a dictionary of computed metrics
+
+        Args:
+            targets: 0/1 for each sample and each class
+            scores: continuous values in 0/1 for each sample and class
+            logging_offset: modify verbosity - for example, -1 will reduce
+                the amount of printing/logging by 1 level
+        """
+        from opensoundscape.metrics import single_target_metrics, multi_target_metrics
+
+        # remove all samples with NaN for a prediction
+        targets = targets[~np.isnan(scores).any(axis=1), :]
+        scores = scores[~np.isnan(scores).any(axis=1), :]
+
+        if len(scores) < 1:
+            warnings.warn("Recieved empty list of predictions (or all nan)")
+            return np.nan, np.nan
+
+        if self.single_target:
+            metrics_dict = single_target_metrics(targets, scores, self.classes)
+        else:
+            metrics_dict = multi_target_metrics(
+                targets, scores, self.classes, self.prediction_threshold
+            )
+
+        # decide what to print/log:
+        self._log(f"Metrics:")
+        self._log(f"\tMAP: {metrics_dict['map']:0.3f}", level=1 - logging_offset)
+        self._log(f"\tAU_ROC: {metrics_dict['au_roc']:0.3f} ", level=2 - logging_offset)
+        self._log(
+            f"\tJacc: {metrics_dict['jaccard']:0.3f} "
+            f"Hamm: {metrics_dict['hamming_loss']:0.3f} ",
+            level=2 - logging_offset,
+        )
+        self._log(
+            f"\tPrec: {metrics_dict['precision']:0.3f} "
+            f"Rec: {metrics_dict['recall']:0.3f} "
+            f"F1: {metrics_dict['f1']:0.3f}",
+            level=2 - logging_offset,
+        )
+
+        # choose one metric to be used for the overall model evaluation
+        score = metrics_dict["map"]
+
+        return score, metrics_dict
+
+    def save(self, path, save_datasets=False):
         import copy
 
         """save model with weights using torch.save()
@@ -476,27 +573,50 @@ class PytorchModel(BaseModule):
         os.makedirs(Path(path).parent, exist_ok=True)
         model_copy = copy.deepcopy(self)
         if not save_datasets:
-            for atr in [
-                "train_dataset",
-                "train_loader",
-                "train_safe_dataset",
-                "valid_dataset",
-            ]:
+            for atr in ["train_loader"]:  # attributes to remove
                 try:
                     delattr(model_copy, atr)
                 except AttributeError:
                     pass
         torch.save(model_copy, path)
 
+    def save_weights(self, path):
+        """save just the weights of the network
+
+        This allows the saved weights to be used more flexibly than model.save()
+        which will pickle the entire object. The weights are saved in a pickled
+        dictionary using torch.save(self.network.state_dict())
+
+        Args:
+            path: location to save weights file
+        """
+        torch.save(self.network.state_dict(), path)
+
+    def load_weights(self, path, strict=True):
+        """load network weights state dict from a file
+
+        For instance, load weights saved with .save_weights()
+        in-place operation
+
+        Args:
+            path: file path with saved weights
+            strict: (bool) see torch.load()
+        """
+        self.network.load_state_dict(torch.load(path))
+
     def predict(
         self,
-        prediction_dataset,
+        samples,
         batch_size=1,
         num_workers=0,
-        activation_layer=None,  # softmax','sigmoid','softmax_and_logit', None
-        binary_preds=None,  #'single_target','multi_target', None
+        activation_layer=None,
+        binary_preds=None,
         threshold=0.5,
-        error_log=None,
+        split_files_into_clips=True,
+        overlap_fraction=0,
+        final_clip=None,
+        augmentation_on=False,
+        unsafe_samples_log=None,
     ):
         """Generate predictions on a dataset
 
@@ -507,10 +627,10 @@ class PytorchModel(BaseModule):
         Note: the order of returned dataframes is (scores, preds, labels)
 
         Args:
-            prediction_dataset:
-                a Preprocessor or DataSset object that returns tensors,
-                such as AudioToSpectrogramPreprocessor (no augmentation)
-                or CnnPreprocessor (w/augmentation) from opensoundscape.datasets
+            samples:
+                the files to generate predictions for. Can be:
+                - a dataframe with index containing audio paths, OR
+                - a list (or np.ndarray) of audio file paths
             batch_size:
                 Number of files to load simultaneously [default: 1]
             num_workers:
@@ -535,43 +655,56 @@ class PytorchModel(BaseModule):
             threshold:
                 prediction threshold(s) for sigmoid scores. Only relevant when
                 binary_preds == 'multi_target'
-            error_log:
-                if not None, saves a list of files that raised errors to
-                the specified file location [default: None]
+            overlap_fraction: fraction of overlap between consecutive clips when
+                predicting on clips of longer audio files. For instance, 0.5
+                gives 50% overlap between consecutive clips.
+            final_clip: see `opensoundscape.helpers.generate_clip_times_df`
+            augmentation_on: default False. preprocessor.augmentation_on
+                will be set to this value. If False, Actions with
+                is_augmentation==True are skipped.
+            unsafe_samples_log: if not None, samples that failed to preprocess
+                will be listed in this text file.
 
-        Returns: 3 DataFrames (or Nones), w/index matching prediciton_dataset.df
-            scores: post-activation_layer scores
-            predictions: 0/1 preds for each class
-            labels: labels from dataset (if available)
+        Returns:
+            scores: df of post-activation_layer scores
+            predictions: df of 0/1 preds for each class
+            unsafe_samples: list of samples that failed to preprocess
 
         Note: if loading an audio file raises a PreprocessingError, the scores
             and predictions for that sample will be np.nan
 
-        Note: if no return type selected for labels/scores/preds, returns None
-        instead of a DataFrame in the returned tuple
+        Note: if no return type is selected for `binary_preds`, returns None
+        instead of a DataFrame for `predictions`
         """
-        if len(prediction_dataset) < 1:
-            warnings.warn("prediction_dataset has zero samples. Returning None.")
-            return None, None, None
-
-        if prediction_dataset.specifies_clip_times:
-            # this dataset provides start and end times of each clip
-            # rather than supplying labels in the columns.
-            # we will add the start_time and end_time back into the output df
-            assert np.array_equal(
-                prediction_dataset.df.columns, ["start_time", "end_time"]
+        # set up prediction Dataset
+        if split_files_into_clips:
+            prediction_dataset = AudioSplittingDataset(
+                samples=samples,
+                preprocessor=self.preprocessor,
+                overlap_fraction=overlap_fraction,
+                final_clip=final_clip,
             )
-        elif len(prediction_dataset.df.columns) > 0:
-            if not list(self.classes) == list(prediction_dataset.df.columns):
-                raise ValueError(
-                    "The columns of prediction_dataset.df differ"
-                    "from model.classes. Should have same columns or no columns."
-                )
+        else:
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor, return_labels=False
+            )
+        prediction_dataset.augmentation_on = augmentation_on
 
-        # move network to device
-        self.network.to(self.device)
+        ## Input Validation ##
+        if len(prediction_dataset.classes) > 0 and not list(self.classes) == list(
+            prediction_dataset.classes
+        ):
+            warnings.warn(
+                "The columns of input samples df differ from `model.classes`."
+            )
 
-        self.network.eval()
+        if len(prediction_dataset) < 1:
+            warnings.warn(
+                "prediction_dataset has zero samples. No predictions will be generated."
+            )
+            scores = pd.DataFrame(columns=self.classes)
+            preds = None if binary_preds is None else pd.DataFrame(columns=self.classes)
+            return scores, preds, prediction_dataset.unsafe_samples
 
         # SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
@@ -588,13 +721,18 @@ class PytorchModel(BaseModule):
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=torch.cuda.is_available(),
         )
+        # add any paths that failed to generate a clip df to _unsafe_samples
+        dataloader.dataset._unsafe_samples += prediction_dataset.unsafe_samples
 
-        ### Prediction ###
+        ### Prediction/Inference ###
+
+        # move network to device
+        self.network.to(self.device)
+        self.network.eval()
+
+        # initialize scores and preds
         total_scores = []
         total_preds = []
-        total_tgts = []
-
-        failed_files = []  # keep list of any samples that raise errors
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
@@ -603,11 +741,6 @@ class PytorchModel(BaseModule):
                 # get batch of Tensors
                 batch_tensors = batch["X"].to(self.device)
                 batch_tensors.requires_grad = False
-                # get batch's labels if available
-                batch_targets = torch.Tensor([]).to(self.device)
-                if prediction_dataset.return_labels:
-                    batch_targets = batch["y"].to(self.device)
-                    batch_targets.requires_grad = False
 
                 # forward pass of network: feature extractor + classifier
                 logits = self.network.forward(batch_tensors)
@@ -623,30 +756,25 @@ class PytorchModel(BaseModule):
                 # disable gradients on returned values
                 total_scores.append(scores.detach().cpu().numpy())
                 total_preds.append(batch_preds.float().detach().cpu().numpy())
-                total_tgts.append(batch_targets.int().detach().cpu().numpy())
 
         # aggregate across all batches
-        total_tgts = np.concatenate(total_tgts, axis=0)
         total_scores = np.concatenate(total_scores, axis=0)
         total_preds = np.concatenate(total_preds, axis=0)
-
-        print(np.shape(total_scores))
 
         # replace scores/preds with nan for samples that failed in preprocessing
         # this feels hacky (we predicted on substitute-samples rather than
         # skipping the samples that failed preprocessing)
-        total_scores[safe_dataset._unsafe_indices, :] = np.nan
+        total_scores[dataloader.dataset._unsafe_indices, :] = np.nan
         if binary_preds is not None:
-            total_preds[safe_dataset._unsafe_indices, :] = np.nan
+            total_preds[dataloader.dataset._unsafe_indices, :] = np.nan
 
-        # return 3 DataFrames with same index/columns as prediction_dataset's df
-        # use None for placeholder if no preds / labels
-        # scores
-        samples = prediction_dataset.df.index.values
+        # return 2 DataFrames with same index/columns as prediction_dataset's df
+        # use None for placeholder if no preds
+        samples = prediction_dataset.label_df.index.values
         score_df = pd.DataFrame(index=samples, data=total_scores, columns=self.classes)
-        if prediction_dataset.specifies_clip_times:
+        if split_files_into_clips:  # return a multi-index
             score_df.index = pd.MultiIndex.from_frame(
-                prediction_dataset.df.reset_index()
+                prediction_dataset.clip_times_df.reset_index()
             )
         # binary 0/1 predictions
         if binary_preds is None:
@@ -655,338 +783,86 @@ class PytorchModel(BaseModule):
             pred_df = pd.DataFrame(
                 index=samples, data=total_preds, columns=self.classes
             )
-            if prediction_dataset.specifies_clip_times:
+            if split_files_into_clips:  # return a multi-index
                 pred_df.index = pd.MultiIndex.from_frame(
-                    prediction_dataset.df.reset_index()
+                    prediction_dataset.clip_times_df.reset_index()
                 )
-        # labels
-        if prediction_dataset.return_labels:
-            label_df = pd.DataFrame(
-                index=samples, data=total_tgts, columns=self.classes
-            )
-        else:
-            label_df = None
 
-        return score_df, pred_df, label_df
+        print(dataloader.dataset._unsafe_samples)
 
-    @deprecated(
-        version="0.6.1",
-        reason="Use ClipLoadingSpectrogramPreprocessor"
-        "with model.predict() for similar functionality but "
-        "lower memory requirements.",
-    )
-    def split_and_predict(
-        self,
-        prediction_dataset,
-        file_batch_size=1,
-        num_workers=0,
-        activation_layer=None,
-        binary_preds=None,
-        threshold=0.5,
-        error_log=None,
-        clip_batch_size=None,
-    ):
-        """Generate predictions on long audio files
+        # warn the user if there were unsafe samples (failed to preprocess)
+        # and log them to a file
+        unsafe_samples = dataloader.dataset.report(log=unsafe_samples_log)
 
-            This function integrates in-pipline splitting of audio files into
-            shorter clips with clip-level prediction.
-
-            The input dataset should be a LongAudioPreprocessor object
-
-            Choose to return any combination of scores, labels, and single-target or
-            multi-target binary predictions. Also choose activation layer for scores
-            (softmax, sigmoid, softmax then logit, or None).
-
-            Args:
-                prediction_dataset:
-                    a LongAudioPreprocessor object
-                file_batch_size:
-                    Number of audio files to load simultaneously [default: 1]
-                num_workers:
-                    parallelization (ie cpus or cores), use 0 for current process
-                    [default: 0]
-                activation_layer:
-                    Optionally apply an activation layer such as sigmoid or
-                    softmax to the raw outputs of the model.
-                    options:
-                    - None: no activation, return raw scores (ie logit, [-inf:inf])
-                    - 'softmax': scores all classes sum to 1
-                    - 'sigmoid': all scores in [0,1] but don't sum to 1
-                    - 'softmax_and_logit': applies softmax first then logit
-                    [default: None]
-                binary_preds:
-                    Optionally return binary (thresholded 0/1) predictions
-                    options:
-                    - 'single_target': max scoring class = 1, others = 0
-                    - 'multi_target': scores above threshold = 1, others = 0
-                    - None: do not create or return binary predictions
-                    [default: None]
-                threshold:
-                    prediction threshold for sigmoid scores. Only relevant when
-                    binary_preds == 'multi_target'
-                clip_batch_size:
-                    batch size of preprocessed samples for CNN prediction
-                error_log:
-                    if not None, saves a list of files that raised errors to
-                    the specified file location [default: None]
-
-            Returns: DataFrames with multi-index: path, clip start & end times
-                scores: post-`activation_layer` scores
-                predictions: 0/1 preds for each class, if `binary_preds` given
-                unsafe_samples: list of samples that failed to preprocess
-
-            Note: if loading an audio file raises a PreprocessingError, the scores
-                and predictions for that sample will be np.nan
-
-            Note: if no return type selected for scores/preds, returns None
-            instead of a DataFrame for predictions
-
-            Note: currently does not support passing labels. Meaning of a label
-            is ambiguous since the original files are split into clips during
-            prediction (output values are for clips, not entire file)
-            """
-        if len(prediction_dataset) < 1:
-            warnings.warn("prediction_dataset has zero samples. Returning None.")
-            return None, None, None
-
-        err_msg = "Prediction dataset should only contain file paths (index)" ""
-        if len(prediction_dataset.df.columns) > 0:
-            assert False, err_msg
-
-        # move network to device,
-        self.network.to(self.device)
-
-        self.network.eval()
-
-        # SafeDataset will not fail on bad files,
-        # with unsafe_behavior=None, returns None on bad sample
-        safe_dataset = SafeDataset(prediction_dataset, unsafe_behavior="none")
-
-        dataloader = torch.utils.data.DataLoader(
-            safe_dataset,
-            batch_size=file_batch_size,
-            num_workers=num_workers,
-            shuffle=False,
-            # use pin_memory=True when loading files on CPU and training on GPU
-            pin_memory=torch.cuda.is_available(),
-            collate_fn=collate_lists_of_audio_clips,  # custom collate function for reshaping inputs from dataset
-        )
-
-        ### Prediction ###
-        total_scores = []
-        total_preds = []
-        total_tgts = []
-        total_dfs = []
-
-        failed_files = []  # keep list of any samples that raise errors
-
-        has_labels = False
-
-        # disable gradient updates during inference
-        with torch.set_grad_enabled(False):
-
-            for superbatch in dataloader:
-                # a "superbatch" comprises samples from >=1
-                # long audio files. For instance, if file_batch_size=2,
-                # a superbatch will produce all of the clips for those 2
-                # unsplit audio files.
-                # Superbatch has keys "X": samples and "df": DataFrame
-                # with multi-index: sample file paths, clip start, clip end
-
-                # bs = num samples passed to network simultaneously
-                # i.e., the traditional "batch" or "minibatch" size
-                bs = (
-                    len(superbatch["X"]) if clip_batch_size is None else clip_batch_size
-                )
-                n_batches_in_superbatch = int(np.ceil(len(superbatch["X"]) / bs))
-
-                for batch_idx in range(n_batches_in_superbatch):
-                    # this batch is the traditional CNN batch: a set of
-                    # [bs] Tensors for inference
-
-                    # get batch of Tensors
-                    batch_tensors = get_batch(superbatch["X"], bs, batch_idx)
-                    batch_tensors = batch_tensors.to(self.device)
-                    batch_tensors.requires_grad = False
-                    # get batch's labels if available
-                    # as of now, passing targets is not supported
-                    # (assume global label during in-pipline splitting?)
-                    # batch_targets = torch.Tensor([]).to(self.device)
-                    # if "y" in superbatch.keys():
-                    #     batch_targets = get_batch(superbatch["y"],bs,batch_idx)
-                    #     batch_targets = batch_targets.to(self.device)
-                    #     batch_targets.requires_grad = False
-                    #     has_labels = True
-
-                    # forward pass of network: feature extractor + classifier
-                    logits = self.network.forward(batch_tensors)
-
-                    ### Activation layer ###
-                    scores = apply_activation_layer(logits, activation_layer)
-
-                    ### Binary predictions ###
-                    batch_preds = tensor_binary_predictions(
-                        scores=logits, mode=binary_preds, threshold=threshold
-                    )
-
-                    # detach the returned values: currently tethered to gradients
-                    # and updates via optimizer/backprop. detach() returns
-                    # just numeric values.
-                    total_scores.append(scores.detach().cpu().numpy())
-                    total_preds.append(batch_preds.float().detach().cpu().numpy())
-                    # total_tgts.append(batch_targets.int().detach().cpu().numpy())
-
-                # we don't need to split the df into smaller batches
-                # instead we can just append entire dfs from superbatches
-                total_dfs.append(superbatch["df"])
-
-        # aggregate across all batches
-        # total_tgts = np.concatenate(total_tgts, axis=0)
-        total_scores = np.concatenate(total_scores, axis=0)
-        total_preds = np.concatenate(total_preds, axis=0)
-        total_dfs = pd.concat(total_dfs)
-
-        unsafe_samples = [
-            safe_dataset.df.index.values[i] for i in safe_dataset._unsafe_indices
-        ]
-
-        score_df = pd.DataFrame(
-            index=total_dfs.index, data=total_scores, columns=self.classes
-        )
-
-        pred_df = (
-            None
-            if binary_preds is None
-            else pd.DataFrame(
-                index=total_dfs.index, data=total_preds, columns=self.classes
-            )
-        )
-        # labels don't make sense here unless we copy them across all clips from a file
-        #         label_df = (
-        #             None
-        #             if not has_labels
-        #             else pd.DataFrame(index=total_dfs.index, data=total_tgts, columns=self.classes)
-        #         )
-
-        return score_df, pred_df, unsafe_samples  # ._unsafe_indices#, label_df
+        return score_df, pred_df, unsafe_samples
 
 
-class CnnResampleLoss(PytorchModel):
-    """Subclass of PytorchModel with ResampleLoss.
+def use_resample_loss(model):
+    """Modify a model to use ResampleLoss for multi-target training
 
     ResampleLoss may perform better than BCE Loss for multitarget problems
     in some scenarios.
-
-    Args:
-        architecture:
-            a model architecture object, for example one generated
-            with the torch.architectures.cnn_architectures module
-        classes:
-            list of class names. Must match with training dataset classes.
-        single_target:
-            - True: model expects exactly one positive class per sample
-            - False: samples can have an number of positive classes
-            [default: False]
     """
+    import types
 
-    def __init__(self, architecture, classes, single_target=False):
-
-        self.classes = classes
-
-        super(CnnResampleLoss, self).__init__(architecture, self.classes, single_target)
-        self.name = "CnnResampleLoss"
-        self.loss_cls = ResampleLoss
+    model.loss_cls = ResampleLoss
 
     def _init_loss_fn(self):
-        """initialize an instance of self.loss_cls
-
-        We override the parent method because we need to pass class frequency
+        """overrides the parent method because we need to pass class frequency
         to the ResampleLoss constructor
-
-        This function is called during .train() so that the user
-        has a chance to change the loss function before training.
-
-        Note: if you change the loss function, you may need to override this
-        to correctly initialize self.loss_cls
         """
         class_frequency = (
-            torch.tensor(self.train_dataset.df.values).sum(0).to(self.device)
+            torch.tensor(self.train_loader.dataset.dataset.label_df.values)
+            .sum(0)
+            .to(self.device)
         )
 
         # initializing ResampleLoss requires us to pass class_frequency
         self.loss_fn = self.loss_cls(class_frequency)
 
+    model._init_loss_fn = types.MethodType(_init_loss_fn, model)
 
-class Resnet18Multiclass(CnnResampleLoss):
-    """Multi-class model with resnet18 architecture and ResampleLoss.
 
-    Notes:
-        Allows separate parameters for feature & classifier blocks
-        via self.optimizer_params's keys: "feature" and "classifier".
-
-        If you do not need separate training parameters for the
-        feature extraction and classification blocks, you can create
-        a model with resnet18 architecture simply by using
-        PytorchModel('resnet18',classes...).
-
-        Can be single or multi-target.
-
-        Uses "ResampleLoss" loss function.
+def separate_resnet_feat_clf(model):
+    """Separate feature/classifier training params for a ResNet model
 
     Args:
-        classes:
-            list of class names. Must match with training dataset classes.
-        single_target:
-            - True: model expects exactly one positive class per sample
-            - False: samples can have an number of positive classes
-            [default: False]
+        model: an opso model object with a pytorch resnet architecture
+
+    Returs:
+        model with modified .optimizer_params and ._init_optimizer() method
+
+    Effects:
+        creates a new self.opt_net object that replaces the old one
+        resets self.current_epoch to 0
     """
+    import types
 
-    def __init__(self, classes, single_target=False, use_pretrained=True):
+    # optimization parameters for parts of the networks - see
+    # https://pytorch.org/docs/stable/optim.html#per-parameter-options
+    model.optimizer_params = {
+        "feature": {  # optimizer parameters for feature extraction layers
+            # "params": self.network.feature.parameters(),
+            "lr": 0.001,
+            "momentum": 0.9,
+            "weight_decay": 0.0005,
+        },
+        "classifier": {  # optimizer parameters for classification layers
+            # "params": self.network.classifier.parameters(),
+            "lr": 0.01,
+            "momentum": 0.9,
+            "weight_decay": 0.0005,
+        },
+    }
 
-        self.classes = classes
-        architecture = cnn_architectures.resnet18(
-            num_classes=len(self.classes), use_pretrained=use_pretrained
-        )
-        super(Resnet18Multiclass, self).__init__(
-            architecture, self.classes, single_target
-        )
-        self.name = "Resnet18Multiclass"
-
-        # optimization parameters for parts of the networks - see
-        # https://pytorch.org/docs/stable/optim.html#per-parameter-options
-        self.optimizer_params = {
-            "feature": {  # optimizer parameters for feature extraction layers
-                # "params": self.network.feature.parameters(),
-                "lr": 0.001,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-            "classifier": {  # optimizer parameters for classification layers
-                # "params": self.network.classifier.parameters(),
-                "lr": 0.01,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-        }
-
+    # We override the parent method because we need to pass a list of
+    # separate optimizer_params for different parts of the network
+    # - ie we now have a dictionary of param dictionaries instead of just a
+    # param dictionary.
     def _init_optimizer(self):
-        """initialize an instance of self.optimizer
-
-        We override the parent method because we need to pass a list of
-        separate optimizer_params for different parts of the network
-        - ie we now have a dictionary of param dictionaries instead of just a
-        param dictionary.
-
-        This function is called during .train() so that the user
-        has a chance to swap/modify the optimizer before training.
-
-        To modify the optimizer, change the value of
-        self.optimizer_cls and/or self.optimizer_params
-        prior to calling .train().
-        """
+        """override parent method to pass separate parameters to feat/clf"""
         param_dict = self.optimizer_params
-        # in torch's resnet18, the classifier layer is called "fc"
+        # in torch's resnet classes, the classifier layer is called "fc"
         feature_extractor_params_list = [
             param
             for name, param in self.network.named_parameters()
@@ -1001,96 +877,24 @@ class Resnet18Multiclass(CnnResampleLoss):
         param_dict["classifier"]["params"] = classifier_params_list
         return self.optimizer_cls(param_dict.values())
 
-
-class Resnet18Binary(PytorchModel):
-    """Subclass of PytorchModel with Resnet18 architecture
-
-    This subclass allows separate training parameters
-    for the feature extractor and classifier via optimizer_params
-
-    If you do not need separate training parameters for the
-    feature extraction and classification blocks, you can create
-    a model with resnet18 architecture simply by using
-    PytorchModel('resnet18',classes...).
-
-    Args:
-        classes:
-            list of class names. Must match with training dataset classes.
-        single_target:
-            - True: model expects exactly one positive class per sample
-            - False: samples can have an number of positive classes
-            [default: False]
-
-    """
-
-    def __init__(self, classes, use_pretrained=True):
-        assert len(classes) == 2, "binary model must have 2 classes"
-
-        single_target = True  # binary model is always single-target
-        self.classes = classes
-        architecture = cnn_architectures.resnet18(
-            num_classes=len(self.classes), use_pretrained=use_pretrained
-        )
-        super(Resnet18Binary, self).__init__(architecture, self.classes, single_target)
-        self.name = "Resnet18Binary"
-
-        # optimization parameters for separate feature extractor and classifier
-        # see: https://pytorch.org/docs/stable/optim.html#per-parameter-options
-        self.optimizer_params = {
-            "feature": {  # optimizer parameters for feature extraction layers
-                # "params": self.network.feature.parameters(),
-                "lr": 0.001,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-            "classifier": {  # optimizer parameters for classification layers
-                # "params": self.network.classifier.parameters(),
-                "lr": 0.01,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-        }
-
-    def _init_optimizer(self):
-        """initialize an instance of self.optimizer
-
-        We override the parent method because we need to pass a list of
-        separate optimizer_params for different parts of the network
-        - ie we now have a dictionary of param dictionaries instead of just a
-        param dictionary.
-
-        This function is called during .train() so that the user
-        has a chance to swap/modify the optimizer before training.
-
-        To modify the optimizer, change the value of
-        self.optimizer_cls and/or self.optimizer_params
-        prior to calling .train().
-        """
-        param_dict = self.optimizer_params
-        feature_extractor_params_list = [
-            param
-            for name, param in self.network.named_parameters()
-            if not name.split(".")[0] == "fc"
-        ]
-        classifier_params_list = [
-            param
-            for name, param in self.network.named_parameters()
-            if name.split(".")[0] == "fc"
-        ]
-        param_dict["feature"]["params"] = feature_extractor_params_list
-        param_dict["classifier"]["params"] = classifier_params_list
-        return self.optimizer_cls(param_dict.values())
+    model._init_optimizer = types.MethodType(_init_optimizer, model)
+    model.opt_net = None  # clears existing opt_net and its parameters
+    model.current_epoch = 0  # resets the epoch to 0
+    # model.opt_net will be created when .train() calls ._set_train()
 
 
-class InceptionV3(PytorchModel):
+class InceptionV3(CNN):
     def __init__(
         self,
         classes,
+        sample_duration,
+        single_target=False,
+        preprocessor_class=SpectrogramPreprocessor,
         freeze_feature_extractor=False,
         use_pretrained=True,
-        single_target=False,
+        sample_shape=[299, 299, 3],
     ):
-        """Model object for InceptionV3 architecture.
+        """Model object for InceptionV3 architecture subclassing CNN
 
         See opensoundscape.org for exaple use.
 
@@ -1116,10 +920,17 @@ class InceptionV3(PytorchModel):
             use_pretrained=use_pretrained,
         )
 
-        super(InceptionV3, self).__init__(architecture, self.classes, single_target)
+        super(InceptionV3, self).__init__(
+            architecture,
+            classes,
+            sample_duration,
+            single_target=single_target,
+            preprocessor_class=preprocessor_class,
+            sample_shape=sample_shape,
+        )
         self.name = "InceptionV3"
 
-    def train_epoch(self):
+    def _train_epoch(self, train_loader):
         """perform forward pass, loss, backpropagation for one epoch
 
         need to override parent because Inception returns different outputs
@@ -1127,13 +938,15 @@ class InceptionV3(PytorchModel):
 
         Returns: (targets, predictions, scores) on training files
         """
+
         self.network.train()
 
         total_tgts = []
         total_preds = []
         total_scores = []
+        batch_loss = []
 
-        for batch_idx, batch_data in enumerate(self.train_loader):
+        for batch_idx, batch_data in enumerate(train_loader):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
             batch_tensors = batch_data["X"].to(self.device)
@@ -1165,7 +978,10 @@ class InceptionV3(PytorchModel):
             loss1 = self.loss_fn(logits, batch_labels)
             loss2 = self.loss_fn(aux_logits, batch_labels)
             loss = loss1 + 0.4 * loss2
-            self.loss_hist[self.current_epoch] = loss.detach().cpu().numpy()
+
+            # save loss for each batch; later take average for epoch
+
+            batch_loss.append(loss.detach().cpu().numpy())
 
             #############################
             # Backward and optimization #
@@ -1180,25 +996,31 @@ class InceptionV3(PytorchModel):
             ###########
             # Logging #
             ###########
-            # log basic train info
+            # log basic train info (used to print every batch)
             if batch_idx % self.log_interval == 0:
                 """show some basic progress metrics during the epoch"""
-                N = len(self.train_loader)
-                print(
+                N = len(train_loader)
+                self._log(
                     "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
                         self.current_epoch, batch_idx, N, 100 * batch_idx / N
                     )
                 )
 
-                # Log the Jaccard score and Hamming loss
+                # Log the Jaccard score and Hamming loss, and Loss function
+                epoch_loss_avg = np.mean(batch_loss)
+                self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
+
+                # Evaluate with model's eval function
                 tgts = batch_labels.int().detach().cpu().numpy()
-                preds = batch_preds.int().detach().cpu().numpy()
-                jac = jaccard_score(tgts, preds, average="macro")
-                ham = hamming_loss(tgts, preds)
-                print(f"\tJacc: {jac:0.3f} Hamm: {ham:0.3f} DistLoss: {loss:.3f}")
+                # preds = batch_preds.int().detach().cpu().numpy()
+                scores = logits.int().detach().cpu().numpy()
+                self.eval(tgts, scores, logging_offset=-1)
 
         # update learning parameters each epoch
         self.scheduler.step()
+
+        # save the loss averaged over all batches
+        self.loss_hist[self.current_epoch] = np.mean(batch_loss)
 
         # return targets, preds, scores
         total_tgts = np.concatenate(total_tgts, axis=0)
@@ -1206,46 +1028,6 @@ class InceptionV3(PytorchModel):
         total_scores = np.concatenate(total_scores, axis=0)
 
         return total_tgts, total_preds, total_scores
-
-
-class InceptionV3ResampleLoss(InceptionV3):
-    def __init__(
-        self,
-        classes,
-        freeze_feature_extractor=False,
-        use_pretrained=True,
-        single_target=False,
-    ):
-        """Subclass of InceptionV3 with ResampleLoss.
-
-        May perform better than BCE for multitarget problems.
-        """
-        self.classes = classes
-
-        super(InceptionV3ResampleLoss, self).__init__(
-            classes,
-            freeze_feature_extractor=False,
-            use_pretrained=True,
-            single_target=single_target,
-        )
-        self.name = "InceptionV3ResampleLoss"
-        self.loss_cls = ResampleLoss
-
-    def _init_loss_fn(self):
-        """initialize an instance of self.loss_cls
-
-        We override the parent method because we need to pass class frequency
-        to the ResampleLoss constructor
-
-        This function is called during .train() so that the user
-        has a chance to change the loss function before training.
-
-        Note: if you change the loss function, you may need to override this
-        to correctly initialize self.loss_cls
-        """
-        class_frequency = np.sum(self.train_dataset.df.values, 0)
-        # initializing ResampleLoss requires us to pass class_frequency
-        self.loss_fn = self.loss_cls(class_frequency)
 
 
 def load_model(path, device=None):
@@ -1268,41 +1050,44 @@ def load_model(path, device=None):
     return model
 
 
-def load_outdated_model(path, model_class, architecture_constructor=None, device=None):
+def load_outdated_model(
+    path, architecture, sample_duration, model_class=CNN, device=None
+):
     """load a CNN saved with a previous version of OpenSoundscape
 
-    This function enables you to load models saved with opso 0.4.x, 0.5.x, and 0.6.0 when using >=0.6.1.
-    For models created with 0.6.1 and above, use load_model(path) which is more robust.
+    This function enables you to load models saved with opso 0.4.x and 0.5.x.
+    If your model was saved with .save() in a previous version of OpenSoundscape
+    >=0.6.0, you must re-load the model
+    using the original package version and save it's network's state dict, i.e.,
+    `torch.save(model.network.state_dict(),path)`, then load the state dict
+    to a new model object with model.load_weights(). See the
+    `Predict with pre-trained CNN` tutorial for details.
 
-    Note: If you are loading a model created with opensoundscape 0.4.x, you most likely want to specify
-    `model_class = opensoundscape.torch.models.CnnResnet18Binary`. If your model was created with
-    opensoundscape 0.5.x or 0.6.0, you need to choose the appropriate class.
+    For models created with the same version of OpenSoundscape as the one
+    you are using, simply use opensoundscape.torch.models.cnn.load_model().
 
     Note: for future use of the loaded model, you can simply call
     `model.save(path)` after creating it, then reload it with
-    `model = load_model(path)`. The saved model will be fully compatible with opensoundscape >=0.6.1.
+    `model = load_model(path)`.
+    The saved model will be fully compatible with opensoundscape >=0.7.0.
 
     Examples:
     ```
     #load a binary resnet18 model from opso 0.4.x, 0.5.x, or 0.6.0
-    from opensoundscape.torch.models.cnn import Resnet18Binary
-    model = load_outdated_model('old_model.tar',model_class=Resnet18Binary)
+    from opensoundscape.torch.models.cnn import CNN
+    model = load_outdated_model('old_model.tar',architecture='resnet18')
 
-    #load a resnet50 model of class PytorchModel created with opso 0.5.0
-    from opensoundscape.torch.models.cnn import PytorchModel
-    from opensoundscape.torch.architectures.cnn_architectures import resnet50
-    model_050 = load_outdated_model('opso050_pytorch_model_r50.model',model_class=PytorchModel,architecture_constructor=resnet50)
+    #load a resnet50 model of class CNN created with opso 0.5.0
+    from opensoundscape.torch.models.cnn import CNN
+    model_050 = load_outdated_model('opso050_pytorch_model_r50.model',architecture='resnet50')
     ```
 
     Args:
         path: path to model file, ie .model or .tar file
-        model_class: the opensoundscape class to create,
-            eg PytorchModel, CnnResampleLoss, or Resnet18Binary from opensoundscape.torch.models.cnn
-        architecture_constructor: the *function* that creates desired cnn architecture
-            eg opensoundscape.torch.architectures.cnn_architectures.resnet18
-            Note: this is only required for classes that take the architecture as an input, for instance
-            PytorchModel or CnnResampleLoss. It's not required for e.g. Resnet18Binary or InceptionV3 which
-            internally create a specific architecture.
+        architecture: see CNN docs
+            (pass None if the class __init__ does not take architecture as an argument)
+        sample_duration: length of samples in seconds
+        model_class: class to construct. Normally CNN.
         device: optionally specify a device to map tensors onto, eg 'cpu', 'cuda:0', 'cuda:1'[default: None]
             - if None, will choose cuda:0 if cuda is available, otherwise chooses cpu
 
@@ -1314,13 +1099,20 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
             torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
         )
 
-    # use torch to load the saved model object
-    model_dict = torch.load(path, map_location=device)
+    try:
+        # use torch to load the saved model object
+        model_dict = torch.load(path, map_location=device)
+    except AttributeError:
+        raise Exception(
+            "This model could not be loaded in this version of "
+            "OpenSoundscape. You may need to load the model with the version "
+            "of OpenSoundscape that created it and torch.save() the "
+            "model.network.state_dict(), then load the weights with model.load_weights"
+        )
 
     if type(model_dict) != dict:
         raise ValueError(
-            "This model was saved with a version of opensoundscape >=0.6.1. "
-            "Use opensoundcape.torch.models.cnn.load_model() instead of this function."
+            "This model was saved as a complete object. Try using load_model() instead."
         )
 
     # get the list of classes
@@ -1334,13 +1126,12 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
         raise ValueError("Could not get a list of classes from the saved model.")
 
     # try to construct a model object
-    try:
-        model = model_class(classes=classes)
-    except TypeError:  # may require us to specify the architecture
-        architecture = architecture_constructor(
-            num_classes=len(classes), use_pretrained=False
+    if architecture is None:
+        model = model_class(classes=classes, sample_duration=sample_duration)
+    else:
+        model = model_class(
+            architecture=architecture, classes=classes, sample_duration=sample_duration
         )
-        model = model_class(architecture=architecture, classes=classes)
 
     # rename keys of resnet18 architecture from 0.4.x-0.6.0 to match pytorch resnet18 keys
     model_dict["model_state_dict"] = {
@@ -1352,6 +1143,7 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
     mismatched_keys = model.network.load_state_dict(
         model_dict["model_state_dict"], strict=False
     )
+    print("mismatched keys:")
     print(mismatched_keys)
 
     # if there's no record of single-tartet vs multitarget, it' single target from opso 0.4.x
@@ -1361,5 +1153,11 @@ def load_outdated_model(path, model_class, architecture_constructor=None, device
         single_target = True
 
     model.single_target = single_target
+
+    warnings.warn(
+        "After loading a model, you still need to ensure that your "
+        "preprocessing (model.preprocessor) matches the settings used to create"
+        "the original model."
+    )
 
     return model

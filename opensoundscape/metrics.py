@@ -4,13 +4,15 @@ from sklearn.metrics import (
     hamming_loss,
     precision_recall_fscore_support,
     confusion_matrix,
+    average_precision_score,
+    roc_auc_score,
 )
 
 # from scipy.sparse import csr_matrix
 import numpy as np
 
 
-def predict(scores, single_target=False, threshold=0.5):
+def binary_predictions(scores, single_target=False, threshold=0.5):  # TODO rename
     """convert numeric scores to binary predictions
 
     return 0/1 for an array of scores: samples (rows) x classes (columns)
@@ -37,27 +39,19 @@ def predict(scores, single_target=False, threshold=0.5):
     return preds
 
 
-def multiclass_metrics(targets, preds, class_names):
-    """provide a list or np.array of 0,1 targets and predictions"""
-    epoch_metrics = {}
+def multi_target_metrics(targets, scores, class_names, threshold):
+    """generate various metrics for a set of scores and labels (targets)"""
+    metrics_dict = {}
 
-    # remove all samples with NaN for a prediction
-    targets = targets[~np.isnan(preds).any(axis=1), :]
-    preds = preds[~np.isnan(preds).any(axis=1), :]
-
-    # Confusion matrix if not multi-label
-    if max(np.sum(targets, 1)) <= 1 and max(np.sum(preds, 1)) <= 1:
-        # requires class labels not one-hot
-        t = np.argmax(targets, 1)
-        p = np.argmax(preds, 1)
-        epoch_metrics["confusion_matrix"] = confusion_matrix(t, p)
+    preds = binary_predictions(scores, single_target=False, threshold=threshold)
 
     # Store per-class precision, recall, and f1
     class_pre, class_rec, class_f1, _ = precision_recall_fscore_support(
         targets, preds, average=None, zero_division=0
     )
+
     for i, class_i in enumerate(class_names):
-        epoch_metrics.update(
+        metrics_dict.update(
             {
                 class_i: {
                     "precision": class_pre[i],
@@ -68,42 +62,69 @@ def multiclass_metrics(targets, preds, class_names):
         )
 
     # macro scores are averaged across classes
-    epoch_metrics["precision"] = class_pre.mean()
-    epoch_metrics["recall"] = class_rec.mean()
-    epoch_metrics["f1"] = class_f1.mean()
+    metrics_dict["precision"] = class_pre.mean()
+    metrics_dict["recall"] = class_rec.mean()
+    metrics_dict["f1"] = class_f1.mean()
 
-    epoch_metrics["jaccard"] = jaccard_score(targets, preds, average="macro")
-    epoch_metrics["hamming_loss"] = hamming_loss(targets, preds)
+    try:
+        metrics_dict["jaccard"] = jaccard_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["jaccard"] = np.nan
+    try:
+        metrics_dict["hamming_loss"] = hamming_loss(targets, preds)
+    except ValueError:
+        metrics_dict["hamming_loss"] = np.nan
+    try:
+        metrics_dict["map"] = average_precision_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["map"] = np.nan
+    try:
+        metrics_dict["au_roc"] = roc_auc_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["au_roc"] = np.nan
 
-    return epoch_metrics
+    return metrics_dict
 
 
-def binary_metrics(targets, preds, class_names=[0, 1]):
-    """labels should be single-target"""
+def single_target_metrics(targets, scores, class_names):
+    """generate various """
     if max(np.sum(targets, 1)) > 1:
         raise ValueError(
-            "Labels must be single-target for binary classification."
-            " Use multi-target classifier if multiple classes can be present."
+            "Labels were not single target! "
+            "Use multi-target classifier if multiple classes can be present "
+            "in a single sample."
         )
 
-    epoch_metrics = {}
+    metrics_dict = {}
 
-    # remove all samples with NaN for a prediction
-    targets = targets[~np.isnan(preds).any(axis=1), :]
-    preds = preds[~np.isnan(preds).any(axis=1), :]
+    preds = binary_predictions(scores, single_target=True)
 
-    # Confusion matrix requires numeric not one-hot labels
+    # Confusion matrix requires numbered-class not one-hot labels
     t = np.argmax(targets, 1)
     p = np.argmax(preds, 1)
-    epoch_metrics["confusion_matrix"] = confusion_matrix(t, p)
+    metrics_dict["confusion_matrix"] = confusion_matrix(t, p)
 
     # precision, recall, and f1
     pre, rec, f1, _ = precision_recall_fscore_support(
         targets, preds, average=None, zero_division=0
     )
-    epoch_metrics.update({"precision": pre[1], "recall": rec[1], "f1": f1[1]})
+    metrics_dict.update({"precision": pre[1], "recall": rec[1], "f1": f1[1]})
 
-    epoch_metrics["jaccard"] = jaccard_score(targets, preds, average="macro")
-    epoch_metrics["hamming_loss"] = hamming_loss(targets, preds)
+    try:
+        metrics_dict["jaccard"] = jaccard_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["jaccard"] = np.nan
+    try:
+        metrics_dict["hamming_loss"] = hamming_loss(targets, preds)
+    except ValueError:
+        metrics_dict["hamming_loss"] = np.nan
+    try:
+        metrics_dict["map"] = average_precision_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["map"] = np.nan
+    try:
+        metrics_dict["au_roc"] = roc_auc_score(targets, preds, average="macro")
+    except ValueError:
+        metrics_dict["au_roc"] = np.nan
 
-    return epoch_metrics
+    return metrics_dict

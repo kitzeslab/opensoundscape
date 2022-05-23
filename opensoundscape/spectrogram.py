@@ -108,8 +108,11 @@ class Spectrogram:
         cls,
         audio,
         window_type="hann",
-        window_samples=512,
-        overlap_samples=256,
+        window_samples=None,
+        window_length_sec=None,
+        overlap_samples=None,
+        overlap_fraction=None,
+        fft_size=None,
         decibel_limits=(-100, -20),
         dB_scale=True,
     ):
@@ -118,10 +121,22 @@ class Spectrogram:
 
         Args:
             window_type="hann": see scipy.signal.spectrogram docs for description of window parameter
-            window_samples=512: number of audio samples per spectrogram window (pixel)
-            overlap_samples=256: number of samples shared by consecutive windows
-            decibel_limits = (-100,-20) : limit the dB values to (min,max) (lower values set to min, higher values set to max)
-            dB_scale=True : If True, rescales values to decibels, x=10*log10(x)
+            window_samples: number of audio samples per spectrogram window (pixel)
+                - Defaults to 512 if window_samples and window_length_sec are None
+                - Note: cannot specify both window_samples and window_length_sec
+            window_length_sec: length of a single window in seconds
+                - Note: cannot specify both window_samples and window_length_sec
+                - Warning: specifying this parameter often results in less efficient
+                    spectrogram computation because window_samples will not be
+                    a power of 2.
+            overlap_samples: number of samples shared by consecutive windows
+                - Note: must not specify both overlap_samples and overlap_fraction
+            overlap_fraction: fractional temporal overlap between consecutive windows
+                - Defaults to 0.5 if overlap_samples and overlap_fraction are None
+                - Note: cannot specify both overlap_samples and overlap_fraction
+            fft_size: see scipy.signal.spectrogram's `nfft` parameter
+            decibel_limits: limit the dB values to (min,max) (lower values set to min, higher values set to max)
+            dB_scale: If True, rescales values to decibels, x=10*log10(x)
                 - if dB_scale is False, decibel_limits is ignored
 
         Returns:
@@ -130,12 +145,39 @@ class Spectrogram:
         if not isinstance(audio, Audio):
             raise TypeError("Class method expects Audio class as input")
 
+        # determine window_samples
+        if window_samples is not None and window_length_sec is not None:
+            raise ValueError(
+                "You may not specify both `window_samples` and `window_length_sec`"
+            )
+        elif window_samples is None and window_length_sec is None:
+            window_samples = 512  # defaults to 512 samples
+        elif window_length_sec is not None:
+            window_samples = int(audio.sample_rate * window_length_sec)
+        # else: use user-provided window_samples argument
+
+        # determine overlap_samples
+        if overlap_samples is not None and overlap_fraction is not None:
+            raise ValueError(
+                "You may not specify both `overlap_samples` and `overlap_fraction`"
+            )
+        elif overlap_samples is None and overlap_fraction is None:
+            # default is 50% overlap
+            overlap_samples = window_samples // 2
+        elif overlap_fraction is not None:
+            assert (
+                overlap_fraction >= 0 and overlap_fraction < 1
+            ), "overlap_fraction must be >=0 and <1"
+            overlap_samples = int(window_samples * overlap_fraction)
+        # else: use the provided overlap_samples argument
+
         frequencies, times, spectrogram = signal.spectrogram(
             audio.samples,
             audio.sample_rate,
             window=window_type,
-            nperseg=window_samples,
-            noverlap=overlap_samples,
+            nperseg=int(window_samples),
+            noverlap=int(overlap_samples),
+            nfft=fft_size,
             scaling="spectrum",
         )
 
@@ -229,7 +271,6 @@ class Spectrogram:
 
     def min_max_scale(self, feature_range=(0, 1)):
         """
-
         Linearly rescale spectrogram values to a range of values using
         in_range as minimum and maximum
 
@@ -257,7 +298,6 @@ class Spectrogram:
 
     def linear_scale(self, feature_range=(0, 1)):
         """
-
         Linearly rescale spectrogram values to a range of values
         using in_range as decibel_limits
 
@@ -480,51 +520,90 @@ class Spectrogram:
     #         with open(destination,'wb') as file:
     #             pickle.dump(self,file)
 
-    def to_image(self, shape=None, mode="RGB", colormap=None):
-        """Create a Pillow Image from spectrogram
+    def to_image(
+        self, shape=None, channels=1, colormap=None, invert=False, return_type="pil"
+    ):
+        """Create an image from spectrogram (array, tensor, or PIL.Image)
 
         Linearly rescales values in the spectrogram from
-        self.decibel_limits to [255,0]
+        self.decibel_limits to [0,255] (PIL.Image) or [0,1] (array/tensor)
 
         Default of self.decibel_limits on load is [-100, -20], so, e.g.,
         -20 db is loudest -> black, -100 db is quietest -> white
 
         Args:
-            destination: a file path (string)
-            shape=None: tuple of image dimensions as (height, width),
-            mode="RGB": RGB for 3-channel output "L" for 1-channel output
-            colormap=None:
+            shape: tuple of output dimensions as (height, width)
+                - if None, retains original shape of self.spectrogram
+            channels: eg 3 for rgb, 1 for greyscale
+                - must be 3 to use colormap
+            colormap:
                 if None, greyscale spectrogram is generated
                 Can be any matplotlib colormap name such as 'jet'
-                Note: if mode="L", colormap will have no effect on output
-
+            return_type: type of returned object
+                - 'pil': PIL.Image
+                - 'np': numpy.ndarray
+                - 'torch': torch.tensor
         Returns:
-            Pillow Image object
+            Image/array with type depending on `return_type`:
+            - PIL.Image with c channels and shape w,h given by `shape`
+                and values in [0,255]
+            - np.ndarray with shape [c,h,w] and values in [0,1]
+            - or torch.tensor with shape [c,h,w] and values in [0,1]
         """
-        from PIL import Image
+        from skimage.transform import resize as skresize
 
-        # rescale spec_range to [255, 0]
-        # note the backwards range: we want white=silence and black=loudest
+        assert return_type in [
+            "pil",
+            "np",
+            "torch",
+        ], f"Arg `return_type` must be one of 'pil', 'np', 'torch'. Got {return_type}."
+        if colormap is not None:
+            # it doesn't make sense to use a colormap with #channels != 3
+            assert (
+                channels == 3
+            ), f"Channels must be 3 to use colormap. Specified {channels}"
+
+        # rescale spec_range to [1, 0]
+        # note the low values represent silence, so a silent img would be black
+        # if plotted directly from these values.
         array = linear_scale(
-            self.spectrogram, in_range=self.decibel_limits, out_range=(1, 0)
+            self.spectrogram, in_range=self.decibel_limits, out_range=(0, 1)
         )
+        # flip so that frequency increases from bottom to top
+        array = array[::-1, :]
 
-        # apply a colormap if desired
-        if mode == "RGB" and colormap is not None:
+        # invert if desired
+        if invert:
+            array = 1 - array
+
+        # apply colormaps
+        if colormap is not None:  # apply a colormap to get RGB channels
             cm = get_cmap(colormap)
-            array = cm(1 - array)  # take 1-array bc its currently inverted
+            array = cm(array)
 
-        # use correct type for img, and scale from 0-1 to 0-255
-        array = np.uint8(array * 255)
+        # resize and change channel dims
+        if shape is None:
+            shape = np.shape(array)
+        out_shape = [shape[0], shape[1], channels]
+        array = skresize(array, out_shape)
 
-        # create PIL Image
-        # pass the array upside-down to create right-side-up image
-        image = Image.fromarray(array[::-1, :])
-        image = image.convert(mode)  #'RGB' 3 channel, 'L' 1 channel
+        if return_type == "pil":  # expected shape of input is [h,w,c]
+            from PIL import Image
 
-        # reshape to desired dimensions
-        if shape is not None:
-            image = image.resize(shape[::-1])
+            # use correct type for img, and scale from 0-1 to 0-255
+            array = np.uint8(array * 255)
+            if array.shape[-1] == 1:
+                # PIL doesnt like [x,y,1] shape, wants [x,y] instead
+                array = array[:, :, 0]
+            image = Image.fromarray(array)
+
+        elif return_type == "np":  # shape should be c,h,w
+            image = array.transpose(2, 0, 1)
+
+        elif return_type == "torch":  # shape should be c,h,w
+            import torch
+
+            image = torch.Tensor(array.transpose(2, 0, 1))
 
         return image
 
@@ -690,36 +769,3 @@ class MelSpectrogram(Spectrogram):
                 warnings.warn("MPLBACKEND is 'None' in os.environ. Skipping plot.")
             else:
                 plt.show()
-
-    # def to_pcen(self, gain=0.8, bias=10.0, power=0.25, time_constant=0.06):
-    #     """ Create PCEN from MelSpectrogram
-    #
-    #     Argument descriptions come from https://librosa.org/doc/latest/generated/librosa.pcen.html?highlight=pcen#librosa-pcen
-    #
-    #     Args:
-    #         gain: The gain factor. Typical values should be slightly less than 1 [default: 0.8]
-    #         bias: The bias point of the nonlinear compression [default: 10.0]
-    #         power: The compression exponent. Typical values should be between 0
-    #             and 0.5. Smaller values of power result in stronger compression. At
-    #             the limit power=0, polynomial compression becomes logarithmic
-    #             [default: 0.25]
-    #         time_constant: The time constant for IIR filtering, measured in seconds [default: 0.06]
-    #
-    #     Returns:
-    #         The per-channel energy normalized version of MelSpectrogram.S
-    #     """
-    #     return MelSpectrogram(
-    #         pcen(
-    #             self.S,
-    #             sr=self.sample_rate,
-    #             hop_length=self.hop_length,
-    #             gain=gain,
-    #             bias=bias,
-    #             power=power,
-    #             time_constant=time_constant,
-    #         ),
-    #         self.sample_rate,
-    #         self.hop_length,
-    #         self.fmin,
-    #         self.fmax,
-    #     )

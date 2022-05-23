@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from opensoundscape.audio import Audio, OpsoLoadAudioInputTooLong
+from opensoundscape.audio import Audio
 import pytest
 import numpy as np
 from opensoundscape import signal as sig
@@ -170,3 +170,43 @@ def test_detect_peak_sequence_cwt_uneven_length_results(rugr_wav_str):
         plot=False,
     )
     assert len(detections) == 2
+
+
+def test_get_ones_sequence():
+    starts, lengths = sig._get_ones_sequences(np.array([1, 1, 1, 0, 1, 1, 0, 1]))
+    assert starts == [0, 4, 7]
+    assert lengths == [3, 2, 1]
+    print(starts, lengths)
+
+
+def test_thresholded_event_durations():
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([1, 1, 1, 0, 1, 1, 0, 1]), threshold=0
+    )
+    assert np.array_equal(starts, np.array([0]))
+    assert np.array_equal(lengths, np.array([8]))
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([1, 1, 1, 0, 1, 1, 0, 1]), threshold=np.array(10)
+    )
+    assert np.array_equal(starts, np.array([]))
+    assert np.array_equal(lengths, np.array([]))
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([-1, -1, -1, 0, 1, -1, 0, 1]), threshold=-0.1
+    )
+    assert np.array_equal(starts, np.array([3, 6]))
+    assert np.array_equal(lengths, np.array([2, 2]))
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([]), threshold=np.array(0.99)
+    )
+    assert np.array_equal(starts, np.array([]))
+    assert np.array_equal(lengths, np.array([]))
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([0, 0, 0]), threshold=np.nan
+    )
+    assert np.array_equal(starts, np.array([]))
+    assert np.array_equal(lengths, np.array([]))
+    starts, lengths = sig.thresholded_event_durations(
+        np.array([0, np.nan, 0]), threshold=-1
+    )
+    assert np.array_equal(starts, np.array([0, 2]))
+    assert np.array_equal(lengths, np.array([1, 1]))
