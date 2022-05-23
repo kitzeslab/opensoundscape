@@ -57,7 +57,7 @@ def test_init_with_str():
 def test_train_single_target(train_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     model.single_target = True
-    model.train(  # TODO: is there a default overlay?
+    model.train(
         train_df,
         train_df,
         save_path="tests/models",
