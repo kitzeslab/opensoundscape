@@ -55,7 +55,8 @@ def test_spec_preprocessor_fails_on_short_file(short_file_row, preprocessor):
     """should fail on short file when audio duration is specified"""
     preprocessor.pipeline.trim_audio.set(extend=False)
     with pytest.raises(PreprocessingError):
-        preprocessor.forward(short_file_row)
+        # if augmenting, random_trim extends!
+        preprocessor.forward(short_file_row, bypass_augmentations=True)
 
 
 def test_insert_action(preprocessor):
