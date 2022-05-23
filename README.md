@@ -25,7 +25,7 @@ For more detailed instructions on how to install OpenSoundscape and use it in Ju
 
 # Features & Tutorials
 OpenSoundscape includes functions to:
-* trim, split, and manipulate audio files
+* load and manipulate audio files
 * create and manipulate spectrograms
 * train CNNs on spectrograms with PyTorch
 * run pre-trained CNNs to detect vocalizations
@@ -58,7 +58,7 @@ from datetime import datetime; import pytz
 
 start_time = pytz.timezone('UTC').localize(datetime(2020,4,4,10,25))
 audio_length = 5 #seconds  
-path = '/Users/SML161/sample_audio/metadata.WAV' #an AudioMoth recording
+path = '/path/to/audiomoth_file.WAV' #an AudioMoth recording
 
 Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 ```
@@ -82,18 +82,13 @@ Training a CNN with labeled audio data
 ```python
 from opensoundscape.torch.models.cnn import CNN
 from sklearn.model_selection import train_test_split
-from opensoundscape.preprocess.utils import show_tensor_grid
 
 #load a DataFrame of one-hot audio clip labels
 df = pd.read_csv('my_labels.csv') #index: paths; columns: classes
 train_df, validation_df = train_test_split(df,test_size=0.2)
 
-# optional: inspect a few preprocessed samples
-samples = model.make_samples(train_df.sample(n=9),augmentation_on=True)
-fig = show_tensor_grid(samples,3)
-
-#create a CNN and train for 2 epochs
-model = PytorchModel('resnet18',classes=df.columns,sample_duration=0.2)
+#create a CNN and train on 2-second spectrograms for 2 epochs
+model = CNN('resnet18',classes=df.columns,sample_duration=2.0)
 model.train(
   train_df,
   validation_df,
