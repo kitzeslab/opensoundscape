@@ -163,7 +163,7 @@ class AudioTrim(Action):
         )
 
 
-def trim_audio(audio, _sample_duration, extend=True, random_trim=False):
+def trim_audio(audio, _sample_duration, extend=True, random_trim=False, tol=1e-5):
     """trim audio clips (Audio -> Audio)
 
     Trims an audio file to desired length
@@ -179,6 +179,7 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False):
         random_trim: if True, chooses a random segment of length _sample_duration
             from the input audio. If False, the file is trimmed from 0 seconds
             to _sample_duration seconds.
+        tol: tolerance for considering a clip to be of the correct length (sec)
 
     Returns:
         trimmed audio
@@ -187,7 +188,7 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False):
         raise ValueError("recieved zero-length audio")
 
     if _sample_duration is not None:
-        if audio.duration() <= _sample_duration:
+        if audio.duration() + tol <= _sample_duration:
             # input audio is not as long as desired length
             if extend:  # extend clip sith silence
                 audio = audio.extend(_sample_duration)
