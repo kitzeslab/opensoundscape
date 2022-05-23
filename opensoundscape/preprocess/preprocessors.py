@@ -67,9 +67,9 @@ class BasePreprocessor:
             # put this action at the end of the index
             self.pipeline = self.pipeline.append(pd.Series({action_index: action}))
         elif before_key is not None:
-            self.insert_action_before(before_key, action_index, action)
+            self._insert_action_before(before_key, action_index, action)
         elif after_key is not None:
-            self.insert_action_after(after_key, action_index, action)
+            self._insert_action_after(after_key, action_index, action)
 
     def remove_action(self, action_index):
         """alias for self.drop(...,inplace=True), removes an action
@@ -163,19 +163,19 @@ class BasePreprocessor:
 
         return x, sample_info
 
-    def insert_action_before(self, idx, name, value):
+    def _insert_action_before(self, idx, name, value):
         """insert an item before a spcific index in a series"""
         i = list(self.pipeline.index).index(idx)
-        part1 = series[0:i]
-        part2 = series[i:]
-        self = part1.append(pd.Series([value], index=[name])).append(part2)
+        part1 = self.pipeline[0:i]
+        part2 = self.pipeline[i:]
+        self.pipeline = part1.append(pd.Series([value], index=[name])).append(part2)
 
-    def insert_action_after(self, idx, name, value):
+    def _insert_action_after(self, idx, name, value):
         """insert an item after a spcific index in a series"""
         i = list(self.pipeline.index).index(idx)
-        part1 = self[0 : i + 1]
-        part2 = self[i + 1 :]
-        self = part1.append(pd.Series([value], index=[name])).append(part2)
+        part1 = self.pipeline[0 : i + 1]
+        part2 = self.pipeline[i + 1 :]
+        self.pipeline = part1.append(pd.Series([value], index=[name])).append(part2)
 
 
 class SpectrogramPreprocessor(BasePreprocessor):
