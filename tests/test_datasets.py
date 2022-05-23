@@ -59,7 +59,7 @@ def small_dataset(dataset_df, overlay_pre):
 
 def test_subset_dataset(small_dataset):
     small_dataset.sample(n=1)
-    small_datset.sample(frac=1)
+    small_dataset.sample(frac=1)
     small_dataset.head(1)
 
 
