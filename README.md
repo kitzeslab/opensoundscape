@@ -7,19 +7,19 @@ OpenSoundscape is a utility library for analyzing bioacoustic data. It consists 
 
 These utilities can be strung together to create data analysis pipelines. OpenSoundscape is designed to be run on any scale of computer: laptop, desktop, or computing cluster.
 
-OpenSoundscape is currently in active development. If you find a bug, please submit an issue. If you have another question about OpenSoundscape, please email Sam Lapp (`sam.lapp` at `pitt.edu`) or Tessa Rhinehart (`tessa.rhinehart` at `pitt.edu`).
+OpenSoundscape is currently in active development. If you find a bug, please submit an issue. If you have another question about OpenSoundscape, please email Sam Lapp (`sam.lapp` at `pitt.edu`).
 
 
 #### Suggested Citation
 ```
-Lapp, Rhinehart, Freeland-Haynes, and Kitzes, 2022. "OpenSoundscape v0.6.2".
+Lapp, Rhinehart, Freeland-Haynes, Khilnani, and Kitzes, 2022. "OpenSoundscape v0.7.0".
 ```
 
 # Installation
 
 OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.7 and 3.8.
 
-Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.6.2`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
+Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.7.0`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
 
 For more detailed instructions on how to install OpenSoundscape and use it in Jupyter, see the [documentation](http://opensoundscape.org).
 
