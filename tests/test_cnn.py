@@ -197,7 +197,7 @@ def test_train_predict_architecture(train_df):
 def test_predict_without_splitting(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     scores, preds, _ = model.predict(
-        test_df, split_files_into_clips=False, binary_preds="multi_target"
+        test_df, split_files_into_clips=False, binary_preds="multi_target", threshold=0
     )
     assert len(scores) == len(test_df)
     assert len(preds) == len(test_df)
