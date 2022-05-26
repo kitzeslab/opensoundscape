@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from opensoundscape.torch.sampling import ClassAwareSampler, ImbalancedDatasetSampler
+from opensoundscape.torch.sampling import ClassAwareSampler
 from torch.utils.data import DataLoader
 from torch.nn.functional import softmax
 import pandas as pd
@@ -34,39 +34,6 @@ class BaseModule(nn.Module):
 
     def update_best(self):
         pass
-
-
-def get_dataloader(
-    safe_dataset, batch_size=64, num_workers=1, shuffle=False, sampler=""
-):
-    """
-    Create a DataLoader from a DataSet
-    - chooses between normal pytorch DataLoader and ImbalancedDatasetSampler.
-    - Sampler: None -> default DataLoader; 'imbalanced'->ImbalancedDatasetSampler
-
-    """
-    if len(safe_dataset) == 0:
-        return None
-
-    if sampler == "imbalanced":
-        loader = DataLoader(
-            safe_dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers,
-            sampler=ImbalancedDatasetSampler(safe_dataset.dataset),
-        )
-    # could implement other sampler options here
-    else:  # just use a regular Pytorch DataLoader
-        loader = DataLoader(
-            safe_dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            pin_memory=True,
-        )
-
-    return loader
 
 
 def cas_dataloader(dataset, batch_size, num_workers):
@@ -141,7 +108,6 @@ def collate_lists_of_audio_clips(batch):
     dfs = [d["df"] for d in batch]
 
     elem = data[0]
-    elem_type = type(elem)
     if isinstance(elem, torch.Tensor):
         out = None
         if torch.utils.data.get_worker_info() is not None:
@@ -224,6 +190,8 @@ def apply_activation_layer(x, activation_layer=None):
 def tensor_binary_predictions(scores, mode, threshold=None):
     """generate binary 0/1 predictions from continuous scores
 
+    Does not transform scores: compares scores directly to threshold.
+
     Args:
         scores: torch.Tensor of dim (batch_size, n_classes) with input scores [-inf:inf]
         mode: 'single_target', 'multi_target', or None (return empty tensor)
@@ -244,11 +212,11 @@ def tensor_binary_predictions(scores, mode, threshold=None):
             raise ValueError(f"threshold must be specified for multi_target prediction")
         # predict 0 or 1 based on a fixed threshold
         elif type(threshold) in [float, np.float32, np.float64, int]:
-            preds = torch.sigmoid(scores) >= threshold
+            preds = scores >= threshold
         elif type(threshold) in [np.array, list, torch.Tensor, tuple]:
             if len(threshold) == 1 or len(threshold) == len(scores[0]):
                 # will make predictions for either a single threshold value or list of class-specific threshold values
-                preds = torch.sigmoid(scores) >= torch.tensor(threshold)
+                preds = scores >= torch.tensor(threshold)
             else:
                 raise ValueError(
                     f"threshold must be a single value, or have the same number of values as there are classes"

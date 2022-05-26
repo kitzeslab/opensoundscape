@@ -4,8 +4,6 @@ import numpy as np
 from torch.utils.data.sampler import Sampler
 import torch
 import torch.utils.data
-import torchvision
-import numpy as np
 
 # Imbalanced Dataset Sampling by davinnovation
 # (https://github.com/ufoym/imbalanced-dataset-sampler)

@@ -7,25 +7,25 @@ OpenSoundscape is a utility library for analyzing bioacoustic data. It consists 
 
 These utilities can be strung together to create data analysis pipelines. OpenSoundscape is designed to be run on any scale of computer: laptop, desktop, or computing cluster.
 
-OpenSoundscape is currently in active development. If you find a bug, please submit an issue. If you have another question about OpenSoundscape, please email Sam Lapp (`sam.lapp` at `pitt.edu`) or Tessa Rhinehart (`tessa.rhinehart` at `pitt.edu`).
+OpenSoundscape is currently in active development. If you find a bug, please submit an issue. If you have another question about OpenSoundscape, please email Sam Lapp (`sam.lapp` at `pitt.edu`).
 
 
 #### Suggested Citation
 ```
-Lapp, Rhinehart, Freeland-Haynes, and Kitzes, 2022. "OpenSoundscape v0.6.2".
+Lapp, Rhinehart, Freeland-Haynes, Khilnani, and Kitzes, 2022. "OpenSoundscape v0.7.0".
 ```
 
 # Installation
 
 OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.7 and 3.8.
 
-Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.6.2`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
+Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.7.0`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
 
 For more detailed instructions on how to install OpenSoundscape and use it in Jupyter, see the [documentation](http://opensoundscape.org).
 
 # Features & Tutorials
 OpenSoundscape includes functions to:
-* trim, split, and manipulate audio files
+* load and manipulate audio files
 * create and manipulate spectrograms
 * train CNNs on spectrograms with PyTorch
 * run pre-trained CNNs to detect vocalizations
@@ -38,8 +38,8 @@ For full API documentation and tutorials on how to use OpenSoundscape to work wi
 
 # Quick Start
 
-Using Audio and Spectrogram classes #tldr
-```
+Using Audio and Spectrogram classes
+```python
 from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram
 
@@ -52,50 +52,47 @@ my_spec = Spectrogram.from_audio(clip_5s)
 my_spec.plot()
 ```
 
-Using a pre-trained CNN to make predictions on long audio files
+Load audio starting at a real-world timestamp
+```python
+from datetime import datetime; import pytz
+
+start_time = pytz.timezone('UTC').localize(datetime(2020,4,4,10,25))
+audio_length = 5 #seconds  
+path = '/path/to/audiomoth_file.WAV' #an AudioMoth recording
+
+Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 ```
+
+Using a pre-trained CNN to make predictions on long audio files
+```python
 from opensoundscape.torch.models.cnn import load_model
-from opensoundscape.preprocess.preprocessors import ClipLoadingSpectrogramPreprocessor
-from opensoundscape.helpers import make_clip_df
-from glob import glob
 
 #get list of audio files
 files = glob('./dir/*.WAV')
 
-#generate clip df
-clip_df = make_clip_df(files,clip_duration=5.0,clip_overlap=0)
-
-#create dataset
-dataset = ClipLoadingSpectrogramPreprocessor(clip_df)
-#you may need to change preprocessing params to match model
-
 #generate predictions with a model
 model = load_model('/path/to/saved.model')
-scores, _, _ = model.predict(dataset)
+scores, _, _ = model.predict(files)
 
 #scores is a dataframe with MultiIndex: file, start_time, end_time
 #containing inference scores for each class and each audio window
 ```
 
 Training a CNN with labeled audio data
-```
-from opensoundscape.torch.models.cnn import PytorchModel
-from opensoundscape.preprocess.preprocessors import CnnPreprocessor
+```python
+from opensoundscape.torch.models.cnn import CNN
+from sklearn.model_selection import train_test_split
 
 #load a DataFrame of one-hot audio clip labels
-#(index: file paths, columns: classes)
-df = pd.read_csv('my_labels.csv')
+df = pd.read_csv('my_labels.csv') #index: paths; columns: classes
+train_df, validation_df = train_test_split(df,test_size=0.2)
 
-#create a preprocessor that will create and augment samples for the CNN
-train_dataset = CnnPreprocessor(df)
-
-#create a CNN and train for 2 epochs
-#for simplicity, using the training set as validation (not recommended!)
-#the best model is automatically saved to `./best.model`
-model = PytorchModel('resnet18',classes=df.columns)
+#create a CNN and train on 2-second spectrograms for 2 epochs
+model = CNN('resnet18',classes=df.columns,sample_duration=2.0)
 model.train(
-  train_dataset=train_dataset,
-  valid_dataset=train_dataset,
+  train_df,
+  validation_df,
   epochs=2
 )
+#the best model is automatically saved to a file `./best.model`
 ```

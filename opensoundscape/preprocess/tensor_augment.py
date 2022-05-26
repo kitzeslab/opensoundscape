@@ -247,8 +247,6 @@ def interpolate_bilinear(
     grid_type = grid.dtype
     grid_device = grid.device
 
-    num_queries = query_points.shape[1]
-
     alphas = []
     floors = []
     ceils = []
