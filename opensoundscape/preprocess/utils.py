@@ -11,11 +11,13 @@ class PreprocessingError(Exception):
 
 
 def get_args(func):
+    """get list of arguments and default values from a function"""
     signature = inspect.signature(func)
     return {k: v.default for k, v in signature.parameters.items()}
 
 
 def get_reqd_args(func):
+    """get list of required arguments and default values from a function"""
     signature = inspect.signature(func)
     return [
         k

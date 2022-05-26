@@ -85,13 +85,15 @@ class Action(BaseAction):
         self.extra_args = extra_args
 
         # query action_fn for arguments and default values
-        self.params = pd.Series(get_args(self.action_fn))
+        self.params = pd.Series(get_args(self.action_fn), dtype=object)
 
         # whether the first argument is 'self' or the incoming object,
         # we remove it from the params dict
         self.params = self.params[1:]
 
         # remove "extra_args" from self.params if they are present:
+        # these sample-specific arguments will be passed to action.go()
+        # directly, so they should not be part of the self.params dictionary
         self.params = self.params.drop([p for p in extra_args if p in self.params])
 
         # update self.params with any user-provided parameters

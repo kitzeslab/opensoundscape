@@ -40,7 +40,18 @@ def binary_predictions(scores, single_target=False, threshold=0.5):  # TODO rena
 
 
 def multi_target_metrics(targets, scores, class_names, threshold):
-    """generate various metrics for a set of scores and labels (targets)"""
+    """generate various metrics for a set of scores and labels (targets)
+
+    Args:
+        targets: 0/1 lables in 2d array
+        scores: continuous values in 2d array
+        class_names: list of strings
+        threshold: scores >= threshold result in prediction of 1,
+            while scores < threshold result in prediction of 0
+
+    Returns:
+        metrics_dict: dictionary of various overall and per-class metrics
+    """
     metrics_dict = {}
 
     preds = binary_predictions(scores, single_target=False, threshold=threshold)
@@ -87,7 +98,20 @@ def multi_target_metrics(targets, scores, class_names, threshold):
 
 
 def single_target_metrics(targets, scores, class_names):
-    """generate various """
+    """generate various metrics for a set of scores and labels (targets)
+
+    Predicts 1 for the highest scoring class per sample and 0 for
+    all other classes.
+
+    Args:
+        targets: 0/1 lables in 2d array
+        scores: continuous values in 2d array
+        class_names: list of strings
+
+    Returns:
+        metrics_dict: dictionary of various overall and per-class metrics
+
+    """
     if max(np.sum(targets, 1)) > 1:
         raise ValueError(
             "Labels were not single target! "
