@@ -239,6 +239,13 @@ def test_prediction_warns_different_classes(train_df):
         assert "classes" in all_warnings
 
 
+def test_prediction_returns_consistent_values(train_df):
+    model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)
+    a, _, _ = model.predict(train_df)
+    b, _, _ = model.predict(train_df)
+    assert np.allclose(a.values, b.values, 1e-6)
+
+
 def test_save_and_load_weights(model_save_path):
     arch = resnet18(2, use_pretrained=False)
     model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)

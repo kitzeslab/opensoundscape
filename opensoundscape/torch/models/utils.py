@@ -190,6 +190,8 @@ def apply_activation_layer(x, activation_layer=None):
 def tensor_binary_predictions(scores, mode, threshold=None):
     """generate binary 0/1 predictions from continuous scores
 
+    Does not transform scores: compares scores directly to threshold.
+
     Args:
         scores: torch.Tensor of dim (batch_size, n_classes) with input scores [-inf:inf]
         mode: 'single_target', 'multi_target', or None (return empty tensor)
@@ -210,11 +212,11 @@ def tensor_binary_predictions(scores, mode, threshold=None):
             raise ValueError(f"threshold must be specified for multi_target prediction")
         # predict 0 or 1 based on a fixed threshold
         elif type(threshold) in [float, np.float32, np.float64, int]:
-            preds = torch.sigmoid(scores) >= threshold
+            preds = scores >= threshold
         elif type(threshold) in [np.array, list, torch.Tensor, tuple]:
             if len(threshold) == 1 or len(threshold) == len(scores[0]):
                 # will make predictions for either a single threshold value or list of class-specific threshold values
-                preds = torch.sigmoid(scores) >= torch.tensor(threshold)
+                preds = scores >= torch.tensor(threshold)
             else:
                 raise ValueError(
                     f"threshold must be a single value, or have the same number of values as there are classes"

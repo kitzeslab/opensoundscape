@@ -611,18 +611,19 @@ class CNN(BaseModule):
         num_workers=0,
         activation_layer=None,
         binary_preds=None,
-        threshold=0.5,
+        threshold=None,
         split_files_into_clips=True,
         overlap_fraction=0,
         final_clip=None,
-        augmentation_on=False,
+        bypass_augmentations=True,
         unsafe_samples_log=None,
     ):
         """Generate predictions on a dataset
 
         Choose to return any combination of scores, labels, and single-target or
         multi-target binary predictions. Also choose activation layer for scores
-        (softmax, sigmoid, softmax then logit, or None).
+        (softmax, sigmoid, softmax then logit, or None). Binary predictions are
+        performed post-activation layer
 
         Note: the order of returned dataframes is (scores, preds, labels)
 
@@ -652,16 +653,18 @@ class CNN(BaseModule):
                 - 'multi_target': scores above threshold = 1, others = 0
                 - None: do not create or return binary predictions
                 [default: None]
+                Note: if you choose multi-target, you must specify `threshold`
             threshold:
-                prediction threshold(s) for sigmoid scores. Only relevant when
-                binary_preds == 'multi_target'
+                prediction threshold(s) for post-activation layer scores.
+                Only relevant when binary_preds == 'multi_target'
+                If activation layer is sigmoid, choose value in [0,1]
+                If activation layer is None or softmax_and_logit, in [-inf,inf]
             overlap_fraction: fraction of overlap between consecutive clips when
                 predicting on clips of longer audio files. For instance, 0.5
                 gives 50% overlap between consecutive clips.
             final_clip: see `opensoundscape.helpers.generate_clip_times_df`
-            augmentation_on: default False. preprocessor.augmentation_on
-                will be set to this value. If False, Actions with
-                is_augmentation==True are skipped.
+            bypass_augmentations: If False, Actions with
+                is_augmentation==True are performed. Default True.
             unsafe_samples_log: if not None, samples that failed to preprocess
                 will be listed in this text file.
 
@@ -676,6 +679,11 @@ class CNN(BaseModule):
         Note: if no return type is selected for `binary_preds`, returns None
         instead of a DataFrame for `predictions`
         """
+        if binary_preds == "multi_target":
+            assert threshold is not None, (
+                "Must specify a threshold when" " generating multi_target predictions"
+            )
+
         # set up prediction Dataset
         if split_files_into_clips:
             prediction_dataset = AudioSplittingDataset(
@@ -688,7 +696,7 @@ class CNN(BaseModule):
             prediction_dataset = AudioFileDataset(
                 samples=samples, preprocessor=self.preprocessor, return_labels=False
             )
-        prediction_dataset.augmentation_on = augmentation_on
+        prediction_dataset.bypass_augmentations = bypass_augmentations
 
         ## Input Validation ##
         if len(prediction_dataset.classes) > 0 and not list(self.classes) == list(
@@ -750,7 +758,7 @@ class CNN(BaseModule):
 
                 ### Binary predictions ###
                 batch_preds = tensor_binary_predictions(
-                    scores=logits, mode=binary_preds, threshold=threshold
+                    scores=scores, mode=binary_preds, threshold=threshold
                 )
 
                 # disable gradients on returned values
