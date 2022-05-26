@@ -269,7 +269,8 @@ def test_split_resnet_feat_clf(train_df):
     cnn.separate_resnet_feat_clf(model)
     assert "feature" in model.optimizer_params
     model.optimizer_params["feature"]["lr"] = 0.1
-    model.train(train_df, epochs=0)
+    model.train(train_df, epochs=0, save_path="tests/models")
+    shutil.rmtree("tests/models/")
 
 
 # test load_outdated_model?
@@ -277,4 +278,5 @@ def test_split_resnet_feat_clf(train_df):
 
 def test_train_no_validation(train_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
-    model.train(train_df)
+    model.train(train_df, save_path="tests/models")
+    shutil.rmtree("tests/models/")
