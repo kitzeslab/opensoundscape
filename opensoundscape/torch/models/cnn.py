@@ -480,6 +480,20 @@ class CNN(BaseModule):
             else:  # Evaluate model w/validation score unless no validation
                 score = train_score
 
+            wandb.log(
+                {
+                    "00_train_val_MAP": wandb.plot.line_series(
+                        ys=[
+                            [self.valid_metrics[self.current_epoch]["map"]],
+                            [self.valid_metrics[self.current_epoch]["map"]],
+                        ],
+                        keys=["train", "val"],
+                        title="MAP",
+                        xname="epochs",
+                    )
+                }
+            )
+
             ### Save ###
             if (
                 self.current_epoch + 1
@@ -546,6 +560,7 @@ class CNN(BaseModule):
         import wandb
 
         self._log(f"Metrics:")
+        wandb.log(metrics_dict)
         wandb.log(
             metrics_dict
             # {
