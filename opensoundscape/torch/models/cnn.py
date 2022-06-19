@@ -485,10 +485,10 @@ class CNN(BaseModule):
             wandb.log(
                 {
                     "00_train_val_MAP": wandb.plot.line_series(
-                        xs=[self.current_epoch],
+                        xs=list(range(self.current_epoch)),
                         ys=[
-                            [self.valid_metrics[self.current_epoch]["map"]],
-                            [self.valid_metrics[self.current_epoch]["map"]],
+                            [m["map"] for m in self.train_metrics.values()],
+                            [m["map"] for m in self.valid_metrics.values()],
                         ],
                         keys=["train", "val"],
                         title="MAP",
