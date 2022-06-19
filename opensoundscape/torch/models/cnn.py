@@ -480,6 +480,8 @@ class CNN(BaseModule):
             else:  # Evaluate model w/validation score unless no validation
                 score = train_score
 
+            import wandb
+
             wandb.log(
                 {
                     "00_train_val_MAP": wandb.plot.line_series(
