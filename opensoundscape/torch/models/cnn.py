@@ -349,6 +349,9 @@ class CNN(BaseModule):
 
         # save the loss averaged over all batches
         self.loss_hist[self.current_epoch] = np.mean(batch_loss)
+        import wandb
+
+        wandb.log({"loss": np.mean(batch_loss)})
 
         # return targets, preds, scores
         total_tgts = np.concatenate(total_tgts, axis=0)
@@ -540,7 +543,17 @@ class CNN(BaseModule):
             )
 
         # decide what to print/log:
+        import wandb
+
         self._log(f"Metrics:")
+        wandb.log(
+            metrics_dict
+            # {
+            #     "MAP":metrics_dict['map'],
+            #     "AU_ROC": metrics_dict['au_roc']
+            # }
+        )
+
         self._log(f"\tMAP: {metrics_dict['map']:0.3f}", level=1 - logging_offset)
         self._log(f"\tAU_ROC: {metrics_dict['au_roc']:0.3f} ", level=2 - logging_offset)
         self._log(
