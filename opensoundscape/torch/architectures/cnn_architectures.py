@@ -32,6 +32,7 @@ opensoundscape.torch.models.cnn.
 from torchvision import models
 from torch import nn
 from opensoundscape.torch.architectures.utils import CompositeArchitecture
+import torch
 
 ARCH_DICT = dict()
 
