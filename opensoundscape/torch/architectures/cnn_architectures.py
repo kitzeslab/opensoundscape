@@ -62,15 +62,15 @@ def modify_resnet(model, num_classes, num_channels):
     if num_channels != 3:
         # modify the input layer to accept custom # channels other than 3
         # first make a copy of the weights from original model
-        avg_conv1_weights = torch.nn.Parameter(
-            torch.unsqueeze(torch.mean(m2.network.conv1.weight, 1), 1)
+        avg_conv1_weights = torch.repeat_interleave(
+            torch.unsqueeze(torch.mean(model.conv1.weight, 1), 1), num_channels, 1
         )
         # change the shape of the first convolution to accept n channels
         model.conv1 = nn.Conv2d(
             num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
         )
         # reapply the average weights of the original architecture's conv1
-        model.conv1.weight = avg_conv1_weights
+        model.conv1.weight = torch.nn.Parameter(avg_conv1_weights)
 
     return model
 
