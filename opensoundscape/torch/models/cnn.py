@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import warnings
-
+import wandb
 
 import torch
 import torch.optim as optim
@@ -457,6 +457,7 @@ class CNN(BaseModule):
             train_score, self.train_metrics[self.current_epoch] = self.eval(
                 train_targets, train_scores
             )
+            wandb.log({"training": self.train_metrics[self.current_epoch]})
 
             #### Validation ###
             if validation_df is not None:
@@ -480,22 +481,7 @@ class CNN(BaseModule):
             else:  # Evaluate model w/validation score unless no validation
                 score = train_score
 
-            import wandb
-
-            wandb.log(
-                {
-                    "00_train_val_MAP": wandb.plot.line_series(
-                        xs=list(range(self.current_epoch)),
-                        ys=[
-                            [m["map"] for m in self.train_metrics.values()],
-                            [m["map"] for m in self.valid_metrics.values()],
-                        ],
-                        keys=["train", "val"],
-                        title="MAP",
-                        xname="epochs",
-                    )
-                }
-            )
+            wandb.log({"validation": self.valid_metrics[self.current_epoch]})
 
             ### Save ###
             if (
@@ -512,6 +498,7 @@ class CNN(BaseModule):
                 self._log("Updating best model", level=2)
                 self.save(f"{self.save_path}/best.model")
 
+            wandb.log({"epoch": epoch})
             self.current_epoch += 1
 
         ### Logging ###
@@ -560,17 +547,7 @@ class CNN(BaseModule):
             )
 
         # decide what to print/log:
-        import wandb
-
         self._log(f"Metrics:")
-        wandb.log(metrics_dict)
-        wandb.log(
-            metrics_dict
-            # {
-            #     "MAP":metrics_dict['map'],
-            #     "AU_ROC": metrics_dict['au_roc']
-            # }
-        )
 
         self._log(f"\tMAP: {metrics_dict['map']:0.3f}", level=1 - logging_offset)
         self._log(f"\tAU_ROC: {metrics_dict['au_roc']:0.3f} ", level=2 - logging_offset)
@@ -776,7 +753,7 @@ class CNN(BaseModule):
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
 
-            for batch in dataloader:
+            for i, batch in enumerate(dataloader):
                 # get batch of Tensors
                 batch_tensors = batch["X"].to(self.device)
                 batch_tensors.requires_grad = False
@@ -795,6 +772,8 @@ class CNN(BaseModule):
                 # disable gradients on returned values
                 total_scores.append(scores.detach().cpu().numpy())
                 total_preds.append(batch_preds.float().detach().cpu().numpy())
+
+                wandb.log({"batch": i})
 
         # aggregate across all batches
         total_scores = np.concatenate(total_scores, axis=0)
@@ -1054,6 +1033,9 @@ class InceptionV3(CNN):
                 # preds = batch_preds.int().detach().cpu().numpy()
                 scores = logits.int().detach().cpu().numpy()
                 self.eval(tgts, scores, logging_offset=-1)
+
+            wandb.log({"batch": batch_idx})
+            wandb.log({"epoch_progress": self.current_epoch + batch_idx / N})
 
         # update learning parameters each epoch
         self.scheduler.step()
