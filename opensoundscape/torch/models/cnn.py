@@ -485,7 +485,7 @@ class CNN(BaseModule):
                         "validation PR curves": wandb.plots.precision_recall(
                             validation_targets,
                             validation_scores,
-                            labels=slef.classes,
+                            labels=self.classes,
                             classes_to_plot=None,
                         )
                     }
