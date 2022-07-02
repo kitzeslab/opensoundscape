@@ -60,8 +60,14 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     class_pre, class_rec, class_f1, _ = precision_recall_fscore_support(
         targets, preds, average=None, zero_division=0
     )
-    class_map = average_precision_score(targets, scores, average=None)
-    class_au_roc = roc_auc_score(targets, scores, average=None)
+    try:
+        class_map = average_precision_score(targets, scores, average=None)
+    except ValueError:
+        class_map = np.nan
+    try:
+        class_au_roc = roc_auc_score(targets, scores, average=None)
+    except ValueError:
+        class_au_roc = np.nan
 
     for i, class_i in enumerate(class_names):
         metrics_dict.update(
