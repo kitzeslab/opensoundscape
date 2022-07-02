@@ -478,10 +478,21 @@ class CNN(BaseModule):
                     validation_targets, validation_scores
                 )
                 score = validation_score
+
+                wandb.log({"validation": self.valid_metrics[self.current_epoch]})
+                wandb.log(
+                    {
+                        "validation PR curves": wandb.plots.precision_recall(
+                            validation_targets,
+                            validation_scores,
+                            labels=slef.classes,
+                            classes_to_plot=None,
+                        )
+                    }
+                )
+
             else:  # Evaluate model w/validation score unless no validation
                 score = train_score
-
-            wandb.log({"validation": self.valid_metrics[self.current_epoch]})
 
             ### Save ###
             if (
