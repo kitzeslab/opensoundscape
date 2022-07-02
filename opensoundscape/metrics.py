@@ -63,11 +63,11 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     try:
         class_map = average_precision_score(targets, scores, average=None)
     except ValueError:
-        class_map = np.nan
+        class_map = [np.nan] * len(class_pre)
     try:
         class_au_roc = roc_auc_score(targets, scores, average=None)
     except ValueError:
-        class_au_roc = np.nan
+        class_au_roc = [np.nan] * len(class_pre)
 
     for i, class_i in enumerate(class_names):
         metrics_dict.update(
