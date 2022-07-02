@@ -349,7 +349,6 @@ class CNN(BaseModule):
 
         # save the loss averaged over all batches
         self.loss_hist[self.current_epoch] = np.mean(batch_loss)
-        import wandb
 
         wandb.log({"loss": np.mean(batch_loss)})
 
@@ -444,6 +443,7 @@ class CNN(BaseModule):
         self.best_epoch = 0
 
         for epoch in range(epochs):
+            wandb.log({"epoch": self.current_epoch})
             # 1 epoch = 1 view of each training file
             # loss fn & backpropogation occurs after each batch
 
@@ -498,7 +498,6 @@ class CNN(BaseModule):
                 self._log("Updating best model", level=2)
                 self.save(f"{self.save_path}/best.model")
 
-            wandb.log({"epoch": epoch})
             self.current_epoch += 1
 
         ### Logging ###
@@ -1034,8 +1033,8 @@ class InceptionV3(CNN):
                 scores = logits.int().detach().cpu().numpy()
                 self.eval(tgts, scores, logging_offset=-1)
 
-            wandb.log({"batch": batch_idx})
-            wandb.log({"epoch_progress": self.current_epoch + batch_idx / N})
+            # wandb.log({"batch": batch_idx})
+            # wandb.log({"epoch_progress": self.current_epoch + batch_idx / N})
 
         # update learning parameters each epoch
         self.scheduler.step()
