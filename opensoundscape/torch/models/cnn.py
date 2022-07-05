@@ -442,6 +442,8 @@ class CNN(BaseModule):
         self.best_score = 0.0
         self.best_epoch = 0
 
+        wandb.watch(self.network, self.loss_fn, log="all", log_freq=1)
+
         for epoch in range(epochs):
             wandb.log({"epoch": self.current_epoch})
             # 1 epoch = 1 view of each training file
