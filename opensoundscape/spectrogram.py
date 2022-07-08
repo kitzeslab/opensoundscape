@@ -31,8 +31,10 @@ class Spectrogram:
             [default: none]
         audio_sample_rate: sample rate of audio from which spec was created
             [default: none]
-        mode:Defines what kind of return values are expected. Options are [‘psd’, ‘complex’, ‘magnitude’, ‘angle’, ‘phase’]. ‘complex’ is equivalent to the output of stft with no padding or boundary extension. ‘magnitude’ returns the absolute magnitude of the STFT. ‘angle’ and ‘phase’ return the complex angle of the STFT, with and without unwrapping, respectively.
-            [default:psd]
+        scaling: { ‘density’, ‘spectrum’ },optional,
+        Selects between computing the power spectral density (‘density’) where Sxx has units of V**2/Hz and computing the power spectrum (‘spectrum’) where Sxx has units of V**2, if x is measured in V and fs is measured in Hz. Defaults to ‘density’.
+            [default: spectrum]
+
     """
 
     __slots__ = (
@@ -44,7 +46,7 @@ class Spectrogram:
         "overlap_samples",
         "window_type",
         "audio_sample_rate",
-        "mode",
+        "scaling",
     )
 
     def __init__(
@@ -57,7 +59,7 @@ class Spectrogram:
         overlap_samples=None,
         window_type=None,
         audio_sample_rate=None,
-        mode=None,
+        scaling=None,
     ):
         if not isinstance(spectrogram, np.ndarray):
             raise TypeError(
@@ -106,7 +108,7 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("overlap_samples", overlap_samples)
         super(Spectrogram, self).__setattr__("window_type", window_type)
         super(Spectrogram, self).__setattr__("audio_sample_rate", audio_sample_rate)
-        super(Spectrogram, self).__setattr__("mode", mode)
+        super(Spectrogram, self).__setattr__("scaling", scaling)
 
     @classmethod
     def from_audio(
@@ -120,7 +122,7 @@ class Spectrogram:
         fft_size=None,
         decibel_limits=(-100, -20),
         dB_scale=True,
-        mode="psd",
+        scaling="spectrum",
     ):
         """
         create a Spectrogram object from an Audio object
@@ -144,8 +146,8 @@ class Spectrogram:
             decibel_limits: limit the dB values to (min,max) (lower values set to min, higher values set to max)
             dB_scale: If True, rescales values to decibels, x=10*log10(x)
                 - if dB_scale is False, decibel_limits is ignored
-            mode: check scipy.signal.spectrogram documentation
-                - Defaults to psd
+            scaling: check scipy.signal.spectrogram documentation
+                - Defaults to spectrum
 
         Returns:
             opensoundscape.spectrogram.Spectrogram object
@@ -186,8 +188,8 @@ class Spectrogram:
             nperseg=int(window_samples),
             noverlap=int(overlap_samples),
             nfft=fft_size,
-            scaling="spectrum",
-            mode=mode,
+            scaling=scaling,
+
         )
 
         # convert to decibels
@@ -214,7 +216,8 @@ class Spectrogram:
             overlap_samples=overlap_samples,
             window_type=window_type,
             audio_sample_rate=audio.sample_rate,
-            mode=mode,
+            scaling=scaling,
+
         )
         return new_obj
 
@@ -647,7 +650,7 @@ class MelSpectrogram(Spectrogram):
         norm="slaney",
         window_type="hann",
         dB_scale=True,
-        mode="psd",
+        scaling="spectrum",
 
     ):
         """ Create a MelSpectrogram object from an Audio object
@@ -687,7 +690,7 @@ class MelSpectrogram(Spectrogram):
             window_samples=window_samples,
             overlap_samples=overlap_samples,
             dB_scale=False,
-            mode=mode,
+            scaling=scaling,
         )
 
         # choose n_fft to ensure filterbank.size[1]==spectrogram.size[0]
@@ -731,7 +734,7 @@ class MelSpectrogram(Spectrogram):
             overlap_samples=overlap_samples,
             window_type=window_type,
             audio_sample_rate=audio.sample_rate,
-            mode=mode,
+            scaling=scaling,
         )
 
     def plot(self, inline=True, fname=None, show_colorbar=False):
