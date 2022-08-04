@@ -31,8 +31,7 @@ class Spectrogram:
             [default: none]
         audio_sample_rate: sample rate of audio from which spec was created
             [default: none]
-        scaling: { ‘density’, ‘spectrum’ },optional,
-        Selects between computing the power spectral density (‘density’) where Sxx has units of V**2/Hz and computing the power spectrum (‘spectrum’) where Sxx has units of V**2, if x is measured in V and fs is measured in Hz. Defaults to ‘density’.
+        scaling:Selects between computing the power spectral density (‘density’) where Sxx has units of V**2/Hz and computing the power spectrum (‘spectrum’) where Sxx has units of V**2, if x is measured in V and fs is measured in Hz.
             [default: spectrum]
 
     """
@@ -146,8 +145,8 @@ class Spectrogram:
             decibel_limits: limit the dB values to (min,max) (lower values set to min, higher values set to max)
             dB_scale: If True, rescales values to decibels, x=10*log10(x)
                 - if dB_scale is False, decibel_limits is ignored
-            scaling: check scipy.signal.spectrogram documentation
-                - Defaults to spectrum
+            scaling="spectrum": see scipy.signal.spectrogram docs for description of scaling parameter
+
 
         Returns:
             opensoundscape.spectrogram.Spectrogram object
@@ -675,6 +674,8 @@ class MelSpectrogram(Spectrogram):
             norm='slanley': mel filter bank normalization, see Librosa docs
             dB_scale=True: If True, rescales values to decibels, x=10*log10(x)
                 - if dB_scale is False, decibel_limits is ignored
+            scaling="spectrum": see scipy.signal.spectrogram docs for description of scaling parameter
+
         Returns:
             opensoundscape.spectrogram.MelSpectrogram object
         """
