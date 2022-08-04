@@ -188,7 +188,6 @@ class Spectrogram:
             noverlap=int(overlap_samples),
             nfft=fft_size,
             scaling=scaling,
-
         )
 
         # convert to decibels
@@ -216,7 +215,6 @@ class Spectrogram:
             window_type=window_type,
             audio_sample_rate=audio.sample_rate,
             scaling=scaling,
-
         )
         return new_obj
 
@@ -650,7 +648,6 @@ class MelSpectrogram(Spectrogram):
         window_type="hann",
         dB_scale=True,
         scaling="spectrum",
-
     ):
         """ Create a MelSpectrogram object from an Audio object
 
