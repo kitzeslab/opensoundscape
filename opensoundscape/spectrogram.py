@@ -31,6 +31,9 @@ class Spectrogram:
             [default: none]
         audio_sample_rate: sample rate of audio from which spec was created
             [default: none]
+        scaling:Selects between computing the power spectral density (‘density’) where Sxx has units of V**2/Hz and computing the power spectrum (‘spectrum’) where Sxx has units of V**2, if x is measured in V and fs is measured in Hz.
+            [default: spectrum]
+
     """
 
     __slots__ = (
@@ -42,6 +45,7 @@ class Spectrogram:
         "overlap_samples",
         "window_type",
         "audio_sample_rate",
+        "scaling",
     )
 
     def __init__(
@@ -54,6 +58,7 @@ class Spectrogram:
         overlap_samples=None,
         window_type=None,
         audio_sample_rate=None,
+        scaling=None,
     ):
         if not isinstance(spectrogram, np.ndarray):
             raise TypeError(
@@ -102,6 +107,7 @@ class Spectrogram:
         super(Spectrogram, self).__setattr__("overlap_samples", overlap_samples)
         super(Spectrogram, self).__setattr__("window_type", window_type)
         super(Spectrogram, self).__setattr__("audio_sample_rate", audio_sample_rate)
+        super(Spectrogram, self).__setattr__("scaling", scaling)
 
     @classmethod
     def from_audio(
@@ -115,6 +121,7 @@ class Spectrogram:
         fft_size=None,
         decibel_limits=(-100, -20),
         dB_scale=True,
+        scaling="spectrum",
     ):
         """
         create a Spectrogram object from an Audio object
@@ -138,6 +145,8 @@ class Spectrogram:
             decibel_limits: limit the dB values to (min,max) (lower values set to min, higher values set to max)
             dB_scale: If True, rescales values to decibels, x=10*log10(x)
                 - if dB_scale is False, decibel_limits is ignored
+            scaling="spectrum": see scipy.signal.spectrogram docs for description of scaling parameter
+
 
         Returns:
             opensoundscape.spectrogram.Spectrogram object
@@ -178,7 +187,7 @@ class Spectrogram:
             nperseg=int(window_samples),
             noverlap=int(overlap_samples),
             nfft=fft_size,
-            scaling="spectrum",
+            scaling=scaling,
         )
 
         # convert to decibels
@@ -205,6 +214,7 @@ class Spectrogram:
             overlap_samples=overlap_samples,
             window_type=window_type,
             audio_sample_rate=audio.sample_rate,
+            scaling=scaling,
         )
         return new_obj
 
@@ -637,6 +647,7 @@ class MelSpectrogram(Spectrogram):
         norm="slaney",
         window_type="hann",
         dB_scale=True,
+        scaling="spectrum",
     ):
         """ Create a MelSpectrogram object from an Audio object
 
@@ -660,6 +671,8 @@ class MelSpectrogram(Spectrogram):
             norm='slanley': mel filter bank normalization, see Librosa docs
             dB_scale=True: If True, rescales values to decibels, x=10*log10(x)
                 - if dB_scale is False, decibel_limits is ignored
+            scaling="spectrum": see scipy.signal.spectrogram docs for description of scaling parameter
+
         Returns:
             opensoundscape.spectrogram.MelSpectrogram object
         """
@@ -675,6 +688,7 @@ class MelSpectrogram(Spectrogram):
             window_samples=window_samples,
             overlap_samples=overlap_samples,
             dB_scale=False,
+            scaling=scaling,
         )
 
         # choose n_fft to ensure filterbank.size[1]==spectrogram.size[0]
@@ -718,6 +732,7 @@ class MelSpectrogram(Spectrogram):
             overlap_samples=overlap_samples,
             window_type=window_type,
             audio_sample_rate=audio.sample_rate,
+            scaling=scaling,
         )
 
     def plot(self, inline=True, fname=None, show_colorbar=False):
