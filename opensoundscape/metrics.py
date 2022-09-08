@@ -86,11 +86,11 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     except ValueError:
         metrics_dict["hamming_loss"] = np.nan
     try:
-        metrics_dict["map"] = average_precision_score(targets, preds, average="macro")
+        metrics_dict["map"] = average_precision_score(targets, scores, average="macro")
     except ValueError:
         metrics_dict["map"] = np.nan
     try:
-        metrics_dict["au_roc"] = roc_auc_score(targets, preds, average="macro")
+        metrics_dict["au_roc"] = roc_auc_score(targets, scores, average="macro")
     except ValueError:
         metrics_dict["au_roc"] = np.nan
 
@@ -143,11 +143,11 @@ def single_target_metrics(targets, scores, class_names):
     except ValueError:
         metrics_dict["hamming_loss"] = np.nan
     try:
-        metrics_dict["map"] = average_precision_score(targets, preds, average="macro")
+        metrics_dict["map"] = average_precision_score(targets, scores, average="macro")
     except ValueError:
         metrics_dict["map"] = np.nan
     try:
-        metrics_dict["au_roc"] = roc_auc_score(targets, preds, average="macro")
+        metrics_dict["au_roc"] = roc_auc_score(targets, scores, average="macro")
     except ValueError:
         metrics_dict["au_roc"] = np.nan
 
