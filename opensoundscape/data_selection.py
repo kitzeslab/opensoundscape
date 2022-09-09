@@ -4,7 +4,12 @@ from itertools import repeat
 
 
 def resample(
-    df, n_samples_per_class, upsample=True, downsample=True, with_replace=False, random_state=None
+			 df, 
+			 n_samples_per_class, 
+			 upsample=True, 
+			 downsample=True, 
+			 with_replace=False, 
+			 random_state=None,
 ):
     """resample a one-hot encoded label df for a target n_samples_per_class
 
@@ -48,7 +53,9 @@ def resample(
         # take a random sample for the "remainder" portion
         # this is the entirety of the new set of n samples if downsampling,
         # and the samples with an 'extra' representation if upsampling
-        random_df = sub_df.sample(n=remainder, replace=with_replace, random_state=random_state)
+        random_df = sub_df.sample(
+			n=remainder, replace=with_replace, random_state=random_state
+		)
 
         # if upsampling, repeat all of the samples as many times as necessary
         if num_replicates > 0:
@@ -89,7 +96,9 @@ def upsample(input_df, label_column="Labels", with_replace=False, random_state=N
         sub_df = input_df[input_df[label_column] == unique_label]
         num_replicates, remainder = divmod(max_count, sub_df.shape[0])
 
-        random_df = sub_df.sample(n=remainder, replace=with_replace, random_state=random_state)
+        random_df = sub_df.sample(
+			n=remainder, replace=with_replace, random_state=random_state
+		)
 
         repeat_df = pd.concat(repeat(sub_df, num_replicates))
 
