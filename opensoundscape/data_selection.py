@@ -4,12 +4,12 @@ from itertools import repeat
 
 
 def resample(
-			 df, 
-			 n_samples_per_class, 
-			 upsample=True, 
-			 downsample=True, 
-			 with_replace=False, 
-			 random_state=None,
+	df, 
+	n_samples_per_class, 
+	upsample=True, 
+	downsample=True, 
+	with_replace=False, 
+	random_state=None,
 ):
     """resample a one-hot encoded label df for a target n_samples_per_class
 
