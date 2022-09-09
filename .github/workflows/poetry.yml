@@ -23,7 +23,7 @@ jobs:
       - name: Install ffmpeg v4
         run: sudo snap install ffmpeg
       - name: Install poetry
-        run: curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
+        run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
         run: ~/.poetry/bin/poetry install
       - name: Poetry run pytest
