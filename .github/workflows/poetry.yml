@@ -25,8 +25,8 @@ jobs:
       - name: Install poetry
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
-        run: ~/runner/.local/bin/poetry install
+        run: /home/runner/.local/bin/poetry install
       - name: Poetry run pytest
-        run: ~/runner/.local/bin/poetry run pytest
+        run: /home/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
-        run: ~/runner/.local/bin/poetry run black . --check --diff
+        run: /home/runner/.local/bin/poetry run black . --check --diff
