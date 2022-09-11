@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 class BoxedAnnotations:
-    """ container for "boxed" (frequency-time) annotations of audio
+    """container for "boxed" (frequency-time) annotations of audio
 
     (for instance, annotations created in Raven software)
     includes functionality to load annotations from Raven txt files,
@@ -462,7 +462,7 @@ def combine(list_of_annotation_objects):
 
 
 def diff(base_annotations, comparison_annotations):
-    """ look at differences between two BoxedAnnotations objects
+    """look at differences between two BoxedAnnotations objects
     Not Implemented.
 
     Compare different labels of the same boxes
