@@ -629,7 +629,7 @@ class MelSpectrogram(Spectrogram):
         dB_scale=True,
         scaling="spectrum",
     ):
-        """ Create a MelSpectrogram object from an Audio object
+        """Create a MelSpectrogram object from an Audio object
 
         First creates a spectrogram and a mel-frequency filter bank,
         then computes the dot product of the filter bank with the spectrogram.
