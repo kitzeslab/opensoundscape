@@ -48,8 +48,7 @@ def list_architectures():
 
 
 def freeze_params(model):
-    """remove gradients (aka freeze) all model parameters
-    """
+    """remove gradients (aka freeze) all model parameters"""
     for param in model.parameters():
         param.requires_grad = False
 

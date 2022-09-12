@@ -44,7 +44,7 @@ def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
 
 
 def clipping_detector(samples, threshold=0.6):
-    """ count the number of samples above a threshold value
+    """count the number of samples above a threshold value
 
     Args:
         samples: a time series of float values
@@ -75,7 +75,7 @@ def window_energy(samples, window_len_samples=256, overlap_len_samples=128):
     """
 
     def _energy(samples):
-        return np.sum(samples ** 2) / len(samples)
+        return np.sum(samples**2) / len(samples)
 
     windowed = []
     skip = window_len_samples - overlap_len_samples
@@ -214,8 +214,8 @@ def mixdown_with_delays(
     # take the files_to_mix, use amix to combine them into [mixdown]. Final duration is an option 'longest','shortest','first'
     # will look like [s0][s1]amix=inputs=2:duration=first[mixdown]
     mixdown_result = (
-        "[mixdown]"
-    )  # think of this as a variable name for the result of amix
+        "[mixdown]"  # think of this as a variable name for the result of amix
+    )
     mix_cmd = (
         f"{files_to_mix}amix=inputs={n_inputs}:duration={duration}{mixdown_result}"
     )

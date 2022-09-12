@@ -14,12 +14,12 @@ def sigmoid(x):
 
 
 def bound(x, bounds):
-    """ restrict x to a range of bounds = [min, max]"""
+    """restrict x to a range of bounds = [min, max]"""
     return min(max(x, bounds[0]), bounds[1])
 
 
 def overlap(r1, r2):
-    """"calculate the amount of overlap between two real-numbered ranges"""
+    """ "calculate the amount of overlap between two real-numbered ranges"""
     assert r1[1] > r1[0]
     assert r2[1] > r2[0]
     lower_bound = max(r1[0], r2[0])
@@ -28,7 +28,7 @@ def overlap(r1, r2):
 
 
 def overlap_fraction(r1, r2):
-    """"calculate the fraction of r1 (low, high range) that overlaps with r2"""
+    """ "calculate the fraction of r1 (low, high range) that overlaps with r2"""
     ol = overlap(r1, r2)
     return ol / (r1[1] - r1[0])
 
@@ -39,7 +39,7 @@ def inrange(x, r):
 
 
 def binarize(x, threshold):
-    """ return a list of 0, 1 by thresholding vector x """
+    """return a list of 0, 1 by thresholding vector x"""
     if len(np.shape(x)) > 2:
         raise ValueError("shape must be 1 dimensional or 2 dimensional")
 
@@ -50,7 +50,7 @@ def binarize(x, threshold):
 
 
 def run_command(cmd):
-    """ run a bash command with Popen, return response"""
+    """run a bash command with Popen, return response"""
     from subprocess import Popen, PIPE
     from shlex import split
 
@@ -58,7 +58,7 @@ def run_command(cmd):
 
 
 def rescale_features(X, rescaling_vector=None):
-    """ rescale all features by dividing by the max value for each feature
+    """rescale all features by dividing by the max value for each feature
 
     optionally provide the rescaling vector (1xlen(X) np.array),
     so that you can rescale a new dataset consistently with an old one
@@ -116,7 +116,7 @@ def min_max_scale(array, feature_range=(0, 1)):
 
 
 def linear_scale(array, in_range=(0, 1), out_range=(0, 255)):
-    """ Translate from range in_range to out_range
+    """Translate from range in_range to out_range
 
     Inputs:
         in_range: The starting range [default: (0, 1)]
