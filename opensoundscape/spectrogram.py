@@ -334,6 +334,11 @@ class Spectrogram:
             self.frequencies,
             self.times,
             self.decibel_limits,
+            self.window_samples,
+            self.overlap_samples,
+            self.window_type,
+            self.audio_sample_rate,
+            self.scaling,
         )
 
     def limit_db_range(self, min_db=-100, max_db=-20):
@@ -360,7 +365,17 @@ class Spectrogram:
         _spec[_spec > max_db] = max_db
         _spec[_spec < min_db] = min_db
 
-        return self.__class__(_spec, self.frequencies, self.times, self.decibel_limits)
+        return self.__class__(
+            _spec,
+            self.frequencies,
+            self.times,
+            self.decibel_limits,
+            self.window_samples,
+            self.overlap_samples,
+            self.window_type,
+            self.audio_sample_rate,
+            self.scaling,
+        )
 
     def bandpass(self, min_f, max_f, out_of_bounds_ok=True):
         """extract a frequency band from a spectrogram
@@ -402,6 +417,11 @@ class Spectrogram:
             self.frequencies[lowest_index : highest_index + 1],
             self.times,
             self.decibel_limits,
+            self.window_samples,
+            self.overlap_samples,
+            self.window_type,
+            self.audio_sample_rate,
+            self.scaling,
         )
 
     def trim(self, start_time, end_time):
@@ -426,6 +446,11 @@ class Spectrogram:
             self.frequencies,
             self.times[lowest_index : highest_index + 1],
             self.decibel_limits,
+            self.window_samples,
+            self.overlap_samples,
+            self.window_type,
+            self.audio_sample_rate,
+            self.scaling,
         )
 
     def plot(self, inline=True, fname=None, show_colorbar=False):
