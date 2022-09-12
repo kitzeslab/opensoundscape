@@ -7,3 +7,4 @@ doc/_build/
 *.ipynb_checkpoints/
 *.DS_Store
 docs/tutorials/woodcock_labeled_data
+.vscode
