@@ -218,22 +218,6 @@ class Spectrogram:
         )
         return new_obj
 
-    @classmethod
-    def from_file(file,):
-        """
-        create a Spectrogram object from a file
-
-        Args:
-            file: path of image to load
-
-        Returns:
-            opensoundscape.spectrogram.Spectrogram object
-        """
-
-        raise NotImplementedError(
-            "Loading Spectrograms from images is not implemented yet"
-        )
-
     def __setattr__(self, name, value):
         raise AttributeError("Spectrogram's cannot be modified")
 
@@ -526,10 +510,6 @@ class Spectrogram:
 
         return net_amplitude
 
-    #     def save(self,destination):
-    #         with open(destination,'wb') as file:
-    #             pickle.dump(self,file)
-
     def to_image(
         self, shape=None, channels=1, colormap=None, invert=False, return_type="pil"
     ):
@@ -649,7 +629,7 @@ class MelSpectrogram(Spectrogram):
         dB_scale=True,
         scaling="spectrum",
     ):
-        """ Create a MelSpectrogram object from an Audio object
+        """Create a MelSpectrogram object from an Audio object
 
         First creates a spectrogram and a mel-frequency filter bank,
         then computes the dot product of the filter bank with the spectrogram.

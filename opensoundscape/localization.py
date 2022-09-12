@@ -203,7 +203,7 @@ def localize(
     cC = lorentz_ip(Bplus_a)
 
     # Compute discriminant
-    disc = cB ** 2 - 4 * cA * cC
+    disc = cB**2 - 4 * cA * cC
     # If discriminant is negative, set to zero to ensure
     # we get an answer, albeit not a very good one
     if disc < 0:
