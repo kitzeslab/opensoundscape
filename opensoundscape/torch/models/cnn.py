@@ -1054,6 +1054,12 @@ def load_model(path, device=None):
             torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
         )
     model = torch.load(path, map_location=device)
+
+    # since ResampleLoss class overrides a method of an instance,
+    # we need to re-change the _init_loss_fn change when we reload
+    if model.loss_cls == ResampleLoss:
+        use_resample_loss(model)
+
     model.device = device
     return model
 
