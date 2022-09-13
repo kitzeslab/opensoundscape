@@ -65,3 +65,8 @@ def test_inception_v3():
 
 def test_use_pretrained():
     arch = cnn_architectures.resnet101(4, use_pretrained=True)
+
+
+def test_noninteger_output_nodes():
+    with pytest.raises(TypeError):
+        arch = cnn_architectures.resnet101(4.5)
