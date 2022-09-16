@@ -33,7 +33,7 @@ class BaseAction:
     """
 
     def __init__(self):
-        self.params = pd.Series(dtype=object)
+        self.params = pd.Series(dtype="object")
         self.extra_args = []
         self.returns_labels = False
         self.is_augmentation = False
@@ -55,7 +55,7 @@ class BaseAction:
         assert unmatched_args == set(
             []
         ), f"unexpected arguments: {unmatched_args}. The valid arguments and current values are: \n{self.params}"
-        self.params.update(kwargs)
+        self.params.update(pd.Series(kwargs, dtype=object))
 
     def get(self, arg):
         return self.params[arg]
