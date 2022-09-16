@@ -398,8 +398,7 @@ class CNN(BaseModule):
                 Note: the best model is always saved to best.model
                 in addition to other saved epochs.
             log_interval:
-                interval in epochs to evaluate model with validation
-                dataset and print metrics to the log
+                interval in batches to print training loss/metrics
             validation_interval:
                 interval in epochs to test the model on the validation set
                 Note that model will only update it's best score and save best.model
