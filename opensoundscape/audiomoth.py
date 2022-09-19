@@ -86,7 +86,7 @@ def parse_audiomoth_metadata(metadata):
     try:
         metadata["gain_setting"] = int(comment.split("gain setting ")[1][:1])
     except ValueError:
-        metadata["gain_setting"] = comment.split(" gain setting")[0].split(" ")[-1]
+        metadata["gain_setting"] = comment.split(" gain")[0].split(" ")[-1]
     # written "3.2V" or "less than 2.5V" (or? greater than 4.5V?)
     metadata["battery_state"] = _parse_audiomoth_battery_info(comment)
     metadata["audiomoth_id"] = metadata["artist"].split(" ")[1]
