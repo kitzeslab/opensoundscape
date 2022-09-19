@@ -87,6 +87,8 @@ def parse_audiomoth_metadata(metadata):
         metadata["gain_setting"] = int(comment.split("gain setting ")[1][:1])
     except ValueError:
         metadata["gain_setting"] = comment.split(" gain")[0].split(" ")[-1]
+    except IndexError:
+        metadata["gain_setting"] = comment.split(" gain")[0].split(" ")[-1]
     # written "3.2V" or "less than 2.5V" (or? greater than 4.5V?)
     metadata["battery_state"] = _parse_audiomoth_battery_info(comment)
     metadata["audiomoth_id"] = metadata["artist"].split(" ")[1]
@@ -165,7 +167,10 @@ def _parse_audiomoth_battery_info(comment):
     Returns:
         float of voltage or string describing voltage, eg "less than 2.5V"
     """
-    battery_str = comment.split("battery state was ")[1].split("V")[0] + "V"
+    if "state " in comment:
+        battery_str = comment.split("battery state was ")[1].split("V")[0] + "V"
+    else:
+        battery_str = comment.split("battery was ")[1].split("V")[0] + "V"
     if len(battery_str) == 4:
         return float(battery_str[:-1])
     else:
