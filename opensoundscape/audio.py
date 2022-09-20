@@ -466,15 +466,13 @@ class Audio:
                 add metadata to the file after writing it. If False,
                 written file will not contain metadata.
         """
-        from soundfile import write
-
         if not str(path).split(".")[-1] in ["wav", "WAV"]:
             raise TypeError(
                 "Only wav file is currently supported by .save()."
                 " File extension must be .wav or .WAV. "
             )
 
-        write(path, self.samples, self.sample_rate)
+        soundfile.write(path, self.samples, self.sample_rate)
 
         if write_metadata:
             with soundfile.SoundFile(path, "r+") as s:
