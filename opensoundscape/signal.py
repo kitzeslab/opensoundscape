@@ -80,7 +80,7 @@ def cwt_peaks(
 
     # normalize, square, hilbert envelope, normalize
     x = x / np.max(x)
-    x = x**2
+    x = x ** 2
     x = abs(signal.hilbert(x))
     x = x / np.max(x)
 
