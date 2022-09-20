@@ -209,11 +209,15 @@ def generate_clip_times_df(
         clip_idxs_to_shift = ends > full_duration
         starts[clip_idxs_to_shift] -= ends[clip_idxs_to_shift] - full_duration
         ends[clip_idxs_to_shift] = full_duration
+
+        # set the start timestamp to 0 for shorter clips
+        starts[starts < 0] = 0
+
     elif final_clip == "extend":
         # Keep the end values that extend beyond full_duration
         pass
 
-    return pd.DataFrame({"start_time": starts, "end_time": ends})
+    return pd.DataFrame({"start_time": starts, "end_time": ends}).drop_duplicates()
 
 
 def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
