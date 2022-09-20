@@ -451,23 +451,46 @@ class Audio:
 
         return fft, frequencies
 
-    def save(self, path):
+    def save(self, path, write_metadata=True):
         """Save Audio to file
 
         NOTE: currently, only saving to .wav format supported
 
+        Supports writing the following metadata fields:
+        ["title","copyright","software","artist","comment","date",
+        "album","license","tracknumber","genre"]
+
         Args:
             path: destination for output
+            write_metadata: if True, uses soundfile.SoundFile to
+                add metadata to the file after writing it. If False,
+                written file will not contain metadata.
         """
-        from soundfile import write
-
         if not str(path).split(".")[-1] in ["wav", "WAV"]:
             raise TypeError(
                 "Only wav file is currently supported by .save()."
                 " File extension must be .wav or .WAV. "
             )
 
-        write(path, self.samples, self.sample_rate)
+        soundfile.write(path, self.samples, self.sample_rate)
+
+        if write_metadata:
+            with soundfile.SoundFile(path, "r+") as s:
+                # must use r+ mode to update the file without overwriting everything
+                for field in [
+                    "title",
+                    "copyright",
+                    "software",
+                    "artist",
+                    "comment",
+                    "date",
+                    "album",
+                    "license",
+                    "tracknumber",
+                    "genre",
+                ]:
+                    if field in self.metadata and self.metadata[field] is not None:
+                        s.__setattr__(field, self.metadata[field])
 
     def duration(self):
         """Return duration of Audio
