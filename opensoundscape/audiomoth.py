@@ -32,7 +32,7 @@ def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):
     if len(name) == 8:
         # HEX filename convention (old firmware)
         if filename_timezone != "UTC":
-           raise ValueError('hexadecimal file names must have filename_timezone="UTC"')
+            raise ValueError('hexadecimal file names must have filename_timezone="UTC"')
         localized_dt = hex_to_time(Path(file).stem)  # returns UTC localized dt
     elif len(name) == 15:
         # human-readable format (newer firmware)
@@ -64,7 +64,7 @@ def parse_audiomoth_metadata(metadata):
       metadata (wav header) eg "and temperature was 11.2C."
     - At some point the firmware shifted from writing "gain setting 2" to
       "medium gain setting" and later to just "medium gain". Should handle both modes.
-    - In later versions of the firmware, "state" was ommitted from "battery state" in 
+    - In later versions of the firmware, "state" was ommitted from "battery state" in
       the comment field. Handles either phrasing.
 
     Tested for AudioMoth firmware versions:
