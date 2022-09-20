@@ -173,7 +173,8 @@ def generate_clip_times_df(
                 - None:         Discard the remainder (do not make a clip)
                 - "extend":     Extend the final clip beyond full_duration to reach clip_duration length
                 - "remainder":  Use only remainder of full_duration (final clip will be shorter than clip_duration)
-                - "full":       Increase overlap with previous clip to yield a clip with clip_duration length
+                - "full":       Increase overlap with previous clip to yield a clip with clip_duration length,
+                                returns original clip if it is shorter than clip_duration
     Returns:
         clip_df: DataFrame with columns for 'start_time', 'end_time', and
         'clip_duration' of each clip (which may differ from `clip_duration`
@@ -205,12 +206,13 @@ def generate_clip_times_df(
     elif final_clip == "full":
         # Increase the overlap of any clips with end_time past full_duration
         # so that they end at full_duration
-        # can result in duplicates of the same final_clip
+        # can result in duplicates of the same final_clip - removed while returning
         clip_idxs_to_shift = ends > full_duration
         starts[clip_idxs_to_shift] -= ends[clip_idxs_to_shift] - full_duration
         ends[clip_idxs_to_shift] = full_duration
 
         # set the start timestamp to 0 for shorter clips
+        # to avoid negative start times and return original clip
         starts[starts < 0] = 0
 
     elif final_clip == "extend":
