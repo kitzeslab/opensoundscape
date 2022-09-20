@@ -26,9 +26,6 @@ class BaseModule(nn.Module):
     def setup_critera(self):
         pass
 
-    def load(self, init_path):
-        pass
-
     def save(self, out_path):
         pass
 

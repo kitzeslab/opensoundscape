@@ -168,24 +168,27 @@ class Audio:
         path = str(path)  # Pathlib path can have dependency issues - use string
 
         ## Load Metadata ##
-        try:
-            metadata = TinyTag.get(path).as_dict()
-            # if this is an AudioMoth file, try to parse out additional
-            # metadata from the comment field
-            if metadata["artist"] and "AudioMoth" in metadata["artist"]:
-                try:
-                    metadata = parse_audiomoth_metadata(metadata)
-                except Exception as e:
-                    warnings.warn(
-                        "This seems to be an AudioMoth file, "
-                        f"but parse_audiomoth_metadata() raised: {e}"
-                    )
+        if metadata:
+            try:
+                metadata = TinyTag.get(path).as_dict()
+                # if this is an AudioMoth file, try to parse out additional
+                # metadata from the comment field
+                if metadata["artist"] and "AudioMoth" in metadata["artist"]:
+                    try:
+                        metadata = parse_audiomoth_metadata(metadata)
+                    except Exception as e:
+                        warnings.warn(
+                            "This seems to be an AudioMoth file, "
+                            f"but parse_audiomoth_metadata() raised: {e}"
+                        )
 
-            ## Update metadata ##
-            metadata["channels"] = 1
+                ## Update metadata ##
+                metadata["channels"] = 1
 
-        except Exception as e:
-            warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
+            except Exception as e:
+                warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
+                metadata = None
+        else:
             metadata = None
 
         ## Determine start time / offset ##

@@ -1,5 +1,6 @@
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.torch.datasets import AudioFileDataset
+from opensoundscape.torch.loss import ResampleLoss
 from opensoundscape.torch.models import cnn
 
 from opensoundscape.torch.architectures.cnn_architectures import alexnet, resnet18
@@ -17,6 +18,7 @@ import warnings
 @pytest.fixture()
 def model_save_path(request):
     path = Path("tests/models/temp.model")
+    path.parent.mkdir(exist_ok=True)
 
     # always delete this at the end
     def fin():
@@ -225,6 +227,33 @@ def test_save_and_load_model(model_save_path):
     m = cnn.load_model(model_save_path)
     assert m.classes == classes
     assert type(m) == cnn.InceptionV3
+
+
+def test_save_load_and_train_model_resample_loss(train_df):
+    arch = alexnet(2, use_pretrained=False)
+    classes = [0, 1]
+
+    m = cnn.CNN(arch, classes, 1.0)
+    cnn.use_resample_loss(m)
+    m.save("tests/models/saved1.model")
+    m2 = cnn.load_model("tests/models/saved1.model")
+    assert m2.classes == classes
+    assert type(m2) == cnn.CNN
+
+    assert m2.loss_cls == ResampleLoss
+
+    # make sure it still trains ok after reloading w/resample loss
+    m2.train(
+        train_df,
+        train_df,
+        save_path="tests/models/",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+
+    shutil.rmtree("tests/models/")
 
 
 def test_prediction_warns_different_classes(train_df):
