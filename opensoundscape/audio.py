@@ -474,7 +474,7 @@ class Audio:
 
         soundfile.write(path, self.samples, self.sample_rate)
 
-        if write_metadata:
+        if write_metadata and self.metadata is not None:
             with soundfile.SoundFile(path, "r+") as s:
                 # must use r+ mode to update the file without overwriting everything
                 for field in [
