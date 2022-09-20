@@ -49,12 +49,15 @@ class CNN(BaseModule):
             cnn_architectures.list_architectures(), eg 'resnet18'.
             - If a string is provided, uses default parameters
                 (including use_pretrained=True)
+                Note: For resnet architectures, if num_channels != 3,
+                averages the conv1 weights across all channels.
         classes:
             list of class names. Must match with training dataset classes if training.
         single_target:
             - True: model expects exactly one positive class per sample
             - False: samples can have any number of positive classes
             [default: False]
+
     """
 
     def __init__(
@@ -398,8 +401,7 @@ class CNN(BaseModule):
                 Note: the best model is always saved to best.model
                 in addition to other saved epochs.
             log_interval:
-                interval in epochs to evaluate model with validation
-                dataset and print metrics to the log
+                interval in batches to print training loss/metrics
             validation_interval:
                 interval in epochs to test the model on the validation set
                 Note that model will only update it's best score and save best.model

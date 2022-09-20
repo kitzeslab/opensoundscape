@@ -60,6 +60,12 @@ Data Selection
 .. automodule:: opensoundscape.data_selection
   :members:
 
+Datasets
+^^^^^^^^
+
+.. automodule:: opensoundscape.torch.datasets
+  :members:
+
 
 Grad Cam
 ^^^^^^^^
