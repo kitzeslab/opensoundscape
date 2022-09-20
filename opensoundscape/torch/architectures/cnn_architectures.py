@@ -28,6 +28,8 @@ or override an existing model's architecture:
 Note: the InceptionV3 architecture must be used differently than other
 architectures - the easiest way is to simply use the InceptionV3 class in
 opensoundscape.torch.models.cnn.
+
+Note 2: For resnet architectures, if num_channels != 3, averages the conv1 weights across all channels.
 """
 from torchvision import models
 from torch import nn
@@ -55,7 +57,10 @@ def freeze_params(model):
 
 
 def modify_resnet(model, num_classes, num_channels):
-    """modify input and output shape of a resnet architecture"""
+    """modify input and output shape of a resnet architecture
+
+    If num_channels != 3, averages the conv1 weights across all channels.
+    """
     num_ftrs = model.fc.in_features
     model.fc = nn.Linear(num_ftrs, num_classes)
     if num_channels != 3:
@@ -90,7 +95,7 @@ def resnet18(
             if True, feature block is frozen and only final layer is trained
         use_pretrained:
             if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
@@ -117,7 +122,7 @@ def resnet34(
             if True, feature block is frozen and only final layer is trained
         use_pretrained:
             if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
@@ -144,7 +149,7 @@ def resnet50(
             if True, feature block is frozen and only final layer is trained
         use_pretrained:
             if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
@@ -171,7 +176,7 @@ def resnet101(
             if True, feature block is frozen and only final layer is trained
         use_pretrained:
             if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
@@ -198,7 +203,7 @@ def resnet152(
             if True, feature block is frozen and only final layer is trained
         use_pretrained:
             if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """

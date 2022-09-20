@@ -49,12 +49,15 @@ class CNN(BaseModule):
             cnn_architectures.list_architectures(), eg 'resnet18'.
             - If a string is provided, uses default parameters
                 (including use_pretrained=True)
+                Note: For resnet architectures, if num_channels != 3,
+                averages the conv1 weights across all channels.
         classes:
             list of class names. Must match with training dataset classes if training.
         single_target:
             - True: model expects exactly one positive class per sample
             - False: samples can have any number of positive classes
             [default: False]
+
     """
 
     def __init__(
