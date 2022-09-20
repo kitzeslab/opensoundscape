@@ -145,6 +145,7 @@ def test_parse_audiomoth_from_path_wrong_metadata(veryshort_wav_str):
     with pytest.raises(ValueError):
         audiomoth.parse_audiomoth_metadata_from_path(veryshort_wav_str)
 
+
 def test_parse_audiomoth_metadata_v16_and_later():
     metadata = {
         "filesize": 115200360,
