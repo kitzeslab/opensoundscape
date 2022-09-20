@@ -144,3 +144,30 @@ def test_parse_audiomoth_metadata_with_low_battery():
 def test_parse_audiomoth_from_path_wrong_metadata(veryshort_wav_str):
     with pytest.raises(ValueError):
         audiomoth.parse_audiomoth_metadata_from_path(veryshort_wav_str)
+
+def test_parse_audiomoth_metadata_v16_and_later():
+    metadata = {
+        "filesize": 115200360,
+        "album": None,
+        "albumartist": None,
+        "artist": "AudioMoth 24526B065D325963",
+        "audio_offset": None,
+        "bitrate": 500.0,
+        "channels": 1,
+        "comment": "Recorded at 10:00:00 15/05/2021 (UTC) by AudioMoth 249BC3055C02FE06 at medium gain while battery was 4.5V and temperature was 21.1C. Recording stopped due to switch position change.",
+        "composer": None,
+        "disc": None,
+        "disc_total": None,
+        "duration": 1800.0,
+        "extra": {},
+        "genre": None,
+        "samplerate": 32000,
+        "title": None,
+        "track": None,
+        "track_total": None,
+        "year": None,
+        "audio_offest": 352,
+    }
+    new_metadata = audiomoth.parse_audiomoth_metadata(metadata)
+    assert new_metadata["gain_setting"] == "medium"
+    assert new_metadata["battery_state"] == 4.5
