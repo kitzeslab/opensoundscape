@@ -3,6 +3,7 @@ from datetime import datetime
 import pytz
 import pytest
 from opensoundscape import audiomoth
+from math import isclose
 
 
 @pytest.fixture()
@@ -146,7 +147,12 @@ def test_parse_audiomoth_from_path_wrong_metadata(veryshort_wav_str):
         audiomoth.parse_audiomoth_metadata_from_path(veryshort_wav_str)
 
 
-def test_parse_audiomoth_metadata_v16_and_later():
+def test_parse_audiomoth_metadata_v16_to_v181():
+    """Firmware versions 1.6.0 through 1.8.2 (latest release as of Sept. 2022) use this comment syntax
+
+    note the difference between how gain and battery are written
+
+    """
     metadata = {
         "filesize": 115200360,
         "album": None,
@@ -171,4 +177,4 @@ def test_parse_audiomoth_metadata_v16_and_later():
     }
     new_metadata = audiomoth.parse_audiomoth_metadata(metadata)
     assert new_metadata["gain_setting"] == "medium"
-    assert new_metadata["battery_state"] == 4.5
+    assert isclose(new_metadata["battery_state"], 4.5, abs_tol=1e-5)
