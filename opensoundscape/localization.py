@@ -73,7 +73,7 @@ from deprecated import deprecated
 
 @deprecated(
     version="0.6.2",
-    reason="This function is not fully implemented and will be replaced in version 0.7.0",
+    reason="This function is not fully implemented and will be replaced in version 0.8.0",
 )
 def localize(
     receiver_positions,
