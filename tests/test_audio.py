@@ -17,8 +17,15 @@ def metadata_wav_str():
 
 
 @pytest.fixture()
-def new_metadata_wav_str():
-    return "tests/audio/new_metadata.wav"
+def new_metadata_wav_str(request):
+    path = "tests/audio/new_metadata.wav"
+
+    def fin():
+        Path("tests/audio/new_metadata.wav").unlink()
+
+    request.addfinalizer(fin)
+
+    return path
 
 
 @pytest.fixture()
