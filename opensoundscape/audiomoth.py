@@ -92,6 +92,7 @@ def parse_audiomoth_metadata(metadata):
             metadata["gain_setting"] = comment.split(" gain setting")[0].split(" ")[-1]
     else:
         metadata["gain_setting"] = comment.split(" gain")[0].split(" ")[-1]
+
     metadata["battery_state"] = _parse_audiomoth_battery_info(comment)
     metadata["audiomoth_id"] = metadata["artist"].split(" ")[1]
     if "temperature" in comment:
@@ -170,7 +171,7 @@ def _parse_audiomoth_battery_info(comment):
     Returns:
         float of voltage or string describing voltage, eg "less than 2.5V"
     """
-    if "state " in comment:
+    if "battery state" in comment:
         battery_str = comment.split("battery state was ")[1].split("V")[0] + "V"
     else:
         battery_str = comment.split("battery was ")[1].split("V")[0] + "V"
