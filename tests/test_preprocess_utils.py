@@ -25,7 +25,7 @@ def test_get_reqd_args():
 
 
 def test_show_tensor():
-    """ just assert that function runs without an error"""
+    """just assert that function runs without an error"""
     tensor = torch.empty((3, 224, 224))
     utils.show_tensor(tensor)
 

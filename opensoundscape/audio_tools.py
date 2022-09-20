@@ -75,7 +75,7 @@ def window_energy(samples, window_len_samples=256, overlap_len_samples=128):
     """
 
     def _energy(samples):
-        return np.sum(samples ** 2) / len(samples)
+        return np.sum(samples**2) / len(samples)
 
     windowed = []
     skip = window_len_samples - overlap_len_samples
