@@ -18,9 +18,6 @@ class BaseArchitecture(nn.Module):
     def setup_net(self):
         pass
 
-    def load(self, init_path):
-        pass
-
     def save(self, out_path):
         pass
 

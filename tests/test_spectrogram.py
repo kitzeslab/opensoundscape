@@ -11,6 +11,21 @@ def veryshort_wav_str():
     return "tests/audio/veryshort.wav"
 
 
+@pytest.fixture()
+def spec():
+    return Spectrogram(
+        np.zeros((5, 10)),
+        np.linspace(0, 100, 5),
+        np.linspace(0, 10, 10),
+        decibel_limits=(-100, -20),
+        window_samples=100,
+        overlap_samples=50,
+        window_type="Hann",
+        audio_sample_rate=44100,
+        scaling="spectrum",
+    )
+
+
 def test_spectrogram_raises_typeerror():
     with pytest.raises(TypeError):
         Spectrogram.from_audio("not samples")
@@ -94,10 +109,16 @@ def test_construct_spectrogram():
     Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20))
 
 
-def test_bandpass_spectrogram():
-    Spectrogram(
-        np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10), (-100, -20)
-    ).bandpass(2, 4)
+def test_bandpass_spectrogram(spec):
+    spec = spec.bandpass(25, 75)
+    assert np.allclose(spec.frequencies, np.array([25, 50, 75]))
+    # make sure it didn't loose any properties
+    assert spec.decibel_limits == (-100, -20)
+    assert spec.window_samples == 100
+    assert spec.overlap_samples == 50
+    assert spec.window_type == "Hann"
+    assert spec.audio_sample_rate == 44100
+    assert spec.scaling == "spectrum"
 
 
 def test_bandpass_spectrogram_out_of_bounds():
@@ -126,10 +147,15 @@ def test_bandpass_spectrogram_bad_limits():
         ).bandpass(4, 2)
 
 
-def test_trim_spectrogram():
-    Spectrogram(
-        np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10), (-100, -20)
-    ).trim(2, 4)
+def test_trim_spectrogram(spec):
+    spec = spec.trim(2, 4)
+    # make sure it didn't loose any properties
+    assert spec.decibel_limits == (-100, -20)
+    assert spec.window_samples == 100
+    assert spec.overlap_samples == 50
+    assert spec.window_type == "Hann"
+    assert spec.audio_sample_rate == 44100
+    assert spec.scaling == "spectrum"
 
 
 def test_limit_db_range():

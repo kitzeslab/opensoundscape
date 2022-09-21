@@ -10,7 +10,7 @@ def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):
 
     AudioMoths create their file name based on the time that recording starts.
     This function parses the name into a timestamp. Older AudioMoth firmwares
-    used a hexidecimal unix time format, while newer firmwares use a
+    used a hexadecimal unix time format, while newer firmwares use a
     human-readable naming convention. This function handles both conventions.
 
     Args:
@@ -32,7 +32,7 @@ def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):
     if len(name) == 8:
         # HEX filename convention (old firmware)
         if filename_timezone != "UTC":
-            raise ValueError('hexidecimal file names must have filename_timezone="UTC"')
+            raise ValueError('hexadecimal file names must have filename_timezone="UTC"')
         localized_dt = hex_to_time(Path(file).stem)  # returns UTC localized dt
     elif len(name) == 15:
         # human-readable format (newer firmware)
@@ -57,16 +57,18 @@ def parse_audiomoth_metadata(metadata):
 
     -parses the comment field
     -adds keys for gain_setting, battery_state, recording_start_time
-    -if available (firmware >=1.4.0), addes temperature
+    -if available (firmware >=1.4.0), adds temperature
 
     Notes on comment field:
     - Starting with Firmware 1.4.0, the audiomoth logs Temperature to the
       metadata (wav header) eg "and temperature was 11.2C."
     - At some point the firmware shifted from writing "gain setting 2" to
-      "medium gain setting". Should handle both modes.
+      "medium gain setting" and later to just "medium gain". Should handle both modes.
+    - In later versions of the firmware, "state" was ommitted from "battery state" in
+      the comment field. Handles either phrasing.
 
     Tested for AudioMoth firmware versions:
-        1.5.0
+        1.5.0 through 1.8.1
 
     Args:
         metadata: dictionary with audiomoth metadata
@@ -83,11 +85,14 @@ def parse_audiomoth_metadata(metadata):
     metadata["recording_start_time"] = _parse_audiomoth_comment_dt(comment)
 
     # gain setting can be written "medium gain" or "gain setting 2"
-    try:
-        metadata["gain_setting"] = int(comment.split("gain setting ")[1][:1])
-    except ValueError:
-        metadata["gain_setting"] = comment.split(" gain setting")[0].split(" ")[-1]
-    # written "3.2V" or "less than 2.5V" (or? greater than 4.5V?)
+    if "gain setting" in comment:
+        try:
+            metadata["gain_setting"] = int(comment.split("gain setting ")[1][:1])
+        except ValueError:
+            metadata["gain_setting"] = comment.split(" gain setting")[0].split(" ")[-1]
+    else:
+        metadata["gain_setting"] = comment.split(" gain")[0].split(" ")[-1]
+
     metadata["battery_state"] = _parse_audiomoth_battery_info(comment)
     metadata["audiomoth_id"] = metadata["artist"].split(" ")[1]
     if "temperature" in comment:
@@ -159,13 +164,17 @@ def _parse_audiomoth_battery_info(comment):
     ...battery state was 4.7V.
     ...battery state was less than 2.5V
     ...battery state was 3.5V and temperature....
+    ...battery was 4.6V and...
 
     Args:
         comment: the full comment string from an audiomoth metadata Comment field
     Returns:
         float of voltage or string describing voltage, eg "less than 2.5V"
     """
-    battery_str = comment.split("battery state was ")[1].split("V")[0] + "V"
+    if "battery state" in comment:
+        battery_str = comment.split("battery state was ")[1].split("V")[0] + "V"
+    else:
+        battery_str = comment.split("battery was ")[1].split("V")[0] + "V"
     if len(battery_str) == 4:
         return float(battery_str[:-1])
     else:

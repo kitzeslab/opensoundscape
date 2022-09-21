@@ -49,12 +49,15 @@ class CNN(BaseModule):
             cnn_architectures.list_architectures(), eg 'resnet18'.
             - If a string is provided, uses default parameters
                 (including use_pretrained=True)
+                Note: For resnet architectures, if num_channels != 3,
+                averages the conv1 weights across all channels.
         classes:
             list of class names. Must match with training dataset classes if training.
         single_target:
             - True: model expects exactly one positive class per sample
             - False: samples can have any number of positive classes
             [default: False]
+
     """
 
     def __init__(
@@ -398,8 +401,7 @@ class CNN(BaseModule):
                 Note: the best model is always saved to best.model
                 in addition to other saved epochs.
             log_interval:
-                interval in epochs to evaluate model with validation
-                dataset and print metrics to the log
+                interval in batches to print training loss/metrics
             validation_interval:
                 interval in epochs to test the model on the validation set
                 Note that model will only update it's best score and save best.model
@@ -512,6 +514,10 @@ class CNN(BaseModule):
     def eval(self, targets, scores, logging_offset=0):
         """compute single-target or multi-target metrics from targets and scores
 
+        By default, the overall model score is "map" (mean average precision)
+        for multi-target models (self.single_target=False) and "f1" (average
+        of f1 score across classes) for single-target models).
+
         Override this function to use a different set of metrics.
         It should always return (1) a single score (float) used as an overall
         metric of model quality and (2) a dictionary of computed metrics
@@ -541,8 +547,11 @@ class CNN(BaseModule):
 
         # decide what to print/log:
         self._log(f"Metrics:")
-        self._log(f"\tMAP: {metrics_dict['map']:0.3f}", level=1 - logging_offset)
-        self._log(f"\tAU_ROC: {metrics_dict['au_roc']:0.3f} ", level=2 - logging_offset)
+        if not self.single_target:
+            self._log(f"\tMAP: {metrics_dict['map']:0.3f}", level=1 - logging_offset)
+            self._log(
+                f"\tAU_ROC: {metrics_dict['au_roc']:0.3f} ", level=2 - logging_offset
+            )
         self._log(
             f"\tJacc: {metrics_dict['jaccard']:0.3f} "
             f"Hamm: {metrics_dict['hamming_loss']:0.3f} ",
@@ -556,7 +565,10 @@ class CNN(BaseModule):
         )
 
         # choose one metric to be used for the overall model evaluation
-        score = metrics_dict["map"]
+        if self.single_target:
+            score = metrics_dict["f1"]
+        else:
+            score = metrics_dict["map"]
 
         return score, metrics_dict
 
@@ -1054,6 +1066,12 @@ def load_model(path, device=None):
             torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
         )
     model = torch.load(path, map_location=device)
+
+    # since ResampleLoss class overrides a method of an instance,
+    # we need to re-change the _init_loss_fn change when we reload
+    if model.loss_cls == ResampleLoss:
+        use_resample_loss(model)
+
     model.device = device
     return model
 
