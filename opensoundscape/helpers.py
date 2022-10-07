@@ -14,12 +14,12 @@ def sigmoid(x):
 
 
 def bound(x, bounds):
-    """ restrict x to a range of bounds = [min, max]"""
+    """restrict x to a range of bounds = [min, max]"""
     return min(max(x, bounds[0]), bounds[1])
 
 
 def overlap(r1, r2):
-    """"calculate the amount of overlap between two real-numbered ranges"""
+    """ "calculate the amount of overlap between two real-numbered ranges"""
     assert r1[1] > r1[0]
     assert r2[1] > r2[0]
     lower_bound = max(r1[0], r2[0])
@@ -28,7 +28,7 @@ def overlap(r1, r2):
 
 
 def overlap_fraction(r1, r2):
-    """"calculate the fraction of r1 (low, high range) that overlaps with r2"""
+    """ "calculate the fraction of r1 (low, high range) that overlaps with r2"""
     ol = overlap(r1, r2)
     return ol / (r1[1] - r1[0])
 
@@ -39,7 +39,7 @@ def inrange(x, r):
 
 
 def binarize(x, threshold):
-    """ return a list of 0, 1 by thresholding vector x """
+    """return a list of 0, 1 by thresholding vector x"""
     if len(np.shape(x)) > 2:
         raise ValueError("shape must be 1 dimensional or 2 dimensional")
 
@@ -50,7 +50,7 @@ def binarize(x, threshold):
 
 
 def run_command(cmd):
-    """ run a bash command with Popen, return response"""
+    """run a bash command with Popen, return response"""
     from subprocess import Popen, PIPE
     from shlex import split
 
@@ -58,7 +58,7 @@ def run_command(cmd):
 
 
 def rescale_features(X, rescaling_vector=None):
-    """ rescale all features by dividing by the max value for each feature
+    """rescale all features by dividing by the max value for each feature
 
     optionally provide the rescaling vector (1xlen(X) np.array),
     so that you can rescale a new dataset consistently with an old one
@@ -116,7 +116,7 @@ def min_max_scale(array, feature_range=(0, 1)):
 
 
 def linear_scale(array, in_range=(0, 1), out_range=(0, 255)):
-    """ Translate from range in_range to out_range
+    """Translate from range in_range to out_range
 
     Inputs:
         in_range: The starting range [default: (0, 1)]
@@ -173,20 +173,18 @@ def generate_clip_times_df(
                 - None:         Discard the remainder (do not make a clip)
                 - "extend":     Extend the final clip beyond full_duration to reach clip_duration length
                 - "remainder":  Use only remainder of full_duration (final clip will be shorter than clip_duration)
-                - "full":       Increase overlap with previous clip to yield a clip with clip_duration length
+                - "full":       Increase overlap with previous clip to yield a clip with clip_duration length.
+                                Note: returns entire original audio if it is shorter than clip_duration
     Returns:
-        clip_df: DataFrame with columns for 'start_time', 'end_time', and
-        'clip_duration' of each clip (which may differ from `clip_duration`
-        argument for final clip only)
-
-    Note: using "remainder" or "full" with clip_overlap>0 is not recommended.
-    This combination may result in several duplications of the same final clip.
+        clip_df: DataFrame with columns for 'start_time' and 'end_time' of each clip
     """
     if not final_clip in ["remainder", "full", "extend", None]:
         raise ValueError(
             f"final_clip must be 'remainder', 'full', 'extend',"
             f"or None. Got {final_clip}."
         )
+
+    assert clip_overlap < clip_duration, "clip_overlap must be less than clip_duration"
 
     # Lists of start and end times for clips
     increment = clip_duration - clip_overlap
@@ -205,15 +203,20 @@ def generate_clip_times_df(
     elif final_clip == "full":
         # Increase the overlap of any clips with end_time past full_duration
         # so that they end at full_duration
-        # can result in duplicates of the same final_clip
+        # can result in duplicates of the same final_clip - removed while returning
         clip_idxs_to_shift = ends > full_duration
         starts[clip_idxs_to_shift] -= ends[clip_idxs_to_shift] - full_duration
         ends[clip_idxs_to_shift] = full_duration
+
+        # set the start timestamp to 0 for shorter clips
+        # to avoid negative start times and return original clip
+        starts[starts < 0] = 0
+
     elif final_clip == "extend":
         # Keep the end values that extend beyond full_duration
         pass
 
-    return pd.DataFrame({"start_time": starts, "end_time": ends})
+    return pd.DataFrame({"start_time": starts, "end_time": ends}).drop_duplicates()
 
 
 def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):

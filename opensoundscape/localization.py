@@ -73,7 +73,7 @@ from deprecated import deprecated
 
 @deprecated(
     version="0.6.2",
-    reason="This function is not fully implemented and will be replaced in version 0.7.0",
+    reason="This function is not fully implemented and will be replaced in version 0.8.0",
 )
 def localize(
     receiver_positions,
@@ -203,7 +203,7 @@ def localize(
     cC = lorentz_ip(Bplus_a)
 
     # Compute discriminant
-    disc = cB ** 2 - 4 * cA * cC
+    disc = cB**2 - 4 * cA * cC
     # If discriminant is negative, set to zero to ensure
     # we get an answer, albeit not a very good one
     if disc < 0:

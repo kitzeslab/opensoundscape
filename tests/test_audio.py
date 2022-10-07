@@ -17,6 +17,18 @@ def metadata_wav_str():
 
 
 @pytest.fixture()
+def new_metadata_wav_str(request):
+    path = "tests/audio/new_metadata.wav"
+
+    def fin():
+        Path("tests/audio/new_metadata.wav").unlink()
+
+    request.addfinalizer(fin)
+
+    return path
+
+
+@pytest.fixture()
 def onemin_wav_str():
     return "tests/audio/1min.wav"
 
@@ -154,6 +166,24 @@ def test_load_timestamp_before_warnmode(metadata_wav_str):
         )
         # Assert the start time is the correct, original timestamp and has not been changed
         assert s.metadata["recording_start_time"] == correct_ts
+
+
+def test_retain_metadata(metadata_wav_str, new_metadata_wav_str):
+    a = Audio.from_file(metadata_wav_str)
+    a.save(new_metadata_wav_str)
+    new_a = Audio.from_file(new_metadata_wav_str)
+
+    # file size may differ slightly, other fields should be the same
+    new_a.metadata["filesize"] = None
+    a.metadata["filesize"] = None
+    assert new_a.metadata == a.metadata
+
+
+def test_update_metadata(metadata_wav_str, new_metadata_wav_str):
+    a = Audio.from_file(metadata_wav_str)
+    a.metadata["artist"] = "newartist"
+    a.save(new_metadata_wav_str)
+    assert Audio.from_file(new_metadata_wav_str).metadata["artist"] == "newartist"
 
 
 def test_load_empty_wav(empty_wav_str):
@@ -422,3 +452,8 @@ def test_non_integer_overlaplen_split_and_save(silence_10s_mp3_pathlib):
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert clip_df.iloc[1]["start_time"] == 4.5
     assert clip_df.iloc[1]["end_time"] == 9.5
+
+
+def test_skip_loading_metadata(metadata_wav_str):
+    a = Audio.from_file(metadata_wav_str, metadata=False)
+    assert a.metadata is None
