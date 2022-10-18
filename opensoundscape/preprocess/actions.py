@@ -204,7 +204,7 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False, tol=1e-5
         if random_trim:
             # uniformly randomly choose clip time from full audio
             extra_time = audio.duration() - _sample_duration
-            start_time = np.random.uniform() * extra_time
+            start_time = random.uniform(0, 1) * extra_time
         else:
             start_time = 0
 
@@ -504,7 +504,7 @@ def overlay(
         ), "overlay_df must have labels if overlay_class is specified"
         if overlay_class != "different":  # user specified a single class
             assert (
-                np.sum(overlay_df[overlay_class]) > 0
+                sum(overlay_df[overlay_class]) > 0
             ), "overlay_df did not contain positive labels for overlay_class"
 
     if len(overlay_df.columns) > 0:
@@ -518,7 +518,7 @@ def overlay(
     # up to a max number of max_overlay_num overlays
     overlays_performed = 0
 
-    while overlay_prob > np.random.uniform() and overlays_performed < max_overlay_num:
+    while overlay_prob > random.uniform(0, 1) and overlays_performed < max_overlay_num:
 
         try:
 
@@ -559,7 +559,7 @@ def overlay(
                 # however, in the case of a fixed overlay class, we could
                 # pass an overlay_df containing only that class)
                 choose_from = overlay_df[overlay_df[overlay_class] == 1]
-                overlay_path = np.random.choice(choose_from.index.values)
+                overlay_path = random.choice(choose_from.index.values)
 
             # now we have picked a file to overlay (overlay_path)
             # we also know its labels, if we need them
