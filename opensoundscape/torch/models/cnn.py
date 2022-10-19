@@ -94,6 +94,7 @@ class CNN(BaseModule):
             architecture = cnn_architectures.ARCH_DICT[architecture](
                 len(classes), num_channels=num_channels
             )
+            self.architecture_name = architecture
         else:
             assert issubclass(
                 type(architecture), torch.nn.Module
@@ -103,6 +104,7 @@ class CNN(BaseModule):
                     f"Make sure your architecture expects the number of channels in your input sampels ({num_channels}). "
                     "Pytorch architectures expect 3 channels by default."
                 )
+            self.architecture_name = str(type(architecture))
         self.network = architecture
 
         ### network device ###
@@ -352,7 +354,6 @@ class CNN(BaseModule):
 
         # save the loss averaged over all batches
         self.loss_hist[self.current_epoch] = np.mean(batch_loss)
-        import wandb
 
         wandb.log({"loss": np.mean(batch_loss)})
 
@@ -362,6 +363,67 @@ class CNN(BaseModule):
         total_scores = np.concatenate(total_scores, axis=0)
 
         return total_tgts, total_preds, total_scores
+
+    def _setup_wandb(self, wandb_project, extra_params):
+        # check that user is logged in (otherwise provide instructions to log in)
+        assert "WANDB_API_KEY" in os.environ, (
+            "os.environ['WANDB_API_KEY'] is not set. Use `wandb login` or "
+            "manually set the environment variable WANDB_API_KEY "
+            "to use Weights and Biases. "
+            "Find your API key at https://wandb.ai/settings)"
+        )
+
+        for k in ("project", "entity"):
+            assert (
+                k in wandb_project
+            ), "wandb_project must have keys 'project' and 'entity' (see wandb.init() docs)"
+        if "config" in wandb_project:
+            assert (
+                type(wandb_project["config"]) == dict
+            ), "wandb_project['config'] must be a dictionary or None"
+
+        # create a dictinoary of parameters to save for this run
+        # user can set additional wandb config parameters via wandb_project['config']
+        wandb_config = dict(
+            architecture=self.architecture_name,
+            sample_duration=self.preprocessor.sample_duration,
+            cuda_device_count=torch.cuda.device_count(),
+            mps_available=torch.backends.mps.is_available(),
+            classes=self.classes,
+            single_target=self.single_target,
+            opensoundscape_version=self.opensoundscape_version,
+        )
+        if "weight_decay" in self.optimizer_params:
+            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
+        else:
+            wandb_config["l2_regularization"] = "n/a"
+
+        if "lr" in self.optimizer_params:
+            wandb_config["learning_rate"] = self.optimizer_params["lr"]
+        else:
+            wandb_config["learning_rate"] = "n/a"
+
+        try:
+            wandb_config["sample_shape"] = self.preprocessor.pipeline.to_img.params[
+                "shape"
+            ] + [self.preprocessor.pipeline.to_img.params["channels"]]
+        except:
+            wandb_config["sample_shape"] = "n/a"
+
+        # add dictionary from "extras" parameter to config
+        wandb_config.update(extra_params)
+
+        # update with config dict that the user passed directly
+        if "config" in wandb_project:
+            wandb_config.update(wandb_project["config"])
+
+        # initialize a wandb run with information about the current model
+        wandb.init(
+            config=wandb_config,
+            entity=wandb_project["entity"],
+            project=wandb_project["project"],
+            name=wandb_project["name"],
+        )
 
     def train(
         self,
@@ -375,6 +437,7 @@ class CNN(BaseModule):
         log_interval=10,  # print metrics every n batches
         validation_interval=1,  # compute validation metrics every n epochs
         unsafe_samples_log="./unsafe_training_samples.log",
+        wandb_project=None,
     ):
         """train the model on samples from train_dataset
 
@@ -413,7 +476,19 @@ class CNN(BaseModule):
                 file path: log all samples that failed in preprocessing
                 (file written when training completes)
                 - if None,  does not write a file
-
+            wandb_project:
+                If a dictionary with keys 'project' and 'entity' is provided,
+                will start a wandb session and log training progress (and samples)
+                to a wandb dashboard. See wandb.init() documentation for more details.
+                Note: requires that environment variable WANDB_API_KEY is set,
+                    can be set directly or via wandb login.
+                Example:
+                {'project':'project_name','entity':'wandb_profile','name':'Training Run 1'}
+                - pass None (default) to turn off wandb logging
+                - optional key 'name': name of run (otherwise wandb invents a name)
+                - optional key 'n_sampels': number of samples to visualze, default=10
+                - optional key 'config': dictionary of extra config parameters to set in the wandb run
+                    - matching keys will over-ride the internally created config dict
         """
 
         ### Input Validation ###
@@ -437,13 +512,59 @@ class CNN(BaseModule):
         self.save_interval = save_interval
         self.save_path = save_path
 
-        ####################
-        # Set Up Loss, Opt #
-        ####################
-        self._set_train(train_df, batch_size, num_workers)
+        ### Initialize Weights and Biases (wandb) logging ###
 
+        if wandb_project is not None:  # should have project, entity, name
+            self._setup_wandb(
+                wandb_project,
+                extra_params=dict(  # some parameters only relevant to training
+                    epochs=epochs,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    lr_update_interval=self.lr_update_interval,
+                    lr_cooling_factor=self.lr_cooling_factor,
+                    optimizer_cls=self.optimizer_cls,
+                    model_save_path=Path(save_path).resolve(),
+                ),
+            )
+
+            # log tables of preprocessed samples
+            n_samples = (
+                wandb_project["n_samples"] if "n_samples" in wandb_project else 10
+            )
+
+            wandb.log(
+                {
+                    "training samples w/augmentation": opensoundscape.wandb.wandb_table(
+                        train_df,
+                        n_samples,
+                        self.preprocessor,
+                        bypass_augmentations=False,
+                        random_state=None,
+                    ),
+                    "training samples w/o augmentation": opensoundscape.wandb.wandb_table(
+                        train_df,
+                        n_samples,
+                        self.preprocessor,
+                        bypass_augmentations=True,
+                        random_state=None,
+                    ),
+                    "validation samples": opensoundscape.wandb.wandb_table(
+                        validation_df,
+                        n_samples,
+                        self.preprocessor,
+                        bypass_augmentations=True,
+                        random_state=None,
+                    ),
+                }
+            )
+
+        ### Set Up Loss and Optimization ###
+        self._set_train(train_df, batch_size, num_workers)
         self.best_score = 0.0
         self.best_epoch = 0
+
+        ### Train ###
 
         for epoch in range(epochs):
             # 1 epoch = 1 view of each training file
@@ -508,6 +629,8 @@ class CNN(BaseModule):
         self._log(
             f"\nBest Model Appears at Epoch {self.best_epoch} with Validation score {self.best_score:.3f}."
         )
+        if wandb_project is not None:
+            wandb.finish()
 
         # warn the user if there were unsafe samples (failed to preprocess)
         unsafe_samples = self.train_loader.dataset.report(log=unsafe_samples_log)
