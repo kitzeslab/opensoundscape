@@ -54,6 +54,9 @@ Convolutional Neural Networks
 .. automodule:: opensoundscape.torch.architectures.utils
   :members:
 
+.. automodule:: opensoundscape.wandb
+  :members:
+
 Data Selection
 ^^^^^^^^^^^^^^
 

@@ -30,10 +30,10 @@ def wandb_table(
             sample = inspection_dataset[i]
             path = samples.index.values[i]
             sample_table.loc[len(sample_table)] = [
-                wandb.Audio(path),
+                wandb.Audio(str(path)),
                 wandb.Image(sample["X"] * -1),
                 one_hot_to_categorical([sample["y"]], classes)[0],
-                path,
+                str(path),
             ]
         except:
             pass  # print(f"failed to load sample {sample_df.index.values[i]}")
