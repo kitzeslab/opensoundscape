@@ -79,6 +79,8 @@ class CNN(BaseModule):
         self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
+        # number of samples to preprocess and log to wandb during train/predict
+        self.n_preview_samples = 8
 
         ### architecture ###
         # can be a pytorch CNN such as Resnet18 or a custom object
@@ -271,8 +273,17 @@ class CNN(BaseModule):
             last_epoch=self.current_epoch - 1,
         )
 
-    def _train_epoch(self, train_loader):
-        """perform forward pass, loss, backpropagation for one epoch
+    def _train_epoch(self, train_loader, wandb_session=None):
+        """perform forward pass, loss, and backpropagation for one epoch
+
+        If wandb_session is passed, logs progress to wandb run
+
+        Args:
+            train_loader: DataLoader object to create samples
+            wandb_session: a wandb session to log to
+                - pass the value returned by wandb.init() to progress log to a
+                Weights and Biases run
+                - if None, does not log to wandb
 
         Returns: (targets, predictions, scores) on training files
         """
@@ -355,8 +366,8 @@ class CNN(BaseModule):
         # save the loss averaged over all batches
         self.loss_hist[self.current_epoch] = np.mean(batch_loss)
 
-        if self._logging_to_wandb:
-            wandb.log({"loss": np.mean(batch_loss)})
+        if wandb_session is not None:
+            wandb_session.log({"loss": np.mean(batch_loss)})
 
         # return targets, preds, scores
         total_tgts = np.concatenate(total_tgts, axis=0)
@@ -365,27 +376,8 @@ class CNN(BaseModule):
 
         return total_tgts, total_preds, total_scores
 
-    def _init_wandb(self, wandb_project, extra_params):
-        # check that user is logged in (otherwise provide instructions to log in)
-        assert "WANDB_API_KEY" in os.environ, (
-            "os.environ['WANDB_API_KEY'] is not set. Use `wandb login` or "
-            "manually set the environment variable WANDB_API_KEY "
-            "to use Weights and Biases. "
-            "Find your API key at https://wandb.ai/settings)"
-        )
-        wandb.login(key=os.environ["WANDB_API_KEY"])
-
-        for k in ("project", "entity"):
-            assert (
-                k in wandb_project
-            ), "wandb_project must have keys 'project' and 'entity' (see wandb.init() docs)"
-        if "config" in wandb_project:
-            assert (
-                type(wandb_project["config"]) == dict
-            ), "wandb_project['config'] must be a dictionary or None"
-
+    def _generate_wandb_config(self):
         # create a dictinoary of parameters to save for this run
-        # user can set additional wandb config parameters via wandb_project['config']
         wandb_config = dict(
             architecture=self.architecture_name,
             sample_duration=self.preprocessor.sample_duration,
@@ -412,21 +404,7 @@ class CNN(BaseModule):
         except:
             wandb_config["sample_shape"] = "n/a"
 
-        # add dictionary from "extras" parameter to config
-        wandb_config.update(extra_params)
-
-        # update with config dict that the user passed directly
-        if "config" in wandb_project:
-            wandb_config.update(wandb_project["config"])
-
-        # initialize a wandb run with information about the current model
-        print("running wandb init")
-        wandb.init(
-            config=wandb_config,
-            entity=wandb_project["entity"],
-            project=wandb_project["project"],
-            name=wandb_project["name"],
-        )
+        return wandb_config
 
     def train(
         self,
@@ -440,7 +418,7 @@ class CNN(BaseModule):
         log_interval=10,  # print metrics every n batches
         validation_interval=1,  # compute validation metrics every n epochs
         unsafe_samples_log="./unsafe_training_samples.log",
-        wandb_project=None,
+        wandb_session=None,
     ):
         """train the model on samples from train_dataset
 
@@ -479,19 +457,19 @@ class CNN(BaseModule):
                 file path: log all samples that failed in preprocessing
                 (file written when training completes)
                 - if None,  does not write a file
-            wandb_project:
-                If a dictionary with keys 'project' and 'entity' is provided,
-                will start a wandb session and log training progress (and samples)
-                to a wandb dashboard. See wandb.init() documentation for more details.
-                Note: requires that environment variable WANDB_API_KEY is set,
-                    can be set directly or via wandb login.
-                Example:
-                {'project':'project_name','entity':'wandb_profile','name':'Training Run 1'}
-                - pass None (default) to turn off wandb logging
-                - optional key 'name': name of run (otherwise wandb invents a name)
-                - optional key 'n_samples': number of samples to visualze, default=10
-                - optional key 'config': dictionary of extra config parameters to set in the wandb run
-                    - matching keys will over-ride the internally created config dict
+            wandb_session: a wandb session to log to
+                - pass the value returned by wandb.init() to progress log to a
+                Weights and Biases run
+                - if None, does not log to wandb
+                For example:
+                ```
+                import wandb
+                wandb.login(key=api_key) #find your api_key at https://wandb.ai/settings
+                session = wandb.init(enitity='mygroup',project='project1',name='first_run')
+                ...
+                model.train(...,wandb_session=session)
+                session.finish()
+                ```
         """
 
         ### Input Validation ###
@@ -514,14 +492,16 @@ class CNN(BaseModule):
         self.log_interval = log_interval
         self.save_interval = save_interval
         self.save_path = save_path
-        self._logging_to_wandb = False
 
-        ### Initialize Weights and Biases (wandb) logging ###
+        # Initialize Weights and Biases (wandb) logging ###
+        if wandb_session is not None:
 
-        if wandb_project is not None:  # should have project, entity, name
-            self._init_wandb(
-                wandb_project,
-                extra_params=dict(  # some parameters only relevant to training
+            # update the run config with information about the model
+            wandb_session.config.update(self._generate_wandb_config())
+
+            # update the run config with training parameters
+            wandb_session.config.update(
+                dict(
                     epochs=epochs,
                     batch_size=batch_size,
                     num_workers=num_workers,
@@ -529,39 +509,29 @@ class CNN(BaseModule):
                     lr_cooling_factor=self.lr_cooling_factor,
                     optimizer_cls=self.optimizer_cls,
                     model_save_path=Path(save_path).resolve(),
-                ),
+                )
             )
-            # if the previous line succeeds, wandb run is active
-            self._logging_to_wandb = True
 
-        if self._logging_to_wandb:
             # log tables of preprocessed samples
-            n_samples = (
-                wandb_project["n_samples"] if "n_samples" in wandb_project else 10
-            )
-
-            wandb.log(
+            wandb_session.log(
                 {
-                    "training samples w/augmentation": opensoundscape.wandb.wandb_table(
-                        train_df,
-                        n_samples,
-                        self.preprocessor,
-                        bypass_augmentations=False,
-                        random_state=None,
+                    "Samples / training samples with augmentation": opensoundscape.wandb.wandb_table(
+                        AudioFileDataset(
+                            train_df, self.preprocessor, bypass_augmentations=False
+                        ),
+                        self.n_preview_samples,
                     ),
-                    "training samples w/o augmentation": opensoundscape.wandb.wandb_table(
-                        train_df,
-                        n_samples,
-                        self.preprocessor,
-                        bypass_augmentations=True,
-                        random_state=None,
+                    "Samples / training samples without augmentation": opensoundscape.wandb.wandb_table(
+                        AudioFileDataset(
+                            train_df, self.preprocessor, bypass_augmentations=True
+                        ),
+                        self.n_preview_samples,
                     ),
-                    "validation samples": opensoundscape.wandb.wandb_table(
-                        validation_df,
-                        n_samples,
-                        self.preprocessor,
-                        bypass_augmentations=True,
-                        random_state=None,
+                    "Samples / validation samples": opensoundscape.wandb.wandb_table(
+                        AudioFileDataset(
+                            validation_df, self.preprocessor, bypass_augmentations=True
+                        ),
+                        self.n_preview_samples,
                     ),
                 }
             )
@@ -580,15 +550,16 @@ class CNN(BaseModule):
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
             train_targets, train_preds, train_scores = self._train_epoch(
-                self.train_loader
+                self.train_loader,
+                wandb_session,
             )
 
             ### Evaluate ###
             train_score, self.train_metrics[self.current_epoch] = self.eval(
                 train_targets, train_scores
             )
-            if self._logging_to_wandb:
-                wandb.log({"training": self.train_metrics[self.current_epoch]})
+            if wandb_session is not None:
+                wandb_session.log({"training": self.train_metrics[self.current_epoch]})
 
             #### Validation ###
             if validation_df is not None:
@@ -612,8 +583,10 @@ class CNN(BaseModule):
             else:  # Evaluate model w/validation score unless no validation
                 score = train_score
 
-            if self._logging_to_wandb:
-                wandb.log({"validation": self.valid_metrics[self.current_epoch]})
+            if wandb_session is not None:
+                wandb_session.log(
+                    {"validation": self.valid_metrics[self.current_epoch]}
+                )
 
             ### Save ###
             if (
@@ -630,9 +603,8 @@ class CNN(BaseModule):
                 self._log("Updating best model", level=2)
                 self.save(f"{self.save_path}/best.model")
 
-            if self._logging_to_wandb:
-                print("logging epoch to wandb")
-                wandb.log({"epoch": epoch})
+            if wandb_session is not None:
+                wandb_session.log({"epoch": epoch})
             self.current_epoch += 1
 
         ### Logging ###
@@ -641,12 +613,7 @@ class CNN(BaseModule):
             f"\nBest Model Appears at Epoch {self.best_epoch} with Validation score {self.best_score:.3f}."
         )
 
-        # End WandB run
-        if self._logging_to_wandb:
-            wandb.finish()
-            self._logging_to_wandb = False
-
-        # warn the user if there were unsafe samples (failed to preprocess)
+        # warn the user if there were unsafe samples (samples that failed to preprocess)
         unsafe_samples = self.train_loader.dataset.report(log=unsafe_samples_log)
         self._log(
             f"{len(unsafe_samples)} of {len(train_df)} total training "
@@ -771,6 +738,7 @@ class CNN(BaseModule):
         final_clip=None,
         bypass_augmentations=True,
         unsafe_samples_log=None,
+        wandb_session=None,
     ):
         """Generate predictions on a dataset
 
@@ -821,6 +789,10 @@ class CNN(BaseModule):
                 is_augmentation==True are performed. Default True.
             unsafe_samples_log: if not None, samples that failed to preprocess
                 will be listed in this text file.
+            wandb_session: a wandb session to log to
+                - pass the value returned by wandb.init() to progress log to a
+                Weights and Biases run
+                - if None, does not log to wandb
 
         Returns:
             scores: df of post-activation_layer scores
@@ -837,8 +809,6 @@ class CNN(BaseModule):
             assert threshold is not None, (
                 "Must specify a threshold when" " generating multi_target predictions"
             )
-
-        # TODO: add wandb logging to predict (run init, log progress and samples)
 
         # set up prediction Dataset
         if split_files_into_clips:
@@ -888,6 +858,31 @@ class CNN(BaseModule):
         # add any paths that failed to generate a clip df to _unsafe_samples
         dataloader.dataset._unsafe_samples += prediction_dataset.unsafe_samples
 
+        # Initialize Weights and Biases (wandb) logging
+        if wandb_session is not None:
+
+            # update the run config with information about the model
+            wandb_session.config.update(self._generate_wandb_config())
+
+            # update the run config with prediction parameters
+            wandb_session.config.update(
+                dict(
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    activation_layer=activation_layer,
+                )
+            )
+
+            # Log a table of preprocessed samples to wandb
+            wandb_session.log(
+                {
+                    "Samples / Preprocessed samples": opensoundscape.wandb.wandb_table(
+                        prediction_dataset,
+                        self.n_preview_samples,
+                    )
+                }
+            )
+
         ### Prediction/Inference ###
 
         # move network to device
@@ -921,7 +916,14 @@ class CNN(BaseModule):
                 total_scores.append(scores.detach().cpu().numpy())
                 total_preds.append(batch_preds.float().detach().cpu().numpy())
 
-                # log({"batch": i})
+                if wandb_session is not None:
+                    wandb_session.log(
+                        {
+                            "progress": i / len(dataloader),
+                            "completed_batches": i,
+                            "total_batches": len(dataloader),
+                        }
+                    )
 
         # aggregate across all batches
         total_scores = np.concatenate(total_scores, axis=0)
@@ -1096,7 +1098,7 @@ class InceptionV3(CNN):
         )
         self.name = "InceptionV3"
 
-    def _train_epoch(self, train_loader):
+    def _train_epoch(self, train_loader, wandb_session=None):
         """perform forward pass, loss, backpropagation for one epoch
 
         need to override parent because Inception returns different outputs
@@ -1182,9 +1184,11 @@ class InceptionV3(CNN):
                 scores = logits.int().detach().cpu().numpy()
                 self.eval(tgts, scores, logging_offset=-1)
 
-            if self._logging_to_wandb:
-                wandb.log({"batch": batch_idx})
-                wandb.log({"epoch_progress": self.current_epoch + batch_idx / N})
+            if wandb_session is not None:
+                wandb_session.log({"batch": batch_idx})
+                wandb_session.log(
+                    {"epoch_progress": self.current_epoch + batch_idx / N}
+                )
 
         # update learning parameters each epoch
         self.scheduler.step()

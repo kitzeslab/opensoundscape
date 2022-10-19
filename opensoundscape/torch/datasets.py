@@ -129,7 +129,10 @@ class AudioFileDataset(torch.utils.data.Dataset):
     def sample(self, **kwargs):
         """out-of-place random sample
 
-        creates copy of object with n rows randomly sampled from dataframe
+        creates copy of object with n rows randomly sampled from label_df
+
+        Note: does not randomly sample clip_times_df, but clip_times_df
+        will be subset to only include clips from the downsampled label_df
 
         Args: see pandas.DataFrame.sample()
 
@@ -140,6 +143,29 @@ class AudioFileDataset(torch.utils.data.Dataset):
         new_ds.label_df = new_ds.label_df.sample(**kwargs)
         if new_ds.clip_times_df is not None:
             new_ds.clip_times_df = new_ds.clip_times_df.loc[new_ds.label_df.index]
+        return new_ds
+
+    def sample_clip_times_df(self, **kwargs):
+        """out-of-place random sample of rows from clip_times_df
+
+        creates copy of object with a new .clip_times_df that has
+        n rows randomly sampled from the original clip_times_df
+        Note: the new .label_df will be subset to indices included in
+        the subsampled .clip_times_df
+
+        Args: see pandas.DataFrame.sample()
+
+        Returns:
+            a new dataset object
+        """
+        assert self.clip_times_df is not None, "Dataset does not contain .clip_times_df"
+        new_ds = copy.deepcopy(self)
+        # sample from all the clips, using a numeric index to keep track of rows
+        new_ds.clip_times_df = new_ds.clip_times_df.reset_index().sample(**kwargs)
+        # subsample label_df to same rows sampled for clip_times_df
+        new_ds.label_df = new_ds.label_df.iloc[new_ds.clip_times_df.index]
+        # re-set the index to file name
+        new_ds.clip_times_df = new_ds.clip_times_df.set_index("file")
         return new_ds
 
     def head(self, n=5):
