@@ -24,30 +24,34 @@ def wandb_table(dataset, n, random_state=None):
     # set up columns for WandB display table
     table_columns = ["audio", "tensor", "labels", "path"]
 
-    # if the dataset specifies clip start/end times, randomly choose n clips
-    # otherwise, randomly choose entire files from the table of labels
-    if dataset.clip_times_df is not None:
-        dataset = dataset.sample_clip_times_df(n=n, random_state=random_state)
+    # randomly choose entire files from the table of labels
+    dataset = dataset.sample(n=n, random_state=random_state)
+
+    if dataset.has_clips:  # keep track of clip start/ends
         table_columns += ["clip start time"]
         table_columns += ["clip end time"]
-    else:
-        dataset = dataset.sample(n=n, random_state=random_state)
+
     classes = dataset.label_df.columns
 
     sample_table = pd.DataFrame(columns=table_columns)
     for i in range(len(dataset)):
         try:
             # generate the content for a new row of the table
-            path = dataset.label_df.index.values[i]
             sample = dataset[i]
-            if dataset.clip_times_df is not None:
-                clip_row = dataset.clip_times_df.iloc[i]
+            clip_row = dataset.label_df.iloc[i]
+            if dataset.has_clips:
+                clip_row = dataset.label_df.iloc[i]
+                path = clip_row.name[0]
+                start_time = clip_row.name[1]
+                end_time = clip_row.name[2]
+                duration = end_time - start_time
                 audio = Audio.from_file(
                     path,
-                    offset=clip_row["start_time"],
-                    duration=clip_row["end_time"] - clip_row["start_time"],
+                    offset=start_time,
+                    duration=duration,
                 )
             else:
+                path = clip_row.name
                 audio = Audio.from_file(path)
 
             row_info = [
@@ -59,11 +63,8 @@ def wandb_table(dataset, n, random_state=None):
                 else None,
                 str(path),
             ]
-            if dataset.clip_times_df is not None:
-                row_info += [
-                    clip_row["start_time"],
-                    clip_row["end_time"],
-                ]
+            if dataset.has_clips:
+                row_info += [start_time, end_time]
 
             # add new row to wandb Table
             sample_table.loc[len(sample_table)] = row_info

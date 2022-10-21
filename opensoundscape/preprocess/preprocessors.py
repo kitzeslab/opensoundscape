@@ -86,7 +86,6 @@ class BasePreprocessor:
         sample,
         break_on_type=None,
         break_on_key=None,
-        clip_times=None,
         bypass_augmentations=False,
     ):
         """perform actions in self.pipeline on a sample (until a break point)
@@ -124,23 +123,37 @@ class BasePreprocessor:
             assert type(sample) == pd.Series, (
                 "sample must be pd.Series with "
                 "path as .name OR file path (str or pathlib.Path), "
+                "OR have multi-index (file,start_time,end_time)"
                 f"was {type(sample)}"
             )
             label_df_row = sample
 
-        # Series.name (dataframe index) contains a path to a file
-        x = Path(label_df_row.name)
+        self.has_clips = type(label_df_row.name) == tuple
+        if self.has_clips:
+            # if the dataframe has a multi-index, it should be (file,start_time,end_time)
+            assert (
+                len(label_df_row.name) == 3
+            ), "multi-index must be ('file','start_time','end_time')"
+            sample_path, clip_start_time, clip_end_time = label_df_row.name
+        else:
+            # Series.name (dataframe index) contains a path to a file
+            # No clip times are provided, so the entire file will be loaded
+            sample_path = Path(label_df_row.name)
+            clip_start_time = None
+            clip_end_time = None
 
         # a list of additional variables that an action may request from the preprocessor
         sample_info = {
-            "_path": Path(label_df_row.name),
+            "_path": sample_path,
             "_labels": copy.deepcopy(label_df_row),
-            "_start_time": None if clip_times is None else clip_times["start_time"],
+            "_start_time": clip_start_time,
+            "_end_time": clip_end_time,
             "_sample_duration": self.sample_duration,
             "_preprocessor": self,
         }
 
         try:
+            x = sample_path
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
                 if type(action) == break_on_type or k == break_on_key:

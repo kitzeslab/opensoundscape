@@ -428,6 +428,7 @@ class CNN(BaseModule):
         Args:
             train_df:
                 a dataframe of files and labels for training the model
+                - either has index `file` or multi-index (file,start_time,end_time)
             validation_df:
                 a dataframe of files and labels for evaluating the model
                 [default: None means no validation is performed]
@@ -753,6 +754,7 @@ class CNN(BaseModule):
             samples:
                 the files to generate predictions for. Can be:
                 - a dataframe with index containing audio paths, OR
+                - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
             batch_size:
                 Number of files to load simultaneously [default: 1]
@@ -781,6 +783,9 @@ class CNN(BaseModule):
                 Only relevant when binary_preds == 'multi_target'
                 If activation layer is sigmoid, choose value in [0,1]
                 If activation layer is None or softmax_and_logit, in [-inf,inf]
+            split_files_into_clips:
+                If True, internally splits and predicts on clips from longer audio files
+                Otherwise, assumes each row of `samples` corresponds to one complete sample
             overlap_fraction: fraction of overlap between consecutive clips when
                 predicting on clips of longer audio files. For instance, 0.5
                 gives 50% overlap between consecutive clips.
@@ -811,7 +816,7 @@ class CNN(BaseModule):
             )
 
         # set up prediction Dataset
-        if split_files_into_clips:
+        if split_files_into_clips:  # TODO: make sure its not already a multi-index df
             prediction_dataset = AudioSplittingDataset(
                 samples=samples,
                 preprocessor=self.preprocessor,
@@ -938,22 +943,19 @@ class CNN(BaseModule):
 
         # return 2 DataFrames with same index/columns as prediction_dataset's df
         # use None for placeholder if no preds
-        samples = prediction_dataset.label_df.index.values
-        score_df = pd.DataFrame(index=samples, data=total_scores, columns=self.classes)
-        if split_files_into_clips:  # return a multi-index
-            score_df.index = pd.MultiIndex.from_frame(
-                prediction_dataset.clip_times_df.reset_index()
-            )
+        df_index = prediction_dataset.label_df.index  # TODO might break?
+        score_df = pd.DataFrame(index=df_index, data=total_scores, columns=self.classes)
+
         # binary 0/1 predictions
         if binary_preds is None:
             pred_df = None
         else:
             pred_df = pd.DataFrame(
-                index=samples, data=total_preds, columns=self.classes
+                index=df_index, data=total_preds, columns=self.classes
             )
             if split_files_into_clips:  # return a multi-index
                 pred_df.index = pd.MultiIndex.from_frame(
-                    prediction_dataset.clip_times_df.reset_index()
+                    prediction_dataset.label_df[[]].reset_index()
                 )
 
         print(dataloader.dataset._unsafe_samples)
