@@ -30,6 +30,7 @@ jobs:
         run: /home/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
         run: /home/runner/.local/bin/poetry run black . --check --diff
+jobs:
   test:
     runs-on: macos-latest
     strategy:
