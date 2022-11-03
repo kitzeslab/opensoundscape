@@ -41,7 +41,7 @@ class SafeDataset:
         __getitem__(index):
             If loading an index fails, keeps trying the next index until success
         _safe_get_item():
-            Tries to load a sample, returns None if error occurs
+            Tries to load a sample, returns tuple of (None, exception) if exception occurs
     """
 
     def __init__(self, dataset, unsafe_behavior, eager_eval=False):
@@ -75,7 +75,7 @@ class SafeDataset:
             self._build_index()
 
     def _safe_get_item(self, idx):
-        """Returns None instead of throwing an error when dealing with an
+        """Returns tuple of None, exception instead of throwing the error when dealing with an
         unsafe sample, and also builds an index of safe and unsafe samples as
         and when they get accessed.
         """
@@ -89,7 +89,7 @@ class SafeDataset:
             sample = self.dataset[idx]
             if idx not in self._safe_indices:
                 self._safe_indices.append(idx)
-            return sample
+            return (sample, None)
         except Exception as e:
             if isinstance(e, IndexError) and invalid_idx:
                 raise
@@ -100,7 +100,7 @@ class SafeDataset:
             if sample not in self._unsafe_samples:
                 self._unsafe_samples.append(sample)
 
-            return None
+            return (None, e)
 
     def _build_index(self):
         """load every sample to determine if each is safe"""
@@ -146,9 +146,9 @@ class SafeDataset:
 
     def __iter__(self):
         return (
-            self._safe_get_item(i)
+            self._safe_get_item(i)[0]
             for i in range(len(self))
-            if self._safe_get_item(i) is not None
+            if self._safe_get_item(i)[0] is not None
         )
 
     def __getitem__(self, idx):
@@ -162,13 +162,15 @@ class SafeDataset:
         if self.unsafe_behavior == "substitute":
             attempts = 0
             while attempts < len(self.dataset):
-                sample = self._safe_get_item(idx)
+                sample, caught_exception = self._safe_get_item(idx)
                 if sample is not None:
                     return sample
                 idx += 1
                 attempts += 1
                 idx = idx % len(self.dataset)  # loop around end to beginning
-            raise IndexError("Tried all samples, none were safe")
+            raise IndexError(
+                f"Tried all samples, none were safe. Last sample attempted raised: {caught_exception}"
+            )
         elif self.unsafe_behavior == "raise" or self.unsafe_behavior == "none":
             try:
                 sample = self.dataset[idx]
