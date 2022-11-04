@@ -57,7 +57,7 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
-        shell: wsl-bash
+        shell: wsl-bash {0}
     strategy:
       matrix:
         python-version: [3.7, 3.8]
