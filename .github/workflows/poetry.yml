@@ -42,9 +42,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install libsndfile1
-        run: sudo apt install libsndfile1
+        run: brew install libsndfile1
       - name: Install ffmpeg v4
-        run: sudo snap install ffmpeg
+        run: brew install ffmpeg
       - name: Install poetry
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
