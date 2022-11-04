@@ -12,18 +12,18 @@ jobs:
     defaults:
       run:
         shell: wsl-bash {0}
-    strategy:
-      matrix:
-        python-version: [3.7, 3.8]
+#    strategy:
+#      matrix:
+#        python-version: [3.7, 3.8]
     steps:
       - uses: Vampire/setup-wsl@v1
         with:
           distribution: Ubuntu-20.04
       - uses: actions/checkout@v2
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
+#      - name: Set up Python ${{ matrix.python-version }}
+#        uses: actions/setup-python@v2
+#        with:
+#          python-version: ${{ matrix.python-version }}
       - name: Install libsndfile
         run: sudo apt-get libsndfile1
       - name: Install ffmpeg v4
@@ -36,3 +36,4 @@ jobs:
         run: /home/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
         run: /home/runner/.local/bin/poetry run black . --check --diff
+        
