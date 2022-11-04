@@ -30,6 +30,7 @@ jobs:
         run: /home/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
         run: /home/runner/.local/bin/poetry run black . --check --diff
+
   test_macos:
     runs-on: macos-latest
     strategy:
@@ -53,6 +54,7 @@ jobs:
         run: /Users/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
         run: /Users/runner/.local/bin/poetry run black . --check --diff
+
   test_windows:
     runs-on: windows-latest
     strategy:
@@ -68,14 +70,20 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install libsndfile
+      - shell: wsl-bash
         run: sudo apt libsndfile1
       - name: Install ffmpeg v4
+        shell: wsl-bash
         run: sudo apt install ffmpeg
       - name: Install poetry
+        shell: wsl-bash
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
+        shell: wsl-bash
         run: /home/runner/.local/bin/poetry install
       - name: Poetry run pytest
+        shell: wsl-bash
         run: /home/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
+        shell: wsl-bash
         run: /home/runner/.local/bin/poetry run black . --check --diff
