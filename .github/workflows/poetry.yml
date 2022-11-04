@@ -71,17 +71,17 @@ jobs:
       - shell: wsl-bash
         run: sudo apt libsndfile1
       - name: Install ffmpeg v4
-        shell: wsl-bash
+      - shell: wsl-bash
         run: sudo apt install ffmpeg
       - name: Install poetry
-        shell: wsl-bash
+      - shell: wsl-bash
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
-        shell: wsl-bash
+      - shell: wsl-bash
         run: /home/runner/.local/bin/poetry install
       - name: Poetry run pytest
-        shell: wsl-bash
+      - shell: wsl-bash
         run: /home/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
-        shell: wsl-bash
+      - shell: wsl-bash
         run: /home/runner/.local/bin/poetry run black . --check --diff
