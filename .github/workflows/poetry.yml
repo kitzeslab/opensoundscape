@@ -41,8 +41,8 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install libsndfile1
-        run: brew install libsndfile1
+      - name: Install libsndfile
+        run: brew install libsndfile
       - name: Install ffmpeg v4
         run: brew install ffmpeg
       - name: Install poetry
