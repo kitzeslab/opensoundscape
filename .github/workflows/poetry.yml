@@ -30,7 +30,6 @@ jobs:
         run: /home/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
         run: /home/runner/.local/bin/poetry run black . --check --diff
-
   test_macos:
     runs-on: macos-latest
     strategy:
@@ -54,7 +53,6 @@ jobs:
         run: /Users/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
         run: /Users/runner/.local/bin/poetry run black . --check --diff
-
   test_windows:
     runs-on: windows-latest
     strategy:
