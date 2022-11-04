@@ -48,8 +48,8 @@ jobs:
       - name: Install poetry
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
-        run: /home/runner/.local/bin/poetry install
+        run: //Users/runner/.local/bin/poetry install
       - name: Poetry run pytest
-        run: /home/runner/.local/bin/poetry run pytest
+        run: //Users/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
-        run: /home/runner/.local/bin/poetry run black . --check --diff
+        run: /Users/runner/.local/bin/poetry run black . --check --diff
