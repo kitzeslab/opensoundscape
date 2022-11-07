@@ -72,7 +72,7 @@ jobs:
       - name: Install libsndfile1
         run: sudo apt install libsndfile1
       - name: print ffmpeg version
-       run: ffmpeg --version
+        run: ffmpeg --version
       - name: print python version
         run: python3 --version 
       - name: Install poetry
