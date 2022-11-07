@@ -80,9 +80,9 @@ jobs:
       - name: Install poetry
         run: (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | py -
       - name: Poetry install
-        run: poetry install
+        run: C:\Users\runneradmin\AppData\Roaming\Python\Scripts\poetry install
       - name: Poetry run pytest
-        run: /home/runner/.local/bin/poetry run pytest
+        run: C:\Users\runneradmin\AppData\Roaming\Python\Scripts\poetry run pytest
       - name: Poetry run black check
-        run: /home/runner/.local/bin/poetry run black . --check --diff
+        run: C:\Users\runneradmin\AppData\Roaming\Python\Scripts\poetry run black . --check --diff
         
