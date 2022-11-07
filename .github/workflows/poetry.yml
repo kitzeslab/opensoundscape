@@ -81,12 +81,12 @@ jobs:
         run: python3 --version 
       - name: Install poetry
         run: curl -sSL https://install.python-poetry.org | python3
-      - name: add poetry to path
-        run: export PATH="/root/.local/bin:$PATH"
+#      - name: add poetry to path
+#        run: export PATH="/root/.local/bin:$PATH"
       - name: Poetry install
-        run: poetry install
+        run: /root/.local/bin/poetry install
       - name: Poetry run pytest
-        run: poetry run pytest
+        run: /root/.local/bin/poetry run pytest
       - name: Poetry run black check
-        run: poetry run black . --check --diff
+        run: /root/.local/bin/poetry run black . --check --diff
         
