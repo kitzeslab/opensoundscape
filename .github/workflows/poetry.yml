@@ -75,14 +75,12 @@ jobs:
 #        run: sudo apt-get update
 #      - name: Install libsndfile
 #        run: sudo apt-get install libsndfile1
-#      - name: Install ffmpeg v4
-#        run: sudo apt-get install -y ffmpeg
+      - name: Install ffmpeg v4
+        run: sudo apt-get install -y ffmpeg
       - name: print python version
         run: python3 --version 
       - name: Install poetry
         run: curl -sSL https://install.python-poetry.org | python3
-#      - name: add poetry to path
-#        run: export PATH="/root/.local/bin:$PATH"
       - name: Poetry install
         run: /root/.local/bin/poetry install
       - name: Poetry run pytest
