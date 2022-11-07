@@ -56,16 +56,16 @@ jobs:
 
   test_windows:
     runs-on: windows-latest
- #   defaults:
- #     run:
- #       shell: wsl-bash {0}
+    defaults:
+      run:
+        shell: wsl-bash {0}
     strategy:
       matrix:
         python-version: [3.7, 3.8]
     steps:
-#      - uses: Vampire/setup-wsl@v1
-#        with:
-#          distribution: Ubuntu-20.04
+      - uses: Vampire/setup-wsl@v1
+        with:
+          distribution: Ubuntu-20.04
       - uses: actions/checkout@v2
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
@@ -80,7 +80,9 @@ jobs:
       - name: print python version
         run: python3 --version 
       - name: Install poetry
-        run: (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | py -
+        run: curl -sSL https://install.python-poetry.org | python3
+      - name: add poetry to path
+        run: echo "Not implemented yet"
       - name: Poetry install
         run: C:\Users\runneradmin\AppData\Roaming\Python\Scripts\poetry install
       - name: Poetry run pytest
