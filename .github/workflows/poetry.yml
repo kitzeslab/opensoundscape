@@ -77,8 +77,8 @@ jobs:
 #        run: sudo apt-get install libsndfile1
       - name: add PPA for ffmpeg
         run: |
-        sudo apt-get install software-properties-common
-        sudo add-apt-repository ppa:mc3man/trusty-media
+          sudo apt-get install software-properties-common
+          sudo add-apt-repository ppa:mc3man/trusty-media
       - name: Install ffmpeg v4
         run: sudo apt-get install -y ffmpeg
       - name: print python version
