@@ -71,12 +71,12 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-      - name: apt-get update
-        run: sudo apt-get update
-      - name: Install libsndfile
-        run: sudo apt-get install libsndfile1
-      - name: Install ffmpeg v4
-        run: sudo apt-get install -y ffmpeg
+#      - name: apt-get update
+#        run: sudo apt-get update
+#      - name: Install libsndfile
+#        run: sudo apt-get install libsndfile1
+#      - name: Install ffmpeg v4
+#        run: sudo apt-get install -y ffmpeg
       - name: Install poetry
         run: (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | py -
       - name: Poetry install
