@@ -56,21 +56,21 @@ jobs:
 
   test_windows:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: wsl-bash {0}
-#    strategy:
-#      matrix:
-#        python-version: [3.7, 3.8]
+ #   defaults:
+ #     run:
+ #       shell: wsl-bash {0}
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8]
     steps:
-      - uses: Vampire/setup-wsl@v1
-        with:
-          distribution: Ubuntu-20.04
-      - uses: actions/checkout@v2
-#      - name: Set up Python ${{ matrix.python-version }}
-#        uses: actions/setup-python@v2
+#      - uses: Vampire/setup-wsl@v1
 #        with:
-#          python-version: ${{ matrix.python-version }}
+#          distribution: Ubuntu-20.04
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: apt-get update
         run: sudo apt-get update
       - name: Install libsndfile
@@ -78,9 +78,9 @@ jobs:
       - name: Install ffmpeg v4
         run: sudo apt-get install -y ffmpeg
       - name: Install poetry
-        run: curl -sSL https://install.python-poetry.org | python
+        run: (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | py -
       - name: Poetry install
-        run: /home/runner/.local/bin/poetry install
+        run: poetry install
       - name: Poetry run pytest
         run: /home/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
