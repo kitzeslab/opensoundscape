@@ -63,6 +63,8 @@ jobs:
         with:
           distribution: Ubuntu-20.04
       - uses: actions/checkout@v2
+      - name: print ffmpeg version
+        run: ffmpeg -version
       - name: add PPA for ffmpeg
         run: |
           sudo apt-get install software-properties-common
@@ -71,8 +73,6 @@ jobs:
         run: sudo apt-get install -y ffmpeg
       - name: Install libsndfile1
         run: sudo apt install libsndfile1
-      - name: print ffmpeg version
-        run: ffmpeg -version
       - name: print python version
         run: python3 --version 
       - name: Install poetry
