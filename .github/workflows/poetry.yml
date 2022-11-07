@@ -77,6 +77,8 @@ jobs:
 #        run: sudo apt-get install libsndfile1
 #      - name: Install ffmpeg v4
 #        run: sudo apt-get install -y ffmpeg
+      - name: print python version
+        run: python --version 
       - name: Install poetry
         run: (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | py -
       - name: Poetry install
