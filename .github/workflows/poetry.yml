@@ -59,18 +59,18 @@ jobs:
     defaults:
       run:
         shell: wsl-bash {0}
-    strategy:
-      matrix:
-        python-version: [3.7, 3.8]
+    # strategy:
+    #   matrix:
+    #     python-version: [3.7, 3.8]
     steps:
       - uses: Vampire/setup-wsl@v1
         with:
           distribution: Ubuntu-20.04
       - uses: actions/checkout@v2
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
+#      - name: Set up Python ${{ matrix.python-version }}
+#        uses: actions/setup-python@v2
+#        with:
+#          python-version: ${{ matrix.python-version }}
 #      - name: apt-get update
 #        run: sudo apt-get update
 #      - name: Install libsndfile
@@ -82,11 +82,11 @@ jobs:
       - name: Install poetry
         run: curl -sSL https://install.python-poetry.org | python3
       - name: add poetry to path
-        run: echo "Not implemented yet"
+        run: export PATH="/root/.local/bin:$PATH"
       - name: Poetry install
-        run: C:\Users\runneradmin\AppData\Roaming\Python\Scripts\poetry install
+        run: poetry install
       - name: Poetry run pytest
-        run: C:\Users\runneradmin\AppData\Roaming\Python\Scripts\poetry run pytest
+        run: poetry run pytest
       - name: Poetry run black check
-        run: C:\Users\runneradmin\AppData\Roaming\Python\Scripts\poetry run black . --check --diff
+        run: poetry run black . --check --diff
         
