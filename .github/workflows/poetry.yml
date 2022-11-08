@@ -78,9 +78,7 @@ jobs:
       - name: print ffmpeg version and try 1 file
         run: | 
           ffmpeg -version
-          python3
-          import subprocess 
-          subprocess.Popen(['ffmpeg'])
+          echo -e "import subprocess\nsubprocess.Popen(['ffmpeg'])" | python3
       # - name: print python version
       #   run: python3 --version 
       # - name: Install poetry
