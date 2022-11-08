@@ -81,7 +81,7 @@ def modify_resnet(model, num_classes, num_channels):
 
 @register_arch
 def resnet18(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, use_pretrained=models.ResNet18_Weights.DEFAULT, num_channels=3
 ):
     """Wrapper for ResNet18 architecture
 
@@ -99,7 +99,7 @@ def resnet18(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet18(pretrained=use_pretrained)
+    model_ft = models.resnet18(weights=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
@@ -126,7 +126,7 @@ def resnet34(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet34(pretrained=use_pretrained)
+    model_ft = models.resnet34(weights=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
@@ -153,7 +153,7 @@ def resnet50(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet50(pretrained=use_pretrained)
+    model_ft = models.resnet50(weights=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
@@ -180,7 +180,7 @@ def resnet101(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet101(pretrained=use_pretrained)
+    model_ft = models.resnet101(weights=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
@@ -207,7 +207,7 @@ def resnet152(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet152(pretrained=use_pretrained)
+    model_ft = models.resnet152(weights=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
@@ -234,7 +234,7 @@ def alexnet(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.alexnet(pretrained=use_pretrained)
+    model_ft = models.alexnet(weights=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     # change output shape
@@ -271,7 +271,7 @@ def vgg11_bn(
         raise NotImplementedError(
             "num_channels!=3 is not implemented for this architecture"
         )
-    model_ft = models.vgg11_bn(pretrained=use_pretrained)
+    model_ft = models.vgg11_bn(weights=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     num_ftrs = model_ft.classifier[6].in_features
@@ -299,7 +299,7 @@ def squeezenet1_0(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.squeezenet1_0(pretrained=use_pretrained)
+    model_ft = models.squeezenet1_0(weights=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft.classifier[1] = nn.Conv2d(
@@ -333,7 +333,7 @@ def densenet121(
             specify channels in input sample, eg [channels h,w] sample shape
 
     """
-    model_ft = models.densenet121(pretrained=use_pretrained)
+    model_ft = models.densenet121(weights=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     num_ftrs = model_ft.classifier.in_features
@@ -369,7 +369,7 @@ def inception_v3(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.inception_v3(pretrained=use_pretrained)
+    model_ft = models.inception_v3(weights=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     # Handle the auxilary net
