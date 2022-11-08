@@ -71,15 +71,21 @@ jobs:
         run: sudo apt-get install -y ffmpeg
       - name: Install libsndfile1
         run: sudo apt install libsndfile1
-      - name: print ffmpeg version
-        run: ffmpeg -version
-      - name: print python version
-        run: python3 --version 
-      - name: Install poetry
-        run: curl -sSL https://install.python-poetry.org | python3
-      - name: Poetry install
-        run: /root/.local/bin/poetry install
-      - name: Poetry run black check
-        run: /root/.local/bin/poetry run black . --check --diff
-      - name: Poetry run pytest
-        run: /root/.local/bin/poetry run pytest
+      - name: view tree
+        run: | 
+        sudo apt-get install tree
+        tree
+      # - name: print ffmpeg version and try 1 file
+      #   run: | 
+      #   ffmpeg -version
+      #   ffmpeg -i 1min.wav 1min123.wav
+      # - name: print python version
+      #   run: python3 --version 
+      # - name: Install poetry
+      #   run: curl -sSL https://install.python-poetry.org | python3
+      # - name: Poetry install
+      #   run: /root/.local/bin/poetry install
+      # - name: Poetry run black check
+      #   run: /root/.local/bin/poetry run black . --check --diff
+      # - name: Poetry run pytest
+      #   run: /root/.local/bin/poetry run pytest
