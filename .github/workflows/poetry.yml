@@ -75,10 +75,10 @@ jobs:
         run: | 
           sudo apt-get install tree
           tree
-      # - name: print ffmpeg version and try 1 file
-      #   run: | 
-      #   ffmpeg -version
-      #   ffmpeg -i 1min.wav 1min123.wav
+      - name: print ffmpeg version and try 1 file
+        run: | 
+        ffmpeg -version
+        ffmpeg -i ./opensoundscape/tests/1min.wav 1min123.wav
       # - name: print python version
       #   run: python3 --version 
       # - name: Install poetry
