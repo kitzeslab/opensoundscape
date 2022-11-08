@@ -19,7 +19,6 @@
  :members:
 
 
-
 .. automodule:: opensoundscape.torch.models.cnn
   :members:
 
@@ -35,8 +34,6 @@
 .. automodule:: opensoundscape.torch.architectures.utils
   :members:
 
-Data Selection
-^^^^^^^^^^^^^^
 
 .. automodule:: opensoundscape.data_selection
   :members:
@@ -92,8 +89,6 @@ Data Selection
 
 .. automodule:: opensoundscape.signal
  :members:
-
-
 
 
 .. automodule:: opensoundscape.helpers
