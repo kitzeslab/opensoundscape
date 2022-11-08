@@ -64,9 +64,9 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
-        shell: wsl-bash {0} # use wsl-bash shell, enabled by setup-wsl step
-    steps:
-      - uses: Vampire/setup-wsl@v1 # github action that installs wsl1
+        shell: wsl-bash {0} #use wsl-bash shell
+    steps: 
+      - uses: Vampire/setup-wsl@v1 #github action that installs wsl1
         with:
           distribution: Ubuntu-20.04
       - uses: actions/checkout@v2
