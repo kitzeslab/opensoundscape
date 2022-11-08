@@ -70,11 +70,12 @@ jobs:
         with:
           distribution: Ubuntu-20.04
       - uses: actions/checkout@v2
-      - name: Install ffmpeg
+      - name: Add repository with ffmpeg
         run: |
           sudo apt-get install software-properties-common
           sudo add-apt-repository ppa:savoury1/ffmpeg4
-          sudo apt-get install -y ffmpeg
+      name: Install ffmpeg
+        run: sudo apt-get install -y ffmpeg
       - name: Install libsndfile1
         run: sudo apt install libsndfile1
       - name: print ffmpeg version
