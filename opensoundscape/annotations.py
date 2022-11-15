@@ -172,11 +172,12 @@ class BoxedAnnotations:
         df = self.df.copy()
 
         # remove annotations that don't overlap with window
-        df = df[
+        df = df.loc[
             [
                 overlap([start_time, end_time], [t0, t1]) > 0
                 for t0, t1 in zip(df["start_time"], df["end_time"])
-            ]
+            ],
+            :,
         ]
 
         if edge_mode == "trim":  # trim boxes to start and end times
@@ -220,11 +221,12 @@ class BoxedAnnotations:
         df = self.df.copy()
 
         # remove annotations that don't overlap with bandpass range
-        df = df[
+        df = df.loc[
             [
                 overlap([low_f, high_f], [f0, f1]) > 0
                 for f0, f1 in zip(df["low_f"], df["high_f"])
-            ]
+            ],
+            :,
         ]
 
         # handle edges
@@ -305,7 +307,7 @@ class BoxedAnnotations:
             classes = np.unique(df["annotation"])
         else:  # the user specified a list of classes
             # subset annotations to user-specified classes
-            df = df[df["annotation"].apply(lambda x: x in classes)]
+            df = df[df["annotation"].isin(classes)]
 
         # if we want to keep the original index, the best way is
         # to store it and add again later
