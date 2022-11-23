@@ -266,6 +266,10 @@ def test_one_hot_to_categorical_and_back():
 def test_raven_annotation_methods_empty(raven_file_empty):
     a = BoxedAnnotations.from_raven_file(raven_file_empty, annotation_column="Species")
 
+    a.trim(0, 5)
+    a.bandpass(0, 11025)
+    assert len(a.df) == 0
+
     # test with random parameters to generate clip dataframe
     clip_df = generate_clip_times_df(
         full_duration=10,
@@ -281,10 +285,6 @@ def test_raven_annotation_methods_empty(raven_file_empty):
 
     assert (labels_df.reset_index() == clip_df).all().all()
 
-    a.trim(0, 5)
-    a.bandpass(0, 11025)
-    assert len(a.df) == 0
-
     # classes = subset
     labels_df = a.one_hot_labels_like(
         clip_df,
@@ -294,7 +294,3 @@ def test_raven_annotation_methods_empty(raven_file_empty):
 
     assert len(labels_df) == len(clip_df)
     assert (labels_df.columns == ["Species1", "Species2"]).all()
-
-    a.trim(0, 5)
-    a.bandpass(0, 11025)
-    assert len(a.df) == 0
