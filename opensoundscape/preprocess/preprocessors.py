@@ -38,7 +38,7 @@ class BasePreprocessor:
         self.sample_duration = sample_duration
 
     def __repr__(self):
-        return f"Preprocessor with pipeline: {self.pipeline}"
+        return f"Preprocessor with pipeline:\n{self.pipeline}"
 
     def insert_action(self, action_index, action, after_key=None, before_key=None):
         """insert an action in specific specific position
@@ -88,6 +88,7 @@ class BasePreprocessor:
         break_on_key=None,
         clip_times=None,
         bypass_augmentations=False,
+        debug=False,
     ):
         """perform actions in self.pipeline on a sample (until a break point)
 
@@ -138,6 +139,7 @@ class BasePreprocessor:
             "_start_time": None if clip_times is None else clip_times["start_time"],
             "_sample_duration": self.sample_duration,
             "_preprocessor": self,
+            "_debug_info": self.pipeline.copy(deep=True) if debug else None,
         }
 
         try:
@@ -155,6 +157,8 @@ class BasePreprocessor:
                     sample_info["_labels"] = labels
                 else:
                     x = action.go(x, **extra_args)
+                if debug:
+                    sample_info["_debug_info"][k] = x
         except:
             # treat any exceptions raised during forward as PreprocessingErrors
             raise PreprocessingError(
