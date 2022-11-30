@@ -504,7 +504,7 @@ def overlay(
         ), "overlay_df must have labels if overlay_class is specified"
         if overlay_class != "different":  # user specified a single class
             assert (
-                sum(overlay_df[overlay_class]) > 0
+                overlay_df[overlay_class].sum() > 0
             ), "overlay_df did not contain positive labels for overlay_class"
 
     if len(overlay_df.columns) > 0:

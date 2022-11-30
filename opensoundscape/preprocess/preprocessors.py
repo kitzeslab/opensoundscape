@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import torch
 from pathlib import Path
-import copy
 import warnings
 
 from opensoundscape.preprocess.utils import PreprocessingError
@@ -134,7 +133,7 @@ class BasePreprocessor:
         # a list of additional variables that an action may request from the preprocessor
         sample_info = {
             "_path": Path(label_df_row.name),
-            "_labels": copy.deepcopy(label_df_row),
+            "_labels": label_df_row.copy(deep=True),
             "_start_time": None if clip_times is None else clip_times["start_time"],
             "_sample_duration": self.sample_duration,
             "_preprocessor": self,
