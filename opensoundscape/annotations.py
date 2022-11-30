@@ -133,7 +133,7 @@ class BoxedAnnotations:
 
         Args:
             classes: list of classes to retain (all others are discarded)
-            - the list can include `np.nan` or `None` if you want to keep them
+            - the list can include `nan` or `None` if you want to keep them
 
         Returns:
             new BoxedAnnotations object containing only annotations in `classes`
@@ -241,7 +241,7 @@ class BoxedAnnotations:
 
     def unique_labels(self):
         """get list of all unique (non-Falsy) labels"""
-        return np.unique(self.df.dropna(subset=["annotation"])["annotation"])
+        return self.df.dropna(subset=["annotation"])["annotation"].unique()
 
     def global_one_hot_labels(self, classes):
         """get a dictionary of one-hot labels for entire duration
@@ -302,7 +302,7 @@ class BoxedAnnotations:
         df = self.df.dropna(subset=["annotation"])
 
         if classes is None:  # include all annotations
-            classes = np.unique(df["annotation"])
+            classes = df["annotation"].unique()
         else:  # the user specified a list of classes
             # subset annotations to user-specified classes
             df = df[df["annotation"].isin(classes)]
@@ -315,7 +315,7 @@ class BoxedAnnotations:
         # the clip_df should have ['start_time','end_time'] in columns
         clip_df = clip_df.set_index(["start_time", "end_time"])
         clip_df = clip_df[[]]  # remove any additional columns
-        clip_df[classes] = np.nan  # add columns for each class
+        clip_df[classes] = float("nan")  # add columns for each class
 
         for (start, end), _ in clip_df.iterrows():
             clip_df.loc[(start, end), :] = one_hot_labels_on_time_interval(
