@@ -88,7 +88,7 @@ class BasePreprocessor:
         break_on_key=None,
         clip_times=None,
         bypass_augmentations=False,
-        debug=False,
+        trace=False,
     ):
         """perform actions in self.pipeline on a sample (until a break point)
 
@@ -139,7 +139,7 @@ class BasePreprocessor:
             "_start_time": None if clip_times is None else clip_times["start_time"],
             "_sample_duration": self.sample_duration,
             "_preprocessor": self,
-            "_debug_info": self.pipeline.copy(deep=True) if debug else None,
+            "_trace": self.pipeline.copy(deep=True) if trace else None,
         }
 
         try:
@@ -157,8 +157,8 @@ class BasePreprocessor:
                     sample_info["_labels"] = labels
                 else:
                     x = action.go(x, **extra_args)
-                if debug:
-                    sample_info["_debug_info"][k] = x
+                if trace:
+                    sample_info["_trace"][k] = x
         except:
             # treat any exceptions raised during forward as PreprocessingErrors
             raise PreprocessingError(
