@@ -71,4 +71,16 @@ def test_insert_action(preprocessor):
         preprocessor.insert_action("new4", action)
 
 
+def test_trace_off(preprocessor, row):
+
+    x, sample_info = preprocessor.forward(row)
+    assert sample_info["_trace"] is None
+
+
+def test_trace_on(preprocessor, row):
+
+    x, sample_info = preprocessor.forward(row, trace=True)
+    assert sample_info["_trace"].shape == sample_info["_pipeline"].shape
+
+
 # several specific scenarios are tested using DataSets in test_datasets.py

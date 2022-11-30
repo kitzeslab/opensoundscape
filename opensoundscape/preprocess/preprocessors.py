@@ -107,6 +107,7 @@ class BasePreprocessor:
                 action is not performed.
             bypass_augmentations: if True, actions with .is_augmentatino=True
                 are skipped
+            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for debugging on samples of interest
 
         Returns:
             {'X':preprocessed sample, 'y':labels} if return_labels==True,
@@ -146,10 +147,18 @@ class BasePreprocessor:
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
                 if type(action) == break_on_type or k == break_on_key:
+                    if trace:
+                        sample_info["_trace"][
+                            k
+                        ] = f"## Pipeline terminated ## {sample_info['_trace'][k]}"
                     break
                 if action.bypass:
                     continue
                 if action.is_augmentation and bypass_augmentations:
+                    if trace:
+                        sample_info["_trace"][
+                            k
+                        ] = f"## Bypassed ## {sample_info['_trace'][k]}"
                     continue
                 extra_args = {key: sample_info[key] for key in action.extra_args}
                 if action.returns_labels:
