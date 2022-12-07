@@ -10,9 +10,10 @@ with importlib.resources.path("opensoundscape.resources", "species_table.csv") a
 def get_species_list():
     """list of scientific-names (lowercase-hyphenated) of species in the loaded species table"""
 
-    return sorted(
+    return (
         species_table[["bn_code", "bn_mapping_in_xc_dataset"]]
         .dropna()["bn_mapping_in_xc_dataset"]
+        .sort_values()
         .to_list()
     )
 
