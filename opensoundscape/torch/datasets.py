@@ -168,7 +168,7 @@ class AudioSplittingDataset(AudioFileDataset):
 
     Internally creates even-lengthed clips split from long audio files.
 
-    Does not currently support passing labels
+    Does not currently support passing labels (what would a label mean for each clip?)
 
     Args:
         see AudioFileDataset and make_clip_df
@@ -188,9 +188,7 @@ class AudioSplittingDataset(AudioFileDataset):
         )
         # clip_times_df might be None if no files succeeded, make empty df
         if clip_times_df is None:
-            clip_times_df = pd.DataFrame(
-                columns=["file", "start_time", "end_time"] + self.classes
-            )
+            clip_times_df = pd.DataFrame(columns=["file", "start_time", "end_time"])
 
         # update "label_df" with multi-index (file,start_time,end_time)
         # using clip file names and start/end times from clip_times_df
