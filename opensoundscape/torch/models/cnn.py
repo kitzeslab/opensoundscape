@@ -943,7 +943,7 @@ class CNN(BaseModule):
 
         # return 2 DataFrames with same index/columns as prediction_dataset's df
         # use None for placeholder if no preds
-        df_index = prediction_dataset.label_df.index  # TODO might break?
+        df_index = prediction_dataset.label_df.index
         score_df = pd.DataFrame(index=df_index, data=total_scores, columns=self.classes)
 
         # binary 0/1 predictions

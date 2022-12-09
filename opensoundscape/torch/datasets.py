@@ -190,6 +190,8 @@ class AudioSplittingDataset(AudioFileDataset):
         if clip_times_df is None:
             clip_times_df = pd.DataFrame(columns=self.classes)
 
-        # update "label_df" so that index matches clip_times_df,
-        # note that this removes any labels and columns!
-        self.label_df = clip_times_df[[]]
+        # update "label_df" with multi-index (file,start_time,end_time)
+        # using clip file names and start/end times from clip_times_df
+        self.label_df = clip_times_df.reset_index().set_index(
+            ["file", "start_time", "end_time"]
+        )[[]]
