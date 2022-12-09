@@ -188,7 +188,9 @@ class AudioSplittingDataset(AudioFileDataset):
         )
         # clip_times_df might be None if no files succeeded, make empty df
         if clip_times_df is None:
-            clip_times_df = pd.DataFrame(columns=self.classes)
+            clip_times_df = pd.DataFrame(
+                columns=["file", "start_time", "end_time"] + self.classes
+            )
 
         # update "label_df" with multi-index (file,start_time,end_time)
         # using clip file names and start/end times from clip_times_df
