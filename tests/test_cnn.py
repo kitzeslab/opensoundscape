@@ -180,7 +180,7 @@ def test_train_predict_inception(train_df):
 
 
 def test_train_predict_architecture(train_df):
-    """test passing a specific architecture to PytorchModel"""
+    """test passing architecture object to CNN class"""
     arch = alexnet(2, use_pretrained=False)
     model = cnn.CNN(arch, [0, 1], sample_duration=2)
     model.train(
