@@ -19,7 +19,7 @@ model has 10 output classes, write
 Then you can initialize a model object from
 `opensoundscape.torch.models.cnn` with your architecture:
 
-`model=PytorchModel(my_arch,classes)`
+`model=CNN(my_arch,classes,sample_duration)`
 
 or override an existing model's architecture:
 
@@ -28,8 +28,6 @@ or override an existing model's architecture:
 Note: the InceptionV3 architecture must be used differently than other
 architectures - the easiest way is to simply use the InceptionV3 class in
 opensoundscape.torch.models.cnn.
-
-Note 2: For resnet architectures, if num_channels != 3, averages the conv1 weights across all channels.
 """
 from torchvision import models
 from torch import nn
