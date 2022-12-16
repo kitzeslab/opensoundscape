@@ -974,8 +974,6 @@ class CNN(BaseModule):
                     prediction_dataset.label_df[[]].reset_index()
                 )
 
-        print(dataloader.dataset._unsafe_samples)
-
         # warn the user if there were unsafe samples (failed to preprocess)
         # and log them to a file
         unsafe_samples = dataloader.dataset.report(log=unsafe_samples_log)
