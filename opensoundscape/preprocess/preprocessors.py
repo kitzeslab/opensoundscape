@@ -104,6 +104,9 @@ class BasePreprocessor:
             break_on_key: if not None, the pipeline will be stopped when it
                 reaches an Action whose index equals this value. The matching
                 action is not performed.
+            clip_times: can be either
+                - None: the file is treated as a single sample
+                - dictionary {"start_time":float,"end_time":float}: the start and end time of clip in audio
             bypass_augmentations: if True, actions with .is_augmentatino=True
                 are skipped
 
