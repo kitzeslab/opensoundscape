@@ -170,7 +170,7 @@ class Audio:
         ## Load Metadata ##
         if metadata:
             try:
-                metadata = TinyTag.get(path).as_dict()
+                metadata = _load_metadata(path)
                 # if this is an AudioMoth file, try to parse out additional
                 # metadata from the comment field
                 if metadata["artist"] and "AudioMoth" in metadata["artist"]:
@@ -183,7 +183,7 @@ class Audio:
                         )
 
                 ## Update metadata ##
-                metadata["channels"] = 1
+                metadata["channels"] = 1  # we sum to mono when we load with librosa
 
             except Exception as e:
                 warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
@@ -451,10 +451,13 @@ class Audio:
 
         return fft, frequencies
 
-    def save(self, path, write_metadata=True):
+    def save(self, path, write_metadata=True, subtype=None, suppress_warnings=False):
         """Save Audio to file
 
-        NOTE: currently, only saving to .wav format supported
+        supports all file formats supported by underlying package soundfile,
+        including WAV, MP3, and others
+
+        NOTE: saving metadata is only supported for WAV and AIFF formats
 
         Supports writing the following metadata fields:
         ["title","copyright","software","artist","comment","date",
@@ -465,32 +468,39 @@ class Audio:
             write_metadata: if True, uses soundfile.SoundFile to
                 add metadata to the file after writing it. If False,
                 written file will not contain metadata.
+            subtype: soundfile audio format choice, see soundfile.write
+                or list options with soundfile.available_subtypes()
+            suppress_warnings: if True, will not warn user when unable to
+                save metadata [default: False]
         """
-        if not str(path).split(".")[-1] in ["wav", "WAV"]:
-            raise TypeError(
-                "Only wav file is currently supported by .save()."
-                " File extension must be .wav or .WAV. "
-            )
+        from pathlib import Path
+
+        fmt = Path(path).suffix.upper()
 
         soundfile.write(path, self.samples, self.sample_rate)
 
         if write_metadata and self.metadata is not None:
-            with soundfile.SoundFile(path, "r+") as s:
-                # must use r+ mode to update the file without overwriting everything
-                for field in [
-                    "title",
-                    "copyright",
-                    "software",
-                    "artist",
-                    "comment",
-                    "date",
-                    "album",
-                    "license",
-                    "tracknumber",
-                    "genre",
-                ]:
-                    if field in self.metadata and self.metadata[field] is not None:
-                        s.__setattr__(field, self.metadata[field])
+            if not fmt in ["WAV", "AIFF"] and not suppress_warnings:
+                warnings.warn(
+                    "Saving metadata is only supported for WAV and AIFF formats"
+                )
+            else:
+                with soundfile.SoundFile(path, "r+") as s:
+                    # must use r+ mode to update the file without overwriting everything
+                    for field in [
+                        "title",
+                        "copyright",
+                        "software",
+                        "artist",
+                        "comment",
+                        "date",
+                        "album",
+                        "license",
+                        "tracknumber",
+                        "genre",
+                    ]:
+                        if field in self.metadata and self.metadata[field] is not None:
+                            s.__setattr__(field, self.metadata[field])
 
     def duration(self):
         """Return duration of Audio
@@ -641,3 +651,15 @@ def load_channels_as_audio(
     ]
 
     return audio_objects
+
+
+def _load_metadata(file):
+    """use soundfile to load metadata from WAV or AIFF file"""
+    with soundfile.SoundFile(path, "r") as f:
+        metadata = f.copy_metadata()
+        metadata["samplerate"] = f.samplerate
+        metadata["format"] = f.format
+        metadata["frames"] = f.frames
+        metadata["sections"] = f.sections
+        metadata["subtype"] = f.subtype
+        return metadata
