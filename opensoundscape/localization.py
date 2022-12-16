@@ -71,6 +71,76 @@ def travel_time(source, receiver, speed_of_sound):
 from deprecated import deprecated
 
 
+def localize_gillette(
+    receiver_positions, arrival_times, reference_receiver=0, temperature=20.0
+):
+    """
+    Uses the Gillette and Silverman (2008) localization algorithm to localize a sound event from a set of TDOAs.
+    Args:
+        receiver_positions: a list of [x,y,z] positions for each receiver
+          Positions should be in meters, e.g., the UTM coordinate system.
+
+        arrival_times: a list of TDOA times (onset times) for each recorder
+          The times should be in seconds.
+
+        reference_receiver: the index of the reference receiver (the receiver that has a TDOA of 0)
+            default is 0 (the first receiver)
+        temperature: ambient temperature in Celsius
+
+    Returns:
+        coords: a tuple of (x,y,z) coordinates of the sound source
+        distance_to_reference_mic: the (distance to reference mic
+        The solution (x,y,z,b) with the lower sum of squares discrepancy
+        b is the error in the pseudorange (distance to mics), b=c*delta_t (delta_t is time error)
+    """
+
+    # check that these delays are with reference to one receiver (the reference receiver). If not, raise an error
+    if np.min(arrival_times) != 0:
+        raise ValueError(
+            "Arrival times must be relative to a reference reciever of the arrival times must be zero (the reference receiver)."
+        )
+
+    # make sure our inputs follow consistent format
+    receiver_positions = np.array(receiver_positions).astype("float64")
+    arrival_times = np.array(arrival_times).astype("float64")
+
+    # The number of dimensions in which to perform localization
+    dim = receiver_positions.shape[1]
+
+    # Calculate speed of sound
+    speed_of_sound = calc_speed_of_sound(temperature)
+
+    # find which is the reference receiver and reorder, so reference receiver is first
+    ref_receiver = np.argmin(arrival_times)
+    ordered_receivers = np.roll(receiver_positions, -ref_receiver, axis=0)
+    ordered_tdoas = np.roll(arrival_times, -ref_receiver, axis=0)
+
+    # Gillette silverman solves Ax = w, where x is the solution vector, A is a matrix, and w is a vector
+    # Matrix A according to Gillette and Silverman (2008)
+    A = np.zeros((len(ordered_tdoas) - 1, dim + 1))
+    for column in range(dim + 1):
+        if column < dim:
+            A[:, column] = ordered_receivers[0, column] - ordered_receivers[1:, column]
+        elif column == dim:
+            A[:, column] = ordered_tdoas[1:] * speed_of_sound
+
+    # Vector w according to Gillette and Silverman (2008)
+    # w = 1/2 (dm0^2 - xm^2 - ym^2 - zm^2 + x0^2 + y0^2 + z0^2)
+    X02 = np.sum(ordered_receivers[0] ** 2)  # x0^2 + y0^2 + z0^2
+    dmx = ordered_tdoas[1:] * speed_of_sound
+    XM2 = np.sum(ordered_receivers**2, axis=1)[1:]
+
+    vec_w = 0.5 * (dmx + X02 - XM2)
+
+    answer = np.linalg.lstsq(A, vec_w.T, rcond=None)
+    coords = answer[0][:dim]
+    pseudorange = answer[0][dim]
+
+    residuals = answer[1]
+
+    return coords, pseudorange, residuals
+
+
 @deprecated(
     version="0.6.2",
     reason="This function is not fully implemented and will be replaced in version 0.8.0",
