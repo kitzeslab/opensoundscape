@@ -480,7 +480,7 @@ class Audio:
         soundfile.write(path, self.samples, self.sample_rate)
 
         if write_metadata and self.metadata is not None:
-            if not fmt in ["WAV", "AIFF"] and not suppress_warnings:
+            if not fmt in [".WAV", ".AIFF"] and not suppress_warnings:
                 warnings.warn(
                     "Saving metadata is only supported for WAV and AIFF formats"
                 )
@@ -653,7 +653,7 @@ def load_channels_as_audio(
     return audio_objects
 
 
-def _load_metadata(file):
+def _load_metadata(path):
     """use soundfile to load metadata from WAV or AIFF file"""
     with soundfile.SoundFile(path, "r") as f:
         metadata = f.copy_metadata()
