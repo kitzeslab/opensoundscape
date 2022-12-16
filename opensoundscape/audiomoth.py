@@ -94,7 +94,7 @@ def parse_audiomoth_metadata(metadata):
         metadata["gain_setting"] = comment.split(" gain")[0].split(" ")[-1]
 
     metadata["battery_state"] = _parse_audiomoth_battery_info(comment)
-    metadata["audiomoth_id"] = metadata["artist"].split(" ")[1]
+    metadata["device_id"] = metadata["artist"]
     if "temperature" in comment:
         metadata["temperature_C"] = float(
             comment.split("temperature was ")[1].split("C")[0]
