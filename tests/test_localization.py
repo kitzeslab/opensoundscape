@@ -119,3 +119,34 @@ def test_localize_nopseudo():
     assert close(
         np.linalg.norm(np.array(estimate[0:3]) - np.array([10, 10, 0])), 0, 0.1
     )
+
+
+def test_gillette_localize_2d():
+    np.random.seed(0)
+    receiver_positions = np.array([[0, 0], [0, 20], [20, 20], [20, 0], [10, 10]])
+    sound_source = np.random.rand(2) * 20
+    speed_of_sound = 343
+    time_of_flight = (
+        np.linalg.norm(receiver_positions - sound_source, axis=1) / speed_of_sound
+    )
+    tdoas = time_of_flight - np.min(time_of_flight)
+
+    estimated_pos, _, _ = localization.localize_gillette(receiver_positions, tdoas)
+
+    assert np.allclose(estimated_pos[0:2], sound_source, rtol=0.1)
+
+
+def test_gillette_localize_3d():
+    receiver_positions = np.array(
+        [[0, 0, 10], [0, 20, 1], [20, 20, -1], [20, 0, 0.1], [10, 10, 0], [5, 5, 5]]
+    )
+    sound_source = np.array([10, 12, 2])
+    speed_of_sound = 343
+    time_of_flight = (
+        np.linalg.norm(receiver_positions - sound_source, axis=1) / speed_of_sound
+    )
+    tdoas = time_of_flight - np.min(time_of_flight)
+
+    estimated_pos, _, _ = localization.localize_gillette(receiver_positions, tdoas)
+
+    assert np.allclose(estimated_pos[0:3], sound_source, atol=2)
