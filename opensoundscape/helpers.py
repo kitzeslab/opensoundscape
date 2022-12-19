@@ -151,6 +151,36 @@ def jitter(x, width, distribution="gaussian"):
     )
 
 
+def _load_metadata(path, raise_exceptions=False):
+    """use soundfile to load metadata from WAV or AIFF file
+
+    Args:
+        path: file path to WAV of AIFF file
+        raise_exceptions: if True, raises exception,
+            if False returns None if exception occurs
+            [default: False]
+
+    Returns:
+        dictionary containing audio file metadata
+    """
+    import soundfile
+
+    try:
+        with soundfile.SoundFile(path, "r") as f:
+            metadata = f.copy_metadata()
+            metadata["samplerate"] = f.samplerate
+            metadata["format"] = f.format
+            metadata["frames"] = f.frames
+            metadata["sections"] = f.sections
+            metadata["subtype"] = f.subtype
+            return metadata
+    except:
+        if raise_exceptions:
+            raise
+        else:
+            return None
+
+
 def generate_clip_times_df(
     full_duration, clip_duration, clip_overlap=0, final_clip=None
 ):

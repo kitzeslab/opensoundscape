@@ -23,9 +23,8 @@ import librosa
 import soundfile
 import numpy as np
 import warnings
-from opensoundscape.helpers import generate_clip_times_df
+from opensoundscape.helpers import generate_clip_times_df, _load_metadata
 from opensoundscape.audiomoth import parse_audiomoth_metadata
-from tinytag import TinyTag
 from datetime import timedelta, datetime
 
 
@@ -651,15 +650,3 @@ def load_channels_as_audio(
     ]
 
     return audio_objects
-
-
-def _load_metadata(path):
-    """use soundfile to load metadata from WAV or AIFF file"""
-    with soundfile.SoundFile(path, "r") as f:
-        metadata = f.copy_metadata()
-        metadata["samplerate"] = f.samplerate
-        metadata["format"] = f.format
-        metadata["frames"] = f.frames
-        metadata["sections"] = f.sections
-        metadata["subtype"] = f.subtype
-        return metadata
