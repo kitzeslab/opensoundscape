@@ -140,7 +140,7 @@ RIBBIT
 Signal Processing
 ^^^^^^^^^^^^^^^^^
 
-.. automodule:: opensoundscape.signal
+.. automodule:: opensoundscape.signal_processing
  :members:
 
 
