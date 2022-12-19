@@ -810,6 +810,11 @@ class CNN(BaseModule):
         Note: if no return type is selected for `binary_preds`, returns None
         instead of a DataFrame for `predictions`
         """
+        assert type(samples) in (list, np.ndarray, pd.DataFrame), (
+            "`samples` must be either: "
+            "(a) list or np.array of files, or DataFrame with (b) file as Index or "
+            "(c) (file,start_time,end_time) as MultiIndex"
+        )
         if binary_preds == "multi_target":
             assert threshold is not None, (
                 "Must specify a threshold when" " generating multi_target predictions"
@@ -817,9 +822,9 @@ class CNN(BaseModule):
 
         # set up prediction Dataset:
         # Three possibilities: (1) user provided multi-index df with file,start_time,end_time of clips
-        # (2) user provided clip list and wants clips to be split out automatically
+        # (2) user provided file list and wants clips to be split out automatically
         # (3) split_files_into_clips=False -> one sample & one prediction per file provided
-        if type(samples.index) == tuple:
+        if type(samples) == pd.DataFrame and type(samples.index) == tuple:
             # if the dataframe has a multi-index, it should be (file,start_time,end_time)
             assert (
                 len(samples.name) == 3
@@ -832,7 +837,7 @@ class CNN(BaseModule):
                 overlap_fraction=overlap_fraction,
                 final_clip=final_clip,
             )
-        elif split_files_into_clips:  # TODO: make sure its not already a multi-index df
+        elif split_files_into_clips:
             prediction_dataset = AudioSplittingDataset(
                 samples=samples,
                 preprocessor=self.preprocessor,
