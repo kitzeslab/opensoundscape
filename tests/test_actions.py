@@ -49,19 +49,19 @@ def img():
 
 def test_audio_clip_loader_file(short_wav_path):
     action = actions.AudioClipLoader()
-    audio = action.go(short_wav_path, _start_time=None, _sample_duration=None)
+    audio = action.go(short_wav_path, _start_time=None, _end_time=None)
     assert audio.sample_rate == 44100
 
 
 def test_audio_clip_loader_resample(short_wav_path):
     action = actions.AudioClipLoader(sample_rate=32000)
-    audio = action.go(short_wav_path, _start_time=None, _sample_duration=None)
+    audio = action.go(short_wav_path, _start_time=None, _end_time=None)
     assert audio.sample_rate == 32000
 
 
 def test_audio_clip_loader_clip(audio_10s_path):
     action = actions.AudioClipLoader()
-    audio = action.go(audio_10s_path, _start_time=0, _sample_duration=2)
+    audio = action.go(audio_10s_path, _start_time=0, _end_time=2)
     assert isclose(audio.duration(), 2, abs_tol=1e-4)
 
 
