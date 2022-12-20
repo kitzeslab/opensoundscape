@@ -173,7 +173,7 @@ class Audio:
                 metadata = TinyTag.get(path).as_dict()
                 # if this is an AudioMoth file, try to parse out additional
                 # metadata from the comment field
-                if metadata["artist"] and "AudioMoth" in metadata["artist"]:
+                if "artist" in metadata and "AudioMoth" in metadata["artist"]:
                     try:
                         metadata = parse_audiomoth_metadata(metadata)
                     except Exception as e:
