@@ -174,8 +174,6 @@ def test_retain_metadata(metadata_wav_str, new_metadata_wav_str):
     new_a = Audio.from_file(new_metadata_wav_str)
 
     # file size may differ slightly, other fields should be the same
-    new_a.metadata["filesize"] = None
-    a.metadata["filesize"] = None
     assert new_a.metadata == a.metadata
 
 
@@ -327,9 +325,15 @@ def test_save(silence_10s_mp3_str, saved_wav):
     assert saved_wav.exists()
 
 
-def test_save_extension_error(silence_10s_mp3_str, saved_mp3):
-    with pytest.raises(TypeError):
+def test_save_mp3(silence_10s_mp3_str, saved_mp3):
+    try:
         Audio.from_file(silence_10s_mp3_str).save(saved_mp3)
+        assert saved_mp3.exists()
+        Audio.from_file(saved_mp3)  # make sure we can still load it as audio
+    except NotImplementedError:
+        # only supported by libsndfile>=1.1.0, which is not available yet
+        # on ubuntu as of Dec 2022. So, we just give the user a helpful error.
+        pass
 
 
 def test_audio_constructor_should_fail_on_file(veryshort_wav_str):

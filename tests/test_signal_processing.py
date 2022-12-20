@@ -2,7 +2,7 @@
 from opensoundscape.audio import Audio
 import pytest
 import numpy as np
-from opensoundscape import signal as sig
+from opensoundscape import signal_processing as sp
 
 
 @pytest.fixture()
@@ -28,12 +28,12 @@ def test_frequency2scale():
     sr = 44100
     wavelet = "morl"
     f_hz = pywt.scale2frequency(wavelet, scale) * sr
-    assert sig.frequency2scale(f_hz, wavelet, sr) == scale
+    assert sp.frequency2scale(f_hz, wavelet, sr) == scale
 
 
 def test_cwt_peaks(gpt_wav_str):
     a = Audio.from_file(gpt_wav_str, sample_rate=44100).trim(5, 10)
-    t, _ = sig.cwt_peaks(a, center_frequency=2500, peak_separation=0.05)
+    t, _ = sp.cwt_peaks(a, center_frequency=2500, peak_separation=0.05)
     assert len(t) == 42
 
 
@@ -83,7 +83,7 @@ def test_find_accel_sequences():
             13.94058086,
         ]
     )
-    seq_y, seq_t = sig.find_accel_sequences(
+    seq_y, seq_t = sp.find_accel_sequences(
         t,
         dt_range=[0.05, 0.8],
         dy_range=[-0.2, 0],
@@ -102,7 +102,7 @@ def test_detect_peak_sequence_cwt(rugr_wav_str):
     the same detection.
     """
     rugr_audio = Audio.from_file(rugr_wav_str)
-    detections = sig.detect_peak_sequence_cwt(
+    detections = sp.detect_peak_sequence_cwt(
         rugr_audio,
         sr=400,
         window_len=10,
@@ -127,7 +127,7 @@ def test_detect_peak_sequence_cwt_no_results(rugr_wav_str):
     is shorter than window_length
     """
     rugr_audio = Audio.from_file(rugr_wav_str).trim(0, 1)
-    detections = sig.detect_peak_sequence_cwt(
+    detections = sp.detect_peak_sequence_cwt(
         rugr_audio,
         sr=400,
         window_len=10,
@@ -153,7 +153,7 @@ def test_detect_peak_sequence_cwt_uneven_length_results(rugr_wav_str):
     detected sequences caused a TypeError
     """
     rugr_audio = Audio.from_file(rugr_wav_str).trim(1, 8).loop(length=20)
-    detections = sig.detect_peak_sequence_cwt(
+    detections = sp.detect_peak_sequence_cwt(
         rugr_audio,
         sr=400,
         window_len=3,
@@ -173,39 +173,39 @@ def test_detect_peak_sequence_cwt_uneven_length_results(rugr_wav_str):
 
 
 def test_get_ones_sequence():
-    starts, lengths = sig._get_ones_sequences(np.array([1, 1, 1, 0, 1, 1, 0, 1]))
+    starts, lengths = sp._get_ones_sequences(np.array([1, 1, 1, 0, 1, 1, 0, 1]))
     assert starts == [0, 4, 7]
     assert lengths == [3, 2, 1]
     print(starts, lengths)
 
 
 def test_thresholded_event_durations():
-    starts, lengths = sig.thresholded_event_durations(
+    starts, lengths = sp.thresholded_event_durations(
         np.array([1, 1, 1, 0, 1, 1, 0, 1]), threshold=0
     )
     assert np.array_equal(starts, np.array([0]))
     assert np.array_equal(lengths, np.array([8]))
-    starts, lengths = sig.thresholded_event_durations(
+    starts, lengths = sp.thresholded_event_durations(
         np.array([1, 1, 1, 0, 1, 1, 0, 1]), threshold=np.array(10)
     )
     assert np.array_equal(starts, np.array([]))
     assert np.array_equal(lengths, np.array([]))
-    starts, lengths = sig.thresholded_event_durations(
+    starts, lengths = sp.thresholded_event_durations(
         np.array([-1, -1, -1, 0, 1, -1, 0, 1]), threshold=-0.1
     )
     assert np.array_equal(starts, np.array([3, 6]))
     assert np.array_equal(lengths, np.array([2, 2]))
-    starts, lengths = sig.thresholded_event_durations(
+    starts, lengths = sp.thresholded_event_durations(
         np.array([]), threshold=np.array(0.99)
     )
     assert np.array_equal(starts, np.array([]))
     assert np.array_equal(lengths, np.array([]))
-    starts, lengths = sig.thresholded_event_durations(
+    starts, lengths = sp.thresholded_event_durations(
         np.array([0, 0, 0]), threshold=np.nan
     )
     assert np.array_equal(starts, np.array([]))
     assert np.array_equal(lengths, np.array([]))
-    starts, lengths = sig.thresholded_event_durations(
+    starts, lengths = sp.thresholded_event_durations(
         np.array([0, np.nan, 0]), threshold=-1
     )
     assert np.array_equal(starts, np.array([0, 2]))
