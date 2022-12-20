@@ -54,27 +54,37 @@ def freeze_params(model):
         param.requires_grad = False
 
 
-def modify_resnet(model, num_classes, num_channels):
+def modify_resnet(architecture, num_classes, num_channels):
     """modify input and output shape of a resnet architecture
-
-    If num_channels != 3, averages the conv1 weights across all channels.
+    Args:
+        architecture:
+            a torchvision.models.resnet architecture
+        num_classes:
+            number of output classes
+        num_channels:
+            number of channels in input data
+            If num_channels != 3, averages the conv1 weights across all channels.
+    Returns:
+        architecture with modified input and output shape
     """
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, num_classes)
+    num_ftrs = architecture.fc.in_features
+    architecture.fc = nn.Linear(num_ftrs, num_classes)
     if num_channels != 3:
         # modify the input layer to accept custom # channels other than 3
         # first make a copy of the weights from original model
         avg_conv1_weights = torch.repeat_interleave(
-            torch.unsqueeze(torch.mean(model.conv1.weight, 1), 1), num_channels, 1
+            torch.unsqueeze(torch.mean(architecture.conv1.weight, 1), 1),
+            num_channels,
+            1,
         )
         # change the shape of the first convolution to accept n channels
-        model.conv1 = nn.Conv2d(
+        architecture.conv1 = nn.Conv2d(
             num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
         )
         # reapply the average weights of the original architecture's conv1
-        model.conv1.weight = torch.nn.Parameter(avg_conv1_weights)
+        architecture.conv1.weight = torch.nn.Parameter(avg_conv1_weights)
 
-    return model
+    return architecture
 
 
 @register_arch
@@ -97,11 +107,11 @@ def resnet18(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet18(pretrained=use_pretrained)
+    architecture_ft = models.resnet18(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        freeze_params(model_ft)
-    model_ft = modify_resnet(model_ft, num_classes, num_channels)
-    return model_ft
+        freeze_params(architecture_ft)
+    architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+    return architecture_ft
 
 
 @register_arch
@@ -124,11 +134,11 @@ def resnet34(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet34(pretrained=use_pretrained)
+    architecture_ft = models.resnet34(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        freeze_params(model_ft)
-    model_ft = modify_resnet(model_ft, num_classes, num_channels)
-    return model_ft
+        freeze_params(architecture_ft)
+    architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+    return architecture_ft
 
 
 @register_arch
@@ -151,11 +161,11 @@ def resnet50(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet50(pretrained=use_pretrained)
+    architecture_ft = models.resnet50(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        freeze_params(model_ft)
-    model_ft = modify_resnet(model_ft, num_classes, num_channels)
-    return model_ft
+        freeze_params(architecture_ft)
+    architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+    return architecture_ft
 
 
 @register_arch
@@ -178,11 +188,11 @@ def resnet101(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet101(pretrained=use_pretrained)
+    architecture_ft = models.resnet101(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        freeze_params(model_ft)
-    model_ft = modify_resnet(model_ft, num_classes, num_channels)
-    return model_ft
+        freeze_params(architecture_ft)
+    architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+    return architecture_ft
 
 
 @register_arch
@@ -205,11 +215,11 @@ def resnet152(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet152(pretrained=use_pretrained)
+    architecture_ft = models.resnet152(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        freeze_params(model_ft)
-    model_ft = modify_resnet(model_ft, num_classes, num_channels)
-    return model_ft
+        freeze_params(architecture_ft)
+    architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+    return architecture_ft
 
 
 @register_arch
@@ -232,18 +242,18 @@ def alexnet(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.alexnet(pretrained=use_pretrained)
+    architecture_ft = models.alexnet(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        freeze_params(model_ft)
+        freeze_params(architecture_ft)
     # change output shape
-    num_ftrs = model_ft.classifier[6].in_features
-    model_ft.classifier[6] = nn.Linear(num_ftrs, num_classes)
+    num_ftrs = architecture_ft.classifier[6].in_features
+    architecture_ft.classifier[6] = nn.Linear(num_ftrs, num_classes)
     # change input shape num_channels
     if num_channels != 3:
-        model_ft.features[0] = nn.Conv2d(
+        architecture_ft.features[0] = nn.Conv2d(
             num_channels, 64, kernel_size=11, stride=4, padding=2
         )
-    return model_ft
+    return architecture_ft
 
 
 @register_arch
@@ -269,12 +279,12 @@ def vgg11_bn(
         raise NotImplementedError(
             "num_channels!=3 is not implemented for this architecture"
         )
-    model_ft = models.vgg11_bn(pretrained=use_pretrained)
+    architecture_ft = models.vgg11_bn(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        freeze_params(model_ft)
-    num_ftrs = model_ft.classifier[6].in_features
-    model_ft.classifier[6] = nn.Linear(num_ftrs, num_classes)
-    return model_ft
+        freeze_params(architecture_ft)
+    num_ftrs = architecture_ft.classifier[6].in_features
+    architecture_ft.classifier[6] = nn.Linear(num_ftrs, num_classes)
+    return architecture_ft
 
 
 @register_arch
@@ -297,17 +307,19 @@ def squeezenet1_0(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.squeezenet1_0(pretrained=use_pretrained)
+    architecture_ft = models.squeezenet1_0(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        freeze_params(model_ft)
-    model_ft.classifier[1] = nn.Conv2d(
+        freeze_params(architecture_ft)
+    architecture_ft.classifier[1] = nn.Conv2d(
         512, num_classes, kernel_size=(1, 1), stride=(1, 1)
     )
-    model_ft.num_classes = num_classes
+    architecture_ft.num_classes = num_classes
     # change input shape num_channels
     if num_channels != 3:
-        model_ft.features[0] = nn.Conv2d(num_channels, 96, kernel_size=7, stride=2)
-    return model_ft
+        architecture_ft.features[0] = nn.Conv2d(
+            num_channels, 96, kernel_size=7, stride=2
+        )
+    return architecture_ft
 
 
 @register_arch
@@ -331,17 +343,17 @@ def densenet121(
             specify channels in input sample, eg [channels h,w] sample shape
 
     """
-    model_ft = models.densenet121(pretrained=use_pretrained)
+    architecture_ft = models.densenet121(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        freeze_params(model_ft)
-    num_ftrs = model_ft.classifier.in_features
-    model_ft.classifier = nn.Linear(num_ftrs, num_classes)
+        freeze_params(architecture_ft)
+    num_ftrs = architecture_ft.classifier.in_features
+    architecture_ft.classifier = nn.Linear(num_ftrs, num_classes)
     # change input shape num_channels
     if num_channels != 3:
-        model_ft.features[0] = nn.Conv2d(
+        architecture_ft.features[0] = nn.Conv2d(
             num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
         )
-    return model_ft
+    return architecture_ft
 
 
 @register_arch
@@ -367,17 +379,19 @@ def inception_v3(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.inception_v3(pretrained=use_pretrained)
+    architecture_ft = models.inception_v3(pretrained=use_pretrained)
     if freeze_feature_extractor:
-        freeze_params(model_ft)
+        freeze_params(architecture_ft)
     # Handle the auxilary net
-    num_ftrs = model_ft.AuxLogits.fc.in_features
-    model_ft.AuxLogits.fc = nn.Linear(num_ftrs, num_classes)
+    num_ftrs = architecture_ft.AuxLogits.fc.in_features
+    architecture_ft.AuxLogits.fc = nn.Linear(num_ftrs, num_classes)
     # Handle the primary net
-    num_ftrs = model_ft.fc.in_features
-    model_ft.fc = nn.Linear(num_ftrs, num_classes)
+    num_ftrs = architecture_ft.fc.in_features
+    architecture_ft.fc = nn.Linear(num_ftrs, num_classes)
     if num_channels != 3:
         from torchvision.models.inception import BasicConv2d
 
-        model_ft.Conv2d_1a_3x3 = BasicConv2d(num_channels, 32, kernel_size=3, stride=2)
-    return model_ft
+        architecture_ft.Conv2d_1a_3x3 = BasicConv2d(
+            num_channels, 32, kernel_size=3, stride=2
+        )
+    return architecture_ft

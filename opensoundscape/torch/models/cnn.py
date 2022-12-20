@@ -849,7 +849,7 @@ def separate_resnet_feat_clf(model):
     Args:
         model: an opso model object with a pytorch resnet architecture
 
-    Returs:
+    Returns:
         model with modified .optimizer_params and ._init_optimizer() method
 
     Effects:
