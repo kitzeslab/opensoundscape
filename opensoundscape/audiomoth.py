@@ -109,7 +109,6 @@ def parse_audiomoth_metadata_from_path(file_path):
     if metadata is None:
         raise ValueError(f"{file_path} does not contain metadata")
     else:
-        metadata = metadata.as_dict()
         artist = metadata["artist"]
         if not artist or (not "AudioMoth" in artist):
             raise ValueError(
