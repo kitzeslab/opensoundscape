@@ -129,6 +129,9 @@ class AudioClipLoader(Action):
 
     Loads an audio file or part of a file to an Audio object.
     Will load entire audio file if _start_time and _end_time are None.
+    If _start_time and _end_time are provided, loads the audio only in the
+    specified interval.
+
     see Audio.from_file() for documentation.
 
     Args:
@@ -137,16 +140,14 @@ class AudioClipLoader(Action):
 
     def __init__(self, **kwargs):
         super(AudioClipLoader, self).__init__(
-            Audio.from_file, extra_args=["_start_time", "_sample_duration"], **kwargs
+            Audio.from_file, extra_args=["_start_time", "_end_time"], **kwargs
         )
-        # two params are replaced by "_start_time" and "_sample_duration"
+        # two params are replaced by "_start_time" and "_end_time"
         self.params = self.params.drop(["offset", "duration"])
 
-    def go(self, path, _start_time, _sample_duration, **kwargs):
+    def go(self, path, _start_time, _end_time, **kwargs):
         offset = 0 if _start_time is None else _start_time
-        # only trim to _sample_duration if _start_time is provided
-        # ie, we are loading clips from a long audio file
-        duration = None if _start_time is None else _sample_duration
+        duration = None if _end_time is None else _end_time - _start_time
         return self.action_fn(
             path, offset=offset, duration=duration, **dict(self.params, **kwargs)
         )

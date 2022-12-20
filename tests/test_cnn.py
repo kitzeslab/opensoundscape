@@ -4,6 +4,7 @@ from opensoundscape.torch.loss import ResampleLoss
 from opensoundscape.torch.models import cnn
 
 from opensoundscape.torch.architectures.cnn_architectures import alexnet, resnet18
+from opensoundscape.helpers import make_clip_df
 import pandas as pd
 from pathlib import Path
 
@@ -124,6 +125,20 @@ def test_single_target_prediction(test_df):
     assert len(preds) == 2
 
 
+def test_predict_on_list_of_files(test_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    scores, preds, _ = model.predict(test_df.index.values)
+    assert len(scores) == 2
+
+
+def test_predict_on_clip_df(test_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=1.0)
+    clip_df, _ = make_clip_df(test_df.index.values[0:1], clip_duration=1.0)
+    clip_df = clip_df.reset_index().set_index(["file", "start_time", "end_time"])
+    scores, _, _ = model.predict(clip_df)
+    assert len(scores) == 10
+
+
 def test_prediction_overlap(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     model.single_target = True
@@ -194,6 +209,29 @@ def test_train_predict_architecture(train_df):
     )
     model.predict(train_df, num_workers=0)
     shutil.rmtree("tests/models/")
+
+
+def test_train_on_clip_df(train_df):
+    """
+    test training a model when Audio files are long/unsplit
+    and a dataframe provides clip-level labels. Training
+    should internally load a relevant clip from the audio
+    file and get its labels from the dataframe
+    """
+    model = cnn.CNN("resnet18", [0, 1], sample_duration=2)
+    train_df, _ = make_clip_df(train_df.index.values, clip_duration=2)
+    train_df = train_df.reset_index().set_index(["file", "start_time", "end_time"])
+    train_df[0] = np.random.choice([0, 1], size=10)
+    train_df[1] = np.random.choice([0, 1], size=10)
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models/",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
 
 
 def test_predict_without_splitting(test_df):

@@ -2,13 +2,14 @@
 
 For tutorials, see notebooks on opensoundscape.org
 """
-
+import copy
 import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
 import warnings
-
+import wandb
+from pandas.core.indexes.multi import MultiIndex
 
 import torch
 import torch.optim as optim
@@ -79,6 +80,8 @@ class CNN(BaseModule):
         self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
+        # number of samples to preprocess and log to wandb during train/predict
+        self.n_preview_samples = 8
 
         ### architecture ###
         # can be a pytorch CNN such as Resnet18 or a custom object
@@ -91,6 +94,7 @@ class CNN(BaseModule):
                 f"architecture must be a pytorch model object or string matching "
                 f"one of cnn_architectures.list_architectures() options. Got {architecture}"
             )
+            self.architecture_name = architecture
             architecture = cnn_architectures.ARCH_DICT[architecture](
                 len(classes), num_channels=num_channels
             )
@@ -100,9 +104,10 @@ class CNN(BaseModule):
             ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
             if num_channels != 3:
                 warnings.warn(
-                    f"Make sure your architecture expects the number of channels in your input sampels ({num_channels}). "
+                    f"Make sure your architecture expects the number of channels in your input samples ({num_channels}). "
                     "Pytorch architectures expect 3 channels by default."
                 )
+            self.architecture_name = str(type(architecture))
         self.network = architecture
 
         ### network device ###
@@ -269,8 +274,17 @@ class CNN(BaseModule):
             last_epoch=self.current_epoch - 1,
         )
 
-    def _train_epoch(self, train_loader):
-        """perform forward pass, loss, backpropagation for one epoch
+    def _train_epoch(self, train_loader, wandb_session=None):
+        """perform forward pass, loss, and backpropagation for one epoch
+
+        If wandb_session is passed, logs progress to wandb run
+
+        Args:
+            train_loader: DataLoader object to create samples
+            wandb_session: a wandb session to log to
+                - pass the value returned by wandb.init() to progress log to a
+                Weights and Biases run
+                - if None, does not log to wandb
 
         Returns: (targets, predictions, scores) on training files
         """
@@ -353,12 +367,45 @@ class CNN(BaseModule):
         # save the loss averaged over all batches
         self.loss_hist[self.current_epoch] = np.mean(batch_loss)
 
+        if wandb_session is not None:
+            wandb_session.log({"loss": np.mean(batch_loss)})
+
         # return targets, preds, scores
         total_tgts = np.concatenate(total_tgts, axis=0)
         total_preds = np.concatenate(total_preds, axis=0)
         total_scores = np.concatenate(total_scores, axis=0)
 
         return total_tgts, total_preds, total_scores
+
+    def _generate_wandb_config(self):
+        # create a dictinoary of parameters to save for this run
+        wandb_config = dict(
+            architecture=self.architecture_name,
+            sample_duration=self.preprocessor.sample_duration,
+            cuda_device_count=torch.cuda.device_count(),
+            mps_available=torch.backends.mps.is_available(),
+            classes=self.classes,
+            single_target=self.single_target,
+            opensoundscape_version=self.opensoundscape_version,
+        )
+        if "weight_decay" in self.optimizer_params:
+            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
+        else:
+            wandb_config["l2_regularization"] = "n/a"
+
+        if "lr" in self.optimizer_params:
+            wandb_config["learning_rate"] = self.optimizer_params["lr"]
+        else:
+            wandb_config["learning_rate"] = "n/a"
+
+        try:
+            wandb_config["sample_shape"] = self.preprocessor.pipeline.to_img.params[
+                "shape"
+            ] + [self.preprocessor.pipeline.to_img.params["channels"]]
+        except:
+            wandb_config["sample_shape"] = "n/a"
+
+        return wandb_config
 
     def train(
         self,
@@ -372,6 +419,7 @@ class CNN(BaseModule):
         log_interval=10,  # print metrics every n batches
         validation_interval=1,  # compute validation metrics every n epochs
         unsafe_samples_log="./unsafe_training_samples.log",
+        wandb_session=None,
     ):
         """train the model on samples from train_dataset
 
@@ -381,6 +429,7 @@ class CNN(BaseModule):
         Args:
             train_df:
                 a dataframe of files and labels for training the model
+                - either has index `file` or multi-index (file,start_time,end_time)
             validation_df:
                 a dataframe of files and labels for evaluating the model
                 [default: None means no validation is performed]
@@ -410,7 +459,19 @@ class CNN(BaseModule):
                 file path: log all samples that failed in preprocessing
                 (file written when training completes)
                 - if None,  does not write a file
-
+            wandb_session: a wandb session to log to
+                - pass the value returned by wandb.init() to progress log to a
+                Weights and Biases run
+                - if None, does not log to wandb
+                For example:
+                ```
+                import wandb
+                wandb.login(key=api_key) #find your api_key at https://wandb.ai/settings
+                session = wandb.init(enitity='mygroup',project='project1',name='first_run')
+                ...
+                model.train(...,wandb_session=session)
+                session.finish()
+                ```
         """
 
         ### Input Validation ###
@@ -434,13 +495,55 @@ class CNN(BaseModule):
         self.save_interval = save_interval
         self.save_path = save_path
 
-        ####################
-        # Set Up Loss, Opt #
-        ####################
-        self._set_train(train_df, batch_size, num_workers)
+        # Initialize Weights and Biases (wandb) logging ###
+        if wandb_session is not None:
 
+            # update the run config with information about the model
+            wandb_session.config.update(self._generate_wandb_config())
+
+            # update the run config with training parameters
+            wandb_session.config.update(
+                dict(
+                    epochs=epochs,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    lr_update_interval=self.lr_update_interval,
+                    lr_cooling_factor=self.lr_cooling_factor,
+                    optimizer_cls=self.optimizer_cls,
+                    model_save_path=Path(save_path).resolve(),
+                )
+            )
+
+            # log tables of preprocessed samples
+            wandb_session.log(
+                {
+                    "Samples / training samples with augmentation": opensoundscape.wandb.wandb_table(
+                        AudioFileDataset(
+                            train_df, self.preprocessor, bypass_augmentations=False
+                        ),
+                        self.n_preview_samples,
+                    ),
+                    "Samples / training samples without augmentation": opensoundscape.wandb.wandb_table(
+                        AudioFileDataset(
+                            train_df, self.preprocessor, bypass_augmentations=True
+                        ),
+                        self.n_preview_samples,
+                    ),
+                    "Samples / validation samples": opensoundscape.wandb.wandb_table(
+                        AudioFileDataset(
+                            validation_df, self.preprocessor, bypass_augmentations=True
+                        ),
+                        self.n_preview_samples,
+                    ),
+                }
+            )
+
+        ### Set Up Loss and Optimization ###
+        self._set_train(train_df, batch_size, num_workers)
         self.best_score = 0.0
         self.best_epoch = 0
+
+        ### Train ###
 
         for epoch in range(epochs):
             # 1 epoch = 1 view of each training file
@@ -449,13 +552,16 @@ class CNN(BaseModule):
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
             train_targets, train_preds, train_scores = self._train_epoch(
-                self.train_loader
+                self.train_loader,
+                wandb_session,
             )
 
             ### Evaluate ###
             train_score, self.train_metrics[self.current_epoch] = self.eval(
                 train_targets, train_scores
             )
+            if wandb_session is not None:
+                wandb_session.log({"training": self.train_metrics[self.current_epoch]})
 
             #### Validation ###
             if validation_df is not None:
@@ -479,6 +585,11 @@ class CNN(BaseModule):
             else:  # Evaluate model w/validation score unless no validation
                 score = train_score
 
+            if wandb_session is not None:
+                wandb_session.log(
+                    {"validation": self.valid_metrics[self.current_epoch]}
+                )
+
             ### Save ###
             if (
                 self.current_epoch + 1
@@ -494,6 +605,8 @@ class CNN(BaseModule):
                 self._log("Updating best model", level=2)
                 self.save(f"{self.save_path}/best.model")
 
+            if wandb_session is not None:
+                wandb_session.log({"epoch": epoch})
             self.current_epoch += 1
 
         ### Logging ###
@@ -502,14 +615,14 @@ class CNN(BaseModule):
             f"\nBest Model Appears at Epoch {self.best_epoch} with Validation score {self.best_score:.3f}."
         )
 
-        # warn the user if there were unsafe samples (failed to preprocess)
+        # warn the user if there were unsafe samples (samples that failed to preprocess)
         unsafe_samples = self.train_loader.dataset.report(log=unsafe_samples_log)
         self._log(
             f"{len(unsafe_samples)} of {len(train_df)} total training "
             f"samples failed to preprocess",
             level=2,
         )
-        self._log(f"List of unsafe sampels: {unsafe_samples}", level=3)
+        self._log(f"List of unsafe samples: {unsafe_samples}", level=3)
 
     def eval(self, targets, scores, logging_offset=0):
         """compute single-target or multi-target metrics from targets and scores
@@ -573,8 +686,6 @@ class CNN(BaseModule):
         return score, metrics_dict
 
     def save(self, path, save_datasets=False):
-        import copy
-
         """save model with weights using torch.save()
 
         load from saved file with torch.load(path) or cnn.load_model(path)
@@ -629,6 +740,7 @@ class CNN(BaseModule):
         final_clip=None,
         bypass_augmentations=True,
         unsafe_samples_log=None,
+        wandb_session=None,
     ):
         """Generate predictions on a dataset
 
@@ -643,6 +755,7 @@ class CNN(BaseModule):
             samples:
                 the files to generate predictions for. Can be:
                 - a dataframe with index containing audio paths, OR
+                - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
             batch_size:
                 Number of files to load simultaneously [default: 1]
@@ -671,6 +784,9 @@ class CNN(BaseModule):
                 Only relevant when binary_preds == 'multi_target'
                 If activation layer is sigmoid, choose value in [0,1]
                 If activation layer is None or softmax_and_logit, in [-inf,inf]
+            split_files_into_clips:
+                If True, internally splits and predicts on clips from longer audio files
+                Otherwise, assumes each row of `samples` corresponds to one complete sample
             overlap_fraction: fraction of overlap between consecutive clips when
                 predicting on clips of longer audio files. For instance, 0.5
                 gives 50% overlap between consecutive clips.
@@ -679,6 +795,10 @@ class CNN(BaseModule):
                 is_augmentation==True are performed. Default True.
             unsafe_samples_log: if not None, samples that failed to preprocess
                 will be listed in this text file.
+            wandb_session: a wandb session to log to
+                - pass the value returned by wandb.init() to progress log to a
+                Weights and Biases run
+                - if None, does not log to wandb
 
         Returns:
             scores: df of post-activation_layer scores
@@ -691,20 +811,32 @@ class CNN(BaseModule):
         Note: if no return type is selected for `binary_preds`, returns None
         instead of a DataFrame for `predictions`
         """
+        assert type(samples) in (list, np.ndarray, pd.DataFrame), (
+            "`samples` must be either: "
+            "(a) list or np.array of files, or DataFrame with (b) file as Index or "
+            "(c) (file,start_time,end_time) as MultiIndex"
+        )
         if binary_preds == "multi_target":
-            assert threshold is not None, (
-                "Must specify a threshold when" " generating multi_target predictions"
-            )
+            assert (
+                threshold is not None
+            ), "Must specify a threshold when generating multi_target predictions"
 
-        # set up prediction Dataset
-        if split_files_into_clips:
+        # set up prediction Dataset, considering three possible cases:
+        # (c1) user provided multi-index df with file,start_time,end_time of clips
+        # (c2) user provided file list and wants clips to be split out automatically
+        # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
+        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor, return_labels=False
+            )
+        elif split_files_into_clips:  # c2
             prediction_dataset = AudioSplittingDataset(
                 samples=samples,
                 preprocessor=self.preprocessor,
                 overlap_fraction=overlap_fraction,
                 final_clip=final_clip,
             )
-        else:
+        else:  # c3
             prediction_dataset = AudioFileDataset(
                 samples=samples, preprocessor=self.preprocessor, return_labels=False
             )
@@ -744,6 +876,31 @@ class CNN(BaseModule):
         # add any paths that failed to generate a clip df to _unsafe_samples
         dataloader.dataset._unsafe_samples += prediction_dataset.unsafe_samples
 
+        # Initialize Weights and Biases (wandb) logging
+        if wandb_session is not None:
+
+            # update the run config with information about the model
+            wandb_session.config.update(self._generate_wandb_config())
+
+            # update the run config with prediction parameters
+            wandb_session.config.update(
+                dict(
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    activation_layer=activation_layer,
+                )
+            )
+
+            # Log a table of preprocessed samples to wandb
+            wandb_session.log(
+                {
+                    "Samples / Preprocessed samples": opensoundscape.wandb.wandb_table(
+                        prediction_dataset,
+                        self.n_preview_samples,
+                    )
+                }
+            )
+
         ### Prediction/Inference ###
 
         # move network to device
@@ -757,7 +914,7 @@ class CNN(BaseModule):
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
 
-            for batch in dataloader:
+            for i, batch in enumerate(dataloader):
                 # get batch of Tensors
                 batch_tensors = batch["X"].to(self.device)
                 batch_tensors.requires_grad = False
@@ -777,6 +934,15 @@ class CNN(BaseModule):
                 total_scores.append(scores.detach().cpu().numpy())
                 total_preds.append(batch_preds.float().detach().cpu().numpy())
 
+                if wandb_session is not None:
+                    wandb_session.log(
+                        {
+                            "progress": i / len(dataloader),
+                            "completed_batches": i,
+                            "total_batches": len(dataloader),
+                        }
+                    )
+
         # aggregate across all batches
         total_scores = np.concatenate(total_scores, axis=0)
         total_preds = np.concatenate(total_preds, axis=0)
@@ -790,25 +956,20 @@ class CNN(BaseModule):
 
         # return 2 DataFrames with same index/columns as prediction_dataset's df
         # use None for placeholder if no preds
-        samples = prediction_dataset.label_df.index.values
-        score_df = pd.DataFrame(index=samples, data=total_scores, columns=self.classes)
-        if split_files_into_clips:  # return a multi-index
-            score_df.index = pd.MultiIndex.from_frame(
-                prediction_dataset.clip_times_df.reset_index()
-            )
+        df_index = prediction_dataset.label_df.index
+        score_df = pd.DataFrame(index=df_index, data=total_scores, columns=self.classes)
+
         # binary 0/1 predictions
         if binary_preds is None:
             pred_df = None
         else:
             pred_df = pd.DataFrame(
-                index=samples, data=total_preds, columns=self.classes
+                index=df_index, data=total_preds, columns=self.classes
             )
             if split_files_into_clips:  # return a multi-index
                 pred_df.index = pd.MultiIndex.from_frame(
-                    prediction_dataset.clip_times_df.reset_index()
+                    prediction_dataset.label_df[[]].reset_index()
                 )
-
-        print(dataloader.dataset._unsafe_samples)
 
         # warn the user if there were unsafe samples (failed to preprocess)
         # and log them to a file
@@ -950,7 +1111,7 @@ class InceptionV3(CNN):
         )
         self.name = "InceptionV3"
 
-    def _train_epoch(self, train_loader):
+    def _train_epoch(self, train_loader, wandb_session=None):
         """perform forward pass, loss, backpropagation for one epoch
 
         need to override parent because Inception returns different outputs
@@ -1035,6 +1196,12 @@ class InceptionV3(CNN):
                 # preds = batch_preds.int().detach().cpu().numpy()
                 scores = logits.int().detach().cpu().numpy()
                 self.eval(tgts, scores, logging_offset=-1)
+
+            if wandb_session is not None:
+                wandb_session.log({"batch": batch_idx})
+                wandb_session.log(
+                    {"epoch_progress": self.current_epoch + batch_idx / N}
+                )
 
         # update learning parameters each epoch
         self.scheduler.step()

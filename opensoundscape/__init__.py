@@ -15,3 +15,4 @@ from . import taxa
 from . import torch
 from . import preprocess
 from . import resources
+from . import wandb
