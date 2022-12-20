@@ -817,40 +817,26 @@ class CNN(BaseModule):
             "(c) (file,start_time,end_time) as MultiIndex"
         )
         if binary_preds == "multi_target":
-            assert threshold is not None, (
-                "Must specify a threshold when" " generating multi_target predictions"
+            assert (
+                threshold is not None
+            ), "Must specify a threshold when generating multi_target predictions"
+
+        # set up prediction Dataset, considering three possible cases:
+        # (c1) user provided multi-index df with file,start_time,end_time of clips
+        # (c2) user provided file list and wants clips to be split out automatically
+        # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
+        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor, return_labels=False
             )
-
-        # set up prediction Dataset:
-        # Three possibilities: (1) user provided multi-index df with file,start_time,end_time of clips
-        # (2) user provided file list and wants clips to be split out automatically
-        # (3) split_files_into_clips=False -> one sample & one prediction per file provided
-
-        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:
-            # if the dataframe has a multi-index, it should be (file,start_time,end_time)
-            assert list(samples.index.names) == [
-                "file",
-                "start_time",
-                "end_time",
-            ], "multi-index of samples must be ('file','start_time','end_time') to use pre-defined clip times df"
-
-            # right now, there isn't a way to create AudioSplittingDataset directly from
-            # a clip df. Should add a way to do this, but a workaround is to just overwrite label_df:
-            prediction_dataset = AudioSplittingDataset(
-                samples=[],
-                preprocessor=self.preprocessor,
-                overlap_fraction=overlap_fraction,
-                final_clip=final_clip,
-            )
-            prediction_dataset.label_df = samples
-        elif split_files_into_clips:
+        elif split_files_into_clips:  # c2
             prediction_dataset = AudioSplittingDataset(
                 samples=samples,
                 preprocessor=self.preprocessor,
                 overlap_fraction=overlap_fraction,
                 final_clip=final_clip,
             )
-        else:
+        else:  # c3
             prediction_dataset = AudioFileDataset(
                 samples=samples, preprocessor=self.preprocessor, return_labels=False
             )
