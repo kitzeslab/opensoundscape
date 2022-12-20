@@ -106,7 +106,7 @@ def ribbit(
         plot=False: if True, plot the power spectral density for each clip
 
     Returns:
-        DataFrame of index=('start_time','end_time'), columns=['score'],
+        DataFrame with columns ['start_time','end_time','score'],
         with a row for each clip.
 
     Notes
