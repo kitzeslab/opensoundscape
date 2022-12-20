@@ -9,7 +9,7 @@ from . import helpers
 from . import localization
 from . import metrics
 from . import ribbit
-from . import signal
+from . import signal_processing
 from . import spectrogram
 from . import taxa
 from . import torch

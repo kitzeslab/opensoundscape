@@ -1,7 +1,7 @@
 """Utilities specifically for audio files recoreded by AudioMoths"""
 import pytz
 import datetime
-from opensoundscape.helpers import hex_to_time
+from opensoundscape.helpers import hex_to_time, _load_metadata
 from pathlib import Path
 
 
@@ -94,7 +94,7 @@ def parse_audiomoth_metadata(metadata):
         metadata["gain_setting"] = comment.split(" gain")[0].split(" ")[-1]
 
     metadata["battery_state"] = _parse_audiomoth_battery_info(comment)
-    metadata["audiomoth_id"] = metadata["artist"].split(" ")[1]
+    metadata["device_id"] = metadata["artist"]
     if "temperature" in comment:
         metadata["temperature_C"] = float(
             comment.split("temperature was ")[1].split("C")[0]
@@ -104,14 +104,11 @@ def parse_audiomoth_metadata(metadata):
 
 
 def parse_audiomoth_metadata_from_path(file_path):
-    from tinytag import TinyTag
-
-    metadata = TinyTag.get(file_path)
+    metadata = _load_metadata(file_path)
 
     if metadata is None:
         raise ValueError(f"{file_path} does not contain metadata")
     else:
-        metadata = metadata.as_dict()
         artist = metadata["artist"]
         if not artist or (not "AudioMoth" in artist):
             raise ValueError(
