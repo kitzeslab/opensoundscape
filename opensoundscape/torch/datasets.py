@@ -75,12 +75,13 @@ class AudioFileDataset(torch.utils.data.Dataset):
             ], "multi-index must be ('file','start_time','end_time')"
 
         # give helpful warnings for incorret df, but don't raise Exception
-        first_path = df.index[0][0] if self.has_clips else df.index[0]
-        if len(df) > 0 and not Path(first_path).exists():
-            warnings.warn(
-                "Index of dataframe passed to "
-                f"preprocessor must be a file path. Got {df.index[0]}."
-            )
+        if len(df) > 0:
+            first_path = df.index[0][0] if self.has_clips else df.index[0]
+            if not Path(first_path).exists():
+                warnings.warn(
+                    "Index of dataframe passed to "
+                    f"preprocessor must be a file path. First sample {df.index[0]} was not found."
+                )
         if return_labels and len(df.columns) == 0:
             warnings.warn("return_labels=True but df has no columns!")
         elif len(df) > 0 and return_labels and not df.values[0, 0] in (0, 1):
