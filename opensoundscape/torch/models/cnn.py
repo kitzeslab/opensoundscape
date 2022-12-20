@@ -9,6 +9,7 @@ import pandas as pd
 from pathlib import Path
 import warnings
 import wandb
+from pandas.core.indexes.multi import MultiIndex
 
 import torch
 import torch.optim as optim
@@ -824,11 +825,15 @@ class CNN(BaseModule):
         # Three possibilities: (1) user provided multi-index df with file,start_time,end_time of clips
         # (2) user provided file list and wants clips to be split out automatically
         # (3) split_files_into_clips=False -> one sample & one prediction per file provided
-        if type(samples) == pd.DataFrame and type(samples.index) == tuple:
+
+        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:
             # if the dataframe has a multi-index, it should be (file,start_time,end_time)
-            assert (
-                len(samples.name) == 3
-            ), "multi-index of samples must be ('file','start_time','end_time') to use pre-defined clip times df"
+            assert list(samples.index.names) == [
+                "file",
+                "start_time",
+                "end_time",
+            ], "multi-index of samples must be ('file','start_time','end_time') to use pre-defined clip times df"
+
             # right now, there isn't a way to create AudioSplittingDataset directly from
             # a clip df. Should add a way to do this, but a workaround is to just overwrite label_df:
             prediction_dataset = AudioSplittingDataset(
@@ -837,6 +842,7 @@ class CNN(BaseModule):
                 overlap_fraction=overlap_fraction,
                 final_clip=final_clip,
             )
+            prediction_dataset.label_df = samples
         elif split_files_into_clips:
             prediction_dataset = AudioSplittingDataset(
                 samples=samples,
