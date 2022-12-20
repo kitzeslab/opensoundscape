@@ -326,9 +326,14 @@ def test_save(silence_10s_mp3_str, saved_wav):
 
 
 def test_save_mp3(silence_10s_mp3_str, saved_mp3):
-    Audio.from_file(silence_10s_mp3_str).save(saved_mp3)
-    assert saved_mp3.exists()
-    Audio.from_file(saved_mp3)  # make sure we can still load it as audio
+    try:
+        Audio.from_file(silence_10s_mp3_str).save(saved_mp3)
+        assert saved_mp3.exists()
+        Audio.from_file(saved_mp3)  # make sure we can still load it as audio
+    except NotImplementedError:
+        # only supported by libsndfile>=1.1.0, which is not available yet
+        # on ubuntu as of Dec 2022. So, we just give the user a helpful error.
+        pass
 
 
 def test_audio_constructor_should_fail_on_file(veryshort_wav_str):

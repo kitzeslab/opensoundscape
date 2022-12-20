@@ -172,7 +172,7 @@ class Audio:
                 metadata = _load_metadata(path)
                 # if this is an AudioMoth file, try to parse out additional
                 # metadata from the comment field
-                if metadata["artist"] and "AudioMoth" in metadata["artist"]:
+                if "artist" in metadata and "AudioMoth" in metadata["artist"]:
                     try:
                         metadata = parse_audiomoth_metadata(metadata)
                     except Exception as e:
@@ -476,7 +476,15 @@ class Audio:
 
         fmt = Path(path).suffix.upper()
 
-        soundfile.write(path, self.samples, self.sample_rate)
+        try:
+            soundfile.write(path, self.samples, self.sample_rate)
+        except ValueError:
+            raise NotImplementedError(
+                "Failed to save file with soundfinder. "
+                "This may be because the underlying package `libsndfile` must be "
+                "version >=1.1.0 to write mp3 files. \n"
+                "Note that as of Dec 2022, libsndfile 1.1.0 is not available on Ubuntu."
+            )
 
         if write_metadata and self.metadata is not None:
             if not fmt in [".WAV", ".AIFF"] and not suppress_warnings:
