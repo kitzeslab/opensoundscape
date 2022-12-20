@@ -11,7 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8]
+        python-version: [3.7, 3.8, 3.9]
+      # Ensure that all flavours are run to completion even if an other flavor failed
+      fail-fast: false
+    
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python ${{ matrix.python-version }}
