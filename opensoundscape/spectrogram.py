@@ -207,9 +207,9 @@ class Spectrogram:
 
         new_obj = cls(
             spectrogram,
-            frequencies,
-            times,
-            decibel_limits,
+            frequencies=frequencies,
+            times=times,
+            decibel_limits=decibel_limits,
             window_samples=window_samples,
             overlap_samples=overlap_samples,
             window_type=window_type,
@@ -285,9 +285,9 @@ class Spectrogram:
         # use self.__class__ so that child classes can inherit this method
         return self.__class__(
             min_max_scale(self.spectrogram, feature_range=feature_range),
-            self.frequencies,
-            self.times,
-            self.decibel_limits,
+            frequencies=self.frequencies,
+            times=self.times,
+            decibel_limits=self.decibel_limits,
         )
 
     def linear_scale(self, feature_range=(0, 1)):
@@ -313,14 +313,14 @@ class Spectrogram:
             linear_scale(
                 self.spectrogram, in_range=self.decibel_limits, out_range=feature_range
             ),
-            self.frequencies,
-            self.times,
-            self.decibel_limits,
-            self.window_samples,
-            self.overlap_samples,
-            self.window_type,
-            self.audio_sample_rate,
-            self.scaling,
+            frequencies=self.frequencies,
+            times=self.times,
+            decibel_limits=self.decibel_limits,
+            window_samples=self.window_samples,
+            overlap_samples=self.overlap_samples,
+            window_type=self.window_type,
+            audio_sample_rate=self.audio_sample_rate,
+            scaling=self.scaling,
         )
 
     def limit_db_range(self, min_db=-100, max_db=-20):
@@ -349,14 +349,14 @@ class Spectrogram:
 
         return self.__class__(
             _spec,
-            self.frequencies,
-            self.times,
-            self.decibel_limits,
-            self.window_samples,
-            self.overlap_samples,
-            self.window_type,
-            self.audio_sample_rate,
-            self.scaling,
+            frequencies=self.frequencies,
+            times=self.times,
+            decibel_limits=self.decibel_limits,
+            window_samples=self.window_samples,
+            overlap_samples=self.overlap_samples,
+            window_type=self.window_type,
+            audio_sample_rate=self.audio_sample_rate,
+            scaling=self.scaling,
         )
 
     def bandpass(self, min_f, max_f, out_of_bounds_ok=True):
@@ -396,14 +396,14 @@ class Spectrogram:
         # take slices of the spectrogram and spec_freq that fall within desired range
         return self.__class__(
             self.spectrogram[lowest_index : highest_index + 1, :],
-            self.frequencies[lowest_index : highest_index + 1],
-            self.times,
-            self.decibel_limits,
-            self.window_samples,
-            self.overlap_samples,
-            self.window_type,
-            self.audio_sample_rate,
-            self.scaling,
+            frequencies=self.frequencies[lowest_index : highest_index + 1],
+            times=self.times,
+            decibel_limits=self.decibel_limits,
+            window_samples=self.window_samples,
+            overlap_samples=self.overlap_samples,
+            window_type=self.window_type,
+            audio_sample_rate=self.audio_sample_rate,
+            scaling=self.scaling,
         )
 
     def trim(self, start_time, end_time):
@@ -425,14 +425,14 @@ class Spectrogram:
         # take slices of the spectrogram and spec_freq that fall within desired range
         return self.__class__(
             self.spectrogram[:, lowest_index : highest_index + 1],
-            self.frequencies,
-            self.times[lowest_index : highest_index + 1],
-            self.decibel_limits,
-            self.window_samples,
-            self.overlap_samples,
-            self.window_type,
-            self.audio_sample_rate,
-            self.scaling,
+            frequencies=self.frequencies,
+            times=self.times[lowest_index : highest_index + 1],
+            decibel_limits=self.decibel_limits,
+            window_samples=self.window_samples,
+            overlap_samples=self.overlap_samples,
+            window_type=self.window_type,
+            audio_sample_rate=self.audio_sample_rate,
+            scaling=self.scaling,
         )
 
     def plot(self, inline=True, fname=None, show_colorbar=False):
@@ -730,9 +730,9 @@ class MelSpectrogram(Spectrogram):
 
         return cls(
             melspectrogram,
-            frequencies,
-            linear_spec.times,
-            decibel_limits,
+            frequencies=frequencies,
+            times=linear_spec.times,
+            decibel_limits=decibel_limits,
             window_samples=window_samples,
             overlap_samples=overlap_samples,
             window_type=window_type,
