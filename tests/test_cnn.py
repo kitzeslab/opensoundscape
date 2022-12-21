@@ -136,7 +136,9 @@ def test_predict_on_list_of_files(test_df):
 def test_predict_all_arch_4ch(test_df):
     for arch_name in cnn_architectures.ARCH_DICT.keys():
         try:
-            arch = cnn_architectures.ARCH_DICT[arch_name](num_classes=2, num_channels=4)
+            arch = cnn_architectures.ARCH_DICT[arch_name](
+                num_classes=2, num_channels=4, use_pretrained=False
+            )
             if "inception" in arch_name:
                 model = cnn.InceptionV3(
                     classes=[0, 1], sample_duration=5.0, sample_shape=[224, 224, 4]
@@ -157,7 +159,9 @@ def test_predict_all_arch_4ch(test_df):
 def test_predict_all_arch_1ch(test_df):
     for arch_name in cnn_architectures.ARCH_DICT.keys():
         try:
-            arch = cnn_architectures.ARCH_DICT[arch_name](num_classes=2, num_channels=1)
+            arch = cnn_architectures.ARCH_DICT[arch_name](
+                num_classes=2, num_channels=1, use_pretrained=False
+            )
             if "inception" in arch_name:
                 model = cnn.InceptionV3(
                     classes=[0, 1], sample_duration=5.0, sample_shape=[224, 224, 4]

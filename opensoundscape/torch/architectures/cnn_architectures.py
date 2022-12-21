@@ -466,7 +466,7 @@ def efficientnet_b0(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_b0",
-        pretrained=use_pretrained,
+        weights="IMAGENET1K_V1" if use_pretrained else None,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -508,7 +508,7 @@ def efficientnet_b4(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_b4",
-        pretrained=use_pretrained,
+        weights="IMAGENET1K_V1" if use_pretrained else None,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -550,7 +550,7 @@ def efficientnet_widese_b0(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_widese_b0",
-        pretrained=use_pretrained,
+        weights="IMAGENET1K_V1" if use_pretrained else None,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -592,7 +592,7 @@ def efficientnet_widese_b4(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_widese_b4",
-        pretrained=use_pretrained,
+        weights="IMAGENET1K_V1" if use_pretrained else None,
     )
 
     # prevent weights of feature extractor from being trained, if desired
