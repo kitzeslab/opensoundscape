@@ -652,6 +652,8 @@ def load_channels_as_audio(
         duration=duration,
     )
     warnings.resetwarnings()
+    if len(np.shape(samples)) == 1:
+        samples = [samples]
     audio_objects = [
         Audio(samples=samples_channel, sample_rate=sr, resample_type=resample_type)
         for samples_channel in samples

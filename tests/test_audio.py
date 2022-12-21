@@ -119,6 +119,14 @@ def test_load_channels_as_audio(stereo_wav_str):
     s = load_channels_as_audio(stereo_wav_str)
     assert max(s[0].samples) == 0  # channel 1 of stereo.wav is all 0
     assert max(s[1].samples) == 1  # channel 2 of stereo.wav is all 1
+    assert len(s) == 2
+    assert type(s[0]) == Audio
+
+
+def test_load_channels_as_audio_from_mono(veryshort_wav_str):
+    s = load_channels_as_audio(veryshort_wav_str)
+    assert len(s) == 1
+    assert type(s[0]) == Audio
 
 
 def test_load_incorrect_timestamp(onemin_wav_str):
