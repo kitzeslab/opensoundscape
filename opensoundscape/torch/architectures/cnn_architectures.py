@@ -33,6 +33,8 @@ from torchvision import models
 from torch import nn
 from opensoundscape.torch.architectures.utils import CompositeArchitecture
 import torch
+import torchvision
+import warnings
 
 ARCH_DICT = dict()
 
@@ -52,39 +54,6 @@ def freeze_params(model):
     """remove gradients (aka freeze) all model parameters"""
     for param in model.parameters():
         param.requires_grad = False
-
-
-def modify_resnet(architecture, num_classes, num_channels):
-    """modify input and output shape of a resnet architecture
-    Args:
-        architecture:
-            a torchvision.models.resnet architecture
-        num_classes:
-            number of output classes
-        num_channels:
-            number of channels in input data
-            If num_channels != 3, averages the conv1 weights across all channels.
-    Returns:
-        architecture with modified input and output shape
-    """
-    num_ftrs = architecture.fc.in_features
-    architecture.fc = nn.Linear(num_ftrs, num_classes)
-    if num_channels != 3:
-        # modify the input layer to accept custom # channels other than 3
-        # first make a copy of the weights from original model
-        avg_conv1_weights = torch.repeat_interleave(
-            torch.unsqueeze(torch.mean(architecture.conv1.weight, 1), 1),
-            num_channels,
-            1,
-        )
-        # change the shape of the first convolution to accept n channels
-        architecture.conv1 = nn.Conv2d(
-            num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
-        )
-        # reapply the average weights of the original architecture's conv1
-        architecture.conv1.weight = torch.nn.Parameter(avg_conv1_weights)
-
-    return architecture
 
 
 @register_arch
@@ -108,9 +77,17 @@ def resnet18(
             specify channels in input sample, eg [channels h,w] sample shape
     """
     architecture_ft = models.resnet18(pretrained=use_pretrained)
+
+    # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
-    architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+
+    # change number of output nodes
+    architecture_ft.fc = change_fc_output_size(architecture_ft.fc, num_classes)
+
+    # change input shape num_channels
+    architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
+
     return architecture_ft
 
 
@@ -135,9 +112,17 @@ def resnet34(
             specify channels in input sample, eg [channels h,w] sample shape
     """
     architecture_ft = models.resnet34(pretrained=use_pretrained)
+
+    # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
-    architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+
+    # change number of output nodes
+    architecture_ft.fc = change_fc_output_size(architecture_ft.fc, num_classes)
+
+    # change input shape num_channels
+    architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
+
     return architecture_ft
 
 
@@ -162,9 +147,17 @@ def resnet50(
             specify channels in input sample, eg [channels h,w] sample shape
     """
     architecture_ft = models.resnet50(pretrained=use_pretrained)
+
+    # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
-    architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+
+    # change number of output nodes
+    architecture_ft.fc = change_fc_output_size(architecture_ft.fc, num_classes)
+
+    # change input shape num_channels
+    architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
+
     return architecture_ft
 
 
@@ -189,9 +182,17 @@ def resnet101(
             specify channels in input sample, eg [channels h,w] sample shape
     """
     architecture_ft = models.resnet101(pretrained=use_pretrained)
+
+    # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
-    architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+
+    # change number of output nodes
+    architecture_ft.fc = change_fc_output_size(architecture_ft.fc, num_classes)
+
+    # change input shape num_channels
+    architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
+
     return architecture_ft
 
 
@@ -218,7 +219,17 @@ def resnet152(
     architecture_ft = models.resnet152(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
-    architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+
+    # prevent weights of feature extractor from being trained, if desired
+    if freeze_feature_extractor:
+        freeze_params(architecture_ft)
+
+    # change number of output nodes
+    architecture_ft.fc = change_fc_output_size(architecture_ft.fc, num_classes)
+
+    # change input shape num_channels
+    architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
+
     return architecture_ft
 
 
@@ -242,17 +253,24 @@ def alexnet(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.alexnet(pretrained=use_pretrained)
+    architecture_ft = models.alexnet(
+        weights=torchvision.models.AlexNet_Weights.DEFAULT if use_pretrained else None
+    )
+
+    # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
-    # change output shape
-    num_ftrs = architecture_ft.classifier[6].in_features
-    architecture_ft.classifier[6] = nn.Linear(num_ftrs, num_classes)
+
+    # change number of output nodes
+    architecture_ft.classifier[6] = change_fc_output_size(
+        architecture_ft.classifier[6], num_classes
+    )
+
     # change input shape num_channels
-    if num_channels != 3:
-        architecture_ft.features[0] = nn.Conv2d(
-            num_channels, 64, kernel_size=11, stride=4, padding=2
-        )
+    architecture_ft.features[0] = change_conv2d_channels(
+        architecture_ft.features[0], num_channels
+    )
+
     return architecture_ft
 
 
@@ -275,15 +293,22 @@ def vgg11_bn(
             Pytorch's model zoo.
 
     """
-    if num_channels != 3:
-        raise NotImplementedError(
-            "num_channels!=3 is not implemented for this architecture"
-        )
     architecture_ft = models.vgg11_bn(pretrained=use_pretrained)
+
+    # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
-    num_ftrs = architecture_ft.classifier[6].in_features
-    architecture_ft.classifier[6] = nn.Linear(num_ftrs, num_classes)
+
+    # change number of output nodes
+    architecture_ft.classifier[6] = change_fc_output_size(
+        architecture_ft.classifier[6], num_classes
+    )
+
+    # change input shape num_channels
+    architecture_ft.features[0] = change_conv2d_channels(
+        architecture_ft.features[0], num_channels
+    )
+
     return architecture_ft
 
 
@@ -308,17 +333,30 @@ def squeezenet1_0(
             specify channels in input sample, eg [channels h,w] sample shape
     """
     architecture_ft = models.squeezenet1_0(pretrained=use_pretrained)
+
+    # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
-    architecture_ft.classifier[1] = nn.Conv2d(
-        512, num_classes, kernel_size=(1, 1), stride=(1, 1)
+
+    # change number of output nodes
+    # uses a conv2d, not a fully connected layera
+    conv2d = architecture_ft.classifier[1]  # original classifier layer
+    architecture_ft.classifier[1] = torch.nn.Conv2d(
+        in_channels=conv2d.in_channels,
+        dilation=conv2d.dilation,
+        groups=conv2d.groups,
+        kernel_size=conv2d.kernel_size,
+        out_channels=num_classes,
+        padding=conv2d.padding,
+        padding_mode=conv2d.padding_mode,
+        stride=conv2d.stride,
     )
-    architecture_ft.num_classes = num_classes
+
     # change input shape num_channels
-    if num_channels != 3:
-        architecture_ft.features[0] = nn.Conv2d(
-            num_channels, 96, kernel_size=7, stride=2
-        )
+    architecture_ft.features[0] = change_conv2d_channels(
+        architecture_ft.features[0], num_channels
+    )
+
     return architecture_ft
 
 
@@ -327,8 +365,6 @@ def densenet121(
     num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
 ):
     """Wrapper for densenet121 architecture
-
-    input size = 224
 
     Args:
         num_classes:
@@ -344,15 +380,21 @@ def densenet121(
 
     """
     architecture_ft = models.densenet121(pretrained=use_pretrained)
+
+    # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
-    num_ftrs = architecture_ft.classifier.in_features
-    architecture_ft.classifier = nn.Linear(num_ftrs, num_classes)
+
+    # change number of output nodes
+    architecture_ft.classifier = change_fc_output_size(
+        architecture_ft.classifier, num_classes
+    )
+
     # change input shape num_channels
-    if num_channels != 3:
-        architecture_ft.features[0] = nn.Conv2d(
-            num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
-        )
+    architecture_ft.features[0] = change_conv2d_channels(
+        architecture_ft.features[0], num_channels
+    )
+
     return architecture_ft
 
 
@@ -389,9 +431,147 @@ def inception_v3(
     num_ftrs = architecture_ft.fc.in_features
     architecture_ft.fc = nn.Linear(num_ftrs, num_classes)
     if num_channels != 3:
+        warnings.warn(
+            "Retaining weights while reshaping Inception "
+            "number of input channels is not implemented. First conv2d will "
+            "have random weights."
+        )
         from torchvision.models.inception import BasicConv2d
 
         architecture_ft.Conv2d_1a_3x3 = BasicConv2d(
             num_channels, 32, kernel_size=3, stride=2
         )
     return architecture_ft
+
+
+# @register_arch
+# def efficientnet(
+#     num_classes,
+#     freeze_feature_extractor=False,
+#     use_pretrained=True,
+#     num_channels=3,
+#     torchhub_entrypoint="nvidia_efficientnet_b4",
+# ):
+#     """Wrapper for EfficientNet architecture
+
+#     Args:
+#         num_classes:
+#             number of output nodes for the final layer
+#         freeze_feature_extractor:
+#             if False (default), entire network will have gradients and can train
+#             if True, feature block is frozen and only final layer is trained
+#         use_pretrained:
+#             if True, uses pre-trained ImageNet features from
+#             Pytorch's model zoo.
+#         num_channels:
+#             specify channels in input sample, eg [channels h,w] sample shape
+#         torchhub_entrypoint:
+#             Choose torchhub architecture from ['nvidia_efficientnet_b0',
+#             'nvidia_efficientnet_b4','nvidia_efficientnet_widese_b0',
+#             'nvidia_efficientnet_widese_b4']. [default: nvidia_efficientnet_b4]
+#     """
+#     architecture_ft = torch.hub.load(
+#         "NVIDIA/DeepLearningExamples:torchhub",
+#         torchhub_entrypoint,
+#         pretrained=use_pretrained,
+#     )
+#     if freeze_feature_extractor:
+#         freeze_params(architecture_ft)
+#     num_ftrs = architecture_ft.classifier.fc.in_features
+#     architecture_ft.classifier = nn.Linear(num_ftrs, num_classes)
+#     # change input shape num_channels
+#     if num_channels != 3:
+#         architecture_ft.features[0] = nn.Conv2d(
+#             num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
+#         )
+#     return architecture_ft
+
+
+def change_conv2d_channels(
+    conv2d,
+    num_channels=3,
+    reuse_weights=True,
+):
+    """Modify the number of input channels for a pytorch CNN
+
+    This function changes the input shape of a torch.nn.Conv2D layer
+    to accommodate a different number of channels. It attempts to retain
+    weights in the following manner:
+    -  If num_channels is less than the original,
+    it will average weights across the original channels and apply them
+    to all new channels.
+    - if num_channels is greater than the original,
+    it will cycle through the original channels, copying them to the
+    new channels
+
+    Args:
+        num_classes:
+            number of output nodes for the final layer
+        freeze_feature_extractor:
+            if False (default), entire network will have gradients and can train
+            if True, feature block is frozen and only final layer is trained
+        use_pretrained:
+            if True, uses pre-trained ImageNet features from
+            Pytorch's model zoo.
+        num_channels:
+            specify channels in input sample, eg [channels h,w] sample shape
+        torchhub_entrypoint:
+            Choose torchhub architecture from ['nvidia_efficientnet_b0',
+            'nvidia_efficientnet_b4','nvidia_efficientnet_widese_b0',
+            'nvidia_efficientnet_widese_b4']. [default: nvidia_efficientnet_b4]
+        reuse_weights: if True (default), averages (if num_channels<original)
+        or cycles through (if num_channels>original) original channel weights
+            and adds them to the new Conv2D
+    """
+    # change input shape num_channels
+    if num_channels == conv2d.in_channels:
+        return conv2d  # already correct shape, don't modify
+
+    # modify the input layer to accept custom # channels
+    new_conv2d = torch.nn.Conv2d(
+        in_channels=num_channels,
+        dilation=conv2d.dilation,
+        groups=conv2d.groups,
+        kernel_size=conv2d.kernel_size,
+        out_channels=conv2d.out_channels,
+        padding=conv2d.padding,
+        padding_mode=conv2d.padding_mode,
+        stride=conv2d.stride,
+    )
+
+    if reuse_weights:
+        # use weights from the original model
+        if num_channels < conv2d.in_channels:
+            # apply weights averaged across channels to each new channel
+            weights = torch.repeat_interleave(
+                torch.unsqueeze(torch.mean(conv2d.weight, 1), 1),
+                num_channels,
+                1,  # dimension to average on; 0 is feats, 1 is channels
+            )
+        else:
+            # cycle through original channels, copying weights to new channels
+            new_channels = [
+                conv2d.weight[:, i % conv2d.in_channels, :, :]
+                for i in range(num_channels)
+            ]
+            weights = torch.stack(new_channels, dim=1)  # stack on channel dim, dim 1
+        # reapply the average weights of the original architecture's conv1
+        new_conv2d.weight = torch.nn.Parameter(weights)
+
+    return new_conv2d
+
+
+def change_fc_output_size(
+    fc,
+    num_classes,
+):
+    """Modify the number of output nodes of a fully connected layer
+
+    Args:
+        fc: the fully connected layer of the model that should
+            be modified
+        num_classes:
+            number of output nodes for the new fc
+    """
+    num_ftrs = fc.in_features
+    return nn.Linear(num_ftrs, num_classes)

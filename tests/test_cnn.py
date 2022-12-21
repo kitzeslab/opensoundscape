@@ -4,6 +4,8 @@ from opensoundscape.torch.loss import ResampleLoss
 from opensoundscape.torch.models import cnn
 
 from opensoundscape.torch.architectures.cnn_architectures import alexnet, resnet18
+from opensoundscape.torch.architectures import cnn_architectures
+
 from opensoundscape.helpers import make_clip_df
 import pandas as pd
 from pathlib import Path
@@ -129,6 +131,48 @@ def test_predict_on_list_of_files(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     scores, preds, _ = model.predict(test_df.index.values)
     assert len(scores) == 2
+
+
+def test_predict_all_arch_4ch(test_df):
+    for arch_name in cnn_architectures.ARCH_DICT.keys():
+        try:
+            arch = cnn_architectures.ARCH_DICT[arch_name](num_classes=2, num_channels=4)
+            if "inception" in arch_name:
+                model = cnn.InceptionV3(
+                    classes=[0, 1], sample_duration=5.0, sample_shape=[224, 224, 4]
+                )
+            else:
+                model = cnn.CNN(
+                    arch,
+                    classes=[0, 1],
+                    sample_duration=5.0,
+                    sample_shape=[224, 224, 4],
+                )
+            scores, _, _ = model.predict(test_df.index.values)
+            assert len(scores) == 2
+        except:
+            raise Exception(f"{arch_name} failed")
+
+
+def test_predict_all_arch_1ch(test_df):
+    for arch_name in cnn_architectures.ARCH_DICT.keys():
+        try:
+            arch = cnn_architectures.ARCH_DICT[arch_name](num_classes=2, num_channels=1)
+            if "inception" in arch_name:
+                model = cnn.InceptionV3(
+                    classes=[0, 1], sample_duration=5.0, sample_shape=[224, 224, 4]
+                )
+            else:
+                model = cnn.CNN(
+                    arch,
+                    classes=[0, 1],
+                    sample_duration=5.0,
+                    sample_shape=[224, 224, ],
+                )
+            scores, preds, _ = model.predict(test_df.index.values)
+            assert len(scores) == 2
+        except:
+            raise Exception(f"{arch_name} failed")
 
 
 def test_predict_on_clip_df(test_df):
