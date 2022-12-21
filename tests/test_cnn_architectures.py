@@ -70,6 +70,22 @@ def test_use_pretrained():
     arch = cnn_architectures.resnet101(4, use_pretrained=True)
 
 
+def test_efficientnet_b0():
+    arch = cnn_architectures.efficientnet_b0(2, use_pretrained=False)
+
+
+def test_efficientnet_b4():
+    arch = cnn_architectures.efficientnet_b4(2, use_pretrained=False)
+
+
+def test_efficientnet_widese_b0():
+    arch = cnn_architectures.efficientnet_widese_b0(2, use_pretrained=False)
+
+
+def test_efficientnet_widese_b4():
+    arch = cnn_architectures.efficientnet_widese_b4(2, use_pretrained=False)
+
+
 def test_noninteger_output_nodes():
     with pytest.raises(TypeError):
         arch = cnn_architectures.resnet101(4.5)

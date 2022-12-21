@@ -444,6 +444,174 @@ def inception_v3(
     return architecture_ft
 
 
+@register_arch
+def efficientnet_b0(
+    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+):
+    """Wrapper for efficientnet_b0 architecture
+
+    Args:
+        num_classes:
+            number of output nodes for the final layer
+        freeze_feature_extractor:
+            if False (default), entire network will have gradients and can train
+            if True, feature block is frozen and only final layer is trained
+        use_pretrained:
+            if True, uses pre-trained ImageNet features from
+            Pytorch's model zoo.
+        num_channels:
+            specify channels in input sample, eg [channels h,w] sample shape
+
+    """
+    architecture_ft = torch.hub.load(
+        "NVIDIA/DeepLearningExamples:torchhub",
+        "nvidia_efficientnet_b0",
+        pretrained=use_pretrained,
+    )
+
+    # prevent weights of feature extractor from being trained, if desired
+    if freeze_feature_extractor:
+        freeze_params(architecture_ft)
+
+    # change number of output nodes
+    architecture_ft.classifier.fc = change_fc_output_size(
+        architecture_ft.classifier.fc, num_classes
+    )
+
+    # change input shape num_channels
+    architecture_ft.stem.conv = change_conv2d_channels(
+        architecture_ft.stem.conv, num_channels
+    )
+
+    return architecture_ft
+
+
+@register_arch
+def efficientnet_b4(
+    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+):
+    """Wrapper for efficientnet_b4 architecture
+
+    Args:
+        num_classes:
+            number of output nodes for the final layer
+        freeze_feature_extractor:
+            if False (default), entire network will have gradients and can train
+            if True, feature block is frozen and only final layer is trained
+        use_pretrained:
+            if True, uses pre-trained ImageNet features from
+            Pytorch's model zoo.
+        num_channels:
+            specify channels in input sample, eg [channels h,w] sample shape
+
+    """
+    architecture_ft = torch.hub.load(
+        "NVIDIA/DeepLearningExamples:torchhub",
+        "nvidia_efficientnet_b4",
+        pretrained=use_pretrained,
+    )
+
+    # prevent weights of feature extractor from being trained, if desired
+    if freeze_feature_extractor:
+        freeze_params(architecture_ft)
+
+    # change number of output nodes
+    architecture_ft.classifier.fc = change_fc_output_size(
+        architecture_ft.classifier.fc, num_classes
+    )
+
+    # change input shape num_channels
+    architecture_ft.stem.conv = change_conv2d_channels(
+        architecture_ft.stem.conv, num_channels
+    )
+
+    return architecture_ft
+
+
+@register_arch
+def efficientnet_widese_b0(
+    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+):
+    """Wrapper for efficientnet_widese_b0 architecture
+
+    Args:
+        num_classes:
+            number of output nodes for the final layer
+        freeze_feature_extractor:
+            if False (default), entire network will have gradients and can train
+            if True, feature block is frozen and only final layer is trained
+        use_pretrained:
+            if True, uses pre-trained ImageNet features from
+            Pytorch's model zoo.
+        num_channels:
+            specify channels in input sample, eg [channels h,w] sample shape
+
+    """
+    architecture_ft = torch.hub.load(
+        "NVIDIA/DeepLearningExamples:torchhub",
+        "nvidia_efficientnet_widese_b0",
+        pretrained=use_pretrained,
+    )
+
+    # prevent weights of feature extractor from being trained, if desired
+    if freeze_feature_extractor:
+        freeze_params(architecture_ft)
+
+    # change number of output nodes
+    architecture_ft.classifier.fc = change_fc_output_size(
+        architecture_ft.classifier.fc, num_classes
+    )
+
+    # change input shape num_channels
+    architecture_ft.stem.conv = change_conv2d_channels(
+        architecture_ft.stem.conv, num_channels
+    )
+
+    return architecture_ft
+
+
+@register_arch
+def efficientnet_widese_b4(
+    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+):
+    """Wrapper for efficientnet_widese_b4 architecture
+
+    Args:
+        num_classes:
+            number of output nodes for the final layer
+        freeze_feature_extractor:
+            if False (default), entire network will have gradients and can train
+            if True, feature block is frozen and only final layer is trained
+        use_pretrained:
+            if True, uses pre-trained ImageNet features from
+            Pytorch's model zoo.
+        num_channels:
+            specify channels in input sample, eg [channels h,w] sample shape
+
+    """
+    architecture_ft = torch.hub.load(
+        "NVIDIA/DeepLearningExamples:torchhub",
+        "nvidia_efficientnet_widese_b4",
+        pretrained=use_pretrained,
+    )
+
+    # prevent weights of feature extractor from being trained, if desired
+    if freeze_feature_extractor:
+        freeze_params(architecture_ft)
+
+    # change number of output nodes
+    architecture_ft.classifier.fc = change_fc_output_size(
+        architecture_ft.classifier.fc, num_classes
+    )
+
+    # change input shape num_channels
+    architecture_ft.stem.conv = change_conv2d_channels(
+        architecture_ft.stem.conv, num_channels
+    )
+
+    return architecture_ft
+
+
 # @register_arch
 # def efficientnet(
 #     num_classes,

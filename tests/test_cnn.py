@@ -167,7 +167,7 @@ def test_predict_all_arch_1ch(test_df):
                     arch,
                     classes=[0, 1],
                     sample_duration=5.0,
-                    sample_shape=[224, 224, ],
+                    sample_shape=[224, 224, 1],
                 )
             scores, preds, _ = model.predict(test_df.index.values)
             assert len(scores) == 2
