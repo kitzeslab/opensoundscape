@@ -138,6 +138,7 @@ def resnet34(
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
     architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+    architecture_ft.grad_cam_target_layer = architecture_ft.layer4[-1]
     return architecture_ft
 
 
@@ -165,6 +166,7 @@ def resnet50(
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
     architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+    architecture_ft.grad_cam_target_layer = architecture_ft.layer4[-1]
     return architecture_ft
 
 
@@ -192,6 +194,7 @@ def resnet101(
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
     architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+    architecture_ft.grad_cam_target_layer = architecture_ft.layer4[-1]
     return architecture_ft
 
 
@@ -219,6 +222,7 @@ def resnet152(
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
     architecture_ft = modify_resnet(architecture_ft, num_classes, num_channels)
+    architecture_ft.grad_cam_target_layer = architecture_ft.layer4[-1]
     return architecture_ft
 
 
@@ -253,6 +257,7 @@ def alexnet(
         architecture_ft.features[0] = nn.Conv2d(
             num_channels, 64, kernel_size=11, stride=4, padding=2
         )
+    architecture_ft.grad_cam_target_layer = architecture_ft.features[10]
     return architecture_ft
 
 
@@ -284,6 +289,7 @@ def vgg11_bn(
         freeze_params(architecture_ft)
     num_ftrs = architecture_ft.classifier[6].in_features
     architecture_ft.classifier[6] = nn.Linear(num_ftrs, num_classes)
+    architecture_ft.grad_cam_target_layer = architecture_ft.features[-1]
     return architecture_ft
 
 
@@ -319,6 +325,7 @@ def squeezenet1_0(
         architecture_ft.features[0] = nn.Conv2d(
             num_channels, 96, kernel_size=7, stride=2
         )
+    architecture_ft.grad_cam_target_layer = architecture_ft.features[-1]
     return architecture_ft
 
 
@@ -353,6 +360,7 @@ def densenet121(
         architecture_ft.features[0] = nn.Conv2d(
             num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
         )
+    architecture_ft.grad_cam_target_layer = architecture_ft.features[-1]
     return architecture_ft
 
 
@@ -394,4 +402,5 @@ def inception_v3(
         architecture_ft.Conv2d_1a_3x3 = BasicConv2d(
             num_channels, 32, kernel_size=3, stride=2
         )
+    architecture_ft.grad_cam_target_layer = architecture_ft.Mixed_7c
     return architecture_ft
