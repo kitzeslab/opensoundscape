@@ -81,7 +81,7 @@ def modify_resnet(model, num_classes, num_channels):
 
 @register_arch
 def resnet18(
-    num_classes, freeze_feature_extractor=False, use_pretrained=models.ResNet18_Weights.DEFAULT, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for ResNet18 architecture
 
@@ -93,13 +93,13 @@ def resnet18(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
+        weights:
             if True, uses pre-trained ImageNet features from
             Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet18(weights=use_pretrained)
+    model_ft = models.resnet18(weights=weights)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
@@ -108,7 +108,7 @@ def resnet18(
 
 @register_arch
 def resnet34(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for ResNet34 architecture
 
@@ -120,13 +120,13 @@ def resnet34(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
+        weights:
             if True, uses pre-trained ImageNet features from
             Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet34(weights=use_pretrained)
+    model_ft = models.resnet34(weights=weights)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
@@ -135,7 +135,7 @@ def resnet34(
 
 @register_arch
 def resnet50(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for ResNet50 architecture
 
@@ -147,13 +147,13 @@ def resnet50(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
+        weights:
             if True, uses pre-trained ImageNet features from
             Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet50(weights=use_pretrained)
+    model_ft = models.resnet50(weights=weights)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
@@ -162,7 +162,7 @@ def resnet50(
 
 @register_arch
 def resnet101(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights=True, num_channels=3
 ):
     """Wrapper for ResNet101 architecture
 
@@ -174,13 +174,13 @@ def resnet101(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
+        weights:
             if True, uses pre-trained ImageNet features from
             Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet101(weights=use_pretrained)
+    model_ft = models.resnet101(weights=weights)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
@@ -189,7 +189,7 @@ def resnet101(
 
 @register_arch
 def resnet152(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights=True, num_channels=3
 ):
     """Wrapper for ResNet152 architecture
 
@@ -201,13 +201,13 @@ def resnet152(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
+        weights:
             if True, uses pre-trained ImageNet features from
             Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet152(weights=use_pretrained)
+    model_ft = models.resnet152(weights=weights)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft = modify_resnet(model_ft, num_classes, num_channels)
@@ -216,7 +216,7 @@ def resnet152(
 
 @register_arch
 def alexnet(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights='default', num_channels=3
 ):
     """Wrapper for AlexNet architecture
 
@@ -228,13 +228,13 @@ def alexnet(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
+        weights:
             if True, uses pre-trained ImageNet features from
             Pytorch's model zoo.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.alexnet(weights=use_pretrained)
+    model_ft = models.alexnet(weights=weights)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     # change output shape
@@ -250,7 +250,7 @@ def alexnet(
 
 @register_arch
 def vgg11_bn(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for vgg11 architecture
 
@@ -262,7 +262,7 @@ def vgg11_bn(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
+        weights:
             if True, uses pre-trained ImageNet features from
             Pytorch's model zoo.
 
@@ -271,7 +271,7 @@ def vgg11_bn(
         raise NotImplementedError(
             "num_channels!=3 is not implemented for this architecture"
         )
-    model_ft = models.vgg11_bn(weights=use_pretrained)
+    model_ft = models.vgg11_bn(weights=weights)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     num_ftrs = model_ft.classifier[6].in_features
@@ -281,7 +281,7 @@ def vgg11_bn(
 
 @register_arch
 def squeezenet1_0(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for squeezenet architecture
 
@@ -293,13 +293,13 @@ def squeezenet1_0(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
+        weights:
             if True, uses pre-trained ImageNet features from
             Pytorch's model zoo.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.squeezenet1_0(weights=use_pretrained)
+    model_ft = models.squeezenet1_0(weights=weights)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     model_ft.classifier[1] = nn.Conv2d(
@@ -314,7 +314,7 @@ def squeezenet1_0(
 
 @register_arch
 def densenet121(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for densenet121 architecture
 
@@ -326,14 +326,15 @@ def densenet121(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
 
     """
-    model_ft = models.densenet121(weights=use_pretrained)
+    model_ft = models.densenet121(weights=weights)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     num_ftrs = model_ft.classifier.in_features
@@ -348,7 +349,7 @@ def densenet121(
 
 @register_arch
 def inception_v3(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for Inception v3 architecture
 
@@ -363,13 +364,13 @@ def inception_v3(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
+        weights:
             if True, uses pre-trained ImageNet features from
             Pytorch's model zoo.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.inception_v3(weights=use_pretrained)
+    model_ft = models.inception_v3(weights=weights)
     if freeze_feature_extractor:
         freeze_params(model_ft)
     # Handle the auxilary net
