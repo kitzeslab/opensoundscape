@@ -32,6 +32,16 @@ from opensoundscape.torch.loss import (
 from opensoundscape.torch.safe_dataset import SafeDataset
 from opensoundscape.torch.datasets import AudioFileDataset, AudioSplittingDataset
 import opensoundscape
+from pytorch_grad_cam import (
+    GradCAM,
+    HiResCAM,
+    ScoreCAM,
+    GradCAMPlusPlus,
+    AblationCAM,
+    XGradCAM,
+    EigenCAM,
+    FullGrad,
+)
 
 
 class CNN(BaseModule):
@@ -552,8 +562,7 @@ class CNN(BaseModule):
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
             train_targets, train_preds, train_scores = self._train_epoch(
-                self.train_loader,
-                wandb_session,
+                self.train_loader, wandb_session
             )
 
             ### Evaluate ###
@@ -895,8 +904,7 @@ class CNN(BaseModule):
             wandb_session.log(
                 {
                     "Samples / Preprocessed samples": opensoundscape.wandb.wandb_table(
-                        prediction_dataset,
-                        self.n_preview_samples,
+                        prediction_dataset, self.n_preview_samples
                     )
                 }
             )
@@ -976,6 +984,86 @@ class CNN(BaseModule):
         unsafe_samples = dataloader.dataset.report(log=unsafe_samples_log)
 
         return score_df, pred_df, unsafe_samples
+
+    def gradcam(
+        self,
+        samples,
+        classes=None,
+        target_layers=None,
+        split_files_into_clips=True,
+        bypass_augmentations=False,
+    ):
+        """
+        Generate a GradCAM heatmap for each sample in samples_df
+
+        Args:
+            samples:
+                the files to generate predictions for. Can be:
+                - a dataframe with index containing audio paths, OR
+                - a dataframe with multi-index (file, start_time, end_time), OR
+                - a list (or np.ndarray) of audio file paths
+            classes (list): list of class names
+        Returns:
+            pd.DataFrame: DataFrame with columns "path", "class", "gradcam"
+        """
+        # initialize GradCAM
+        cam = GradCAM(
+            model=self.network, target_layers=self.network.grad_cam_target_layers
+        )
+
+        # move model to device
+        self.network.to(self.device)
+        self.network.eval()
+
+        # set classes and target_layers
+        if classes is None:
+            classes = self.classes
+        if target_layers is None:
+            target_layers = self.network.grad_cam_target_layers
+
+        # set up prediction Dataset, considering three possible cases:
+        # (c1) user provided multi-index df with file,start_time,end_time of clips
+        # (c2) user provided file list and wants clips to be split out automatically
+        # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
+        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor, return_labels=False
+            )
+        elif split_files_into_clips:  # c2
+            prediction_dataset = AudioSplittingDataset(
+                samples=samples,
+                preprocessor=self.preprocessor,
+                overlap_fraction=0,
+                final_clip=None,
+            )
+        else:  # c3
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor, return_labels=False
+            )
+        prediction_dataset.bypass_augmentations = bypass_augmentations
+
+        # set up DataLoader
+        dataloader = torch.utils.data.DataLoader(
+            prediction_dataset,
+            batch_size=1,  # TODO: make this a parameter
+            num_workers=0,  # TODO: make this a parameter
+            shuffle=False,
+            # use pin_memory=True when loading files on CPU and training on GPU
+            pin_memory=torch.cuda.is_available(),
+        )
+
+        outputs = []
+
+        for i, batch in enumerate(dataloader):
+            # get batch of Tensors
+            batch_tensors = batch["X"].to(self.device)
+            batch_tensors.requires_grad = False
+
+            # forward pass of network: feature extractor + classifier
+            output_tensors = cam(batch_tensors)
+            outputs.append(output_tensors)
+
+        return outputs
 
 
 def use_resample_loss(model):
