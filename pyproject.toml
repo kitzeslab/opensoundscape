@@ -35,6 +35,11 @@ pywavelets = ">=1.2.0"
 Deprecated = "^1.2.13"
 soundfile = ">=0.11"
 wandb = "^0.13.4"
+pillow = ">=9.3.0"
+jupyter-server = ">=1.17.0"
+protobuf = ">=4.21.6"
+joblib = ">=1.2.0"
+certifi = ">=2022.12.7"
 
 [tool.poetry.dev-dependencies]
 black = "~=22.8"
