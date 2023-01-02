@@ -506,7 +506,7 @@ def efficientnet_b4(
             specify channels in input sample, eg [channels h,w] sample shape
 
     """
-    torch.hub._validate_not_a_forked_repo=lambda a,b,c: True
+    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_b4",
@@ -549,7 +549,7 @@ def efficientnet_widese_b0(
             specify channels in input sample, eg [channels h,w] sample shape
 
     """
-    torch.hub._validate_not_a_forked_repo=lambda a,b,c: True
+    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_widese_b0",
@@ -592,7 +592,7 @@ def efficientnet_widese_b4(
             specify channels in input sample, eg [channels h,w] sample shape
 
     """
-    torch.hub._validate_not_a_forked_repo=lambda a,b,c: True
+    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_widese_b4",
