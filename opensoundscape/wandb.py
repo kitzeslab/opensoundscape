@@ -6,30 +6,35 @@ from opensoundscape.annotations import one_hot_to_categorical
 from opensoundscape.audio import Audio
 
 
-def wandb_table(dataset, n, random_state=None):
+def wandb_table(dataset, n=None, classes_to_extract=[], random_state=None):
     """Generate a wandb Table visualizing n random samples from a sample_df
 
     Args:
         dataset: object to generate samples, eg AudioFileDataset or AudioSplittingDataset
         n: number of samples to generate (randomly selected from df)
+            - if None, does not subsample or change order
         bypass_augmentations: if True, augmentations in Preprocessor are skipped
+        classes_to_extract: list of classes - will create columns containing the scores/labels
         random_state: default None; if integer provided, used for reproducible random sample
 
     Returns: a W&B Table of preprocessed samples with labels and playable audio
+
     """
-    # if not enough samples to make n, just use all of them (don't complain)
-    if len(dataset) < n:
-        n = len(dataset)
+    # select which clips to generate
+    if n is None or len(dataset) < n:
+        # if not enough samples to make n, just use all of them (don't complain)
+        pass
+    else:
+        # randomly choose entire files from the table of labels
+        dataset = dataset.sample(n=n, random_state=random_state)
 
     # set up columns for WandB display table
     table_columns = ["audio", "tensor", "labels", "path"]
-
-    # randomly choose entire files from the table of labels
-    dataset = dataset.sample(n=n, random_state=random_state)
-
     if dataset.has_clips:  # keep track of clip start/ends
         table_columns += ["clip start time"]
         table_columns += ["clip end time"]
+    for c in classes_to_extract:
+        table_columns += classes_to_extract
 
     classes = dataset.label_df.columns
 
@@ -65,12 +70,13 @@ def wandb_table(dataset, n, random_state=None):
             ]
             if dataset.has_clips:
                 row_info += [start_time, end_time]
-
+            for c in classes_to_extract:
+                row_info += [clip_row[c]]
             # add new row to wandb Table
             sample_table.loc[len(sample_table)] = row_info
 
         except:  # we'll allow failures to pass here
-            pass  # print(f"failed to load sample {sample_df.index.values[i]}")
+            raise  # pass  # print(f"failed to load sample {sample_df.index.values[i]}")
 
     return wandb.Table(dataframe=sample_table)
 

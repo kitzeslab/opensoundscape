@@ -196,3 +196,5 @@ class AudioSplittingDataset(AudioFileDataset):
         self.label_df = clip_times_df.reset_index().set_index(
             ["file", "start_time", "end_time"]
         )[[]]
+
+        self.has_clips = True

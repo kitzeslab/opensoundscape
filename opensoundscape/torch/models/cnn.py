@@ -81,7 +81,11 @@ class CNN(BaseModule):
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
         # number of samples to preprocess and log to wandb during train/predict
-        self.n_preview_samples = 8
+        self.wandb_logging = dict(
+            n_preview_samples=8,  # before train/predict, log n random samples
+            top_samples_classes=None,  # specify list of classes to see top samples from
+            n_top_samples=3,  # after prediction, log n top scoring samples per class
+        )
 
         ### architecture ###
         # can be a pytorch CNN such as Resnet18 or a custom object
@@ -472,6 +476,14 @@ class CNN(BaseModule):
                 model.train(...,wandb_session=session)
                 session.finish()
                 ```
+
+        Effects:
+            If wandb_session is provided, logs progress and samples to Weights
+            and Biases. A random set of training and validation samples
+            are preprocessed and logged to a table. Training progress, loss,
+            and metrics are also logged.
+            Use self.wandb_logging dictionary to change the number of samples
+            logged.
         """
 
         ### Input Validation ###
@@ -521,19 +533,19 @@ class CNN(BaseModule):
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=False
                         ),
-                        self.n_preview_samples,
+                        self.wandb_logging["n_preview_samples"],
                     ),
                     "Samples / training samples without augmentation": opensoundscape.wandb.wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=True
                         ),
-                        self.n_preview_samples,
+                        self.wandb_logging["n_preview_samples"],
                     ),
                     "Samples / validation samples": opensoundscape.wandb.wandb_table(
                         AudioFileDataset(
                             validation_df, self.preprocessor, bypass_augmentations=True
                         ),
-                        self.n_preview_samples,
+                        self.wandb_logging["n_preview_samples"],
                     ),
                 }
             )
@@ -805,6 +817,14 @@ class CNN(BaseModule):
             predictions: df of 0/1 preds for each class
             unsafe_samples: list of samples that failed to preprocess
 
+        Effects:
+            If wandb_session is provided, logs progress and samples to Weights
+            and Biases. A random set of samples is preprocessed and logged to
+            a table. Progress over all batches is logged. Afte prediction,
+            top scoring samples are logged.
+            Use self.wandb_logging dictionary to change the number of samples
+            logged or which classes have top-scoring samples logged.
+
         Note: if loading an audio file raises a PreprocessingError, the scores
             and predictions for that sample will be np.nan
 
@@ -896,7 +916,7 @@ class CNN(BaseModule):
                 {
                     "Samples / Preprocessed samples": opensoundscape.wandb.wandb_table(
                         prediction_dataset,
-                        self.n_preview_samples,
+                        self.wandb_logging["n_preview_samples"],
                     )
                 }
             )
@@ -974,6 +994,30 @@ class CNN(BaseModule):
         # warn the user if there were unsafe samples (failed to preprocess)
         # and log them to a file
         unsafe_samples = dataloader.dataset.report(log=unsafe_samples_log)
+
+        # log top-scoring samples per class to wandb table
+        if wandb_session is not None:
+            classes_to_log = self.wandb_logging["top_samples_classes"]
+            if classes_to_log is None:  # pick the first few classes if none specified
+                classes_to_log = self.classes
+                if len(classes_to_log) > 5:  # don't accidentally log hundreds of tables
+                    classes_to_log = classes_to_log[0:5]
+
+            for i, c in enumerate(classes_to_log):
+                top_samples = score_df.nlargest(
+                    n=self.wandb_logging["n_top_samples"], columns=[c]
+                )
+                ds = AudioFileDataset(
+                    samples=top_samples,
+                    preprocessor=self.preprocessor,
+                    return_labels=False,
+                    bypass_augmentations=True,
+                )
+                table = opensoundscape.wandb.wandb_table(
+                    dataset=ds,
+                    classes_to_extract=[c],
+                )
+                wandb_session.log({f"Samples / Top scoring [{c}]": table})
 
         return score_df, pred_df, unsafe_samples
 
