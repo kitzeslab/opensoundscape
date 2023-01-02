@@ -450,6 +450,49 @@ class Audio:
 
         return fft, frequencies
 
+    def normalize(self, peak_level=None, peak_dBFS=None):
+        """Return audio object with normalized waveform
+
+        Linearly scales waveform values so that the max absolute value matches
+        the specified value (default: 1.0)
+
+        args:
+            peak_level: maximum absolute value of resulting waveform
+            peak_dBFS: maximum resulting absolute value in decibels Full Scale
+                - for example, -3 dBFS equals a peak level of 0.71
+                - Note: do not specify both peak_level and peak_dBFS
+
+        returns:
+            Audio object with
+
+        Note: if all samples are zero, returns the original object (avoids
+        division by zero)
+
+        """
+        # make sure the user didn't request peak level both ways
+        if peak_level is not None and peak_dBFS is not None:
+            raise ValueError("Must not specify both peak_level and peak_dBFS")
+
+        if peak_level is None and peak_dBFS is None:
+            peak_level = 0
+        elif peak_dBFS is not None:
+            if peak_dBFS > 0:
+                warnings.warn("user requested decibels Full Scale >0 !")
+
+            # dBFS is defined as 20*log10(V), so V = 10^(dBFS/20)
+            peak_level = 10 ** (peak_dBFS / 20)
+
+        abs_max = max(max(self.samples), -min(self.samples))
+        if abs_max == 0:
+            # don't try to normalize 0-valued samples. Return original object
+            abs_max = 1
+
+        return Audio(
+            self.samples / abs_max * peak_level,
+            self.sample_rate,
+            resample_type=self.resample_type,
+        )
+
     def save(self, path, write_metadata=True, subtype=None, suppress_warnings=False):
         """Save Audio to file
 

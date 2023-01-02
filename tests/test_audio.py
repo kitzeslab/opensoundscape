@@ -44,6 +44,11 @@ def veryshort_wav_str():
 
 
 @pytest.fixture()
+def veryshort_wav_audio(veryshort_wav_str):
+    return Audio.from_file(veryshort_wav_str)
+
+
+@pytest.fixture()
 def silence_10s_mp3_str():
     return "tests/audio/silence_10s.mp3"
 
@@ -127,6 +132,25 @@ def test_load_channels_as_audio_from_mono(veryshort_wav_str):
     s = load_channels_as_audio(veryshort_wav_str)
     assert len(s) == 1
     assert type(s[0]) == Audio
+
+
+def test_normalize(veryshort_wav_audio):
+    assert isclose(
+        max(abs(veryshort_wav_audio.normalize(peak_level=0.5).samples)),
+        0.5,
+        abs_tol=1e-4,
+    )
+
+
+def test_normalize_by_db(veryshort_wav_audio):
+    assert isclose(
+        max(abs(veryshort_wav_audio.normalize(peak_dBFS=0).samples)), 1, abs_tol=1e-4
+    )
+
+
+def test_normalize_doesnt_allow_both_arguments(veryshort_wav_audio):
+    with pytest.raises(ValueError):
+        veryshort_wav_audio.normalize(peak_dBFS=0, peak_level=0.2)
 
 
 def test_load_incorrect_timestamp(onemin_wav_str):
