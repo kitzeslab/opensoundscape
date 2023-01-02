@@ -466,7 +466,7 @@ def efficientnet_b0(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_b0",
-        weights="IMAGENET1K_V1" if use_pretrained else None,
+        pretrained=use_pretrained,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -508,7 +508,7 @@ def efficientnet_b4(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_b4",
-        weights="IMAGENET1K_V1" if use_pretrained else None,
+        pretrained=use_pretrained,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -550,7 +550,7 @@ def efficientnet_widese_b0(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_widese_b0",
-        weights="IMAGENET1K_V1" if use_pretrained else None,
+        pretrained=use_pretrained,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -592,7 +592,7 @@ def efficientnet_widese_b4(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_widese_b4",
-        weights="IMAGENET1K_V1" if use_pretrained else None,
+        pretrained=use_pretrained,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -683,10 +683,6 @@ def change_conv2d_channels(
             Pytorch's model zoo.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
-        torchhub_entrypoint:
-            Choose torchhub architecture from ['nvidia_efficientnet_b0',
-            'nvidia_efficientnet_b4','nvidia_efficientnet_widese_b0',
-            'nvidia_efficientnet_widese_b4']. [default: nvidia_efficientnet_b4]
         reuse_weights: if True (default), averages (if num_channels<original)
         or cycles through (if num_channels>original) original channel weights
             and adds them to the new Conv2D
