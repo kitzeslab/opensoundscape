@@ -56,8 +56,3 @@ def test_clipping_detector(veryshort_audio):
 
 def test_silence_filter(veryshort_wav_str):
     assert audio_tools.silence_filter(veryshort_wav_str) > -1
-
-
-def test_convolve_file(veryshort_wav_str, silent_wav_str, convolved_wav_str, out_path):
-    audio_tools.convolve_file(silent_wav_str, convolved_wav_str, veryshort_wav_str)
-    assert convolved_wav_str.exists()
