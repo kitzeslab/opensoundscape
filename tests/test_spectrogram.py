@@ -37,10 +37,10 @@ def test_spectrogram_shape_of_veryshort(veryshort_wav_str):
     assert spec.spectrogram.shape == (257, 21)
     assert spec.frequencies.shape == (257,)
     assert spec.times.shape == (21,)
-    assert isclose(spec.window_length(), 0.02321995465, abs_tol=1e-4)
-    assert isclose(spec.window_step(), 0.005804988662, abs_tol=1e-4)
-    assert isclose(spec.duration(), audio.duration(), abs_tol=1e-2)
-    assert isclose(spec.window_start_times()[0], 0, abs_tol=1e-4)
+    assert isclose(spec.window_length, 0.02321995465, abs_tol=1e-4)
+    assert isclose(spec.window_step, 0.005804988662, abs_tol=1e-4)
+    assert isclose(spec.duration, audio.duration, abs_tol=1e-2)
+    assert isclose(spec.window_start_times[0], 0, abs_tol=1e-4)
 
 
 def test_spectrogram_shape_of_windowlengths_overlapfraction(veryshort_wav_str):

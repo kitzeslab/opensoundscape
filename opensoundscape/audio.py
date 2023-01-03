@@ -552,15 +552,6 @@ class Audio:
                         if field in self.metadata and self.metadata[field] is not None:
                             s.__setattr__(field, self.metadata[field])
 
-    def duration(self):
-        """Return duration of Audio
-
-        Returns:
-            duration (float): The duration of the Audio
-        """
-
-        return len(self.samples) / self.sample_rate
-
     def split(self, clip_duration, clip_overlap=0, final_clip=None):
         """Split Audio into even-lengthed clips
 
@@ -587,7 +578,7 @@ class Audio:
                 f"or None. Got {final_clip}."
             )
 
-        duration = self.duration()
+        duration = self.duration
         clip_df = generate_clip_times_df(
             full_duration=duration,
             clip_duration=clip_duration,
@@ -666,6 +657,21 @@ class Audio:
         df.index = clip_names
         df.index.name = "file"
         return df
+
+    @property
+    def duration(self):
+        """Calculates the Audio duration in seconds"""
+        return len(self.samples) / self.sample_rate
+
+    @property
+    def rms(self):
+        """Calculates the root-mean-square value of the audio samples"""
+        return np.sqrt(np.mean(self.samples**2))
+
+    @property
+    def dBFS(self):
+        """calculate the root-mean-square dB value relative to a full-scale sine wave"""
+        return 20 * np.log10(self.rms * np.sqrt(2))
 
 
 def load_channels_as_audio(

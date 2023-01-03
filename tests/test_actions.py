@@ -62,20 +62,20 @@ def test_audio_clip_loader_resample(short_wav_path):
 def test_audio_clip_loader_clip(audio_10s_path):
     action = actions.AudioClipLoader()
     audio = action.go(audio_10s_path, _start_time=0, _end_time=2)
-    assert isclose(audio.duration(), 2, abs_tol=1e-4)
+    assert isclose(audio.duration, 2, abs_tol=1e-4)
 
 
 def test_action_trim(audio_short):
     action = actions.AudioTrim()
     audio = action.go(audio_short, _sample_duration=1.0)
-    assert isclose(audio.duration(), 1.0, abs_tol=1e-4)
+    assert isclose(audio.duration, 1.0, abs_tol=1e-4)
 
 
 def test_action_random_trim(audio_short):
     action = actions.AudioTrim(random_trim=True)
     a = action.go(audio_short, _sample_duration=0.01)
     a2 = action.go(audio_short, _sample_duration=0.01)
-    assert isclose(a.duration(), 0.01, abs_tol=1e-4)
+    assert isclose(a.duration, 0.01, abs_tol=1e-4)
     assert not np.array_equal(a.samples, a2.samples)
 
 
@@ -83,7 +83,7 @@ def test_audio_trimmer_default(audio_10s):
     """should not trim if no extra args"""
     action = actions.AudioTrim()
     audio = action.go(audio_10s, _sample_duration=None)
-    assert isclose(audio.duration(), 10, abs_tol=1e-4)
+    assert isclose(audio.duration, 10, abs_tol=1e-4)
 
 
 def test_audio_trimmer_raises_error_on_short_clip(audio_short):
@@ -95,7 +95,7 @@ def test_audio_trimmer_raises_error_on_short_clip(audio_short):
 def test_audio_trimmer_extend_short_clip(audio_short):
     action = actions.AudioTrim()
     audio = action.go(audio_short, _sample_duration=1.0)  # extend=True is default
-    assert isclose(audio.duration(), 1.0, abs_tol=1e-4)
+    assert isclose(audio.duration, 1.0, abs_tol=1e-4)
 
 
 def test_color_jitter(tensor):

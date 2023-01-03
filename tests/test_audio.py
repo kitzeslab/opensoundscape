@@ -134,6 +134,10 @@ def test_load_channels_as_audio_from_mono(veryshort_wav_str):
     assert type(s[0]) == Audio
 
 
+def test_duration(veryshort_wav_audio):
+    assert isclose(veryshort_wav_audio.duration, 0.14208616780045352, abs_tol=1e-7)
+
+
 def test_normalize(veryshort_wav_audio):
     assert isclose(
         max(abs(veryshort_wav_audio.normalize(peak_level=0.5).samples)),
@@ -270,41 +274,47 @@ def test_load_metadata(veryshort_wav_str):
 #         a=Audio.from_file(path_with_no_metadata)
 
 
+def test_calculate_rms(veryshort_wav_audio):
+    assert isclose(veryshort_wav_audio.rms, 0.0871002, abs_tol=1e-7)
+
+
+def test_calculate_dBFS(veryshort_wav_audio):
+    assert isclose(veryshort_wav_audio.dBFS, -18.189316963185377, abs_tol=1e-5)
+
+
 def test_property_trim_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
-    duration = audio.duration()
+    duration = audio.duration
     for _ in range(100):
         [first, second] = sorted([uniform(0, duration), uniform(0, duration)])
-        assert isclose(
-            audio.trim(first, second).duration(), second - first, abs_tol=1e-4
-        )
+        assert isclose(audio.trim(first, second).duration, second - first, abs_tol=1e-4)
 
 
 def test_trim_from_negative_time(silence_10s_mp3_str):
     """correct behavior is to trim from time zero"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(-1, 5)
-    assert isclose(audio.duration(), 5, abs_tol=1e-5)
+    assert isclose(audio.duration, 5, abs_tol=1e-5)
 
 
 def test_trim_past_end_of_clip(silence_10s_mp3_str):
     """correct behavior is to trim to the end of the clip"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(9, 11)
-    assert isclose(audio.duration(), 1, abs_tol=1e-5)
+    assert isclose(audio.duration, 1, abs_tol=1e-5)
 
 
 def test_resample_veryshort_wav(veryshort_wav_str):
     audio = Audio.from_file(veryshort_wav_str)
-    dur = audio.duration()
+    dur = audio.duration
     resampled_audio = audio.resample(22050)
-    assert resampled_audio.duration() == dur
+    assert resampled_audio.duration == dur
     assert resampled_audio.samples.shape == (3133,)
 
 
 def test_resample_mp3_nonstandard_sr(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
-    dur = audio.duration()
+    dur = audio.duration
     resampled_audio = audio.resample(5000)
-    assert resampled_audio.duration() == dur
+    assert resampled_audio.duration == dur
     assert resampled_audio.sample_rate == 5000
 
 
@@ -317,11 +327,11 @@ def test_resample_classmethod_vs_instancemethod(silence_10s_mp3_str):
 
 def test_extend_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
-    duration = audio.duration()
+    duration = audio.duration
     for _ in range(100):
         extend_length = uniform(duration, duration * 10)
         assert isclose(
-            audio.extend(extend_length).duration(), extend_length, abs_tol=1e-4
+            audio.extend(extend_length).duration, extend_length, abs_tol=1e-4
         )
 
 

@@ -224,6 +224,7 @@ class Spectrogram:
     def __repr__(self):
         return f"<Spectrogram(spectrogram={self.spectrogram.shape}, frequencies={self.frequencies.shape}, times={self.times.shape})>"
 
+    @property
     def duration(self):
         """calculate the ammount of time represented in the spectrogram
 
@@ -232,8 +233,8 @@ class Spectrogram:
         such that some samples from the end of the original audio were
         discarded
         """
-        window_length = self.window_length()
-        if window_length is None:
+        window_length = self.window_length
+        if self.window_length is None:
             warnings.warn(
                 "spectrogram must have window_length attribute to"
                 " accurately calculate duration. Approximating duration."
@@ -242,12 +243,14 @@ class Spectrogram:
         else:
             return self.times[-1] + window_length / 2
 
+    @property
     def window_length(self):
         """calculate length of a single fft window, in seconds:"""
         if self.window_samples and self.audio_sample_rate:
             return float(self.window_samples) / self.audio_sample_rate
         return None
 
+    @property
     def window_step(self):
         """calculate time difference (sec) between consecutive windows' centers"""
         if self.window_samples and self.overlap_samples and self.audio_sample_rate:
@@ -257,9 +260,10 @@ class Spectrogram:
             )
         return None
 
+    @property
     def window_start_times(self):
         """get start times of each window, rather than midpoint times"""
-        window_length = self.window_length()
+        window_length = self.window_length
         if window_length is not None:
             return np.array(self.times) - window_length / 2
 
