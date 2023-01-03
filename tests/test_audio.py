@@ -121,6 +121,16 @@ def stereo_wav_str():
     return "tests/audio/stereo.wav"
 
 
+def test_init_with_list():
+    a = Audio([0] * 10, sample_rate=10)
+    assert len(a.samples) == 10
+
+
+def test_init_with_nparray():
+    a = Audio(np.zeros(10), sample_rate=10)
+    assert len(a.samples) == 10
+
+
 def test_load_channels_as_audio(stereo_wav_str):
     s = load_channels_as_audio(stereo_wav_str)
     assert max(s[0].samples) == 0  # channel 1 of stereo.wav is all 0

@@ -71,10 +71,11 @@ class Audio:
         self.metadata = metadata
 
         samples_error = None
-        if not isinstance(self.samples, np.ndarray):
+        if not (isinstance(self.samples, np.ndarray) or isinstance(self.samples,list)):
             samples_error = (
-                "Initializing an Audio object requires samples to be a numpy array"
+                "Initializing an Audio object requires samples to be a numpy array or list"
             )
+        samples = np.array(samples)
 
         try:
             self.sample_rate = int(self.sample_rate)
