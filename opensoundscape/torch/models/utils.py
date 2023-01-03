@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from torch.nn.functional import softmax
 import pandas as pd
 import numpy as np
+import warnings
 
 
 class BaseModule(nn.Module):
@@ -177,7 +178,14 @@ def apply_activation_layer(x, activation_layer=None):
         x = torch.sigmoid(x)
     elif activation_layer == "softmax_and_logit":
         # softmax, then remap scores from [0,1] to [-inf,inf]
-        x = torch.logit(softmax(x, 1))
+        try:
+            x = torch.logit(softmax(x, 1))
+        except NotImplementedError:
+            # use cpu because mps aten::logit is not implemented yet
+            warnings.warn("falling back to CPU for logit operation")
+            original_device = x.device
+            x = torch.logit(softmax(x).cpu()).to(original_device)
+
     else:
         raise ValueError(f"invalid option for activation_layer: {activation_layer}")
 
