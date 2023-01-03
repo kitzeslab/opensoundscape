@@ -769,3 +769,32 @@ def load_channels_as_audio(
     ]
 
     return audio_objects
+
+
+def concat(audio_objects, sample_rate=None):
+    """concatenate a list of Audio objects end-to-end
+
+    Args:
+        audio_objects: iterable of Audio objects
+        sample_rate: target sampling rate
+            - if None, uses sampling rate of _first_
+            Audio object in list
+            - default: None
+
+    Returns: a single Audio object
+
+    Notes: discards metadata and retains .resample_type of _first_ audio object
+    """
+
+    assert np.all(
+        [type(a) == Audio for a in audio_objects]
+    ), "all elements in audio_objects must be Audio objects"
+
+    if sample_rate is None:
+        sample_rate = audio_objects[0].sample_rate
+
+    return Audio(
+        np.array([a.resample(sample_rate).samples for a in audio_objects]).flatten(),
+        sample_rate,
+        resample_type=audio_objects[0].resample_type,
+    )

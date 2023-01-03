@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
+from opensoundscape import audio
 import pytest
 from pathlib import Path
 import io
@@ -515,3 +516,8 @@ def test_noise_classmethod():
     for c in ["white", "blue", "violet", "brown", "pink"]:
         a = Audio.noise(1, 200, color=c)
         assert len(a.samples) == 200
+
+
+def test_concat(veryshort_wav_audio):
+    a = audio.concat([veryshort_wav_audio, veryshort_wav_audio])
+    assert a.duration == 2 * veryshort_wav_audio.duration
