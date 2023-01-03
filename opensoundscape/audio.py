@@ -92,6 +92,66 @@ class Audio:
             raise ValueError(f"Audio initialization failed with:\n{samples_error}")
 
     @classmethod
+    def silent(cls, duration, sample_rate):
+        """ "Create audio object with zero-valued samples
+
+        Args:
+            duration: length in seconds
+            sample_rate: samples per second
+        """
+        return cls(np.zeros(duration * sample_rate), sample_rate)
+
+    @classmethod
+    def noise(cls, duration, sample_rate, color="white", dBFS=-10):
+        """ "Create audio object with noise of a desired 'color'
+
+        set np.random.seed() for reproducible results
+
+        Based on an implementatino by @Bob in StackOverflow question 67085963
+
+        Args:
+            duration: length in seconds
+            sample_rate: samples per second
+            color: any of the following colors, which describe the shape of the power spectral density
+            [default: 'white']
+                - white: uniform psd (equal energy per linear frequency band)
+                - pink: psd = 1/sqrt(f) (equal energy per octave)
+                - brownian: psd = 1/f (aka brown noise)
+                - brown: synonym for brownian
+                - violet: psd = f
+                - blue: psd = sqrt(f)
+
+        Returns: Audio object
+
+        Note: clamping of samples to (-1,1) can result in dBFS different from that
+        requested, especially when dBFS is near zero
+        """
+        # look-up dictionary for relationship of power spectral density with frequency
+        psd_functions = dict(
+            white=lambda f: 1,
+            blue=lambda f: np.sqrt(f),
+            violet=lambda f: f,
+            brownian=lambda f: 1 / np.where(f == 0, float("inf"), f),
+            brown=lambda f: 1 / np.where(f == 0, float("inf"), f),
+            pink=lambda f: 1 / np.where(f == 0, float("inf"), np.sqrt(f)),
+        )
+        n_samples = duration * sample_rate
+        assert color in psd_functions, f"Invalid color {color}"
+        psd = psd_functions[color]
+
+        X_white = np.fft.rfft(np.random.randn(n_samples))
+        S = psd(np.fft.rfftfreq(n_samples))
+        # Normalize S for rms of desired dBFS
+        S = S / np.sqrt(np.mean(S**2)) * (10 ** (dBFS / 20)) / np.sqrt(2)
+
+        X_shaped = X_white * S
+
+        samples = np.fft.irfft(X_shaped)
+
+        clamp = lambda x, l, h: [max(min(xi, h), l) for xi in x]
+        return cls(np.array(clamp(samples, -1, 1)), sample_rate)
+
+    @classmethod
     def from_file(
         cls,
         path,

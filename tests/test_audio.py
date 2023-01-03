@@ -503,3 +503,15 @@ def test_non_integer_overlaplen_split_and_save(silence_10s_mp3_pathlib):
 def test_skip_loading_metadata(metadata_wav_str):
     a = Audio.from_file(metadata_wav_str, metadata=False)
     assert a.metadata is None
+
+
+def test_silent_classmethod():
+    a = Audio.silent(10, 200)
+    assert len(a.samples) == 2000
+    assert max(a.samples) == 0
+
+
+def test_noise_classmethod():
+    for c in ["white", "blue", "violet", "brown", "pink"]:
+        a = Audio.noise(1, 200, color=c)
+        assert len(a.samples) == 200
