@@ -48,9 +48,6 @@ Convolutional Neural Networks
 .. automodule:: opensoundscape.torch.architectures.cnn_architectures
   :members:
 
-.. automodule:: opensoundscape.torch.architectures.resnet
-  :members:
-
 .. automodule:: opensoundscape.torch.architectures.utils
   :members:
 
