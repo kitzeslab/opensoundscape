@@ -157,6 +157,12 @@ def test_normalize(veryshort_wav_audio):
     )
 
 
+def test_apply_gain():
+    a = Audio([1, -1, 0], sample_rate=10).apply_gain(dB=-20)
+    assert isclose(a.samples.max(), 0.1, abs_tol=1e-6)
+    assert isclose(a.samples.min(), -0.1, abs_tol=1e-6)
+
+
 def test_normalize_by_db(veryshort_wav_audio):
     assert isclose(
         max(abs(veryshort_wav_audio.normalize(peak_dBFS=0).samples)), 1, abs_tol=1e-4
@@ -517,7 +523,7 @@ def test_skip_loading_metadata(metadata_wav_str):
 
 
 def test_silent_classmethod():
-    a = Audio.silent(10, 200)
+    a = Audio.silence(10, 200)
     assert len(a.samples) == 2000
     assert max(a.samples) == 0
 

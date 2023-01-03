@@ -71,11 +71,9 @@ class Audio:
         self.metadata = metadata
 
         samples_error = None
-        if not (isinstance(self.samples, np.ndarray) or isinstance(self.samples,list)):
-            samples_error = (
-                "Initializing an Audio object requires samples to be a numpy array or list"
-            )
-        samples = np.array(samples)
+        if not (isinstance(self.samples, np.ndarray) or isinstance(self.samples, list)):
+            samples_error = "Initializing an Audio object requires samples to be a numpy array or list"
+        self.samples = np.array(self.samples).astype("float32")
 
         try:
             self.sample_rate = int(self.sample_rate)
@@ -93,14 +91,16 @@ class Audio:
             raise ValueError(f"Audio initialization failed with:\n{samples_error}")
 
     @classmethod
-    def silent(cls, duration, sample_rate):
+    def silence(cls, duration, sample_rate):
         """ "Create audio object with zero-valued samples
 
         Args:
             duration: length in seconds
             sample_rate: samples per second
+
+        Note: rounds down to integer number of samples
         """
-        return cls(np.zeros(duration * sample_rate), sample_rate)
+        return cls(np.zeros(int(duration * sample_rate)), sample_rate)
 
     @classmethod
     def noise(cls, duration, sample_rate, color="white", dBFS=-10):
@@ -394,8 +394,8 @@ class Audio:
 
         Warning: metadata is lost during this operation
         """
-        start_sample = max(0, self.time_to_sample(start_time))
-        end_sample = self.time_to_sample(end_time)
+        start_sample = max(0, self._get_sample_index(start_time))
+        end_sample = self._get_sample_index(end_time)
         samples_trimmed = self.samples[start_sample:end_sample]
         return Audio(
             samples_trimmed, self.sample_rate, resample_type=self.resample_type
@@ -448,17 +448,6 @@ class Audio:
         return Audio(
             samples_extended, self.sample_rate, resample_type=self.resample_type
         )
-
-    def time_to_sample(self, time):
-        """Given a time, convert it to the corresponding sample
-
-        Args:
-            time: The time to multiply with the sample_rate
-
-        Returns:
-            sample: The rounded sample
-        """
-        return int(time * self.sample_rate)
 
     def bandpass(self, low_f, high_f, order):
         """Bandpass audio signal with a butterworth filter
@@ -524,7 +513,7 @@ class Audio:
                 - Note: do not specify both peak_level and peak_dBFS
 
         returns:
-            Audio object with
+            Audio object with normalized samples
 
         Note: if all samples are zero, returns the original object (avoids
         division by zero)
@@ -552,6 +541,19 @@ class Audio:
             self.samples / abs_max * peak_level,
             self.sample_rate,
             resample_type=self.resample_type,
+            metadata=self.metadata,
+        )
+
+    def apply_gain(self, dB):
+        """apply dB (decibels) of gain to audio signal
+
+        Specifically, multiplies samples by 10^(dB/20)
+        """
+        return Audio(
+            self.samples * (10 ** (dB / 20)),
+            self.sample_rate,
+            resample_type=self.resample_type,
+            metadata=self.metadata,
         )
 
     def save(self, path, write_metadata=True, subtype=None, suppress_warnings=False):
@@ -719,6 +721,19 @@ class Audio:
         df.index.name = "file"
         return df
 
+    def _get_sample_index(self, time):
+        """Given a time, convert it to the corresponding sample
+
+        Args:
+            time: The time to multiply with the sample_rate
+
+        Returns:
+            sample: The rounded sample
+
+        Note: always rounds down (casts to int)
+        """
+        return int(time * self.sample_rate)
+
     @property
     def duration(self):
         """Calculates the Audio duration in seconds"""
@@ -791,11 +806,128 @@ def concat(audio_objects, sample_rate=None):
         [type(a) == Audio for a in audio_objects]
     ), "all elements in audio_objects must be Audio objects"
 
+    # use first object's sample rate if None provided
     if sample_rate is None:
         sample_rate = audio_objects[0].sample_rate
 
+    # concatenate sample arrays to form new Audio object
     return Audio(
-        np.array([a.resample(sample_rate).samples for a in audio_objects]).flatten(),
+        np.hstack([a.resample(sample_rate).samples for a in audio_objects]),
         sample_rate,
         resample_type=audio_objects[0].resample_type,
     )
+
+
+def mix(audio_objects, duration=None, gain=-3, offsets=None, sample_rate=None):
+    """mixdown (superimpose) Audio signals into a single Audio object
+
+    Adds audio samples from multiple audio objects to create a mixdown
+    of Audio samples. Resamples all audio to a consistent sample rate,
+    and optionally applies individual gain and time-offsets to each Audio.
+
+    Args:
+        audio_objects: iterable of Audio objects
+        duration: duration in seconds of returned Audio. Can be:
+            - number: extends shorter Audio with silence
+                and truncates longer Audio
+            - None: extends all Audio to the length of the longest
+                value of (Audio.duration + offset)
+            [default: None]
+        gain: number, list of numbers, or None
+            - number: decibles of gain to apply to all objects
+            - list of numbers: dB of gain to apply to each object
+                (length must match length of audio_objects)
+            [default: -3 dB on each object]
+        offsets: list of time-offsets (seconds) for each Audio object
+            For instance [0,1] starts the first Audio at 0 seconds and
+            shifts the second Audio to start at 1.0 seconds
+            - if None, all objects start at time 0
+            - otherwise, length must match length of audio_objects.
+        sample_rate: sample rate of returned Audio object
+            - integer: resamples all audio to this sample rate
+            - None: uses sample rate of _first_ Audio object
+            [default: None]
+
+
+    Returns:
+        Audio object
+
+    Notes:
+        Audio metadata is discarded. .resample_type of first Audio is retained.
+        Resampling of each Audio uses respective .resample_type of objects.
+
+    """
+
+    ## Input validation ##
+
+    assert np.all(
+        [type(a) == Audio for a in audio_objects]
+    ), "all elements in audio_objects must be Audio objects"
+
+    if hasattr(duration, "__iter__"):
+        assert len(duration) == len(audio_objects), (
+            f"duration must be a number, None, or an iterable of the same "
+            f"length as audio_objects. duration length {len(duration)} does not "
+            f"match audio_objects length {len(audio_objects)}."
+        )
+
+    if hasattr(gain, "__iter__"):
+        assert len(gain) == len(audio_objects), (
+            f"gain must be a number, None, or an iterable of the same "
+            f"length as audio_objects. gain length {len(duration)} does not "
+            f"match audio_objects length {len(audio_objects)}."
+        )
+
+    if offsets is not None:
+        assert len(offsets) == len(audio_objects), (
+            f"offsets must be None or an iterable of the same "
+            f"length as audio_objects. offsets length {len(duration)} does not "
+            f"match audio_objects length {len(audio_objects)}."
+        )
+
+    if sample_rate is None:
+        sample_rate = audio_objects[0].sample_rate
+
+    if duration is None:
+        if offsets is not None:
+            duration = max(
+                [a.duration + offsets[i] for i, a in enumerate(audio_objects)]
+            )
+        else:
+            duration = max([a.duration for a in audio_objects])
+
+    ## Create mixdown ##
+
+    mixdown = np.zeros(int(duration * sample_rate))
+
+    for i, audio in enumerate(audio_objects):
+        # apply volume (gain) adjustment to this Audio
+        if hasattr(gain, "__iter__"):
+            audio = audio.apply_gain(gain[i])
+        elif gain is not None:
+            audio = audio.apply_gain(gain)
+
+        # resample if required
+        if audio.sample_rate != sample_rate:
+            audio = audio.resample(sample_rate)
+
+        # add offset if desired
+        if offsets is not None:
+            audio = concat(
+                [Audio.silence(duration=offsets[i], sample_rate=sample_rate), audio]
+            )
+
+        # pad or truncate to correct length
+        if audio.duration < duration:
+            audio = audio.extend(duration)
+        elif audio.duration > duration:
+            audio = audio.trim(0, duration)
+
+        # add samples to mixdown
+        mixdown += audio.samples
+
+    # clamp samples to range [-1,1]
+    clamp = lambda x, l, h: [max(min(xi, h), l) for xi in x]
+    mixdown = clamp(mixdown, -1, 1)
+
+    return Audio(mixdown, sample_rate, resample_type=audio_objects[0].resample_type)
