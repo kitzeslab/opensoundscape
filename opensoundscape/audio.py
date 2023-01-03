@@ -92,6 +92,66 @@ class Audio:
             raise ValueError(f"Audio initialization failed with:\n{samples_error}")
 
     @classmethod
+    def silent(cls, duration, sample_rate):
+        """ "Create audio object with zero-valued samples
+
+        Args:
+            duration: length in seconds
+            sample_rate: samples per second
+        """
+        return cls(np.zeros(duration * sample_rate), sample_rate)
+
+    @classmethod
+    def noise(cls, duration, sample_rate, color="white", dBFS=-10):
+        """ "Create audio object with noise of a desired 'color'
+
+        set np.random.seed() for reproducible results
+
+        Based on an implementatino by @Bob in StackOverflow question 67085963
+
+        Args:
+            duration: length in seconds
+            sample_rate: samples per second
+            color: any of the following colors, which describe the shape of the power spectral density
+            [default: 'white']
+                - white: uniform psd (equal energy per linear frequency band)
+                - pink: psd = 1/sqrt(f) (equal energy per octave)
+                - brownian: psd = 1/f (aka brown noise)
+                - brown: synonym for brownian
+                - violet: psd = f
+                - blue: psd = sqrt(f)
+
+        Returns: Audio object
+
+        Note: clamping of samples to (-1,1) can result in dBFS different from that
+        requested, especially when dBFS is near zero
+        """
+        # look-up dictionary for relationship of power spectral density with frequency
+        psd_functions = dict(
+            white=lambda f: 1,
+            blue=lambda f: np.sqrt(f),
+            violet=lambda f: f,
+            brownian=lambda f: 1 / np.where(f == 0, float("inf"), f),
+            brown=lambda f: 1 / np.where(f == 0, float("inf"), f),
+            pink=lambda f: 1 / np.where(f == 0, float("inf"), np.sqrt(f)),
+        )
+        n_samples = duration * sample_rate
+        assert color in psd_functions, f"Invalid color {color}"
+        psd = psd_functions[color]
+
+        X_white = np.fft.rfft(np.random.randn(n_samples))
+        S = psd(np.fft.rfftfreq(n_samples))
+        # Normalize S for rms of desired dBFS
+        S = S / np.sqrt(np.mean(S**2)) * (10 ** (dBFS / 20)) / np.sqrt(2)
+
+        X_shaped = X_white * S
+
+        samples = np.fft.irfft(X_shaped)
+
+        clamp = lambda x, l, h: [max(min(xi, h), l) for xi in x]
+        return cls(np.array(clamp(samples, -1, 1)), sample_rate)
+
+    @classmethod
     def from_file(
         cls,
         path,
@@ -450,6 +510,49 @@ class Audio:
 
         return fft, frequencies
 
+    def normalize(self, peak_level=None, peak_dBFS=None):
+        """Return audio object with normalized waveform
+
+        Linearly scales waveform values so that the max absolute value matches
+        the specified value (default: 1.0)
+
+        args:
+            peak_level: maximum absolute value of resulting waveform
+            peak_dBFS: maximum resulting absolute value in decibels Full Scale
+                - for example, -3 dBFS equals a peak level of 0.71
+                - Note: do not specify both peak_level and peak_dBFS
+
+        returns:
+            Audio object with
+
+        Note: if all samples are zero, returns the original object (avoids
+        division by zero)
+
+        """
+        # make sure the user didn't request peak level both ways
+        if peak_level is not None and peak_dBFS is not None:
+            raise ValueError("Must not specify both peak_level and peak_dBFS")
+
+        if peak_level is None and peak_dBFS is None:
+            peak_level = 0
+        elif peak_dBFS is not None:
+            if peak_dBFS > 0:
+                warnings.warn("user requested decibels Full Scale >0 !")
+
+            # dBFS is defined as 20*log10(V), so V = 10^(dBFS/20)
+            peak_level = 10 ** (peak_dBFS / 20)
+
+        abs_max = max(max(self.samples), -min(self.samples))
+        if abs_max == 0:
+            # don't try to normalize 0-valued samples. Return original object
+            abs_max = 1
+
+        return Audio(
+            self.samples / abs_max * peak_level,
+            self.sample_rate,
+            resample_type=self.resample_type,
+        )
+
     def save(self, path, write_metadata=True, subtype=None, suppress_warnings=False):
         """Save Audio to file
 
@@ -509,15 +612,6 @@ class Audio:
                         if field in self.metadata and self.metadata[field] is not None:
                             s.__setattr__(field, self.metadata[field])
 
-    def duration(self):
-        """Return duration of Audio
-
-        Returns:
-            duration (float): The duration of the Audio
-        """
-
-        return len(self.samples) / self.sample_rate
-
     def split(self, clip_duration, clip_overlap=0, final_clip=None):
         """Split Audio into even-lengthed clips
 
@@ -544,7 +638,7 @@ class Audio:
                 f"or None. Got {final_clip}."
             )
 
-        duration = self.duration()
+        duration = self.duration
         clip_df = generate_clip_times_df(
             full_duration=duration,
             clip_duration=clip_duration,
@@ -624,6 +718,21 @@ class Audio:
         df.index.name = "file"
         return df
 
+    @property
+    def duration(self):
+        """Calculates the Audio duration in seconds"""
+        return len(self.samples) / self.sample_rate
+
+    @property
+    def rms(self):
+        """Calculates the root-mean-square value of the audio samples"""
+        return np.sqrt(np.mean(self.samples**2))
+
+    @property
+    def dBFS(self):
+        """calculate the root-mean-square dB value relative to a full-scale sine wave"""
+        return 20 * np.log10(self.rms * np.sqrt(2))
+
 
 def load_channels_as_audio(
     path, sample_rate=None, resample_type="kaiser_fast", offset=0, duration=None
@@ -660,3 +769,32 @@ def load_channels_as_audio(
     ]
 
     return audio_objects
+
+
+def concat(audio_objects, sample_rate=None):
+    """concatenate a list of Audio objects end-to-end
+
+    Args:
+        audio_objects: iterable of Audio objects
+        sample_rate: target sampling rate
+            - if None, uses sampling rate of _first_
+            Audio object in list
+            - default: None
+
+    Returns: a single Audio object
+
+    Notes: discards metadata and retains .resample_type of _first_ audio object
+    """
+
+    assert np.all(
+        [type(a) == Audio for a in audio_objects]
+    ), "all elements in audio_objects must be Audio objects"
+
+    if sample_rate is None:
+        sample_rate = audio_objects[0].sample_rate
+
+    return Audio(
+        np.array([a.resample(sample_rate).samples for a in audio_objects]).flatten(),
+        sample_rate,
+        resample_type=audio_objects[0].resample_type,
+    )

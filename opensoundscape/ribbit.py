@@ -139,7 +139,7 @@ def ribbit(
 
     """
     if final_clip == "extend":
-        raise ValuseError(
+        raise ValueError(
             "final_clip='extend' is not supported for RIBBIT. "
             "consider using 'remainder'."
         )
@@ -149,11 +149,11 @@ def ribbit(
     time = spectrogram.times
     # we calculate the sample rate of the amplitude signal using the difference
     # in time between columns of the Spectrogram
-    sample_rate = 1 / spectrogram.window_step()
+    sample_rate = 1 / spectrogram.window_step
 
     # determine the start and end times of each clip to analyze
     clip_df = generate_clip_times_df(
-        full_duration=spectrogram.duration(),
+        full_duration=spectrogram.duration,
         clip_duration=clip_duration,
         clip_overlap=clip_overlap,
         final_clip=final_clip,

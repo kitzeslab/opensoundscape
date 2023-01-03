@@ -85,7 +85,7 @@ def cwt_peaks(
     x = x / np.max(x)
 
     # calcualte time vector for each point in cwt signal
-    t = np.linspace(0, audio.duration(), len(x))
+    t = np.linspace(0, audio.duration, len(x))
 
     ## find peaks in cwt signal ##
 
@@ -335,7 +335,7 @@ def detect_peak_sequence_cwt(
     dfs = []
 
     # analyze the audio in analysis windows of length winidow_len seconds
-    for window_idx in range(int(audio.duration() / window_len)):
+    for window_idx in range(int(audio.duration / window_len)):
         window_start_t = window_idx * window_len
 
         # trim audio to an analysis window

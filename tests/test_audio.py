@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
+from opensoundscape import audio
 import pytest
 from pathlib import Path
 import io
@@ -41,6 +42,11 @@ def empty_wav_str():
 @pytest.fixture()
 def veryshort_wav_str():
     return "tests/audio/veryshort.wav"
+
+
+@pytest.fixture()
+def veryshort_wav_audio(veryshort_wav_str):
+    return Audio.from_file(veryshort_wav_str)
 
 
 @pytest.fixture()
@@ -127,6 +133,29 @@ def test_load_channels_as_audio_from_mono(veryshort_wav_str):
     s = load_channels_as_audio(veryshort_wav_str)
     assert len(s) == 1
     assert type(s[0]) == Audio
+
+
+def test_duration(veryshort_wav_audio):
+    assert isclose(veryshort_wav_audio.duration, 0.14208616780045352, abs_tol=1e-7)
+
+
+def test_normalize(veryshort_wav_audio):
+    assert isclose(
+        max(abs(veryshort_wav_audio.normalize(peak_level=0.5).samples)),
+        0.5,
+        abs_tol=1e-4,
+    )
+
+
+def test_normalize_by_db(veryshort_wav_audio):
+    assert isclose(
+        max(abs(veryshort_wav_audio.normalize(peak_dBFS=0).samples)), 1, abs_tol=1e-4
+    )
+
+
+def test_normalize_doesnt_allow_both_arguments(veryshort_wav_audio):
+    with pytest.raises(ValueError):
+        veryshort_wav_audio.normalize(peak_dBFS=0, peak_level=0.2)
 
 
 def test_load_incorrect_timestamp(onemin_wav_str):
@@ -246,41 +275,47 @@ def test_load_metadata(veryshort_wav_str):
 #         a=Audio.from_file(path_with_no_metadata)
 
 
+def test_calculate_rms(veryshort_wav_audio):
+    assert isclose(veryshort_wav_audio.rms, 0.0871002, abs_tol=1e-7)
+
+
+def test_calculate_dBFS(veryshort_wav_audio):
+    assert isclose(veryshort_wav_audio.dBFS, -18.189316963185377, abs_tol=1e-5)
+
+
 def test_property_trim_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
-    duration = audio.duration()
+    duration = audio.duration
     for _ in range(100):
         [first, second] = sorted([uniform(0, duration), uniform(0, duration)])
-        assert isclose(
-            audio.trim(first, second).duration(), second - first, abs_tol=1e-4
-        )
+        assert isclose(audio.trim(first, second).duration, second - first, abs_tol=1e-4)
 
 
 def test_trim_from_negative_time(silence_10s_mp3_str):
     """correct behavior is to trim from time zero"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(-1, 5)
-    assert isclose(audio.duration(), 5, abs_tol=1e-5)
+    assert isclose(audio.duration, 5, abs_tol=1e-5)
 
 
 def test_trim_past_end_of_clip(silence_10s_mp3_str):
     """correct behavior is to trim to the end of the clip"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(9, 11)
-    assert isclose(audio.duration(), 1, abs_tol=1e-5)
+    assert isclose(audio.duration, 1, abs_tol=1e-5)
 
 
 def test_resample_veryshort_wav(veryshort_wav_str):
     audio = Audio.from_file(veryshort_wav_str)
-    dur = audio.duration()
+    dur = audio.duration
     resampled_audio = audio.resample(22050)
-    assert resampled_audio.duration() == dur
+    assert resampled_audio.duration == dur
     assert resampled_audio.samples.shape == (3133,)
 
 
 def test_resample_mp3_nonstandard_sr(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
-    dur = audio.duration()
+    dur = audio.duration
     resampled_audio = audio.resample(5000)
-    assert resampled_audio.duration() == dur
+    assert resampled_audio.duration == dur
     assert resampled_audio.sample_rate == 5000
 
 
@@ -293,11 +328,11 @@ def test_resample_classmethod_vs_instancemethod(silence_10s_mp3_str):
 
 def test_extend_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
-    duration = audio.duration()
+    duration = audio.duration
     for _ in range(100):
         extend_length = uniform(duration, duration * 10)
         assert isclose(
-            audio.extend(extend_length).duration(), extend_length, abs_tol=1e-4
+            audio.extend(extend_length).duration, extend_length, abs_tol=1e-4
         )
 
 
@@ -469,3 +504,20 @@ def test_non_integer_overlaplen_split_and_save(silence_10s_mp3_pathlib):
 def test_skip_loading_metadata(metadata_wav_str):
     a = Audio.from_file(metadata_wav_str, metadata=False)
     assert a.metadata is None
+
+
+def test_silent_classmethod():
+    a = Audio.silent(10, 200)
+    assert len(a.samples) == 2000
+    assert max(a.samples) == 0
+
+
+def test_noise_classmethod():
+    for c in ["white", "blue", "violet", "brown", "pink"]:
+        a = Audio.noise(1, 200, color=c)
+        assert len(a.samples) == 200
+
+
+def test_concat(veryshort_wav_audio):
+    a = audio.concat([veryshort_wav_audio, veryshort_wav_audio])
+    assert a.duration == 2 * veryshort_wav_audio.duration

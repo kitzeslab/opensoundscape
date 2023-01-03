@@ -191,20 +191,20 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False, tol=1e-5
         raise ValueError("recieved zero-length audio")
 
     if _sample_duration is not None:
-        if audio.duration() + tol <= _sample_duration:
+        if audio.duration + tol <= _sample_duration:
             # input audio is not as long as desired length
             if extend:  # extend clip sith silence
                 audio = audio.extend(_sample_duration)
             else:
                 raise ValueError(
-                    f"the length of the original file ({audio.duration()} "
+                    f"the length of the original file ({audio.duration} "
                     f"sec) was less than the length to extract "
                     f"({_sample_duration} sec). To extend short "
                     f"clips, use extend=True"
                 )
         if random_trim:
             # uniformly randomly choose clip time from full audio
-            extra_time = audio.duration() - _sample_duration
+            extra_time = audio.duration - _sample_duration
             start_time = np.random.uniform() * extra_time
         else:
             start_time = 0
