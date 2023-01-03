@@ -124,7 +124,7 @@ class Audio:
 
         Returns: Audio object
 
-        Note: clamping of samples to (-1,1) can result in dBFS different from that
+        Note: Clips samples to [-1,1] which can result in dBFS different from that
         requested, especially when dBFS is near zero
         """
         # look-up dictionary for relationship of power spectral density with frequency
@@ -149,8 +149,7 @@ class Audio:
 
         samples = np.fft.irfft(X_shaped)
 
-        clamp = lambda x, l, h: [max(min(xi, h), l) for xi in x]
-        return cls(np.array(clamp(samples, -1, 1)), sample_rate)
+        return cls(np.clip(samples, -1, 1), sample_rate)
 
     @classmethod
     def from_file(
@@ -544,13 +543,26 @@ class Audio:
             metadata=self.metadata,
         )
 
-    def apply_gain(self, dB):
+    def apply_gain(self, dB, clip_range=[-1, 1]):
         """apply dB (decibels) of gain to audio signal
 
         Specifically, multiplies samples by 10^(dB/20)
+
+        Args:
+            dB: decibels of gain to apply
+            clip_range: [minimum,maximum] values for samples
+                - values outside this range will be replaced with the range
+                boundary values. Pass `None` to preserve original sample values
+                without clipping. [Default: [-1,1]]
+
+        Returns:
+            Audio object with gain applied to samples
         """
+        samples = self.samples * (10 ** (dB / 20))
+        if clip_range is not None:
+            samples = np.clip(samples, clip_range[0], clip_range[1])
         return Audio(
-            self.samples * (10 ** (dB / 20)),
+            samples,
             self.sample_rate,
             resample_type=self.resample_type,
             metadata=self.metadata,
@@ -818,7 +830,14 @@ def concat(audio_objects, sample_rate=None):
     )
 
 
-def mix(audio_objects, duration=None, gain=-3, offsets=None, sample_rate=None):
+def mix(
+    audio_objects,
+    duration=None,
+    gain=-3,
+    offsets=None,
+    sample_rate=None,
+    clip_range=[-1, 1],
+):
     """mixdown (superimpose) Audio signals into a single Audio object
 
     Adds audio samples from multiple audio objects to create a mixdown
@@ -847,6 +866,10 @@ def mix(audio_objects, duration=None, gain=-3, offsets=None, sample_rate=None):
             - integer: resamples all audio to this sample rate
             - None: uses sample rate of _first_ Audio object
             [default: None]
+        clip_range: minimum and maximum sample values. Samples outside
+            this range will be replaced by the range limit values
+            Pass None to keep sample values without clipping.
+            [default: [-1,1]]
 
 
     Returns:
@@ -926,8 +949,8 @@ def mix(audio_objects, duration=None, gain=-3, offsets=None, sample_rate=None):
         # add samples to mixdown
         mixdown += audio.samples
 
-    # clamp samples to range [-1,1]
-    clamp = lambda x, l, h: [max(min(xi, h), l) for xi in x]
-    mixdown = clamp(mixdown, -1, 1)
+    # limit sample values to clip_range
+    if clip_range is not None:
+        mixdown = np.clip(mixdown, clip_range[0], clip_range[1])
 
     return Audio(mixdown, sample_rate, resample_type=audio_objects[0].resample_type)

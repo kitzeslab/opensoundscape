@@ -163,6 +163,12 @@ def test_apply_gain():
     assert isclose(a.samples.min(), -0.1, abs_tol=1e-6)
 
 
+def test_gain_clips():
+    a = Audio([0.5, -0.5, 0], sample_rate=10).apply_gain(dB=10)
+    assert isclose(a.samples.max(), 1, abs_tol=1e-6)
+    assert isclose(a.samples.min(), -1, abs_tol=1e-6)
+
+
 def test_normalize_by_db(veryshort_wav_audio):
     assert isclose(
         max(abs(veryshort_wav_audio.normalize(peak_dBFS=0).samples)), 1, abs_tol=1e-4
@@ -537,3 +543,36 @@ def test_noise_classmethod():
 def test_concat(veryshort_wav_audio):
     a = audio.concat([veryshort_wav_audio, veryshort_wav_audio])
     assert a.duration == 2 * veryshort_wav_audio.duration
+
+
+def test_mix(veryshort_wav_audio):
+    m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], gain=0)
+    assert isclose(max(veryshort_wav_audio.samples) * 2, max(m.samples), abs_tol=1e-6)
+
+
+def test_mix_duration(veryshort_wav_audio):
+    m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], duration=1)
+    assert isclose(m.duration, 1, abs_tol=1e-6)
+
+
+def test_mix_duration_extends(veryshort_wav_audio):
+    m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], duration=1)
+    assert isclose(m.duration, 1, abs_tol=1e-3)
+
+
+def test_mix_duration_truncates(veryshort_wav_audio):
+    a = Audio.silence(10, veryshort_wav_audio.sample_rate)
+    m = audio.mix([a, veryshort_wav_audio], duration=1)
+    assert isclose(m.duration, 1, abs_tol=1e-3)
+
+
+def test_mix_offsets(veryshort_wav_audio):
+    m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], offsets=[0, 1])
+    # expected behavior: length will be offset + audio length
+    assert isclose(m.duration, 1 + veryshort_wav_audio.duration, abs_tol=1e-3)
+
+
+def test_mix_clip(veryshort_wav_audio):
+    # should never have values outside of [-1,1]
+    m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], gain=100)
+    assert max(abs(m.samples)) <= 1
