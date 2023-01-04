@@ -4,16 +4,18 @@ import pandas as pd
 from scipy import signal
 import pywt
 import matplotlib.pyplot as plt
+from pywt import central_frequency
+
 from opensoundscape.helpers import inrange
 
 
-def frequency2scale(frequency, wavelet, sr):
+def frequency2scale(frequency, wavelet, sample_rate):
     """determine appropriate wavelet scale for desired center frequency
 
     Args:
         frequency: desired center frequency of wavelet in Hz (1/seconds)
         wavelet: (str) name of pywt wavelet, eg 'morl' for Morlet
-        sr: sample rate in Hz (1/seconds)
+        sample_rate: sample rate in Hz (1/seconds)
 
     Returns:
         scale: (float) scale parameter for pywt.ctw() to extract desired frequency
@@ -23,13 +25,11 @@ def frequency2scale(frequency, wavelet, sr):
     rather than frequency in Hz (cycles/second). In other words,
     freuquency_hz = pywt.scale2frequency(w,scale)*sr.
     """
-    from pywt import central_frequency
-
     # get center frequency of this wavelet
-    cf = central_frequency(wavelet)
+    center_freq = central_frequency(wavelet)
 
     # calculate scale
-    return cf * sr / frequency
+    return center_freq * sample_rate / frequency
 
 
 def cwt_peaks(
@@ -272,7 +272,7 @@ def find_accel_sequences(
 
 def detect_peak_sequence_cwt(
     audio,
-    sr=400,
+    sample_rate=400,
     window_len=60,
     center_frequency=50,
     wavelet="morl",
@@ -298,7 +298,7 @@ def detect_peak_sequence_cwt(
 
     Args:
         audio: Audio object
-        sr=400: resample audio to this sample rate (Hz)
+        sample_rate=400: resample audio to this sample rate (Hz)
         window_len=60: length of analysis window (sec)
         center_frequency=50: target audio frequency of cwt
         wavelet='morl': (str) pywt wavelet name (see pywavelets docs)
@@ -329,7 +329,7 @@ def detect_peak_sequence_cwt(
     """
 
     # resample audio
-    audio = audio.resample(sr)
+    audio = audio.resample(sample_rate)
 
     # save detection dfs from each window in a list (aggregate later)
     dfs = []
@@ -430,7 +430,7 @@ def _get_ones_sequences(x):
     return starts, lengths
 
 
-def thresholded_event_durations(x, threshold, normalize=False, sr=1):
+def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
     """Detect positions and durations of events over threshold in 1D signal
 
     This function takes a 1D numeric vector and searches for segments that
@@ -443,7 +443,7 @@ def thresholded_event_durations(x, threshold, normalize=False, sr=1):
         x: 1d input signal, a vector of numeric values
         threshold: minimum value of signal to be a detection
         normalize: if True, performs x=x/max(x)
-        sr: sample rate of input signal
+        sample_rate: sample rate of input signal
 
     Returns:
         start_times: start time of each detected event
@@ -454,4 +454,4 @@ def thresholded_event_durations(x, threshold, normalize=False, sr=1):
     x_01 = (np.array(x) >= threshold).astype(int)
     starts, lengths = _get_ones_sequences(x_01)
 
-    return np.array(starts) / sr, np.array(lengths) / sr
+    return np.array(starts) / sample_rate, np.array(lengths) / sample_rate

@@ -79,10 +79,10 @@ class SafeDataset:
         unsafe sample, and also builds an index of safe and unsafe samples as
         and when they get accessed.
         """
+        invalid_idx = False
         try:
             # differentiates IndexError occuring here from one occuring during
             # sample loading
-            invalid_idx = False
             if idx >= len(self.dataset):
                 invalid_idx = True
                 raise IndexError("index exceeded end of self.dataset")
@@ -90,8 +90,8 @@ class SafeDataset:
             if idx not in self._safe_indices:
                 self._safe_indices.append(idx)
             return sample
-        except Exception as e:
-            if isinstance(e, IndexError) and invalid_idx:
+        except Exception as exc:
+            if isinstance(exc, IndexError) and invalid_idx:
                 raise
             if idx not in self._unsafe_indices:
                 self._unsafe_indices.append(idx)
@@ -115,6 +115,7 @@ class SafeDataset:
         self._safe_indices = self._unsafe_indices = self._unsafe_samples = []
 
     def report(self, log=None):
+        """write _unsafe_samples to log file, give warning, & return _unsafe_samples"""
         if len(self._unsafe_samples) > 0:
             msg = (
                 f"There were {len(self._unsafe_samples)} "
@@ -122,7 +123,8 @@ class SafeDataset:
             )
             if log is not None:
                 with open(log, "w") as f:
-                    [f.write(p + "\n") for p in self._unsafe_samples]
+                    for p in self._unsafe_samples:
+                        f.write(p + "\n")
                 msg += f"The unsafe file paths are logged in {log}"
             warnings.warn(msg)
         return self._unsafe_samples
@@ -136,6 +138,7 @@ class SafeDataset:
 
     @property
     def num_samples_examined(self):
+        """count of _safe_indices + _unsafe_indices"""
         return len(self._safe_indices) + len(self._unsafe_indices)
 
     def __len__(self):
@@ -184,5 +187,6 @@ class SafeDataset:
                     raise
         else:
             raise ValueError(
-                f"unsafe_behavior must be 'substitute','raise', or 'none'. Got {self.unsafe_behavior}"
+                f"unsafe_behavior must be 'substitute','raise', or 'none'. "
+                f"Got {self.unsafe_behavior}"
             )

@@ -1,6 +1,13 @@
+"""Utilities for opensoundscape"""
+
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
-import requests
+import pytz
+import soundfile
+
+import librosa
 
 
 def isNan(x):
@@ -24,8 +31,7 @@ def overlap(r1, r2):
 
 def overlap_fraction(r1, r2):
     """ "calculate the fraction of r1 (low, high range) that overlaps with r2"""
-    ol = overlap(r1, r2)
-    return ol / (r1[1] - r1[0])
+    return overlap(r1, r2) / (r1[1] - r1[0])
 
 
 def inrange(x, r):
@@ -44,14 +50,6 @@ def binarize(x, threshold):
     return [1 if xi > threshold else 0 for xi in x]
 
 
-def run_command(cmd):
-    """run a bash command with Popen, return response"""
-    from subprocess import Popen, PIPE
-    from shlex import split
-
-    return Popen(split(cmd), stdout=PIPE, stderr=PIPE).communicate()
-
-
 def rescale_features(X, rescaling_vector=None):
     """rescale all features by dividing by the max value for each feature
 
@@ -59,19 +57,10 @@ def rescale_features(X, rescaling_vector=None):
     so that you can rescale a new dataset consistently with an old one
 
     returns rescaled feature set and rescaling vector"""
-    import numpy as np
-
     if rescaling_vector is None:
         rescaling_vector = 1 / np.nanmax(X, 0)
-    rescaledX = np.multiply(X, rescaling_vector).tolist()
-    return rescaledX, rescaling_vector
-
-
-def file_name(path):
-    """get file name without extension from a path"""
-    import os
-
-    return os.path.splitext(os.path.basename(path))[0]
+    rescaled_x = np.multiply(X, rescaling_vector).tolist()
+    return rescaled_x, rescaling_vector
 
 
 def hex_to_time(s):
@@ -93,9 +82,6 @@ def hex_to_time(s):
     Returns:
         datetime.datetime object representing the date and time in UTC
     """
-    from datetime import datetime
-    import pytz
-
     sec = int(s, 16)
     timestamp = datetime.utcfromtimestamp(sec).replace(tzinfo=pytz.utc)
     return timestamp
@@ -158,7 +144,6 @@ def _load_metadata(path, raise_exceptions=False):
     Returns:
         dictionary containing audio file metadata
     """
-    import soundfile
 
     try:
         with soundfile.SoundFile(path, "r") as f:
@@ -196,10 +181,13 @@ def generate_clip_times_df(
             clip_duration seconds long [default: None].
             Options:
                 - None:         Discard the remainder (do not make a clip)
-                - "extend":     Extend the final clip beyond full_duration to reach clip_duration length
-                - "remainder":  Use only remainder of full_duration (final clip will be shorter than clip_duration)
-                - "full":       Increase overlap with previous clip to yield a clip with clip_duration length.
-                                Note: returns entire original audio if it is shorter than clip_duration
+                - "extend":     Extend the final clip beyond full_duration to reach clip_duration
+                  length
+                - "remainder":  Use only remainder of full_duration (final clip will be shorter than
+                  clip_duration)
+                - "full":       Increase overlap with previous clip to yield a clip with
+                  clip_duration length.
+                    Note: returns entire original audio if it is shorter than clip_duration
     Returns:
         clip_df: DataFrame with columns for 'start_time' and 'end_time' of each clip
     """
@@ -265,9 +253,6 @@ def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
         unsafe_samples: list of file paths that did not exist or failed to
             produce a valid list of clips
     """
-
-    import librosa
-
     if isinstance(files, str):
         raise TypeError(
             "make_clip_df expects a list of files, it looks like you passed it a string"

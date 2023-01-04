@@ -1,9 +1,7 @@
-import pandas as pd
-import numpy as np
-import torch
+"""Preprocessor classes: tools for preparing and augmenting audio samples"""
 from pathlib import Path
 import copy
-import warnings
+import pandas as pd
 
 from opensoundscape.preprocess.utils import PreprocessingError
 from opensoundscape.preprocess import actions
@@ -105,7 +103,8 @@ class BasePreprocessor:
                 action is not performed.
             clip_times: can be either
                 - None: the file is treated as a single sample
-                - dictionary {"start_time":float,"end_time":float}: the start and end time of clip in audio
+                - dictionary {"start_time":float,"end_time":float}:
+                    the start and end time of clip in audio
             bypass_augmentations: if True, actions with .is_augmentatino=True
                 are skipped
 
@@ -131,8 +130,8 @@ class BasePreprocessor:
             )
             label_df_row = sample
 
-        self.has_clips = type(label_df_row.name) == tuple
-        if self.has_clips:
+        has_clips = type(label_df_row.name) == tuple
+        if has_clips:
             # if the dataframe has a multi-index, it should be (file,start_time,end_time)
             assert (
                 len(label_df_row.name) == 3
@@ -171,11 +170,11 @@ class BasePreprocessor:
                     sample_info["_labels"] = labels
                 else:
                     x = action.go(x, **extra_args)
-        except:
+        except Exception as exc:
             # treat any exceptions raised during forward as PreprocessingErrors
             raise PreprocessingError(
                 f"failed to preprocess sample from path: {label_df_row.name}"
-            )
+            ) from exc
 
         return x, sample_info
 

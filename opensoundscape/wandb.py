@@ -1,6 +1,5 @@
 """helpers for integrating with WandB and exporting content"""
 import wandb
-from opensoundscape.torch.datasets import AudioFileDataset
 import pandas as pd
 from opensoundscape.annotations import one_hot_to_categorical
 from opensoundscape.audio import Audio
@@ -76,7 +75,7 @@ def wandb_table(dataset, n=None, classes_to_extract=[], random_state=None):
             sample_table.loc[len(sample_table)] = row_info
 
         except:  # we'll allow failures to pass here
-            raise  # pass  # print(f"failed to load sample {sample_df.index.values[i]}")
+            pass  # print(f"failed to load sample {sample_df.index.values[i]}")
 
     return wandb.Table(dataframe=sample_table)
 

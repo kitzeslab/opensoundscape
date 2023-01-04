@@ -12,9 +12,9 @@ class BCEWithLogitsLoss_hot(nn.BCEWithLogitsLoss):
     def __init__(self):
         super(BCEWithLogitsLoss_hot, self).__init__()
 
-    def forward(self, input, target):
+    def forward(self, x, target):
         target = target.float()
-        return super(BCEWithLogitsLoss_hot, self).forward(input, target)
+        return super(BCEWithLogitsLoss_hot, self).forward(x, target)
 
 
 class CrossEntropyLoss_hot(nn.CrossEntropyLoss):
@@ -27,11 +27,11 @@ class CrossEntropyLoss_hot(nn.CrossEntropyLoss):
     def __init__(self):
         super(CrossEntropyLoss_hot, self).__init__()
 
-    def forward(self, input, target):
+    def forward(self, x, target):
         if not (target.sum(1).all() and target.sum(1).max() == 1):
             raise ValueError("labels must be single-target for CrossEntropyLoss")
         target = target.argmax(1)
-        return super(CrossEntropyLoss_hot, self).forward(input, target)
+        return super(CrossEntropyLoss_hot, self).forward(x, target)
 
 
 def reduce_loss(loss, reduction):
@@ -84,6 +84,7 @@ def weight_reduce_loss(loss, weight=None, reduction="mean", avg_factor=None):
 
 
 def binary_cross_entropy(pred, label, weight=None, reduction="mean", avg_factor=None):
+    """helper function for BCE loss in ResampleLoss class"""
     if pred.dim() != label.dim():
         if weight is not None:
             weight = weight.view(-1, 1).expand(weight.size(0), pred.size(-1))
@@ -147,9 +148,8 @@ class ResampleLoss(nn.Module):
         cls_score,
         label,
         weight=None,
-        avg_factor=None,
+        # avg_factor=None,
         reduction_override=None,
-        **kwargs,
     ):
 
         assert reduction_override in (None, "none", "mean", "sum")

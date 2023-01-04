@@ -1,12 +1,13 @@
 """Preprocessors: pd.Series child with an action sequence & forward method"""
-import torch
-from opensoundscape.helpers import make_clip_df
-import torch
-import numpy as np
-import pandas as pd
-from pathlib import Path
 import warnings
 import copy
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import torch
+
+from opensoundscape.helpers import make_clip_df
 
 
 class AudioFileDataset(torch.utils.data.Dataset):
@@ -56,9 +57,9 @@ class AudioFileDataset(torch.utils.data.Dataset):
 
         # validate type of samples: list, np array, or df
         assert type(samples) in (list, np.ndarray, pd.DataFrame,), (
-            f"samples must be type list/np.ndarray of file paths, ",
+            f"samples must be type list/np.ndarray of file paths, "
             f"or pd.DataFrame with index containing path (or multi-index of "
-            f"path, start_time, end_time). Got {type(samples)}.",
+            f"path, start_time, end_time). Got {type(samples)}."
         )
         if type(samples) == list or type(samples) == np.ndarray:
             df = pd.DataFrame(index=samples)

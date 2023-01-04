@@ -1,13 +1,12 @@
-import inspect
+"""Utilities for preprocessing"""
 import copy
-from pathlib import Path
-import pandas as pd
+import inspect
+from matplotlib import pyplot as plt
+import matplotlib
 
 
 class PreprocessingError(Exception):
     """Custom exception indicating that a Preprocessor pipeline failed"""
-
-    pass
 
 
 def get_args(func):
@@ -37,9 +36,6 @@ def show_tensor(tensor, channel=None, transform_from_zero_centered=True, invert=
         invert:
             if true, flips value range via x=1-x
     """
-    from matplotlib import pyplot as plt
-    import matplotlib
-    import copy
 
     tensor = copy.deepcopy(tensor)
 
@@ -83,8 +79,6 @@ def show_tensor_grid(
         labels: title of each subplot
         for other args, see show_tensor()
     """
-    from matplotlib import pyplot as plt
-
     if labels is not None:
         assert len(labels) == len(tensors)
 

@@ -19,6 +19,6 @@ def test_multitarget_metrics():
 def test_singletarget_metrics():
     x = [[0, 1], [1, 0], [1, 0]]
     y = [[0, 1], [0, 1], [1, 0]]
-    out = metrics.single_target_metrics(y, x, [0, 1])
+    out = metrics.single_target_metrics(y, x)
     assert out["precision"] == 1
     assert out["recall"] == 0.5

@@ -97,7 +97,7 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     return metrics_dict
 
 
-def single_target_metrics(targets, scores, class_names):
+def single_target_metrics(targets, scores):
     """generate various metrics for a set of scores and labels (targets)
 
     Predicts 1 for the highest scoring class per sample and 0 for
@@ -106,7 +106,6 @@ def single_target_metrics(targets, scores, class_names):
     Args:
         targets: 0/1 lables in 2d array
         scores: continuous values in 2d array
-        class_names: list of strings
 
     Returns:
         metrics_dict: dictionary of various overall and per-class metrics

@@ -30,17 +30,9 @@ def test_binarize_shape_error():
         helpers.binarize([[[0, 0.2], [5, 0.6]]], 0.5)
 
 
-def test_run_command():
-    helpers.run_command("ls .")
-
-
 def test_rescale_features():
     x = helpers.rescale_features([1, 2, 3], [1])
     assert x[0][0] == 1
-
-
-def test_file_name():
-    assert helpers.file_name("/abc/def/hij.kl") == "hij"
 
 
 def test_hex_to_time():

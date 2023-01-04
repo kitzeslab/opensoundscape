@@ -18,27 +18,28 @@ audio_object = audio_object.resample(22050)
 ```
 
 """
+import warnings
+from datetime import timedelta, datetime
+from pathlib import Path
 
+import numpy as np
+from scipy.fftpack import fft as scipyfft
+from scipy.fft import fftfreq
 import librosa
 import soundfile
-import numpy as np
-import warnings
+
 from opensoundscape.helpers import generate_clip_times_df, _load_metadata
 from opensoundscape.audiomoth import parse_audiomoth_metadata
-from datetime import timedelta, datetime
+from opensoundscape.audio_tools import bandpass_filter
 
 
 class OpsoLoadAudioInputError(Exception):
     """Custom exception indicating we can't load input"""
 
-    pass
-
 
 class AudioOutOfBoundsError(Exception):
     """Custom exception indicating the user tried to load audio
     outside of the time period that exists in the audio object"""
-
-    pass
 
 
 class Audio:
@@ -72,20 +73,25 @@ class Audio:
 
         samples_error = None
         if not (isinstance(self.samples, np.ndarray) or isinstance(self.samples, list)):
-            samples_error = "Initializing an Audio object requires samples to be a numpy array or list"
+            samples_error = (
+                "Initializing an Audio object requires samples to be a numpy "
+                "array or list"
+            )
         self.samples = np.array(self.samples).astype("float32")
 
         try:
             self.sample_rate = int(self.sample_rate)
-        except ValueError:
+        except ValueError as exc:
             sample_rate_error = (
                 "Initializing an Audio object requires the audio samples' sampling rate"
             )
             if samples_error:
                 raise ValueError(
                     f"Audio initialization failed with:\n{samples_error}\n{sample_rate_error}"
-                )
-            raise ValueError(f"Audio initialization failed with:\n{sample_rate_error}")
+                ) from exc
+            raise ValueError(
+                f"Audio initialization failed with:\n{sample_rate_error}"
+            ) from exc
 
         if samples_error:
             raise ValueError(f"Audio initialization failed with:\n{samples_error}")
@@ -113,14 +119,14 @@ class Audio:
         Args:
             duration: length in seconds
             sample_rate: samples per second
-            color: any of the following colors, which describe the shape of the power spectral density
-            [default: 'white']
+            color: any of these colors, which describe the shape of the power spectral density:
                 - white: uniform psd (equal energy per linear frequency band)
                 - pink: psd = 1/sqrt(f) (equal energy per octave)
                 - brownian: psd = 1/f (aka brown noise)
                 - brown: synonym for brownian
                 - violet: psd = f
                 - blue: psd = sqrt(f)
+            [default: 'white']
 
         Returns: Audio object
 
@@ -140,14 +146,19 @@ class Audio:
         assert color in psd_functions, f"Invalid color {color}"
         psd = psd_functions[color]
 
-        X_white = np.fft.rfft(np.random.randn(n_samples))
-        S = psd(np.fft.rfftfreq(n_samples))
+        white = np.fft.rfft(np.random.randn(n_samples))
+        target_psd = psd(np.fft.rfftfreq(n_samples))
         # Normalize S for rms of desired dBFS
-        S = S / np.sqrt(np.mean(S**2)) * (10 ** (dBFS / 20)) / np.sqrt(2)
+        target_psd = (
+            target_psd
+            / np.sqrt(np.mean(target_psd**2))
+            * (10 ** (dBFS / 20))
+            / np.sqrt(2)
+        )
 
-        X_shaped = X_white * S
+        shaped = white * target_psd
 
-        samples = np.fft.irfft(X_shaped)
+        samples = np.fft.irfft(shaped)
 
         return cls(np.clip(samples, -1, 1), sample_rate)
 
@@ -235,17 +246,17 @@ class Audio:
                 if "artist" in metadata and "AudioMoth" in metadata["artist"]:
                     try:
                         metadata = parse_audiomoth_metadata(metadata)
-                    except Exception as e:
+                    except Exception as exc:
                         warnings.warn(
                             "This seems to be an AudioMoth file, "
-                            f"but parse_audiomoth_metadata() raised: {e}"
+                            f"but parse_audiomoth_metadata() raised: {exc}"
                         )
 
                 ## Update metadata ##
                 metadata["channels"] = 1  # we sum to mono when we load with librosa
 
-            except Exception as e:
-                warnings.warn(f"Failed to load metadata: {e}. Metadata will be None")
+            except Exception as exc:
+                warnings.warn(f"Failed to load metadata: {exc}. Metadata will be None")
                 metadata = None
         else:
             metadata = None
@@ -346,12 +357,18 @@ class Audio:
         Returns:
             An initialized Audio object
         """
-        samples, sr = soundfile.read(bytesio)
-        if sample_rate:
-            samples = librosa.resample(samples, sr, sample_rate, res_type=resample_type)
-            sr = sample_rate
+        samples, original_sample_rate = soundfile.read(bytesio)
+        if sample_rate is not None and sample_rate != original_sample_rate:
+            samples = librosa.resample(
+                samples,
+                orig_sr=original_sample_rate,
+                target_sr=sample_rate,
+                res_type=resample_type,
+            )
+        else:
+            sample_rate = original_sample_rate
 
-        return cls(samples, sr, resample_type=resample_type)
+        return cls(samples, sample_rate, resample_type=resample_type)
 
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
@@ -417,7 +434,7 @@ class Audio:
             a new Audio object of the desired length or repetitions
         """
         if (length is None) + (n is None) != 1:
-            raise ValueError("Please enter a value for 'length' OR " "'n', not both")
+            raise ValueError("Please enter a value for 'length' OR 'n', not both")
 
         if length is not None:
             # loop the audio until it reaches a duration of `length` seconds
@@ -459,7 +476,6 @@ class Audio:
             order: butterworth filter order (integer) ~= steepness of cutoff
 
         """
-        from opensoundscape.audio_tools import bandpass_filter
 
         if low_f <= 0:
             raise ValueError("low_f must be greater than zero")
@@ -483,14 +499,13 @@ class Audio:
         Returns:
             fft, frequencies
         """
-        from scipy.fftpack import fft
-        from scipy.fft import fftfreq
 
         # Compute the fft (fast fourier transform) of the selected clip
         N = len(self.samples)
-        T = 1 / self.sample_rate
-        fft = fft(self.samples)
-        freq = fftfreq(N, d=T)  # the frequencies corresponding to fft bins
+        fft = scipyfft(self.samples)
+
+        # create the frequencies corresponding to fft bins
+        freq = fftfreq(N, d=1 / self.sample_rate)
 
         # remove negative frequencies and scale magnitude by 2.0/N:
         fft = 2.0 / N * fft[0 : int(N / 2)]
@@ -568,7 +583,14 @@ class Audio:
             metadata=self.metadata,
         )
 
-    def save(self, path, write_metadata=True, subtype=None, suppress_warnings=False):
+    def save(
+        self,
+        path,
+        write_metadata=True,
+        soundfile_subtype=None,
+        soundfile_format=None,
+        suppress_warnings=False,
+    ):
         """Save Audio to file
 
         supports all file formats supported by underlying package soundfile,
@@ -585,27 +607,32 @@ class Audio:
             write_metadata: if True, uses soundfile.SoundFile to
                 add metadata to the file after writing it. If False,
                 written file will not contain metadata.
-            subtype: soundfile audio format choice, see soundfile.write
+            soundfile_subtype: soundfile audio subtype choice, see soundfile.write
                 or list options with soundfile.available_subtypes()
+            soundfile_format: soundfile audio format choice, see soundfile.write
             suppress_warnings: if True, will not warn user when unable to
                 save metadata [default: False]
         """
-        from pathlib import Path
-
         fmt = Path(path).suffix.upper()
 
         try:
-            soundfile.write(path, self.samples, self.sample_rate)
-        except ValueError:
+            soundfile.write(
+                file=path,
+                data=self.samples,
+                samplerate=self.sample_rate,
+                subtype=soundfile_subtype,
+                format=soundfile_format,
+            )
+        except ValueError as exc:
             raise NotImplementedError(
                 "Failed to save file with soundfinder. "
                 "This may be because the underlying package `libsndfile` must be "
                 "version >=1.1.0 to write mp3 files. \n"
                 "Note that as of Dec 2022, libsndfile 1.1.0 is not available on Ubuntu."
-            )
+            ) from exc
 
         if write_metadata and self.metadata is not None:
-            if not fmt in [".WAV", ".AIFF"] and not suppress_warnings:
+            if fmt not in [".WAV", ".AIFF"] and not suppress_warnings:
                 warnings.warn(
                     "Saving metadata is only supported for WAV and AIFF formats"
                 )
@@ -639,10 +666,13 @@ class Audio:
                 seconds long. By default, discards remaining audio if less than
                 clip_duration seconds long [default: None].
                 Options:
-                    - None:         Discard the remainder (do not make a clip)
-                    - "extend":     Extend the final clip with silence to reach clip_duration length
-                    - "remainder":  Use only remainder of Audio (final clip will be shorter than clip_duration)
-                    - "full":       Increase overlap with previous clip to yield a clip with clip_duration length
+                - None: Discard the remainder (do not make a clip)
+                - "extend": Extend the final clip with silence to reach
+                    clip_duration length
+                - "remainder": Use only remainder of Audio (final clip will be
+                    shorter than clip_duration)
+                - "full": Increase overlap with previous clip to yield a clip with
+                    clip_duration length
         Returns:
             - audio_clips: list of audio objects
             - dataframe w/columns for start_time and end_time of each clip
@@ -698,18 +728,22 @@ class Audio:
         """Split audio into clips and save them to a folder
 
         Args:
-            destination:        A folder to write clips to
-            prefix:             A name to prepend to the written clips
-            clip_duration:      The duration of each clip in seconds
-            clip_overlap:       The overlap of each clip in seconds [default: 0]
-            final_clip (str):   Behavior if final_clip is less than clip_duration seconds long. [default: None]
+            destination: A folder to write clips to
+            prefix: A name to prepend to the written clips
+            clip_duration: The duration of each clip in seconds
+            clip_overlap: The overlap of each clip in seconds [default: 0]
+            final_clip (str): Behavior if final_clip is less than clip_duration seconds long.
+            [default: None]
                 By default, ignores final clip entirely.
                 Possible options (any other input will ignore the final clip entirely),
-                    - "remainder":  Include the remainder of the Audio (clip will not have clip_duration length)
-                    - "full":       Increase the overlap to yield a clip with clip_duration length
-                    - "extend":     Similar to remainder but extend (repeat) the clip to reach clip_duration length
-                    - None:         Discard the remainder
-            dry_run (bool):      If True, skip writing audio and just return clip DataFrame [default: False]
+                    - "remainder": Include the remainder of the Audio (clip will not have
+                      clip_duration length)
+                    - "full": Increase the overlap to yield a clip with clip_duration length
+                    - "extend": Similar to remainder but extend (repeat) the clip to reach
+                      clip_duration length
+                    - None: Discard the remainder
+            dry_run (bool): If True, skip writing audio and just return clip DataFrame
+                [default: False]
 
         Returns:
             pandas.DataFrame containing paths and start and end times for each clip
@@ -780,7 +814,7 @@ def load_channels_as_audio(
 
     ## Load samples ##
     warnings.filterwarnings("ignore")
-    samples, sr = librosa.load(
+    samples, sample_rate = librosa.load(
         path,
         sr=sample_rate,
         res_type=resample_type,
@@ -792,7 +826,11 @@ def load_channels_as_audio(
     if len(np.shape(samples)) == 1:
         samples = [samples]
     audio_objects = [
-        Audio(samples=samples_channel, sample_rate=sr, resample_type=resample_type)
+        Audio(
+            samples=samples_channel,
+            sample_rate=sample_rate,
+            resample_type=resample_type,
+        )
         for samples_channel in samples
     ]
 

@@ -29,17 +29,19 @@ Note: the InceptionV3 architecture must be used differently than other
 architectures - the easiest way is to simply use the InceptionV3 class in
 opensoundscape.torch.models.cnn.
 """
+import warnings
+
 from torchvision import models
 from torch import nn
-from opensoundscape.torch.architectures.utils import CompositeArchitecture
 import torch
 import torchvision
-import warnings
+from torchvision.models.inception import BasicConv2d
 
 ARCH_DICT = dict()
 
 
 def register_arch(func):
+    """add architecture to ARCH_DICT"""
     # register the model in dictionary
     ARCH_DICT[func.__name__] = func
     # return the function
@@ -47,6 +49,7 @@ def register_arch(func):
 
 
 def list_architectures():
+    """return list of available architecture keyword strings"""
     return list(ARCH_DICT.keys())
 
 
@@ -72,7 +75,8 @@ def resnet18(
             if True, feature block is frozen and only final layer is trained
         use_pretrained:
             if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
+            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights
+            across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
@@ -107,7 +111,8 @@ def resnet34(
             if True, feature block is frozen and only final layer is trained
         use_pretrained:
             if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
+            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights
+            across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
@@ -142,7 +147,8 @@ def resnet50(
             if True, feature block is frozen and only final layer is trained
         use_pretrained:
             if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
+            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights
+            across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
@@ -177,7 +183,8 @@ def resnet101(
             if True, feature block is frozen and only final layer is trained
         use_pretrained:
             if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
+            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights
+            across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
@@ -212,7 +219,8 @@ def resnet152(
             if True, feature block is frozen and only final layer is trained
         use_pretrained:
             if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights across all channels.
+            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights
+            across all channels.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
@@ -436,7 +444,6 @@ def inception_v3(
             "number of input channels is not implemented. First conv2d will "
             "have random weights."
         )
-        from torchvision.models.inception import BasicConv2d
 
         architecture_ft.Conv2d_1a_3x3 = BasicConv2d(
             num_channels, 32, kernel_size=3, stride=2

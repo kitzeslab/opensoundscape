@@ -104,7 +104,7 @@ def test_detect_peak_sequence_cwt(rugr_wav_str):
     rugr_audio = Audio.from_file(rugr_wav_str)
     detections = sp.detect_peak_sequence_cwt(
         rugr_audio,
-        sr=400,
+        sample_rate=400,
         window_len=10,
         center_frequency=50,
         wavelet="morl",
@@ -129,7 +129,7 @@ def test_detect_peak_sequence_cwt_no_results(rugr_wav_str):
     rugr_audio = Audio.from_file(rugr_wav_str).trim(0, 1)
     detections = sp.detect_peak_sequence_cwt(
         rugr_audio,
-        sr=400,
+        sample_rate=400,
         window_len=10,
         center_frequency=50,
         wavelet="morl",
@@ -155,7 +155,7 @@ def test_detect_peak_sequence_cwt_uneven_length_results(rugr_wav_str):
     rugr_audio = Audio.from_file(rugr_wav_str).trim(1, 8).loop(length=20)
     detections = sp.detect_peak_sequence_cwt(
         rugr_audio,
-        sr=400,
+        sample_rate=400,
         window_len=3,
         center_frequency=50,
         wavelet="morl",

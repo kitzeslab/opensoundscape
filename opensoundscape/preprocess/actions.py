@@ -8,11 +8,11 @@ or augmented sample, which may or may not be the same type as the original.
 See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
-import numpy as np
 import random
+import warnings
+import numpy as np
 from torchvision import transforms
 import torch
-import warnings
 import pandas as pd
 
 from opensoundscape.audio import Audio
@@ -46,15 +46,16 @@ class BaseAction:
             "Action"
         )
 
-    def go(self, x, **kwargs):
+    def go(self, x):
         return x
 
     def set(self, **kwargs):
         """only allow keys that exist in self.params"""
         unmatched_args = set(list(kwargs.keys())) - set(list(self.params.keys()))
-        assert unmatched_args == set(
-            []
-        ), f"unexpected arguments: {unmatched_args}. The valid arguments and current values are: \n{self.params}"
+        assert unmatched_args == set([]), (
+            f"unexpected arguments: {unmatched_args}. "
+            f"The valid arguments and current values are: \n{self.params}"
+        )
         self.params.update(pd.Series(kwargs, dtype=object))
 
     def get(self, arg):
@@ -402,7 +403,8 @@ class Overlay(Action):
         overlay_df = kwargs["overlay_df"]
         overlay_df = overlay_df[~overlay_df.index.duplicated()]  # remove duplicates
 
-        # warn the user if using "different" as overlay_class and "different" is one of the model classes
+        # warn the user if using "different" as overlay_class
+        # and "different" is one of the model classes
         if (
             "different" in overlay_df.columns
             and "overlay_class" in kwargs
@@ -415,7 +417,7 @@ class Overlay(Action):
                 "Consider renaming the `different` class. "
             )
 
-        # move overlay_df from params to its own space, so that it doesn't display with print(params)
+        # move overlay_df from params to its own space so that it doesn't display with print(params)
         self.overlay_df = overlay_df
         self.params = self.params.drop("overlay_df")  # removes it
 
@@ -573,16 +575,17 @@ def overlay(
             # it will cut off the preprocessing of the overlayed sample before
             # the first Overlay object. This may or may not be the desired behavior,
             # but it will at least "work".
-            x2, sample_info = _preprocessor.forward(overlay_row, break_on_type=Overlay)
+            x2, _ = _preprocessor.forward(overlay_row, break_on_type=Overlay)
 
             # now we blend the two tensors together with a weighted average
             # Select weight of overlay; <0.5 means more emphasis on original sample
             # Supports uniform-random selection from a range of weights eg [0.1,0.7]
             weight = overlay_weight
             if hasattr(weight, "__iter__"):
-                assert (
-                    len(weight) == 2
-                ), f"overlay_weight must specify a single value or range of 2 values, got {overlay_weight}"
+                assert len(weight) == 2, (
+                    f"overlay_weight must specify a single value or range of 2 values, "
+                    f"got {overlay_weight}"
+                )
                 weight = random.uniform(weight[0], weight[1])
 
             # use a weighted sum to overlay (blend) the samples
@@ -598,11 +601,11 @@ def overlay(
             # overlay was successful, update count:
             overlays_performed += 1
 
-        except PreprocessingError:
+        except PreprocessingError as ex:
             # don't try to load this sample again: remove from overlay df
             overlay_df = overlay_df.drop(overlay_path)
             warnings.warn(f"unsafe overlay sample: {overlay_path}")
             if len(overlay_df) < 1:
-                raise ValueError("tried all overlay_df samples, none were safe")
+                raise ValueError("tried all overlay_df samples, none were safe") from ex
 
     return x, _labels

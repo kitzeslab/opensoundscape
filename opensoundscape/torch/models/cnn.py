@@ -2,13 +2,15 @@
 
 For tutorials, see notebooks on opensoundscape.org
 """
-import copy
-import os
-import numpy as np
-import pandas as pd
 from pathlib import Path
 import warnings
-import wandb
+import copy
+import os
+import types
+import yaml
+
+import numpy as np
+import pandas as pd
 from pandas.core.indexes.multi import MultiIndex
 
 import torch
@@ -32,6 +34,10 @@ from opensoundscape.torch.loss import (
 from opensoundscape.torch.safe_dataset import SafeDataset
 from opensoundscape.torch.datasets import AudioFileDataset, AudioSplittingDataset
 import opensoundscape
+
+from opensoundscape.metrics import single_target_metrics, multi_target_metrics
+
+from opensoundscape.torch.architectures.cnn_architectures import inception_v3
 
 
 class CNN(BaseModule):
@@ -86,6 +92,9 @@ class CNN(BaseModule):
             top_samples_classes=None,  # specify list of classes to see top samples from
             n_top_samples=3,  # after prediction, log n top scoring samples per class
         )
+        self.loss_fn = None
+        self.train_loader = None
+        self.scheduler = None
 
         ### architecture ###
         # can be a pytorch CNN such as Resnet18 or a custom object
@@ -108,8 +117,9 @@ class CNN(BaseModule):
             ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
             if num_channels != 3:
                 warnings.warn(
-                    f"Make sure your architecture expects the number of channels in your input samples ({num_channels}). "
-                    "Pytorch architectures expect 3 channels by default."
+                    f"Make sure your architecture expects the number of channels in "
+                    f"your input samples ({num_channels}). "
+                    f"Pytorch architectures expect 3 channels by default."
                 )
             self.architecture_name = str(type(architecture))
         self.network = architecture
@@ -170,8 +180,8 @@ class CNN(BaseModule):
         self.valid_metrics = {}
         self.loss_hist = {}  # could add TensorBoard tracking
 
-    def _log(self, input, level=1):
-        txt = str(input)
+    def _log(self, message, level=1):
+        txt = str(message)
         if self.logging_level >= level and self.log_file is not None:
             with open(self.log_file, "a") as logfile:
                 logfile.write(txt + "\n")
@@ -347,12 +357,11 @@ class CNN(BaseModule):
             ###########
             # log basic train info (used to print every batch)
             if batch_idx % self.log_interval == 0:
-                """show some basic progress metrics during the epoch"""
+                # show some basic progress metrics during the epoch
                 N = len(train_loader)
                 self._log(
-                    "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
-                        self.current_epoch, batch_idx, N, 100 * batch_idx / N
-                    )
+                    f"Epoch: {self.current_epoch} "
+                    f"[batch {batch_idx}/{N}, {100 * batch_idx / N :.2f}%] "
                 )
 
                 # Log the Jaccard score and Hamming loss, and Loss function
@@ -529,13 +538,13 @@ class CNN(BaseModule):
             # log tables of preprocessed samples
             wandb_session.log(
                 {
-                    "Samples / training samples with augmentation": opensoundscape.wandb.wandb_table(
+                    "Samples / training samples w/augmentation": opensoundscape.wandb.wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=False
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
-                    "Samples / training samples without augmentation": opensoundscape.wandb.wandb_table(
+                    "Samples / training samples w/o augmentation": opensoundscape.wandb.wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=True
                         ),
@@ -563,7 +572,7 @@ class CNN(BaseModule):
 
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
-            train_targets, train_preds, train_scores = self._train_epoch(
+            train_targets, _, train_scores = self._train_epoch(
                 self.train_loader,
                 wandb_session,
             )
@@ -624,7 +633,8 @@ class CNN(BaseModule):
         ### Logging ###
         self._log("Training complete", level=2)
         self._log(
-            f"\nBest Model Appears at Epoch {self.best_epoch} with Validation score {self.best_score:.3f}."
+            f"\nBest Model Appears at Epoch {self.best_epoch} "
+            f"with Validation score {self.best_score:.3f}."
         )
 
         # warn the user if there were unsafe samples (samples that failed to preprocess)
@@ -653,7 +663,6 @@ class CNN(BaseModule):
             logging_offset: modify verbosity - for example, -1 will reduce
                 the amount of printing/logging by 1 level
         """
-        from opensoundscape.metrics import single_target_metrics, multi_target_metrics
 
         # remove all samples with NaN for a prediction
         targets = targets[~np.isnan(scores).any(axis=1), :]
@@ -664,14 +673,14 @@ class CNN(BaseModule):
             return np.nan, np.nan
 
         if self.single_target:
-            metrics_dict = single_target_metrics(targets, scores, self.classes)
+            metrics_dict = single_target_metrics(targets, scores)
         else:
             metrics_dict = multi_target_metrics(
                 targets, scores, self.classes, self.prediction_threshold
             )
 
         # decide what to print/log:
-        self._log(f"Metrics:")
+        self._log("Metrics:")
         if not self.single_target:
             self._log(f"\tMAP: {metrics_dict['map']:0.3f}", level=1 - logging_offset)
             self._log(
@@ -697,22 +706,23 @@ class CNN(BaseModule):
 
         return score, metrics_dict
 
-    def save(self, path, save_datasets=False):
+    def save(self, path, save_train_loader=False):
         """save model with weights using torch.save()
 
         load from saved file with torch.load(path) or cnn.load_model(path)
 
         Args:
             path: file path for saved model object
+            save_train_loader: retrain .train_loader in saved object
+                [default: False]
         """
         os.makedirs(Path(path).parent, exist_ok=True)
         model_copy = copy.deepcopy(self)
-        if not save_datasets:
-            for atr in ["train_loader"]:  # attributes to remove
-                try:
-                    delattr(model_copy, atr)
-                except AttributeError:
-                    pass
+        if not save_train_loader:
+            try:
+                delattr(model_copy, "train_loader")
+            except AttributeError:
+                pass
         torch.save(model_copy, path)
 
     def save_weights(self, path):
@@ -737,7 +747,7 @@ class CNN(BaseModule):
             path: file path with saved weights
             strict: (bool) see torch.load()
         """
-        self.network.load_state_dict(torch.load(path))
+        self.network.load_state_dict(torch.load(path), strict=strict)
 
     def predict(
         self,
@@ -863,7 +873,7 @@ class CNN(BaseModule):
         prediction_dataset.bypass_augmentations = bypass_augmentations
 
         ## Input Validation ##
-        if len(prediction_dataset.classes) > 0 and not list(self.classes) == list(
+        if len(prediction_dataset.classes) > 0 and list(self.classes) != list(
             prediction_dataset.classes
         ):
             warnings.warn(
@@ -1007,14 +1017,14 @@ class CNN(BaseModule):
                 top_samples = score_df.nlargest(
                     n=self.wandb_logging["n_top_samples"], columns=[c]
                 )
-                ds = AudioFileDataset(
+                dataset = AudioFileDataset(
                     samples=top_samples,
                     preprocessor=self.preprocessor,
                     return_labels=False,
                     bypass_augmentations=True,
                 )
                 table = opensoundscape.wandb.wandb_table(
-                    dataset=ds,
+                    dataset=dataset,
                     classes_to_extract=[c],
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
@@ -1028,7 +1038,6 @@ def use_resample_loss(model):
     ResampleLoss may perform better than BCE Loss for multitarget problems
     in some scenarios.
     """
-    import types
 
     model.loss_cls = ResampleLoss
 
@@ -1061,7 +1070,6 @@ def separate_resnet_feat_clf(model):
         creates a new self.opt_net object that replaces the old one
         resets self.current_epoch to 0
     """
-    import types
 
     # optimization parameters for parts of the networks - see
     # https://pytorch.org/docs/stable/optim.html#per-parameter-options
@@ -1109,6 +1117,8 @@ def separate_resnet_feat_clf(model):
 
 
 class InceptionV3(CNN):
+    """Child of CNN class for InceptionV3 architecture"""
+
     def __init__(
         self,
         classes,
@@ -1135,7 +1145,6 @@ class InceptionV3(CNN):
                 if True, predict exactly one class per sample
 
         """
-        from opensoundscape.torch.architectures.cnn_architectures import inception_v3
 
         self.classes = classes
 
@@ -1223,12 +1232,11 @@ class InceptionV3(CNN):
             ###########
             # log basic train info (used to print every batch)
             if batch_idx % self.log_interval == 0:
-                """show some basic progress metrics during the epoch"""
+                # show some basic progress metrics during the epoch
                 N = len(train_loader)
                 self._log(
-                    "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
-                        self.current_epoch, batch_idx, N, 100 * batch_idx / N
-                    )
+                    f"Epoch: {self.current_epoch} "
+                    f"[batch {batch_idx}/{N}, {100 * batch_idx / N :.2f}%] "
                 )
 
                 # Log the Jaccard score and Hamming loss, and Loss function
@@ -1325,7 +1333,8 @@ def load_outdated_model(
             (pass None if the class __init__ does not take architecture as an argument)
         sample_duration: length of samples in seconds
         model_class: class to construct. Normally CNN.
-        device: optionally specify a device to map tensors onto, eg 'cpu', 'cuda:0', 'cuda:1'[default: None]
+        device: optionally specify a device to map tensors onto,
+        eg 'cpu', 'cuda:0', 'cuda:1'[default: None]
             - if None, will choose cuda:0 if cuda is available, otherwise chooses cpu
 
     Returns:
@@ -1339,13 +1348,13 @@ def load_outdated_model(
     try:
         # use torch to load the saved model object
         model_dict = torch.load(path, map_location=device)
-    except AttributeError:
+    except AttributeError as exc:
         raise Exception(
             "This model could not be loaded in this version of "
             "OpenSoundscape. You may need to load the model with the version "
             "of OpenSoundscape that created it and torch.save() the "
             "model.network.state_dict(), then load the weights with model.load_weights"
-        )
+        ) from exc
 
     if type(model_dict) != dict:
         raise ValueError(
@@ -1356,8 +1365,6 @@ def load_outdated_model(
     if "classes" in model_dict:
         classes = model_dict["classes"]
     elif "labels_yaml" in model_dict:
-        import yaml
-
         classes = list(yaml.safe_load(model_dict["labels_yaml"]).values())
     else:
         raise ValueError("Could not get a list of classes from the saved model.")

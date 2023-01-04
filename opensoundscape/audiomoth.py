@@ -1,8 +1,9 @@
 """Utilities specifically for audio files recoreded by AudioMoths"""
-import pytz
-import datetime
-from opensoundscape.helpers import hex_to_time, _load_metadata
 from pathlib import Path
+import datetime
+
+import pytz
+from opensoundscape.helpers import hex_to_time, _load_metadata
 
 
 def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):
@@ -36,12 +37,12 @@ def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):
         localized_dt = hex_to_time(Path(file).stem)  # returns UTC localized dt
     elif len(name) == 15:
         # human-readable format (newer firmware)
-        dt = datetime.datetime.strptime(name, "%Y%m%d_%H%M%S")
+        file_datetime = datetime.datetime.strptime(name, "%Y%m%d_%H%M%S")
 
         # convert the naive datetime into a localized datetime based on the
         # timezone provided by the user. (This is the time zone that the AudioMoth
         # uses to record its name, not the time zone local to the recording site.)
-        localized_dt = pytz.timezone(filename_timezone).localize(dt)
+        localized_dt = pytz.timezone(filename_timezone).localize(file_datetime)
 
     else:
         raise ValueError(f"file had unsupported name format: {name}")
@@ -76,9 +77,6 @@ def parse_audiomoth_metadata(metadata):
     Returns:
         metadata dictionary with added keys and values
     """
-    import datetime
-    import pytz
-
     comment = metadata["comment"]
 
     # parse recording start time (can have timzeone info like "UTC-5")
@@ -104,6 +102,7 @@ def parse_audiomoth_metadata(metadata):
 
 
 def parse_audiomoth_metadata_from_path(file_path):
+    """Wrapper function to parse audiomoth metadata from file path"""
     metadata = _load_metadata(file_path)
 
     if metadata is None:
@@ -148,10 +147,10 @@ def _parse_audiomoth_comment_dt(comment):
         dt_str = f"{dt_str.split(marker)[0]}{dt_str_tz_str})"
     else:  #
         dt_str = dt_str.replace("(UTC)", "(UTC-0000)")
-    dt = datetime.datetime.strptime(
+    parsed_datetime = datetime.datetime.strptime(
         dt_str, "%H:%M:%S %d/%m/%Y (%Z%z)"
     )  # .astimezone(final_tz)
-    return dt
+    return parsed_datetime
 
 
 def _parse_audiomoth_battery_info(comment):

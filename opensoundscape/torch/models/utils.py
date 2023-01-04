@@ -1,12 +1,15 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from opensoundscape.torch.sampling import ClassAwareSampler
-from torch.utils.data import DataLoader
-from torch.nn.functional import softmax
+"""Utilties for .torch.models"""
+import warnings
 import pandas as pd
 import numpy as np
-import warnings
+import torch
+from torch import nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from torch.nn.functional import softmax
+
+
+from opensoundscape.torch.sampling import ClassAwareSampler
 
 
 class BaseModule(nn.Module):
@@ -17,9 +20,6 @@ class BaseModule(nn.Module):
     """
 
     name = None
-
-    def __init__(self):
-        super(BaseModule, self).__init__()
 
     def setup_net(self):
         pass
@@ -123,7 +123,7 @@ def apply_activation_layer(x, activation_layer=None):
         values with activation layer applied
 
     """
-    if activation_layer == None:  # scores [-inf,inf]
+    if activation_layer is None:  # scores [-inf,inf]
         pass
     elif activation_layer == "softmax":
         # "softmax" activation: preds across all classes sum to 1
@@ -169,17 +169,19 @@ def tensor_binary_predictions(scores, mode, threshold=None):
         preds = F.one_hot(scores.argmax(1), len(scores[0]))
     elif mode == "multi_target":
         if threshold is None:
-            raise ValueError(f"threshold must be specified for multi_target prediction")
+            raise ValueError("threshold must be specified for multi_target prediction")
         # predict 0 or 1 based on a fixed threshold
         elif type(threshold) in [float, np.float32, np.float64, int]:
             preds = scores >= threshold
         elif type(threshold) in [np.array, list, torch.Tensor, tuple]:
             if len(threshold) == 1 or len(threshold) == len(scores[0]):
-                # will make predictions for either a single threshold value or list of class-specific threshold values
+                # will make predictions for either a single threshold value
+                # or list of class-specific threshold values
                 preds = scores >= torch.tensor(threshold)
             else:
                 raise ValueError(
-                    f"threshold must be a single value, or have the same number of values as there are classes"
+                    "threshold must be a single value, or have "
+                    "the same number of values as there are classes"
                 )
 
     elif mode is None:
