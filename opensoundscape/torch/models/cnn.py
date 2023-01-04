@@ -576,7 +576,7 @@ class CNN(BaseModule):
                 wandb_session.log({"training": self.train_metrics[self.current_epoch]})
 
             #### Validation ###
-            if validation_df is not None:
+            if validation_df is not None and epoch % validation_interval == 0:
                 self._log("\nValidation.")
                 validation_scores, _, unsafe_val_samples = self.predict(
                     validation_df,
@@ -594,7 +594,7 @@ class CNN(BaseModule):
                     validation_targets, validation_scores
                 )
                 score = validation_score
-            else:  # Evaluate model w/validation score unless no validation
+            else:  # Evaluate model w/train_score if no validation_df given
                 score = train_score
 
             if wandb_session is not None:
