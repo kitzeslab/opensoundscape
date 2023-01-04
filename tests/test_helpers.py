@@ -17,10 +17,6 @@ def test_sigmoid():
     helpers.sigmoid(-1)
 
 
-def test_bound():
-    assert helpers.bound(-1, [0, 1]) == 0 and helpers.bound(2, [0, 1]) == 1
-
-
 def test_binarize():
     assert np.sum(helpers.binarize([-1, 1], 0)) == 1
 

@@ -13,11 +13,6 @@ def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
 
-def bound(x, bounds):
-    """restrict x to a range of bounds = [min, max]"""
-    return min(max(x, bounds[0]), bounds[1])
-
-
 def overlap(r1, r2):
     """ "calculate the amount of overlap between two real-numbered ranges"""
     assert r1[1] > r1[0]
