@@ -82,51 +82,6 @@ def cas_dataloader(dataset, batch_size, num_workers):
     return loader
 
 
-def collate_lists_of_audio_clips(batch):
-    """
-    Collate function for splitting + prediction of long audio files
-
-    Puts each data field into a tensor with outer dimension batch size
-
-    Additionally, concats the dfs from each audio file into one long df for the entire batch
-    """
-
-    # first, we remove all None elements: these failed to preprocess
-    batch = [x for x in batch if x is not None]
-
-    if len(batch) == 0:
-        return {"X": torch.Tensor(), "y": torch.Tensor(), "df": None}
-
-    has_labels = "y" in batch[0].keys()
-    if has_labels:
-        labels = [d["y"] for d in batch]
-
-    data = [d["X"] for d in batch]
-
-    dfs = [d["df"] for d in batch]
-
-    elem = data[0]
-    if isinstance(elem, torch.Tensor):
-        out = None
-        if torch.utils.data.get_worker_info() is not None:
-            # If we're in a background process, concatenate directly into a
-            # shared memory tensor to avoid an extra copy
-            numel = sum([x.numel() for x in data])
-            storage = elem.storage()._new_shared(numel)
-            out = elem.new(storage)
-
-        if has_labels:
-            return {
-                "X": torch.cat(data, 0, out=out),
-                "y": torch.stack(labels),
-                "df": pd.concat(dfs),
-            }
-        else:
-            return {"X": torch.cat(data, 0, out=out), "df": pd.concat(dfs)}
-
-    raise TypeError(f"not a tensor. Got {elem}")
-
-
 def get_batch(array, batch_size, batch_number):
     """get a single slice of a larger array
 
