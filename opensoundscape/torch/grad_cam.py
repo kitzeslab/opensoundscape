@@ -11,7 +11,7 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
+from torch.nn.functional import softmax, adaptive_avg_pool2d
 
 
 class _PropagationBase(object):
@@ -30,7 +30,7 @@ class _PropagationBase(object):
         self.image = image.requires_grad_()
         self.model.zero_grad()
         self.preds = self.model(self.image)
-        self.probs = F.softmax(self.preds, dim=1)[0]
+        self.probs = softmax(self.preds, dim=1)[0]
         self.prob, self.idx = self.probs.sort(0, True)
         return self.prob, self.idx
 
@@ -101,7 +101,7 @@ class GradCAM(_PropagationBase):
 
     def _compute_grad_weights(self, grads):
         grads = self._normalize(grads)
-        return F.adaptive_avg_pool2d(grads, 1)
+        return adaptive_avg_pool2d(grads, 1)
 
     def generate(self, target_layer, target_neuron=None):
         fmaps = self._find(self.all_fmaps, target_layer)
