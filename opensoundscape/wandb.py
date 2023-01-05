@@ -87,7 +87,7 @@ def wandb_table(dataset, n=None, classes_to_extract=[], random_state=None):
 #     inspection_dataset.bypass_augmentations = True
 
 
-#     scores, _, _ = model.predict(sample_df)
+#     scores = model.predict(sample_df)
 
 #     sample_table = pd.DataFrame(columns=["audio", "tensor", "labels:scores", "path"])
 #     for i in range(len(inspection_dataset)):
