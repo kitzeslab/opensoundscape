@@ -162,7 +162,11 @@ def _load_metadata(path, raise_exceptions=False):
 
 
 def generate_clip_times_df(
-    full_duration, clip_duration, clip_overlap=0, final_clip=None
+    full_duration,
+    clip_duration,
+    clip_overlap=0,
+    final_clip=None,
+    rounding_precision=10,
 ):
     """generate start and end times for even-lengthed clips
 
@@ -188,6 +192,9 @@ def generate_clip_times_df(
                 - "full":       Increase overlap with previous clip to yield a clip with
                   clip_duration length.
                     Note: returns entire original audio if it is shorter than clip_duration
+        rounding_precision (int or None): number of decimals to round start/end times to
+            - pass None to skip rounding
+
     Returns:
         clip_df: DataFrame with columns for 'start_time' and 'end_time' of each clip
     """
@@ -229,6 +236,10 @@ def generate_clip_times_df(
         # Keep the end values that extend beyond full_duration
         pass
 
+    if rounding_precision is not None:
+        starts = starts.round(rounding_precision)
+        ends = ends.round(rounding_precision)
+
     return pd.DataFrame({"start_time": starts, "end_time": ends}).drop_duplicates()
 
 
@@ -248,8 +259,7 @@ def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
         final_clip (str): see generate_clip_times_df
 
     Returns:
-        clip_df: dataframe with columns 'start_time', 'end_time' and
-            file paths as index
+        clip_df: dataframe multi-index ('file','start_time','end_time')
         unsafe_samples: list of file paths that did not exist or failed to
             produce a valid list of clips
     """

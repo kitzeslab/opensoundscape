@@ -78,6 +78,26 @@ def test_generate_clip_times_df_default():
     assert clip_df.iloc[1]["end_time"] == 10.0
 
 
+def test_floating_point_error():
+    """accessing un-rounded float index causes KeyError"""
+    clip_df = helpers.generate_clip_times_df(
+        full_duration=10, clip_duration=0.2, rounding_precision=None
+    )
+    clip_df = clip_df.set_index("start_time")
+    with pytest.raises(KeyError):
+        clip_df.loc[0.6]
+
+
+def test_rounding_avoids_fp_error():
+    """default behavior rounds times to avoid key error"""
+    clip_df = helpers.generate_clip_times_df(
+        full_duration=10,
+        clip_duration=0.2,  # rounding_precision=10 default
+    )
+    clip_df = clip_df.set_index("start_time")
+    clip_df.loc[0.6]
+
+
 def test_generate_clip_times_df_extend():
     clip_df = helpers.generate_clip_times_df(
         full_duration=10, clip_duration=6.0, final_clip="extend"
