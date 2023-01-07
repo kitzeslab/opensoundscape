@@ -170,7 +170,7 @@ class AudioSplittingDataset(AudioFileDataset):
 
     Internally creates even-lengthed clips split from long audio files.
 
-    Does not currently support passing labels (what would a label mean for each clip?)
+    If file labels are provided, applies copied labels to all clips from a file
 
     Args:
         see AudioFileDataset and make_clip_df
@@ -181,21 +181,15 @@ class AudioSplittingDataset(AudioFileDataset):
             samples=samples, preprocessor=preprocessor, return_labels=False
         )
 
-        # create clip df
-        clip_times_df, self.unsafe_samples = make_clip_df(
-            self.label_df.index.values,
-            preprocessor.sample_duration,
-            overlap_fraction * preprocessor.sample_duration,
-            final_clip,
-        )
-        # clip_times_df might be None if no files succeeded, make empty df
-        if clip_times_df is None:
-            clip_times_df = pd.DataFrame(columns=["file", "start_time", "end_time"])
-
-        # update "label_df" with multi-index (file,start_time,end_time)
-        # using clip file names and start/end times from clip_times_df
-        self.label_df = clip_times_df.reset_index().set_index(
-            ["file", "start_time", "end_time"]
-        )[[]]
-
         self.has_clips = True
+
+        # create clip df
+        # self.label_df will have multi-index (file,start_time,end_time)
+        # can contain rows with start/end time np.nan for failed samples
+        self.label_df, self.unsafe_samples = make_clip_df(
+            files=samples,
+            clip_duration=preprocessor.sample_duration,
+            clip_overlap=overlap_fraction * preprocessor.sample_duration,
+            final_clip=final_clip,
+            return_unsafe_samples=True,
+        )

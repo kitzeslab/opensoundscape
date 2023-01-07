@@ -2,11 +2,17 @@ from opensoundscape import helpers
 from numpy import nan
 import numpy as np
 import pytest
+import pandas as pd
 
 
 @pytest.fixture()
 def silence_10s_mp3_str():
     return "tests/audio/silence_10s.mp3"
+
+
+@pytest.fixture()
+def metadata_wav_str():
+    return "tests/audio/metadata.wav"
 
 
 def test_isnan():
@@ -147,7 +153,19 @@ def test_make_clip_df(silence_10s_mp3_str):
     clip_df, unsafe_samples = helpers.make_clip_df(
         files=[silence_10s_mp3_str, silence_10s_mp3_str, "notafile.wav"],
         clip_duration=5.0,
+        return_unsafe_samples=True,
     )
-    assert len(clip_df) == 4
+    assert len(clip_df) == 5
     assert len(unsafe_samples) == 1
-    assert np.array_equal(clip_df.columns, ["start_time", "end_time"])
+
+
+def test_make_clip_df_from_label_df(silence_10s_mp3_str, metadata_wav_str):
+    label_df = pd.DataFrame(
+        {"a": [0, 1, 2]},
+        index=[silence_10s_mp3_str, silence_10s_mp3_str, metadata_wav_str],
+    )
+    clip_df = helpers.make_clip_df(label_df, clip_duration=5.0)
+
+    # should copy labels for each file to all clips of that file
+    # duplicate file should have labels from _first_ occurrence in label_df
+    assert np.array_equal(clip_df["a"].values, [0, 0, 0, 0, 2, 2])

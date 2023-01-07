@@ -97,6 +97,9 @@ class SafeDataset:
                 self._unsafe_indices.append(idx)
             # store the actual sample names also?
             sample = self.dataset.label_df.index[idx]
+            if isinstance(sample, tuple):
+                # just get file path, discard start/end time #TODO revisit choice
+                sample = sample[0]
             if sample not in self._unsafe_samples:
                 self._unsafe_samples.append(sample)
 

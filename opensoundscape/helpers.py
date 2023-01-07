@@ -243,8 +243,10 @@ def generate_clip_times_df(
     return pd.DataFrame({"start_time": starts, "end_time": ends}).drop_duplicates()
 
 
-def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
-    """generate df of fixed-length clip times for a set of file_batch_size
+def make_clip_df(
+    files, clip_duration, clip_overlap=0, final_clip=None, return_unsafe_samples=False
+):
+    """generate df of fixed-length clip start/end times for a set of files
 
     Used internally to prepare a dataframe listing clips of longer audio files
 
@@ -252,25 +254,54 @@ def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
     the index and columns: 'start_time', 'end_time'. It will list
     clips of a fixed duration from the beginning to end of each audio file.
 
+    Note: if a label dataframe is passed as `files`, the labels for each file
+    will be copied to all clips having the corresponding file. If the label dataframe
+    contains multiple rows for a single file, the labels in the _first_ row containing
+    the file path are used as labels for resulting clips. 
+
     Args:
-        files: list of audio file paths
+        files: list of audio file paths, or dataframe with file path as index
+            - if dataframe, columns represent classes and values represent
+            class labels. Labels for a file will be copied to all clips
+            belonging to that file in the returned clip dataframe.
         clip_duration (float): see generate_clip_times_df
         clip_overlap (float): see generate_clip_times_df
         final_clip (str): see generate_clip_times_df
+        return_unsafe_samples (bool): if true, returns additional value,
+            a list of samples that caused exceptions
 
     Returns:
         clip_df: dataframe multi-index ('file','start_time','end_time')
-        unsafe_samples: list of file paths that did not exist or failed to
-            produce a valid list of clips
+            - if files is a dataframe, will contain same columns as files
+            - otherwise, will have no columns
+
+        if return_unsafe_samples==True, returns (clip_df, unsafe_samples)
+
+    Note: if an exception is raised (for instance, trying to get the duration of the file),
+        the dataframe will have one row with np.nan for 'start_time' and 'end_time' for that
+        file path.
     """
     if isinstance(files, str):
         raise TypeError(
             "make_clip_df expects a list of files, it looks like you passed it a string"
         )
 
+    label_df = None #assume no labels to begin with, just a list of paths
+    if isinstance(files, pd.DataFrame):
+        file_list = files.index.values
+        # use the dataframe as labels, keeping each column as a class
+        # if paths are duplicated in index, keep only the first of each
+        label_df = files[~files.index.duplicated(keep='first')]
+    else:
+        assert hasattr(files,'__iter__'), (f"`files` should be a dataframe with paths as "
+            f"the index, or an iterable of file paths. Got {type(files)}.")
+        file_list = files
+
+    assert len(files) > 0, "files list has length zero!"
+
     clip_dfs = []
     unsafe_samples = []
-    for f in files:
+    for f in file_list:
         try:
             t = librosa.get_duration(filename=f)
             clips = generate_clip_times_df(
@@ -279,14 +310,24 @@ def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
                 clip_overlap=clip_overlap,
                 final_clip=final_clip,
             )
-            clips.index = [f] * len(clips)
-            clips.index.name = "file"
-            clip_dfs.append(clips)
-        except:
-            unsafe_samples.append(f)
+            clips["file"] = f
 
-    if len(clip_dfs) > 0:
-        clip_df = pd.concat(clip_dfs)
+        except:
+            # make one row for this file with nan for start/end times
+            clips = pd.DataFrame(
+                {"file": [f], "start_time": np.nan, "end_time": np.nan}
+            )
+            unsafe_samples.append(f)
+    
+        if label_df is not None:
+            # copy labels for this file to all of its clips
+            clips[label_df.columns] = label_df.loc[f]
+
+        clip_dfs.append(clips)
+
+    clip_df = pd.concat(clip_dfs).set_index(["file", "start_time", "end_time"])
+
+    if return_unsafe_samples:
+        return clip_df, unsafe_samples
     else:
-        clip_df = None
-    return clip_df, unsafe_samples
+        return clip_df

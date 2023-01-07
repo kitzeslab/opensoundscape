@@ -181,8 +181,7 @@ def test_predict_all_arch_1ch(test_df):
 
 def test_predict_on_clip_df(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=1.0)
-    clip_df, _ = make_clip_df(test_df.index.values[0:1], clip_duration=1.0)
-    clip_df = clip_df.reset_index().set_index(["file", "start_time", "end_time"])
+    clip_df = make_clip_df(test_df.index.values[0:1], clip_duration=1.0)
     scores, _, _ = model.predict(clip_df)
     assert len(scores) == 10
 
@@ -208,12 +207,20 @@ def test_multi_target_prediction(train_df, test_df):
     assert len(preds) == 2
 
 
-def test_predict_missing_file_is_unsafe_sample(missing_file_df):
+def test_predict_missing_file_is_unsafe_sample(missing_file_df, test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    scores, _, unsafe_samples = model.predict(missing_file_df, threshold=0.1)
 
-    assert len(scores) == 0
-    assert len(unsafe_samples) == 1
+    with pytest.raises(IndexError):
+        # if all samples are unsafe, will give IndexError
+        model.predict(missing_file_df, threshold=0.1)
+
+    scores, _, unsafe_samples = model.predict(
+        pd.concat([missing_file_df, test_df.head(1)])
+    )
+    assert len(scores) == 3  # should have one row with nan values for the unsafe sample
+    isnan = lambda x: x != x
+    assert np.all([isnan(score) for score in scores.iloc[0].values])
+    assert len(set(unsafe_samples)) == 1
 
 
 def test_predict_wrong_input_error(test_df):
@@ -267,8 +274,7 @@ def test_train_on_clip_df(train_df):
     file and get its labels from the dataframe
     """
     model = cnn.CNN("resnet18", [0, 1], sample_duration=2)
-    train_df, _ = make_clip_df(train_df.index.values, clip_duration=2)
-    train_df = train_df.reset_index().set_index(["file", "start_time", "end_time"])
+    train_df = make_clip_df(train_df.index.values, clip_duration=2)
     train_df[0] = np.random.choice([0, 1], size=10)
     train_df[1] = np.random.choice([0, 1], size=10)
     model.train(
