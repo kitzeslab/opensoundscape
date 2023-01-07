@@ -604,7 +604,7 @@ def overlay(
         except PreprocessingError as ex:
             # don't try to load this sample again: remove from overlay df
             overlay_df = overlay_df.drop(overlay_path)
-            warnings.warn(f"unsafe overlay sample: {overlay_path}")
+            warnings.warn(f"Invalid overlay sample: {overlay_path}")
             if len(overlay_df) < 1:
                 raise ValueError("tried all overlay_df samples, none were safe") from ex
 

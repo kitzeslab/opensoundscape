@@ -3,11 +3,11 @@
 A SafeDataset handles errors in a potentially misleading way: If an error is
 raised while trying to load a sample, the SafeDataset will instead load a
 different sample. The indices of any samples that failed to load will be
-stored in ._unsafe_indices.
+stored in ._invalid_indices.
 
 The behavior may be desireable for training a model, but could cause silent
 errors when predicting a model (replacing a bad file with a different file),
-and you should always be careful to check for ._unsafe_indices after using
+and you should always be careful to check for ._invalid_indices after using
 a SafeDataset.
 
 based on an implementation by @msamogh in nonechucks
@@ -30,27 +30,28 @@ class SafeDataset:
     Args:
         dataset: a torch Dataset instance or child such as a Preprocessor
         eager_eval: If True, checks if every file is able to be loaded during
-            initialization (logs _safe_indices and _unsafe_indices)
+            initialization (logs _valid_indices and _invalid_indices)
 
-    Attributes: _safe_indices and _unsafe_indices can be accessed later to check
-    which samples threw errors.
+    Attributes: _vlid_indices and _invalid_indices can be accessed later to check
+    which samples raised Exceptions. _invalid_samples is a set of all index values
+    for samples that raised Exceptions.
 
     Methods:
         _build_index():
-            tries to load each sample, logs _safe_indices and _unsafe_indices
+            tries to load each sample, logs _valid_indices and _invalid_indices
         __getitem__(index):
             If loading an index fails, keeps trying the next index until success
         _safe_get_item():
             Tries to load a sample, returns None if error occurs
     """
 
-    def __init__(self, dataset, unsafe_behavior, eager_eval=False):
+    def __init__(self, dataset, invalid_sample_behavior, eager_eval=False):
         """Creates a `SafeDataset` wrapper on a DataSet to handle bad samples
 
         Args:
             dataset: a Pytorch DataSet object
             eager_eval=False: try to load all samples when object is created
-            unsafe_behavior: what to do when loading a sample results in an error
+            invalid_sample_behavior: what to do when loading a sample results in an error
                 - "substitute": pick another sample to load
                 - "raise": raise the error
                 - "none": return None
@@ -60,23 +61,23 @@ class SafeDataset:
         """
 
         self.dataset = dataset
-        self.unsafe_behavior = unsafe_behavior
+        self.invalid_sample_behavior = invalid_sample_behavior
         self.eager_eval = eager_eval
         # These will contain indices over the original dataset. The indices of
-        # the safe samples will go into _safe_indices and similarly for unsafe
-        # samples in _unsafe_indices. _unsafe_samples holds the actual names
-        self._safe_indices = []
-        self._unsafe_indices = []
-        self._unsafe_samples = []
+        # the safe samples will go into _valid_indices and similarly for invalid
+        # samples in _invalid_indices. _invalid_samples holds the actual names
+        self._valid_indices = []
+        self._invalid_indices = []
+        self._invalid_samples = []
 
-        # If eager_eval is True, we build the full index of safe/unsafe samples
+        # If eager_eval is True, we build the full index of valid/invalid samples
         # by attempting to access every sample in self.dataset.
         if self.eager_eval is True:
             self._build_index()
 
     def _safe_get_item(self, idx):
         """Returns None instead of throwing an error when dealing with an
-        unsafe sample, and also builds an index of safe and unsafe samples as
+        invalid sample, and also builds an index of valid and invalid samples as
         and when they get accessed.
         """
         invalid_idx = False
@@ -87,62 +88,66 @@ class SafeDataset:
                 invalid_idx = True
                 raise IndexError("index exceeded end of self.dataset")
             sample = self.dataset[idx]
-            if idx not in self._safe_indices:
-                self._safe_indices.append(idx)
+            if idx not in self._valid_indices:
+                self._valid_indices.append(idx)
             return sample
         except Exception as exc:
             if isinstance(exc, IndexError) and invalid_idx:
                 raise
-            if idx not in self._unsafe_indices:
-                self._unsafe_indices.append(idx)
+            if idx not in self._invalid_indices:
+                self._invalid_indices.append(idx)
             # store the actual sample names also?
             sample = self.dataset.label_df.index[idx]
             if isinstance(sample, tuple):
                 # just get file path, discard start/end time #TODO revisit choice
                 sample = sample[0]
-            if sample not in self._unsafe_samples:
-                self._unsafe_samples.append(sample)
+            if sample not in self._invalid_samples:
+                self._invalid_samples.append(sample)
 
             return None
 
     def _build_index(self):
-        """load every sample to determine if each is safe"""
+        """load every sample to determine if each is valid"""
         for idx in range(len(self.dataset)):
             # The returned sample is deliberately discarded because
             # self._safe_get_item(idx) is called only to classify every index
-            # into either safe_samples_indices or _unsafe_samples_indices.
+            # into either _valid_indices or _invalid_indices.
             _ = self._safe_get_item(idx)
 
     def _reset_index(self):
-        """Resets the safe and unsafe samples indices, & unsafe sample list."""
-        self._safe_indices = self._unsafe_indices = self._unsafe_samples = []
+        """Resets the valid and invalid samples indices, & invalid sample list."""
+        self._valid_indices = []
+        self._invalid_indices = []
+        self._invalid_samples = []
 
     def report(self, log=None):
-        """write _unsafe_samples to log file, give warning, & return _unsafe_samples"""
-        if len(self._unsafe_samples) > 0:
+        """write _invalid_samples to log file, give warning, & return _invalid_samples"""
+        if len(self._invalid_samples) > 0:
             msg = (
-                f"There were {len(self._unsafe_samples)} "
+                f"There were {len(self._invalid_samples)} "
                 "sample(s) that raised errors and were skipped."
             )
             if log is not None:
                 with open(log, "w") as f:
-                    for p in self._unsafe_samples:
+                    for p in self._invalid_samples:
                         f.write(p + "\n")
-                msg += f"The unsafe file paths are logged in {log}"
+                msg += f"The invalid file paths are logged in {log}"
             warnings.warn(msg)
-        return self._unsafe_samples
+        return self._invalid_samples
 
     @property
     def is_index_built(self):
         """Returns True if all indices of the original dataset have been
-        classified into safe_samples_indices or _unsafe_samples_indices.
+        classified into _valid_indices or _invalid_indices.
         """
-        return len(self.dataset) == len(self._safe_indices) + len(self._unsafe_indices)
+        return len(self.dataset) == len(self._valid_indices) + len(
+            self._invalid_indices
+        )
 
     @property
     def num_samples_examined(self):
-        """count of _safe_indices + _unsafe_indices"""
-        return len(self._safe_indices) + len(self._unsafe_indices)
+        """count of _valid_indices + _invalid_indices"""
+        return len(self._valid_indices) + len(self._invalid_indices)
 
     def __len__(self):
         """Returns the length of the original dataset.
@@ -158,14 +163,14 @@ class SafeDataset:
         )
 
     def __getitem__(self, idx):
-        """If loading an index fails, behavior depends on self.unsafe_behavior
+        """If loading an index fails, behavior depends on self.invalid_sample_behavior
 
-        self.unsafe_behavior = {
+        self.invalid_sample_behavior = {
             "substitute": pick another sample,
             "raise": raise the error
             "none": return None
         """
-        if self.unsafe_behavior == "substitute":
+        if self.invalid_sample_behavior == "substitute":
             attempts = 0
             while attempts < len(self.dataset):
                 sample = self._safe_get_item(idx)
@@ -174,22 +179,28 @@ class SafeDataset:
                 idx += 1
                 attempts += 1
                 idx = idx % len(self.dataset)  # loop around end to beginning
-            raise IndexError("Tried all samples, none were safe")
-        elif self.unsafe_behavior == "raise" or self.unsafe_behavior == "none":
+            raise IndexError(
+                "None of the samples in the SafeDataset loaded. "
+                "All samples caused exceptions during preprocessing. "
+            )
+        elif (
+            self.invalid_sample_behavior == "raise"
+            or self.invalid_sample_behavior == "none"
+        ):
             try:
                 sample = self.dataset[idx]
-                if idx not in self._safe_indices:
-                    self._safe_indices.append(idx)
+                if idx not in self._valid_indices:
+                    self._valid_indices.append(idx)
                 return sample
             except Exception:
-                if idx not in self._unsafe_indices:
-                    self._unsafe_indices.append(idx)
-                if self.unsafe_behavior == "none":
+                if idx not in self._invalid_indices:
+                    self._invalid_indices.append(idx)
+                if self.invalid_sample_behavior == "none":
                     return None
                 else:  # raise the Exception
                     raise
         else:
             raise ValueError(
-                f"unsafe_behavior must be 'substitute','raise', or 'none'. "
-                f"Got {self.unsafe_behavior}"
+                f"invalid_sample_behavior must be 'substitute','raise', or 'none'. "
+                f"Got {self.invalid_sample_behavior}"
             )

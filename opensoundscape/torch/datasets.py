@@ -45,7 +45,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
         PreprocessingError if exception is raised during __getitem__
 
     Effects:
-        self.unsafe_samples will contain a list of paths that did not successfully
+        self.invalid_samples will contain a list of paths that did not successfully
             produce a list of clips with start/end times, if split_files_into_clips=True
     """
 
@@ -97,7 +97,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
         self.label_df = df
         self.return_labels = return_labels
         self.preprocessor = preprocessor
-        self.unsafe_samples = []
+        self.invalid_samples = []
 
         # if True skips Actions with .is_augmentation=True
         self.bypass_augmentations = bypass_augmentations
@@ -186,10 +186,10 @@ class AudioSplittingDataset(AudioFileDataset):
         # create clip df
         # self.label_df will have multi-index (file,start_time,end_time)
         # can contain rows with start/end time np.nan for failed samples
-        self.label_df, self.unsafe_samples = make_clip_df(
+        self.label_df, self.invalid_samples = make_clip_df(
             files=samples,
             clip_duration=preprocessor.sample_duration,
             clip_overlap=overlap_fraction * preprocessor.sample_duration,
             final_clip=final_clip,
-            return_unsafe_samples=True,
+            return_invalid_samples=True,
         )

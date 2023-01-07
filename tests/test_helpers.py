@@ -150,13 +150,13 @@ def test_generate_clip_times_df_overlap():
 
 def test_make_clip_df(silence_10s_mp3_str):
     """many corner cases / alternatives are tested for audio.split()"""
-    clip_df, unsafe_samples = helpers.make_clip_df(
+    clip_df, invalid_samples = helpers.make_clip_df(
         files=[silence_10s_mp3_str, silence_10s_mp3_str, "notafile.wav"],
         clip_duration=5.0,
-        return_unsafe_samples=True,
+        return_invalid_samples=True,
     )
     assert len(clip_df) == 5
-    assert len(unsafe_samples) == 1
+    assert len(invalid_samples) == 1
 
 
 def test_make_clip_df_from_label_df(silence_10s_mp3_str, metadata_wav_str):

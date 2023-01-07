@@ -249,8 +249,10 @@ class CNN(BaseModule):
         train_dataset.bypass_augmentations = False
 
         # SafeDataset loads a new sample if loading a sample throws an error
-        # indices of bad samples are appended to ._unsafe_indices
-        train_safe_dataset = SafeDataset(train_dataset, unsafe_behavior="substitute")
+        # indices of bad samples are appended to ._invalid_indices
+        train_safe_dataset = SafeDataset(
+            train_dataset, invalid_sample_behavior="substitute"
+        )
 
         # train_loader samples batches of images + labels from training set
         self.train_loader = self._init_dataloader(
@@ -431,7 +433,7 @@ class CNN(BaseModule):
         save_interval=1,  # save weights every n epochs
         log_interval=10,  # print metrics every n batches
         validation_interval=1,  # compute validation metrics every n epochs
-        unsafe_samples_log="./unsafe_training_samples.log",
+        invalid_samples_log="./invalid_training_samples.log",
         wandb_session=None,
     ):
         """train the model on samples from train_dataset
@@ -468,7 +470,7 @@ class CNN(BaseModule):
                 interval in epochs to test the model on the validation set
                 Note that model will only update it's best score and save best.model
                 file on epochs that it performs validation.
-            unsafe_samples_log:
+            invalid_samples_log:
                 file path: log all samples that failed in preprocessing
                 (file written when training completes)
                 - if None,  does not write a file
@@ -587,7 +589,7 @@ class CNN(BaseModule):
             #### Validation ###
             if validation_df is not None and epoch % validation_interval == 0:
                 self._log("\nValidation.")
-                validation_scores, _, unsafe_val_samples = self.predict(
+                validation_scores, _, invalid_val_samples = self.predict(
                     validation_df,
                     batch_size=batch_size,
                     num_workers=num_workers,
@@ -637,14 +639,14 @@ class CNN(BaseModule):
             f"with Validation score {self.best_score:.3f}."
         )
 
-        # warn the user if there were unsafe samples (samples that failed to preprocess)
-        unsafe_samples = self.train_loader.dataset.report(log=unsafe_samples_log)
+        # warn the user if there were invalid samples (samples that failed to preprocess)
+        invalid_samples = self.train_loader.dataset.report(log=invalid_samples_log)
         self._log(
-            f"{len(unsafe_samples)} of {len(train_df)} total training "
+            f"{len(invalid_samples)} of {len(train_df)} total training "
             f"samples failed to preprocess",
             level=2,
         )
-        self._log(f"List of unsafe samples: {unsafe_samples}", level=3)
+        self._log(f"List of invalid samples: {invalid_samples}", level=3)
 
     def eval(self, targets, scores, logging_offset=0):
         """compute single-target or multi-target metrics from targets and scores
@@ -761,7 +763,7 @@ class CNN(BaseModule):
         overlap_fraction=0,
         final_clip=None,
         bypass_augmentations=True,
-        unsafe_samples_log=None,
+        invalid_samples_log=None,
         wandb_session=None,
     ):
         """Generate predictions on a dataset
@@ -815,7 +817,7 @@ class CNN(BaseModule):
             final_clip: see `opensoundscape.helpers.generate_clip_times_df`
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
-            unsafe_samples_log: if not None, samples that failed to preprocess
+            invalid_samples_log: if not None, samples that failed to preprocess
                 will be listed in this text file.
             wandb_session: a wandb session to log to
                 - pass the value returned by wandb.init() to progress log to a
@@ -825,7 +827,7 @@ class CNN(BaseModule):
         Returns:
             scores: df of post-activation_layer scores
             predictions: df of 0/1 preds for each class
-            unsafe_samples: list of samples that failed to preprocess
+            invalid_samples: list of samples that failed to preprocess
 
         Effects:
             If wandb_session is provided, logs progress and samples to Weights
@@ -886,14 +888,16 @@ class CNN(BaseModule):
             )
             scores = pd.DataFrame(columns=self.classes)
             preds = None if binary_preds is None else pd.DataFrame(columns=self.classes)
-            return scores, preds, prediction_dataset.unsafe_samples
+            return scores, preds, prediction_dataset.invalid_samples
 
         # SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
-        # with np.nan for the bad samples (using safe_dataset._unsafe_indices)
+        # with np.nan for the bad samples (using safe_dataset._invalid_indices)
         # this approach to error handling feels hacky
         # however, returning None would break the batching of samples
-        safe_dataset = SafeDataset(prediction_dataset, unsafe_behavior="substitute")
+        safe_dataset = SafeDataset(
+            prediction_dataset, invalid_sample_behavior="substitute"
+        )
 
         dataloader = torch.utils.data.DataLoader(
             safe_dataset,
@@ -903,8 +907,8 @@ class CNN(BaseModule):
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=torch.cuda.is_available(),
         )
-        # add any paths that failed to generate a clip df to _unsafe_samples
-        dataloader.dataset._unsafe_samples += prediction_dataset.unsafe_samples
+        # add any paths that failed to generate a clip df to _invalid_samples
+        dataloader.dataset._invalid_samples += prediction_dataset.invalid_samples
 
         # Initialize Weights and Biases (wandb) logging
         if wandb_session is not None:
@@ -980,9 +984,9 @@ class CNN(BaseModule):
         # replace scores/preds with nan for samples that failed in preprocessing
         # this feels hacky (we predicted on substitute-samples rather than
         # skipping the samples that failed preprocessing)
-        total_scores[dataloader.dataset._unsafe_indices, :] = np.nan
+        total_scores[dataloader.dataset._invalid_indices, :] = np.nan
         if binary_preds is not None:
-            total_preds[dataloader.dataset._unsafe_indices, :] = np.nan
+            total_preds[dataloader.dataset._invalid_indices, :] = np.nan
 
         # return 2 DataFrames with same index/columns as prediction_dataset's df
         # use None for placeholder if no preds
@@ -1001,9 +1005,9 @@ class CNN(BaseModule):
                     prediction_dataset.label_df[[]].reset_index()
                 )
 
-        # warn the user if there were unsafe samples (failed to preprocess)
+        # warn the user if there were invalid samples (failed to preprocess)
         # and log them to a file
-        unsafe_samples = dataloader.dataset.report(log=unsafe_samples_log)
+        invalid_samples = dataloader.dataset.report(log=invalid_samples_log)
 
         # log top-scoring samples per class to wandb table
         if wandb_session is not None:
@@ -1029,7 +1033,7 @@ class CNN(BaseModule):
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
 
-        return score_df, pred_df, unsafe_samples
+        return score_df, pred_df, invalid_samples
 
 
 def use_resample_loss(model):
