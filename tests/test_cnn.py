@@ -217,10 +217,12 @@ def test_predict_missing_file_is_invalid_sample(missing_file_df, test_df):
     scores, _, invalid_samples = model.predict(
         pd.concat([missing_file_df, test_df.head(1)])
     )
-    assert len(scores) == 3  # should have one row with nan values for the invalid sample
+    assert (
+        len(scores) == 3
+    )  # should have one row with nan values for the invalid sample
     isnan = lambda x: x != x
     assert np.all([isnan(score) for score in scores.iloc[0].values])
-    assert len(set(invalid_samples)) == 1
+    assert len(invalid_samples) == 1
 
 
 def test_predict_wrong_input_error(test_df):

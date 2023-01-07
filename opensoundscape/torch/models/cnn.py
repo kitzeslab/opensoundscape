@@ -908,7 +908,9 @@ class CNN(BaseModule):
             pin_memory=torch.cuda.is_available(),
         )
         # add any paths that failed to generate a clip df to _invalid_samples
-        dataloader.dataset._invalid_samples += prediction_dataset.invalid_samples
+        dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
+            prediction_dataset.invalid_samples
+        )
 
         # Initialize Weights and Biases (wandb) logging
         if wandb_session is not None:

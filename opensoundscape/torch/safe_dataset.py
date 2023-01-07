@@ -68,7 +68,7 @@ class SafeDataset:
         # samples in _invalid_indices. _invalid_samples holds the actual names
         self._valid_indices = []
         self._invalid_indices = []
-        self._invalid_samples = []
+        self._invalid_samples = set()
 
         # If eager_eval is True, we build the full index of valid/invalid samples
         # by attempting to access every sample in self.dataset.
@@ -102,7 +102,7 @@ class SafeDataset:
                 # just get file path, discard start/end time #TODO revisit choice
                 sample = sample[0]
             if sample not in self._invalid_samples:
-                self._invalid_samples.append(sample)
+                self._invalid_samples.add(sample)
 
             return None
 
@@ -118,7 +118,7 @@ class SafeDataset:
         """Resets the valid and invalid samples indices, & invalid sample list."""
         self._valid_indices = []
         self._invalid_indices = []
-        self._invalid_samples = []
+        self._invalid_samples = set()
 
     def report(self, log=None):
         """write _invalid_samples to log file, give warning, & return _invalid_samples"""

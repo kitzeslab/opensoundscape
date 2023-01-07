@@ -302,7 +302,7 @@ def make_clip_df(
     assert len(files) > 0, "files list has length zero!"
 
     clip_dfs = []
-    invalid_samples = []
+    invalid_samples = set()
     for f in file_list:
         try:
             t = librosa.get_duration(filename=f)
@@ -319,7 +319,7 @@ def make_clip_df(
             clips = pd.DataFrame(
                 {"file": [f], "start_time": np.nan, "end_time": np.nan}
             )
-            invalid_samples.append(f)
+            invalid_samples.add(f)
 
         if label_df is not None:
             # copy labels for this file to all of its clips
