@@ -3,7 +3,7 @@ from pathlib import Path
 import datetime
 
 import pytz
-from opensoundscape.helpers import hex_to_time, _load_metadata
+from opensoundscape.helpers import hex_to_time, load_metadata
 
 
 def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):
@@ -103,7 +103,7 @@ def parse_audiomoth_metadata(metadata):
 
 def parse_audiomoth_metadata_from_path(file_path):
     """Wrapper function to parse audiomoth metadata from file path"""
-    metadata = _load_metadata(file_path)
+    metadata = load_metadata(file_path)
 
     if metadata is None:
         raise ValueError(f"{file_path} does not contain metadata")
