@@ -21,6 +21,7 @@ audio_object = audio_object.resample(22050)
 import warnings
 from datetime import timedelta, datetime
 from pathlib import Path
+import json
 
 import numpy as np
 from scipy.fftpack import fft as scipyfft
@@ -28,7 +29,8 @@ from scipy.fft import fftfreq
 import librosa
 import soundfile
 
-from opensoundscape.helpers import generate_clip_times_df, _load_metadata
+import opensoundscape
+from opensoundscape.helpers import generate_clip_times_df, load_metadata
 from opensoundscape.audiomoth import parse_audiomoth_metadata
 from opensoundscape.audio_tools import bandpass_filter
 
@@ -168,7 +170,7 @@ class Audio:
         path,
         sample_rate=None,
         resample_type="kaiser_fast",
-        metadata=True,
+        load_metadata=True,
         offset=None,
         duration=None,
         start_timestamp=None,
@@ -195,7 +197,7 @@ class Audio:
             sample_rate (int, None): resample audio with value and resample_type,
                 if None use source sample_rate (default: None)
             resample_type: method used to resample_type (default: kaiser_fast)
-            metadata (bool): if True, attempts to load metadata from the audio
+            load_metadata (bool): if True, attempts to load metadata from the audio
                 file. If an exception occurs, self.metadata will be `None`.
                 Otherwise self.metadata is a dictionary.
                 Note: will also attempt to parse AudioMoth metadata from the
@@ -238,26 +240,8 @@ class Audio:
         path = str(path)  # Pathlib path can have dependency issues - use string
 
         ## Load Metadata ##
-        if metadata:
-            try:
-                metadata = _load_metadata(path)
-                # if this is an AudioMoth file, try to parse out additional
-                # metadata from the comment field
-                if "artist" in metadata and "AudioMoth" in metadata["artist"]:
-                    try:
-                        metadata = parse_audiomoth_metadata(metadata)
-                    except Exception as exc:
-                        warnings.warn(
-                            "This seems to be an AudioMoth file, "
-                            f"but parse_audiomoth_metadata() raised: {exc}"
-                        )
-
-                ## Update metadata ##
-                metadata["channels"] = 1  # we sum to mono when we load with librosa
-
-            except Exception as exc:
-                warnings.warn(f"Failed to load metadata: {exc}. Metadata will be None")
-                metadata = None
+        if load_metadata:
+            metadata = _metadata_from_file_handler(path)
         else:
             metadata = None
 
@@ -405,16 +389,30 @@ class Audio:
         Args:
             start_time: time in seconds for start of extracted clip
             end_time: time in seconds for end of extracted clip
+
         Returns:
             a new Audio object containing samples from start_time to end_time
-
-        Warning: metadata is lost during this operation
         """
         start_sample = max(0, self._get_sample_index(start_time))
         end_sample = self._get_sample_index(end_time)
         samples_trimmed = self.samples[start_sample:end_sample]
+
+        # update metadata with new start time and duration
+        if self.metadata is None:
+            metadata = None
+        else:
+            metadata = self.metadata.copy()
+            if "recording_start_time" in metadata:
+                metadata["recording_start_time"] += timedelta(seconds=start_time)
+
+            if "duration" in metadata:
+                metadata["duration"] = len(samples_trimmed) / self.sample_rate
+
         return Audio(
-            samples_trimmed, self.sample_rate, resample_type=self.resample_type
+            samples_trimmed,
+            self.sample_rate,
+            resample_type=self.resample_type,
+            metadata=metadata,
         )
 
     def loop(self, length=None, n=None):
@@ -440,11 +438,22 @@ class Audio:
             # loop the audio until it reaches a duration of `length` seconds
             total_samples_needed = round(length * self.sample_rate)
             samples_extended = np.resize(self.samples, total_samples_needed)
-
         else:  # loop the audio n times
             samples_extended = np.tile(self.samples, n)
+
+        # update metadata to reflect new duration
+        if self.metadata is None:
+            metadata = None
+        else:
+            metadata = self.metadata.copy()
+            if "duration" in metadata:
+                metadata["duration"] = len(samples_extended) / self.sample_rate
+
         return Audio(
-            samples_extended, self.sample_rate, resample_type=self.resample_type
+            samples_extended,
+            self.sample_rate,
+            resample_type=self.resample_type,
+            metadata=metadata,
         )
 
     def extend(self, length):
@@ -461,8 +470,20 @@ class Audio:
         samples_extended = np.pad(
             self.samples, pad_width=(0, total_samples_needed - len(self.samples))
         )
+
+        # update metadata to reflect new duration
+        if self.metadata is None:
+            metadata = None
+        else:
+            metadata = self.metadata.copy()
+            if "duration" in metadata:
+                metadata["duration"] = len(samples_extended) / self.sample_rate
+
         return Audio(
-            samples_extended, self.sample_rate, resample_type=self.resample_type
+            samples_extended,
+            self.sample_rate,
+            resample_type=self.resample_type,
+            metadata=metadata,
         )
 
     def bandpass(self, low_f, high_f, order):
@@ -586,7 +607,7 @@ class Audio:
     def save(
         self,
         path,
-        write_metadata=True,
+        metadata_format="opso",
         soundfile_subtype=None,
         soundfile_format=None,
         suppress_warnings=False,
@@ -604,9 +625,15 @@ class Audio:
 
         Args:
             path: destination for output
-            write_metadata: if True, uses soundfile.SoundFile to
-                add metadata to the file after writing it. If False,
-                written file will not contain metadata.
+            metadata_format: strategy for saving metadata. Can be:
+                - 'opso' [Default]: Saves metadata dictionary in the comment
+                    field as a JSON string. Uses the most recent version of opso_metadata
+                    formats.
+                - 'opso_metadata_v0.1': specify the exact version of opso_metadata to use
+                - 'soundfile': Saves the default soundfile metadata fields only:
+                    ["title","copyright","software","artist","comment","date",
+                     "album","license","tracknumber","genre"]
+                - None: does not save metadata to file
             soundfile_subtype: soundfile audio subtype choice, see soundfile.write
                 or list options with soundfile.available_subtypes()
             soundfile_format: soundfile audio format choice, see soundfile.write
@@ -631,28 +658,13 @@ class Audio:
                 "Note that as of Dec 2022, libsndfile 1.1.0 is not available on Ubuntu."
             ) from exc
 
-        if write_metadata and self.metadata is not None:
+        if metadata_format is not None and self.metadata is not None:
             if fmt not in [".WAV", ".AIFF"] and not suppress_warnings:
                 warnings.warn(
                     "Saving metadata is only supported for WAV and AIFF formats"
                 )
             else:
-                with soundfile.SoundFile(path, "r+") as s:
-                    # must use r+ mode to update the file without overwriting everything
-                    for field in [
-                        "title",
-                        "copyright",
-                        "software",
-                        "artist",
-                        "comment",
-                        "date",
-                        "album",
-                        "license",
-                        "tracknumber",
-                        "genre",
-                    ]:
-                        if field in self.metadata and self.metadata[field] is not None:
-                            s.__setattr__(field, self.metadata[field])
+                _write_metadata(self.metadata, metadata_format, path)
 
     def split(self, clip_duration, clip_overlap=0, final_clip=None):
         """Split Audio into even-lengthed clips
@@ -797,7 +809,12 @@ class Audio:
 
 
 def load_channels_as_audio(
-    path, sample_rate=None, resample_type="kaiser_fast", offset=0, duration=None
+    path,
+    sample_rate=None,
+    resample_type="kaiser_fast",
+    offset=0,
+    duration=None,
+    metadata=True,
 ):
     """Load each channel of an audio file to a separate Audio object
 
@@ -809,8 +826,17 @@ def load_channels_as_audio(
 
     returns:
         list of Audio objects (one per channel)
+
+    Note: metadata is copied to each Audio object, but will contain an
+        additional field: "channel"="1 of 3" for first of 3 channels
     """
     path = str(path)  # Pathlib path can have dependency issues - use string
+
+    ## Load Metadata ##
+    if metadata:
+        metadata_dict = _metadata_from_file_handler(path)
+    else:
+        metadata_dict = None
 
     ## Load samples ##
     warnings.filterwarnings("ignore")
@@ -825,15 +851,23 @@ def load_channels_as_audio(
     warnings.resetwarnings()
     if len(np.shape(samples)) == 1:
         samples = [samples]
-    audio_objects = [
-        Audio(
-            samples=samples_channel,
-            sample_rate=sample_rate,
-            resample_type=resample_type,
-        )
-        for samples_channel in samples
-    ]
 
+    # create an audio object for each channel
+    # adding a metadata field to track which of
+    # the original channels it represents
+    audio_objects = []
+    for i, samples_channel in enumerate(samples):
+        channel_metadata = metadata_dict.copy()
+        channel_metadata["channels"] = 1
+        channel_metadata["channel"] = f"{i+1} of {len(samples)}"
+        audio_objects.append(
+            Audio(
+                samples=samples_channel,
+                sample_rate=sample_rate,
+                resample_type=resample_type,
+                metadata=channel_metadata,
+            )
+        )
     return audio_objects
 
 
@@ -992,3 +1026,161 @@ def mix(
         mixdown = np.clip(mixdown, clip_range[0], clip_range[1])
 
     return Audio(mixdown, sample_rate, resample_type=audio_objects[0].resample_type)
+
+
+def parse_opso_metadata(comment_string):
+    """parse metadata saved by opensoundcsape as json in comment field
+
+    Parses a json string which opensoundscape saves to the comment metadata field
+    of WAV files to preserve metadata. The string begins with `opso_metadata`
+    The contents of the string after this 13 character prefix should be parsable
+    as JSON, and should have a key `opso_metadata_version` specifying the version
+    of the metadata format, for instance 'v0.1'.
+
+    see also `generate_opso_metadata` which generates the string parsed by
+    this function.
+
+    Args:
+        comment_string: a string beginning with `opso_metadata` followed
+            by JSON parseable dictionary
+
+    Returns: dictionary of parsed metadata
+    """
+    assert comment_string[:13] == "opso_metadata", (
+        "Comment string did not begin" "with 'opso_metadata'."
+    )
+
+    metadata = json.loads(comment_string[13:])
+    metadata_version = metadata["opso_metadata_version"]
+    if metadata_version == "v0.1":
+        # parse and re-format according to opso_metadata_v0.1 formatting
+        if "recording_start_time" in metadata:
+            metadata["recording_start_time"] = datetime.fromisoformat(
+                metadata["recording_start_time"]
+            )
+    # elif: # implement parsing of future metadata versions here
+    else:
+        raise NotImplementedError(
+            f"Parsing opso_metadata version {metadata_version} "
+            "has not been implemented."
+        )
+
+    return metadata
+
+
+def generate_opso_metadata_str(metadata_dictionary, version="v0.1"):
+    """generate json string for comment field containing metadata
+
+    Preserve Audio.metadata dictionary by dumping to a json string
+    and including it as the 'comment' field when saving WAV files.
+
+    The string begins with `opso_metadata`
+    The contents of the string after this 13 character prefix should be parsable
+    as JSON, and should have a key `opso_metadata_version` specifying the version
+    of the metadata format, for instance 'v0.1'.
+
+    See also: `parse_opso_metadata` which parses the string created by this
+    fundtion
+
+    Args:
+        metadata_dictionary: dictionary of audio metadata. Should conform
+            to opso_metadata version. v0.1 should have only strings and floats
+            except the "recording_start_time" key, which should contain a
+            localized (ie has timezone) datetime.datetime object. The datetime
+            is saved as a string in ISO format using datetime.isoformat()
+            and loaded with datetime.fromisoformat().
+        version: version number of opso_metadata format.
+            Currently implemented: ['v0.1']
+
+
+    Returns:
+        string beginning with `opso_metadata` followed by JSON-parseable
+        string containing the metadata.
+    """
+    metadata = metadata_dictionary.copy()
+    metadata["opso_metadata_version"] = version
+    if version == "v0.1":
+        # formatting rules for v0.1:
+        if "recording_start_time" in metadata:
+            metadata["recording_start_time"] = metadata[
+                "recording_start_time"
+            ].isoformat()
+        metadata["opensoundscape_version"] = opensoundscape.__version__
+    # elif #implement future versions of metadata format here
+    else:
+        raise NotImplementedError(
+            f"Saving opso_metadata version {version} has not been implemented."
+        )
+    return "opso_metadata" + json.dumps(metadata)
+
+
+def _metadata_from_file_handler(path):
+    try:
+        metadata = load_metadata(path)
+        # if we have saved this file an opso_metadata json string in
+        # the comment field, re-load the metadata dictionary by parsing
+        # the json string
+        if "comment" in metadata and metadata["comment"][:13] == "opso_metadata":
+            try:
+                metadata = parse_opso_metadata(metadata["comment"])
+            except Exception as exec:
+                warnings.warn(
+                    "The file seems to contain opensoundcape metadata in the "
+                    f"comment field, but parse_opso_metadata raised {exec}"
+                )
+        # otherwise, if this is an AudioMoth file, try to parse out additional
+        # metadata from the comment field
+        elif "artist" in metadata and "AudioMoth" in metadata["artist"]:
+            try:
+                metadata = parse_audiomoth_metadata(metadata)
+            except Exception as exc:
+                warnings.warn(
+                    "This seems to be an AudioMoth file, "
+                    f"but parse_audiomoth_metadata() raised: {exc}"
+                )
+
+        ## Update metadata ##
+        metadata["channels"] = 1  # we sum to mono when we load with librosa
+
+    except Exception as exc:
+        warnings.warn(f"Failed to load metadata: {exc}. Metadata will be None")
+        metadata = None
+
+    return metadata
+
+
+def _write_metadata(metadata, metadata_format, path):
+    """write metadata using one of the supported formats
+
+    Args:
+        metadata: dictionary of metadata
+        metadata_format: one of 'opso','opso_metadata_v0.1','soundfile'
+            (see Audio.wave documentation)
+        path: file path to save metadata in with soundfile
+    """
+    metadata = metadata.copy()  # avoid changing the existing object
+    if metadata_format == "soundfile":
+        pass  # just write the metadata as is
+    elif metadata_format in ("opso", "opso_metadata_v0.1"):
+        # opso_metadata_v0.1 is currently the most recent
+        # so metadata_format='opso' will also use this format
+        metadata["comment"] = generate_opso_metadata_str(metadata, version="v0.1")
+    else:
+        raise NotImplementedError(f"unkown metadata_format: {metadata_format}")
+
+    with soundfile.SoundFile(path, "r+") as s:
+        # MUST use r+ mode to update the file without overwriting everything
+        for field in [
+            "title",
+            "copyright",
+            "software",
+            "artist",
+            "comment",
+            "date",
+            "album",
+            "license",
+            "tracknumber",
+            "genre",
+        ]:
+            if field in metadata and metadata[field] is not None:
+                s.__setattr__(field, metadata[field])
