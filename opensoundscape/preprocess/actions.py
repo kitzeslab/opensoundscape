@@ -216,6 +216,23 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False, tol=1e-5
     return audio
 
 
+def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
+    """Applies a randomly selected gain level to an Audio object
+
+    Gain is selected from a uniform distribution in the range dB_range
+
+    Args:
+        audio: an Audio object
+        dB_range: (min,max) decibels of gain to apply
+            - dB gain applied is chosen from a uniform random
+            distribution in this range
+
+    Returns: Audio object with gain applied
+    """
+    gain = random.uniform(dB_range[0], dB_range[1])
+    return audio.apply_gain(dB=gain, clip_range=clip_range)
+
+
 def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue=0):
     """Wraps torchvision.transforms.ColorJitter
 

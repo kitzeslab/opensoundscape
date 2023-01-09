@@ -98,6 +98,13 @@ def test_audio_trimmer_extend_short_clip(audio_short):
     assert isclose(audio.duration, 1.0, abs_tol=1e-4)
 
 
+def test_audio_random_gain(audio_short):
+    # should reduce 10x if -20dB gain
+    action = actions.Action(actions.audio_random_gain, dB_range=[-20, -20])
+    audio = action.go(audio_short)
+    assert isclose(max(audio.samples) * 10, max(audio_short.samples), abs_tol=1e-6)
+
+
 def test_color_jitter(tensor):
     """test that color jitter changes the tensor so that channels differ"""
     tensor = actions.torch_color_jitter(tensor)
