@@ -105,6 +105,16 @@ def test_audio_random_gain(audio_short):
     assert isclose(max(audio.samples) * 10, max(audio_short.samples), abs_tol=1e-6)
 
 
+def test_audio_add_noise(audio_short):
+    """smoke test: does it run?"""
+    action = actions.Action(actions.audio_add_noise)
+    audio = action.go(audio_short)
+    action = actions.Action(
+        actions.audio_add_noise, noise_dB=-100, signal_dB=10, color="pink"
+    )
+    audio = action.go(audio_short)
+
+
 def test_color_jitter(tensor):
     """test that color jitter changes the tensor so that channels differ"""
     tensor = actions.torch_color_jitter(tensor)
