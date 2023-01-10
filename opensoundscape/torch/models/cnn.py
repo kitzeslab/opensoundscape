@@ -766,6 +766,7 @@ class CNN(BaseModule):
         bypass_augmentations=True,
         invalid_samples_log=None,
         wandb_session=None,
+        return_invalid_samples=False,
     ):
         """Generate predictions on a dataset
 
@@ -811,9 +812,14 @@ class CNN(BaseModule):
                 - pass the value returned by wandb.init() to progress log to a
                 Weights and Biases run
                 - if None, does not log to wandb
+            return_invalid_samples: bool, if True, returns second argument, a set
+                containing file paths of samples that caused errors during preprocessing
+                [default: False]
 
         Returns:
             df of post-activation_layer scores
+            - if return_invalid_samples is True, returns (df,invalid_samples)
+            where invalid_samples is a set of file paths that failed to preprocess
 
         Effects:
             (1) wandb logging
@@ -969,7 +975,7 @@ class CNN(BaseModule):
 
         # warn the user if there were invalid samples (failed to preprocess)
         # and log them to a file
-        dataloader.dataset.report(log=invalid_samples_log)
+        invalid_samples = dataloader.dataset.report(log=invalid_samples_log)
 
         # log top-scoring samples per class to wandb table
         if wandb_session is not None:
@@ -995,7 +1001,10 @@ class CNN(BaseModule):
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
 
-        return score_df
+        if return_invalid_samples:
+            return score_df, invalid_samples
+        else:
+            return score_df
 
 
 def use_resample_loss(model):

@@ -204,15 +204,18 @@ def test_predict_missing_file_is_invalid_sample(missing_file_df, test_df):
 
     with pytest.raises(IndexError):
         # if all samples are invalid, will give IndexError
-        model.predict(missing_file_df, threshold=0.1)
+        model.predict(missing_file_df)
 
-    scores = model.predict(pd.concat([missing_file_df, test_df.head(1)]))
+    scores, invalid_samples = model.predict(
+        pd.concat([missing_file_df, test_df.head(1)]), return_invalid_samples=True
+    )
     assert (
         len(scores) == 3
     )  # should have one row with nan values for the invalid sample
     isnan = lambda x: x != x
     assert np.all([isnan(score) for score in scores.iloc[0].values])
-    # assert len(invalid_samples) == 1
+    assert len(invalid_samples) == 1
+    assert missing_file_df.index.values[0] in invalid_samples
 
 
 def test_predict_wrong_input_error(test_df):
