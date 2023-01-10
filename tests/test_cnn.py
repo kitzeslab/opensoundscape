@@ -195,7 +195,7 @@ def test_prediction_overlap(test_df):
 
 def test_multi_target_prediction(train_df, test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    scores = model.predict(test_df, threshold=0.1)
+    scores = model.predict(test_df)
 
     assert len(scores) == 2
 
@@ -278,7 +278,7 @@ def test_train_on_clip_df(train_df):
 
 def test_predict_without_splitting(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    scores = model.predict(test_df, split_files_into_clips=False, threshold=0)
+    scores = model.predict(test_df, split_files_into_clips=False)
     assert len(scores) == len(test_df)
 
 
