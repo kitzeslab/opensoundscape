@@ -758,7 +758,6 @@ class CNN(BaseModule):
         batch_size=1,
         num_workers=0,
         activation_layer=None,
-        threshold=None,
         split_files_into_clips=True,
         overlap_fraction=0,
         final_clip=None,
@@ -813,8 +812,6 @@ class CNN(BaseModule):
 
         Returns:
             df of post-activation_layer scores
-            predictions: df of 0/1 preds for each class
-            unsafe_samples: list of samples that failed to preprocess
 
         Effects:
             (1) wandb logging
@@ -824,12 +821,13 @@ class CNN(BaseModule):
             top scoring samples are logged.
             Use self.wandb_logging dictionary to change the number of samples
             logged or which classes have top-scoring samples logged.
+
             (2) unsafe sample logging
             If unsafe_samples_log is not None, saves a list of all file paths that
             failed to preprocess in unsafe_samples_log as a text file
 
         Note: if loading an audio file raises a PreprocessingError, the scores
-            and predictions for that sample will be np.nan
+            for that sample will be np.nan
 
         """
         assert type(samples) in (list, np.ndarray, pd.DataFrame), (
@@ -922,7 +920,7 @@ class CNN(BaseModule):
         self.network.to(self.device)
         self.network.eval()
 
-        # initialize scores and preds
+        # initialize scores
         total_scores = []
 
         # disable gradient updates during inference
@@ -954,7 +952,7 @@ class CNN(BaseModule):
         # aggregate across all batches
         total_scores = np.concatenate(total_scores, axis=0)
 
-        # replace scores/preds with nan for samples that failed in preprocessing
+        # replace scores with nan for samples that failed in preprocessing
         # this feels hacky (we predicted on substitute-samples rather than
         # skipping the samples that failed preprocessing)
         total_scores[dataloader.dataset._unsafe_indices, :] = np.nan
@@ -1207,7 +1205,6 @@ class InceptionV3(CNN):
 
                 # Evaluate with model's eval function
                 tgts = batch_labels.int().detach().cpu().numpy()
-                # preds = batch_preds.int().detach().cpu().numpy()
                 scores = logits.int().detach().cpu().numpy()
                 self.eval(tgts, scores, logging_offset=-1)
 
