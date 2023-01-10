@@ -640,11 +640,12 @@ class Audio:
             ) from exc
 
         if write_metadata and self.metadata is not None:
-            if fmt not in [".WAV", ".AIFF"] and not suppress_warnings:
-                warnings.warn(
-                    "Saving metadata is only supported for WAV and AIFF formats"
-                )
-            else:
+            if fmt not in [".WAV", ".AIFF"]:
+                if not suppress_warnings:
+                    warnings.warn(
+                        "Saving metadata is only supported for WAV and AIFF formats"
+                    )
+            else:  # we can write metadata for WAV and AIFF
                 with soundfile.SoundFile(path, "r+") as s:
                     # must use r+ mode to update the file without overwriting everything
                     for field in [
