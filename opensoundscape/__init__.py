@@ -16,3 +16,15 @@ from . import torch
 from . import preprocess
 from . import resources
 from . import wandb
+
+# expose some modules at the top level
+from .torch.models import cnn
+from .preprocess import preprocessors, actions
+
+# expose some classes at the top level
+from .audio import Audio
+from .spectrogram import Spectrogram
+from .torch.models.cnn import CNN
+from .torch.datasets import AudioFileDataset, AudioSplittingDataset
+from .preprocess.actions import Action
+from .preprocess.preprocessors import SpectrogramPreprocessor
