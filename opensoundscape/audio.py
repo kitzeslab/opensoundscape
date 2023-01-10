@@ -854,7 +854,7 @@ def load_channels_as_audio(
         path,
         sr=sample_rate,
         res_type=resample_type,
-        mono=True,
+        mono=False,
         offset=offset,
         duration=duration,
         dtype=None,
@@ -879,7 +879,7 @@ def load_channels_as_audio(
         audio_objects.append(
             Audio(
                 samples=samples_channel,
-                sample_rate=sample_rate,
+                sample_rate=sr,
                 resample_type=resample_type,
                 metadata=channel_metadata,
             )
