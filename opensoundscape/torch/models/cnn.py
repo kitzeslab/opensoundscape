@@ -1160,7 +1160,7 @@ class InceptionV3(CNN):
             # all augmentation occurs in the Preprocessor (train_loader)
             batch_tensors = batch_data["X"].to(self.device)
             batch_labels = batch_data["y"].to(self.device)
-            batch_labels = batch_labels.squeeze(1)
+            # batch_labels = batch_labels.squeeze(1)
 
             ####################
             # Forward and loss #
