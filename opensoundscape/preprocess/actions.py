@@ -15,7 +15,7 @@ from torchvision import transforms
 import torch
 import pandas as pd
 
-from opensoundscape.audio import Audio
+from opensoundscape.audio import Audio, mix
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 
@@ -214,6 +214,59 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False, tol=1e-5
         audio = audio.trim(start_time, end_time)
 
     return audio
+
+
+def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
+    """Applies a randomly selected gain level to an Audio object
+
+    Gain is selected from a uniform distribution in the range dB_range
+
+    Args:
+        audio: an Audio object
+        dB_range: (min,max) decibels of gain to apply
+            - dB gain applied is chosen from a uniform random
+            distribution in this range
+
+    Returns: Audio object with gain applied
+    """
+    gain = random.uniform(dB_range[0], dB_range[1])
+    return audio.apply_gain(dB=gain, clip_range=clip_range)
+
+
+def audio_add_noise(audio, noise_dB=-30, signal_dB=0, color="white"):
+    """Generates noise and adds to audio object
+
+    Args:
+        audio: an Audio object
+        noise_dB: number or range: dBFS of noise signal generated
+            - if number, crates noise with `dB` dBFS level
+            - if (min,max) tuple, chooses noise `dBFS` randomly
+            from range with a uniform distribution
+        signal_dB: dB (decibels) gain to apply to the incoming Audio
+            before mixing with noise [default: -3 dB]
+            - like noise_dB, can specify (min,max) tuple to
+            use random uniform choice in range
+
+    Returns: Audio object with noise added
+    """
+    if hasattr(noise_dB, "__iter__"):
+        # choose noise level randomly from dB range
+        noise_dB = random.uniform(noise_dB[0], noise_dB[1])
+    # otherwise, it should just be a number
+
+    if hasattr(signal_dB, "__iter__"):
+        # choose signal level randomly from dB range
+        signal_dB = random.uniform(signal_dB[0], signal_dB[1])
+    # otherwise, it should just be a number
+
+    noise = Audio.noise(
+        duration=audio.duration,
+        sample_rate=audio.sample_rate,
+        color=color,
+        dBFS=noise_dB,
+    )
+
+    return mix([audio, noise], gain=[signal_dB, 0])
 
 
 def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue=0):
