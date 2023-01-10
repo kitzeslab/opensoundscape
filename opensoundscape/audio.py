@@ -292,7 +292,7 @@ class Audio:
         # temporary workaround for soundfile issue #349
         # which causes empty sample array if loading float32 from mp3:
         # pass dtype=None, then change it afterwards
-        samples = samples.astype(np.float32)
+        samples = samples.astype(dtype)
         warnings.resetwarnings()
 
         # out of bounds warning/exception user if no samples or too short
@@ -821,6 +821,7 @@ def load_channels_as_audio(
     path,
     sample_rate=None,
     resample_type="kaiser_fast",
+    dtype=np.float32,
     offset=0,
     duration=None,
     metadata=True,
@@ -849,14 +850,20 @@ def load_channels_as_audio(
 
     ## Load samples ##
     warnings.filterwarnings("ignore")
-    samples, sample_rate = librosa.load(
+    samples, sr = librosa.load(
         path,
         sr=sample_rate,
         res_type=resample_type,
-        mono=False,
+        mono=True,
         offset=offset,
         duration=duration,
+        dtype=None,
     )
+    # temporary workaround for soundfile issue #349
+    # which causes empty sample array if loading float32 from mp3:
+    # pass dtype=None, then change it afterwards
+    samples = samples.astype(dtype)
+
     warnings.resetwarnings()
     if len(np.shape(samples)) == 1:
         samples = [samples]
