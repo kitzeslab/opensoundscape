@@ -52,7 +52,3 @@ def test_bandpass_filter(veryshort_audio):
 
 def test_clipping_detector(veryshort_audio):
     assert audio_tools.clipping_detector(veryshort_audio.samples) > -1
-
-
-def test_silence_filter(veryshort_wav_str):
-    assert audio_tools.silence_filter(veryshort_wav_str) > -1

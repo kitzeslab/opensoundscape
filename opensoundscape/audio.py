@@ -144,7 +144,7 @@ class Audio:
             brown=lambda f: 1 / np.where(f == 0, float("inf"), f),
             pink=lambda f: 1 / np.where(f == 0, float("inf"), np.sqrt(f)),
         )
-        n_samples = duration * sample_rate
+        n_samples = int(duration * sample_rate)
         assert color in psd_functions, f"Invalid color {color}"
         psd = psd_functions[color]
 
