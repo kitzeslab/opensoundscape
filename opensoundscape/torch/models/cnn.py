@@ -961,7 +961,7 @@ class CNN(BaseModule):
         # replace scores with nan for samples that failed in preprocessing
         # this feels hacky (we predicted on substitute-samples rather than
         # skipping the samples that failed preprocessing)
-        total_scores[dataloader.dataset._unsafe_indices, :] = np.nan
+        total_scores[dataloader.dataset._invalid_indices, :] = np.nan
 
         # return DataFrame with same index/columns as prediction_dataset's df
         df_index = prediction_dataset.label_df.index
