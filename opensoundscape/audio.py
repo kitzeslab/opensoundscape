@@ -170,6 +170,7 @@ class Audio:
         path,
         sample_rate=None,
         resample_type="kaiser_fast",
+        dtype=np.float32,
         load_metadata=True,
         offset=None,
         duration=None,
@@ -182,7 +183,8 @@ class Audio:
         Also attempts to load metadata using tinytag.
 
         Audio objects only support mono (one-channel) at this time. Files
-        with multiple channels are mixed down to a single channel.
+        with multiple channels are mixed down to a single channel. To load
+        multiple channels as separate Audio objects, use `load_channels_as_audio()`
 
         Optionally, load only a piece of a file using `offset` and `duration`.
         This will efficiently read sections of a .wav file regardless of where
@@ -197,6 +199,7 @@ class Audio:
             sample_rate (int, None): resample audio with value and resample_type,
                 if None use source sample_rate (default: None)
             resample_type: method used to resample_type (default: kaiser_fast)
+            dtype: data type of samples returned [Default: np.float32]
             load_metadata (bool): if True, attempts to load metadata from the audio
                 file. If an exception occurs, self.metadata will be `None`.
                 Otherwise self.metadata is a dictionary.
@@ -284,7 +287,12 @@ class Audio:
             mono=True,
             offset=offset,
             duration=duration,
+            dtype=None,
         )
+        # temporary workaround for soundfile issue #349
+        # which causes empty sample array if loading float32 from mp3:
+        # pass dtype=None, then change it afterwards
+        samples = samples.astype(np.float32)
         warnings.resetwarnings()
 
         # out of bounds warning/exception user if no samples or too short
@@ -659,11 +667,12 @@ class Audio:
             ) from exc
 
         if metadata_format is not None and self.metadata is not None:
-            if fmt not in [".WAV", ".AIFF"] and not suppress_warnings:
-                warnings.warn(
-                    "Saving metadata is only supported for WAV and AIFF formats"
-                )
-            else:
+            if fmt not in [".WAV", ".AIFF"]:
+                if not suppress_warnings:
+                    warnings.warn(
+                        "Saving metadata is only supported for WAV and AIFF formats"
+                    )
+            else:  # we can write metadata for WAV and AIFF
                 _write_metadata(self.metadata, metadata_format, path)
 
     def split(self, clip_duration, clip_overlap=0, final_clip=None):

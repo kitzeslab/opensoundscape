@@ -18,12 +18,11 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-
+import opensoundscape
 from opensoundscape.torch.architectures import cnn_architectures
 from opensoundscape.torch.models.utils import (
     BaseModule,
     apply_activation_layer,
-    tensor_binary_predictions,
 )
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.torch.loss import (
@@ -33,11 +32,13 @@ from opensoundscape.torch.loss import (
 )
 from opensoundscape.torch.safe_dataset import SafeDataset
 from opensoundscape.torch.datasets import AudioFileDataset, AudioSplittingDataset
-import opensoundscape
-
-from opensoundscape.metrics import single_target_metrics, multi_target_metrics
-
 from opensoundscape.torch.architectures.cnn_architectures import inception_v3
+from opensoundscape.metrics import (
+    predict_multi_target_labels,
+    predict_single_target_labels,
+    single_target_metrics,
+    multi_target_metrics,
+)
 
 
 class CNN(BaseModule):
@@ -328,12 +329,14 @@ class CNN(BaseModule):
             total_scores.append(logits.detach().cpu().numpy())
             total_tgts.append(batch_labels.detach().cpu().numpy())
 
-            # generate binary predictions
+            # generate boolean predictions
             if self.single_target:  # predict highest scoring class only
-                batch_preds = F.one_hot(logits.argmax(1), len(logits[0]))
+                batch_preds = predict_single_target_labels(scores=logits)
             else:  # multi-target: predict 0 or 1 based on a fixed threshold
-                batch_preds = torch.sigmoid(logits) >= self.prediction_threshold
-            total_preds.append(batch_preds.int().detach().cpu().numpy())
+                batch_preds = predict_multi_target_labels(
+                    scores=torch.sigmoid(logits), threshold=self.prediction_threshold
+                )
+            total_preds.append(batch_preds.detach().int().cpu().numpy())
 
             # calculate loss
             loss = self.loss_fn(logits, batch_labels)
@@ -587,7 +590,7 @@ class CNN(BaseModule):
             #### Validation ###
             if validation_df is not None and epoch % validation_interval == 0:
                 self._log("\nValidation.")
-                validation_scores, _, unsafe_val_samples = self.predict(
+                validation_scores = self.predict(
                     validation_df,
                     batch_size=batch_size,
                     num_workers=num_workers,
@@ -755,8 +758,6 @@ class CNN(BaseModule):
         batch_size=1,
         num_workers=0,
         activation_layer=None,
-        binary_preds=None,
-        threshold=None,
         split_files_into_clips=True,
         overlap_fraction=0,
         final_clip=None,
@@ -793,19 +794,6 @@ class CNN(BaseModule):
                 - 'sigmoid': all scores in [0,1] but don't sum to 1
                 - 'softmax_and_logit': applies softmax first then logit
                 [default: None]
-            binary_preds:
-                Optionally return binary (thresholded 0/1) predictions
-                options:
-                - 'single_target': max scoring class = 1, others = 0
-                - 'multi_target': scores above threshold = 1, others = 0
-                - None: do not create or return binary predictions
-                [default: None]
-                Note: if you choose multi-target, you must specify `threshold`
-            threshold:
-                prediction threshold(s) for post-activation layer scores.
-                Only relevant when binary_preds == 'multi_target'
-                If activation layer is sigmoid, choose value in [0,1]
-                If activation layer is None or softmax_and_logit, in [-inf,inf]
             split_files_into_clips:
                 If True, internally splits and predicts on clips from longer audio files
                 Otherwise, assumes each row of `samples` corresponds to one complete sample
@@ -823,11 +811,10 @@ class CNN(BaseModule):
                 - if None, does not log to wandb
 
         Returns:
-            scores: df of post-activation_layer scores
-            predictions: df of 0/1 preds for each class
-            unsafe_samples: list of samples that failed to preprocess
+            df of post-activation_layer scores
 
         Effects:
+            (1) wandb logging
             If wandb_session is provided, logs progress and samples to Weights
             and Biases. A random set of samples is preprocessed and logged to
             a table. Progress over all batches is logged. Afte prediction,
@@ -835,21 +822,19 @@ class CNN(BaseModule):
             Use self.wandb_logging dictionary to change the number of samples
             logged or which classes have top-scoring samples logged.
 
-        Note: if loading an audio file raises a PreprocessingError, the scores
-            and predictions for that sample will be np.nan
+            (2) unsafe sample logging
+            If unsafe_samples_log is not None, saves a list of all file paths that
+            failed to preprocess in unsafe_samples_log as a text file
 
-        Note: if no return type is selected for `binary_preds`, returns None
-        instead of a DataFrame for `predictions`
+        Note: if loading an audio file raises a PreprocessingError, the scores
+            for that sample will be np.nan
+
         """
         assert type(samples) in (list, np.ndarray, pd.DataFrame), (
             "`samples` must be either: "
             "(a) list or np.array of files, or DataFrame with (b) file as Index or "
             "(c) (file,start_time,end_time) as MultiIndex"
         )
-        if binary_preds == "multi_target":
-            assert (
-                threshold is not None
-            ), "Must specify a threshold when generating multi_target predictions"
 
         # set up prediction Dataset, considering three possible cases:
         # (c1) user provided multi-index df with file,start_time,end_time of clips
@@ -884,9 +869,7 @@ class CNN(BaseModule):
             warnings.warn(
                 "prediction_dataset has zero samples. No predictions will be generated."
             )
-            scores = pd.DataFrame(columns=self.classes)
-            preds = None if binary_preds is None else pd.DataFrame(columns=self.classes)
-            return scores, preds, prediction_dataset.unsafe_samples
+            return pd.DataFrame(columns=self.classes)
 
         # SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
@@ -937,9 +920,8 @@ class CNN(BaseModule):
         self.network.to(self.device)
         self.network.eval()
 
-        # initialize scores and preds
+        # initialize scores
         total_scores = []
-        total_preds = []
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
@@ -955,14 +937,8 @@ class CNN(BaseModule):
                 ### Activation layer ###
                 scores = apply_activation_layer(logits, activation_layer)
 
-                ### Binary predictions ###
-                batch_preds = tensor_binary_predictions(
-                    scores=scores, mode=binary_preds, threshold=threshold
-                )
-
                 # disable gradients on returned values
                 total_scores.append(scores.detach().cpu().numpy())
-                total_preds.append(batch_preds.float().detach().cpu().numpy())
 
                 if wandb_session is not None:
                     wandb_session.log(
@@ -975,35 +951,19 @@ class CNN(BaseModule):
 
         # aggregate across all batches
         total_scores = np.concatenate(total_scores, axis=0)
-        total_preds = np.concatenate(total_preds, axis=0)
 
-        # replace scores/preds with nan for samples that failed in preprocessing
+        # replace scores with nan for samples that failed in preprocessing
         # this feels hacky (we predicted on substitute-samples rather than
         # skipping the samples that failed preprocessing)
         total_scores[dataloader.dataset._unsafe_indices, :] = np.nan
-        if binary_preds is not None:
-            total_preds[dataloader.dataset._unsafe_indices, :] = np.nan
 
-        # return 2 DataFrames with same index/columns as prediction_dataset's df
-        # use None for placeholder if no preds
+        # return DataFrame with same index/columns as prediction_dataset's df
         df_index = prediction_dataset.label_df.index
         score_df = pd.DataFrame(index=df_index, data=total_scores, columns=self.classes)
 
-        # binary 0/1 predictions
-        if binary_preds is None:
-            pred_df = None
-        else:
-            pred_df = pd.DataFrame(
-                index=df_index, data=total_preds, columns=self.classes
-            )
-            if split_files_into_clips:  # return a multi-index
-                pred_df.index = pd.MultiIndex.from_frame(
-                    prediction_dataset.label_df[[]].reset_index()
-                )
-
         # warn the user if there were unsafe samples (failed to preprocess)
         # and log them to a file
-        unsafe_samples = dataloader.dataset.report(log=unsafe_samples_log)
+        dataloader.dataset.report(log=unsafe_samples_log)
 
         # log top-scoring samples per class to wandb table
         if wandb_session is not None:
@@ -1029,7 +989,7 @@ class CNN(BaseModule):
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
 
-        return score_df, pred_df, unsafe_samples
+        return score_df
 
 
 def use_resample_loss(model):
@@ -1245,7 +1205,6 @@ class InceptionV3(CNN):
 
                 # Evaluate with model's eval function
                 tgts = batch_labels.int().detach().cpu().numpy()
-                # preds = batch_preds.int().detach().cpu().numpy()
                 scores = logits.int().detach().cpu().numpy()
                 self.eval(tgts, scores, logging_offset=-1)
 
