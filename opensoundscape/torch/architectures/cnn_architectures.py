@@ -221,7 +221,7 @@ def resnet152(
 
 @register_arch
 def alexnet(
-    num_classes, freeze_feature_extractor=False, weights='DEFAULT', num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for AlexNet architecture
 
@@ -272,7 +272,7 @@ def vgg11_bn(
             string containing version name of the pre-trained classification weights to use for this architecture.
             if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
             Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
-            
+
     """
     if num_channels != 3:
         raise NotImplementedError(
