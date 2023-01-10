@@ -127,19 +127,19 @@ def apply_activation_layer(x, activation_layer=None):
         pass
     elif activation_layer == "softmax":
         # "softmax" activation: preds across all classes sum to 1
-        x = softmax(x, 1)
+        x = softmax(x, dim=1)
     elif activation_layer == "sigmoid":
         # map [-inf,inf] to [0,1]
         x = torch.sigmoid(x)
     elif activation_layer == "softmax_and_logit":
         # softmax, then remap scores from [0,1] to [-inf,inf]
         try:
-            x = torch.logit(softmax(x, 1))
+            x = torch.logit(softmax(x, dim=1))
         except NotImplementedError:
             # use cpu because mps aten::logit is not implemented yet
             warnings.warn("falling back to CPU for logit operation")
             original_device = x.device
-            x = torch.logit(softmax(x).cpu()).to(original_device)
+            x = torch.logit(softmax(x, dim=1).cpu()).to(original_device)
 
     else:
         raise ValueError(f"invalid option for activation_layer: {activation_layer}")

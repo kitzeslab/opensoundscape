@@ -198,8 +198,8 @@ class Spectrogram:
         # else: use the provided overlap_samples argument
 
         frequencies, times, spectrogram = signal.spectrogram(
-            audio.samples,
-            audio.sample_rate,
+            x=audio.samples,
+            fs=audio.sample_rate,
             window=window_type,
             nperseg=int(window_samples),
             noverlap=int(overlap_samples),
