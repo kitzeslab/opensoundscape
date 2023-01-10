@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
-from opensoundscape import audio
 import pytest
 from pathlib import Path
 import io
@@ -9,7 +6,11 @@ from random import uniform
 from math import isclose
 import numpy.testing as npt
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
+
+from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
+from opensoundscape import audio
+import opensoundscape
 
 
 @pytest.fixture()
@@ -138,6 +139,9 @@ def test_load_channels_as_audio(stereo_wav_str):
     assert len(s) == 2
     assert type(s[0]) == Audio
 
+    assert s[0].metadata["channel"] == "1 of 2"
+    assert s[0].metadata["channels"] == 1
+
 
 def test_load_channels_as_audio_from_mono(veryshort_wav_str):
     s = load_channels_as_audio(veryshort_wav_str)
@@ -227,13 +231,30 @@ def test_load_timestamp_before_warnmode(metadata_wav_str):
         assert s.metadata["recording_start_time"] == correct_ts
 
 
-def test_retain_metadata(metadata_wav_str, new_metadata_wav_str):
+def test_retain_metadata_soundfile(metadata_wav_str, new_metadata_wav_str):
     a = Audio.from_file(metadata_wav_str)
-    a.save(new_metadata_wav_str)
+    a.save(new_metadata_wav_str, metadata_format="soundfile")
     new_a = Audio.from_file(new_metadata_wav_str)
 
     # file size may differ slightly, other fields should be the same
     assert new_a.metadata == a.metadata
+
+
+def test_save_load_opso_metadata(metadata_wav_str, new_metadata_wav_str):
+    # add more tests if more versions are added
+
+    a = Audio.from_file(metadata_wav_str)
+    a.save(new_metadata_wav_str, metadata_format="opso")
+    new_md = Audio.from_file(new_metadata_wav_str).metadata
+
+    assert new_md["opensoundscape_version"] == opensoundscape.__version__
+    assert new_md["opso_metadata_version"] == "v0.1"  # current default version
+
+    # file size may differ slightly, other fields should be the same
+    # all other keys/values should be equivalent:
+    del new_md["opensoundscape_version"]
+    del new_md["opso_metadata_version"]
+    assert new_md == a.metadata
 
 
 def test_update_metadata(metadata_wav_str, new_metadata_wav_str):
@@ -311,6 +332,15 @@ def test_property_trim_length_is_correct(silence_10s_mp3_str):
     for _ in range(100):
         [first, second] = sorted([uniform(0, duration), uniform(0, duration)])
         assert isclose(audio.trim(first, second).duration, second - first, abs_tol=1e-4)
+
+
+def test_trim_updates_metadata(metadata_wav_str):
+    a = Audio.from_file(metadata_wav_str)
+    a2 = a.trim(1, 2)
+    assert a2.metadata["recording_start_time"] == a.metadata[
+        "recording_start_time"
+    ] + timedelta(seconds=1)
+    assert a2.metadata["duration"] == 1
 
 
 def test_trim_from_negative_time(silence_10s_mp3_str):
@@ -524,7 +554,7 @@ def test_non_integer_overlaplen_split_and_save(silence_10s_mp3_pathlib):
 
 
 def test_skip_loading_metadata(metadata_wav_str):
-    a = Audio.from_file(metadata_wav_str, metadata=False)
+    a = Audio.from_file(metadata_wav_str, load_metadata=False)
     assert a.metadata is None
 
 
@@ -576,3 +606,22 @@ def test_mix_clip(veryshort_wav_audio):
     # should never have values outside of [-1,1]
     m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], gain=100)
     assert max(abs(m.samples)) <= 1
+
+
+def test_loop(veryshort_wav_audio):
+    veryshort_wav_audio.metadata = {"duration": veryshort_wav_audio.duration}
+    a2 = veryshort_wav_audio.loop(n=2)
+    assert isclose(a2.duration, veryshort_wav_audio.duration * 2, abs_tol=1e-5)
+    assert isclose(a2.duration, a2.metadata["duration"])
+
+    a3 = veryshort_wav_audio.loop(length=1)
+    assert isclose(a3.duration, 1.0, abs_tol=1e-5)
+    assert isclose(a3.metadata["duration"], 1.0, abs_tol=1e-5)
+
+
+def test_extend(veryshort_wav_audio):
+    a = veryshort_wav_audio.extend(length=1)
+    assert isclose(a.duration, 1.0, abs_tol=1e-5)
+    assert isclose(a.metadata["duration"], 1.0, abs_tol=1e-5)
+    # samples should be zero
+    assert isclose(0.0, np.max(a.samples[-100:]), abs_tol=1e-7)

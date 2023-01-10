@@ -132,7 +132,7 @@ def jitter(x, width, distribution="gaussian"):
     )
 
 
-def _load_metadata(path, raise_exceptions=False):
+def load_metadata(path, raise_exceptions=False):
     """use soundfile to load metadata from WAV or AIFF file
 
     Args:

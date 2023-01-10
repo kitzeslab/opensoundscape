@@ -121,15 +121,13 @@ def test_train_one_class(train_df):
 def test_single_target_prediction(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     model.single_target = True
-    scores, preds, _ = model.predict(test_df, binary_preds="single_target")
-
+    scores = model.predict(test_df)
     assert len(scores) == 2
-    assert len(preds) == 2
 
 
 def test_predict_on_list_of_files(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    scores, preds, _ = model.predict(test_df.index.values)
+    scores = model.predict(test_df.index.values)
     assert len(scores) == 2
 
 
@@ -150,7 +148,7 @@ def test_predict_all_arch_4ch(test_df):
                     sample_duration=5.0,
                     sample_shape=[224, 224, 4],
                 )
-            scores, _, _ = model.predict(test_df.index.values)
+            scores = model.predict(test_df.index.values)
             assert len(scores) == 2
         except:
             raise Exception(f"{arch_name} failed")
@@ -173,7 +171,7 @@ def test_predict_all_arch_1ch(test_df):
                     sample_duration=5.0,
                     sample_shape=[224, 224, 1],
                 )
-            scores, preds, _ = model.predict(test_df.index.values)
+            scores = model.predict(test_df.index.values)
             assert len(scores) == 2
         except:
             raise Exception(f"{arch_name} failed")
@@ -182,29 +180,23 @@ def test_predict_all_arch_1ch(test_df):
 def test_predict_on_clip_df(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=1.0)
     clip_df = make_clip_df(test_df.index.values[0:1], clip_duration=1.0)
-    scores, _, _ = model.predict(clip_df)
+    scores = model.predict(clip_df)
     assert len(scores) == 10
 
 
 def test_prediction_overlap(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     model.single_target = True
-    scores, preds, _ = model.predict(
-        test_df, binary_preds="single_target", overlap_fraction=0.5
-    )
+    scores = model.predict(test_df, overlap_fraction=0.5)
 
     assert len(scores) == 3
-    assert len(preds) == 3
 
 
 def test_multi_target_prediction(train_df, test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    scores, preds, _ = model.predict(
-        test_df, binary_preds="multi_target", threshold=0.1
-    )
+    scores = model.predict(test_df, threshold=0.1)
 
     assert len(scores) == 2
-    assert len(preds) == 2
 
 
 def test_predict_missing_file_is_invalid_sample(missing_file_df, test_df):
@@ -214,15 +206,13 @@ def test_predict_missing_file_is_invalid_sample(missing_file_df, test_df):
         # if all samples are invalid, will give IndexError
         model.predict(missing_file_df, threshold=0.1)
 
-    scores, _, invalid_samples = model.predict(
-        pd.concat([missing_file_df, test_df.head(1)])
-    )
+    scores = model.predict(pd.concat([missing_file_df, test_df.head(1)]))
     assert (
         len(scores) == 3
     )  # should have one row with nan values for the invalid sample
     isnan = lambda x: x != x
     assert np.all([isnan(score) for score in scores.iloc[0].values])
-    assert len(invalid_samples) == 1
+    # assert len(invalid_samples) == 1
 
 
 def test_predict_wrong_input_error(test_df):
@@ -292,18 +282,15 @@ def test_train_on_clip_df(train_df):
 
 def test_predict_without_splitting(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    scores, preds, _ = model.predict(
-        test_df, split_files_into_clips=False, binary_preds="multi_target", threshold=0
-    )
+    scores = model.predict(test_df, split_files_into_clips=False, threshold=0)
     assert len(scores) == len(test_df)
-    assert len(preds) == len(test_df)
 
 
 def test_predict_splitting_short_file(short_file_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        scores, _, _ = model.predict(short_file_df)
+        scores = model.predict(short_file_df)
         assert len(scores) == 0
         assert "prediction_dataset" in str(w[0].message)
 
@@ -364,8 +351,8 @@ def test_prediction_warns_different_classes(train_df):
 
 def test_prediction_returns_consistent_values(train_df):
     model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)
-    a, _, _ = model.predict(train_df)
-    b, _, _ = model.predict(train_df)
+    a = model.predict(train_df)
+    b = model.predict(train_df)
     assert np.allclose(a.values, b.values, 1e-6)
 
 
@@ -383,7 +370,7 @@ def test_save_and_load_weights(model_save_path):
 
 def test_eval(train_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
-    scores, _, _ = model.predict(train_df, split_files_into_clips=False)
+    scores = model.predict(train_df, split_files_into_clips=False)
     model.eval(train_df.values, scores.values)
 
 
