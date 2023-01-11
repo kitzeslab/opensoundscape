@@ -80,7 +80,7 @@ def resnet18(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet18(pretrained=use_pretrained)
+    architecture_ft = models.resnet18(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
