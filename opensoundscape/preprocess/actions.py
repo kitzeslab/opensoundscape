@@ -76,7 +76,7 @@ class Action(BaseAction):
     Other arguments are an arbitrary list of kwargs.
     """
 
-    def __init__(self, fn, is_augmentation=False, extra_args=[], **kwargs):
+    def __init__(self, fn, is_augmentation=False, extra_args=(), **kwargs):
         super(Action, self).__init__()
 
         self.action_fn = fn
@@ -163,7 +163,7 @@ class AudioTrim(Action):
 
     def __init__(self, **kwargs):
         super(AudioTrim, self).__init__(
-            trim_audio, extra_args=["_sample_duration"], **kwargs
+            trim_audio, extra_args=("_sample_duration",), **kwargs
         )
 
 
@@ -447,7 +447,7 @@ class Overlay(Action):
         super(Overlay, self).__init__(
             overlay,
             is_augmentation=is_augmentation,
-            extra_args=["_labels", "_preprocessor"],
+            extra_args=("_labels", "_preprocessor"),
             **kwargs,
         )
 
