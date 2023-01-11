@@ -446,7 +446,7 @@ def inception_v3(
 
 @register_arch
 def efficientnet_b0(
-    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
+    num_classes, freeze_feature_extractor=False, weights='DEFAULT', num_channels=3
 ):
     """Wrapper for efficientnet_b0 architecture
 
