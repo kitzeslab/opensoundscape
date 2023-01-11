@@ -386,3 +386,17 @@ def test_train_no_validation(train_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
     model.train(train_df, save_path="tests/models")
     shutil.rmtree("tests/models/")
+
+
+def test_train_raise_errors(missing_file_df):
+    # test that model.train raises errors if raise_errors=True
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
+    with pytest.raises(ValueError):
+        model.train(missing_file_df, raise_errors=True)
+
+
+def test_predict_raise_errors(missing_file_df):
+    # test that model.predict raises errors if raise_errors=True
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
+    with pytest.raises(ValueError):
+        model.predict(missing_file_df, raise_errors=True)
