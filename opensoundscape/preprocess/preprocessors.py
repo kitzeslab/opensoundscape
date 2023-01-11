@@ -214,10 +214,10 @@ class SpectrogramPreprocessor(BasePreprocessor):
         overlay_df: if not None, will include an overlay action drawing
             samples from this df
         out_shape:
-            output shape of tensor h,w,channels [default: [224,224,3]]
+            output shape of tensor h,w,channels [default: (224,224,3)]
     """
 
-    def __init__(self, sample_duration, overlay_df=None, out_shape=[224, 224, 3]):
+    def __init__(self, sample_duration, overlay_df=None, out_shape=(224, 224, 3)):
 
         super(SpectrogramPreprocessor, self).__init__(sample_duration=sample_duration)
 

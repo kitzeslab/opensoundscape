@@ -587,7 +587,7 @@ class Audio:
             metadata=self.metadata,
         )
 
-    def apply_gain(self, dB, clip_range=[-1, 1]):
+    def apply_gain(self, dB, clip_range=(-1, 1)):
         """apply dB (decibels) of gain to audio signal
 
         Specifically, multiplies samples by 10^(dB/20)
@@ -924,7 +924,7 @@ def mix(
     gain=-3,
     offsets=None,
     sample_rate=None,
-    clip_range=[-1, 1],
+    clip_range=(-1, 1),
 ):
     """mixdown (superimpose) Audio signals into a single Audio object
 
@@ -957,7 +957,7 @@ def mix(
         clip_range: minimum and maximum sample values. Samples outside
             this range will be replaced by the range limit values
             Pass None to keep sample values without clipping.
-            [default: [-1,1]]
+            [default: (-1,1)]
 
 
     Returns:

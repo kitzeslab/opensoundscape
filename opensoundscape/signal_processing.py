@@ -122,12 +122,12 @@ def cwt_peaks(
 
 def find_accel_sequences(
     t,
-    dt_range=[0.05, 0.8],
-    dy_range=[-0.2, 0],
-    d2y_range=[-0.05, 0.15],
+    dt_range=(0.05, 0.8),
+    dy_range=(-0.2, 0),
+    d2y_range=(-0.05, 0.15),
     max_skip=3,
-    duration_range=[1, 15],
-    points_range=[5, 100],
+    duration_range=(1, 15),
+    points_range=(5, 100),
 ):
     """
     detect accelerating/decelerating sequences in time series
@@ -159,15 +159,15 @@ def find_accel_sequences(
 
     Args:
         t: (list or np.array) times of all detected peaks (seconds)
-        dt_range=[0.05,0.8]: valid values for t(i) - t(i-1)
-        dy_range=[-0.2,0]: valid values for change in y
+        dt_range=(0.05,0.8): valid values for t(i) - t(i-1)
+        dy_range=(-0.2,0): valid values for change in y
             (grouse: difference in time between consecutive beats should decrease)
-        d2y_range=[-.05,.15]: limit change in dy: should not show large decrease
+        d2y_range=(-.05,.15): limit change in dy: should not show large decrease
             (sharp curve downward on y vs t plot)
         max_skip=3: max invalid points between valid points for a sequence
             (grouse: should not have many noisy points between beats)
-        duration_range=[1,15]: total duration of sequence (sec)
-        points_range=[9,100]: total number of points in sequence
+        duration_range=(1,15): total duration of sequence (sec)
+        points_range=(9,100): total number of points in sequence
 
     Returns:
         sequences_t, sequences_y: lists of t and y for each detected sequence
@@ -278,12 +278,12 @@ def detect_peak_sequence_cwt(
     wavelet="morl",
     peak_threshold=0.2,
     peak_separation=15 / 400,
-    dt_range=[0.05, 0.8],
-    dy_range=[-0.2, 0],
-    d2y_range=[-0.05, 0.15],
+    dt_range=(0.05, 0.8),
+    dy_range=(-0.2, 0),
+    d2y_range=(-0.05, 0.15),
     max_skip=3,
-    duration_range=[1, 15],
-    points_range=[9, 100],
+    duration_range=(1, 15),
+    points_range=(9, 100),
     plot=False,
 ):
     """Use a continuous wavelet transform to detect accellerating sequences
@@ -304,13 +304,13 @@ def detect_peak_sequence_cwt(
         wavelet='morl': (str) pywt wavelet name (see pywavelets docs)
         peak_threshold=0.2: height threhsold (0-1) for peaks in normalized signal
         peak_separation=15/400: min separation (sec) for peak finding
-        dt_range=[0.05, 0.8]: sequence detection point-to-point criterion 1
+        dt_range=(0.05, 0.8): sequence detection point-to-point criterion 1
             - Note: the upper limit is also used as sequence termination criterion 2
-        dy_range=[-0.2, 0]: sequence detection point-to-point criterion 2
-        d2y_range=[-0.05, 0.15]: sequence detection point-to-point criterion 3
+        dy_range=(-0.2, 0): sequence detection point-to-point criterion 2
+        d2y_range=(-0.05, 0.15): sequence detection point-to-point criterion 3
         max_skip=3: sequence termination criterion 1: max sequential invalid points
-        duration_range=[1, 15]: sequence criterion 1: length (sec) of sequence
-        points_range=[9, 100]: sequence criterion 2: num points in sequence
+        duration_range=(1, 15): sequence criterion 1: length (sec) of sequence
+        points_range=(9, 100): sequence criterion 2: num points in sequence
         plot=False: if True, plot peaks and detected sequences with pyplot
 
     Returns:

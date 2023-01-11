@@ -65,6 +65,9 @@ class CNN(BaseModule):
             - True: model expects exactly one positive class per sample
             - False: samples can have any number of positive classes
             [default: False]
+        preprocessor_class: class of Preprocessor object
+        sample_shape: tuple of height, width, channels for created sample
+            [default: (224,224,3)]
 
     """
 
@@ -75,7 +78,7 @@ class CNN(BaseModule):
         sample_duration,
         single_target=False,
         preprocessor_class=SpectrogramPreprocessor,
-        sample_shape=[224, 224, 3],
+        sample_shape=(224, 224, 3),
     ):
 
         super(CNN, self).__init__()
@@ -1102,7 +1105,7 @@ class InceptionV3(CNN):
         preprocessor_class=SpectrogramPreprocessor,
         freeze_feature_extractor=False,
         use_pretrained=True,
-        sample_shape=[299, 299, 3],
+        sample_shape=(299, 299, 3),
     ):
         """Model object for InceptionV3 architecture subclassing CNN
 
