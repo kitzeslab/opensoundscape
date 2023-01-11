@@ -1101,7 +1101,7 @@ class InceptionV3(CNN):
         single_target=False,
         preprocessor_class=SpectrogramPreprocessor,
         freeze_feature_extractor=False,
-        use_pretrained=True,
+        weights="DEFAULT",
         sample_shape=[299, 299, 3],
     ):
         """Model object for InceptionV3 architecture subclassing CNN
@@ -1114,8 +1114,10 @@ class InceptionV3(CNN):
             freeze-feature_extractor:
                 if True, feature weights don't have
                 gradient, and only final classification layer is trained
-            use_pretrained:
-                if True, use pre-trained InceptionV3 Imagenet weights
+            pretrained_weights:
+                set of pretrained weights to use for the model
+                (all sets found on torch model hub https://pytorch.org/vision/stable/models.html).
+                None if no pretrained weights
             single_target:
                 if True, predict exactly one class per sample
 
@@ -1126,7 +1128,7 @@ class InceptionV3(CNN):
         architecture = inception_v3(
             len(self.classes),
             freeze_feature_extractor=freeze_feature_extractor,
-            use_pretrained=use_pretrained,
+            weights=weights,
         )
 
         super(InceptionV3, self).__init__(

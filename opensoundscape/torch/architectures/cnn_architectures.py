@@ -291,11 +291,8 @@ def vgg11_bn(
             Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
 
     """
-    if num_channels != 3:
-        raise NotImplementedError(
-            "num_channels!=3 is not implemented for this architecture"
-        )
     architecture_ft = models.vgg11_bn(weights=weights)
+
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
