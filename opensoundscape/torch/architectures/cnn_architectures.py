@@ -80,7 +80,7 @@ def resnet18(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet18(pretrained=use_pretrained)
+    architecture_ft = models.resnet18(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -114,7 +114,7 @@ def resnet34(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet34(pretrained=use_pretrained)
+    architecture_ft = models.resnet34(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -148,7 +148,7 @@ def resnet50(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet50(pretrained=use_pretrained)
+    architecture_ft = models.resnet50(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -182,7 +182,7 @@ def resnet101(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet101(pretrained=use_pretrained)
+    architecture_ft = models.resnet101(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -216,7 +216,7 @@ def resnet152(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.resnet152(pretrained=use_pretrained)
+    architecture_ft = models.resnet152(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -254,7 +254,7 @@ def alexnet(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.alexnet(pretrained=use_pretrained)
+    architecture_ft = models.alexnet(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -295,7 +295,7 @@ def vgg11_bn(
         raise NotImplementedError(
             "num_channels!=3 is not implemented for this architecture"
         )
-    model_ft = models.vgg11_bn(pretrained=use_pretrained)
+    architecture_ft = models.vgg11_bn(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -381,7 +381,7 @@ def densenet121(
             specify channels in input sample, eg [channels h,w] sample shape
 
     """
-    model_ft = models.densenet121(pretrained=use_pretrained)
+    architecture_ft = models.densenet121(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -422,7 +422,7 @@ def inception_v3(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    model_ft = models.inception_v3(pretrained=use_pretrained)
+    architecture_ft = models.inception_v3(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
     # Handle the auxilary net
@@ -468,7 +468,7 @@ def efficientnet_b0(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_b0",
-        pretrained=use_pretrained,
+        weights=weights,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -512,7 +512,7 @@ def efficientnet_b4(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_b4",
-        pretrained=use_pretrained,
+        weights=weights,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -556,7 +556,7 @@ def efficientnet_widese_b0(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_widese_b0",
-        pretrained=use_pretrained,
+        weights=weights,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -600,7 +600,7 @@ def efficientnet_widese_b4(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_widese_b4",
-        pretrained=use_pretrained,
+        weights=weights,
     )
 
     # prevent weights of feature extractor from being trained, if desired
