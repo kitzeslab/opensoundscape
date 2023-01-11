@@ -61,7 +61,7 @@ def freeze_params(model):
 
 @register_arch
 def resnet18(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for ResNet18 architecture
 
@@ -73,16 +73,14 @@ def resnet18(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights
-            across all channels.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet18(pretrained=use_pretrained)
-
-    # prevent weights of feature extractor from being trained, if desired
+    model_ft = models.resnet18(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -97,7 +95,7 @@ def resnet18(
 
 @register_arch
 def resnet34(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for ResNet34 architecture
 
@@ -109,16 +107,14 @@ def resnet34(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights
-            across all channels.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet34(pretrained=use_pretrained)
-
-    # prevent weights of feature extractor from being trained, if desired
+    model_ft = models.resnet34(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -133,7 +129,7 @@ def resnet34(
 
 @register_arch
 def resnet50(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for ResNet50 architecture
 
@@ -145,16 +141,14 @@ def resnet50(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights
-            across all channels.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet50(pretrained=use_pretrained)
-
-    # prevent weights of feature extractor from being trained, if desired
+    model_ft = models.resnet50(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -169,7 +163,7 @@ def resnet50(
 
 @register_arch
 def resnet101(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for ResNet101 architecture
 
@@ -181,16 +175,14 @@ def resnet101(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights
-            across all channels.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet101(pretrained=use_pretrained)
-
-    # prevent weights of feature extractor from being trained, if desired
+    model_ft = models.resnet101(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -205,7 +197,7 @@ def resnet101(
 
 @register_arch
 def resnet152(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for ResNet152 architecture
 
@@ -217,14 +209,14 @@ def resnet152(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo. If num_channels != 3, averages the conv1 weights
-            across all channels.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet152(pretrained=use_pretrained)
+    model_ft = models.resnet152(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -243,7 +235,7 @@ def resnet152(
 
 @register_arch
 def alexnet(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for AlexNet architecture
 
@@ -255,17 +247,14 @@ def alexnet(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.alexnet(
-        weights=torchvision.models.AlexNet_Weights.DEFAULT if use_pretrained else None
-    )
-
-    # prevent weights of feature extractor from being trained, if desired
+    model_ft = models.alexnet(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -284,7 +273,7 @@ def alexnet(
 
 @register_arch
 def vgg11_bn(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for vgg11 architecture
 
@@ -296,14 +285,17 @@ def vgg11_bn(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
 
     """
-    architecture_ft = models.vgg11_bn(pretrained=use_pretrained)
-
-    # prevent weights of feature extractor from being trained, if desired
+    if num_channels != 3:
+        raise NotImplementedError(
+            "num_channels!=3 is not implemented for this architecture"
+        )
+    model_ft = models.vgg11_bn(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -322,7 +314,7 @@ def vgg11_bn(
 
 @register_arch
 def squeezenet1_0(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for squeezenet architecture
 
@@ -334,13 +326,14 @@ def squeezenet1_0(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.squeezenet1_0(pretrained=use_pretrained)
+    architecture_ft = models.squeezenet1_0(weights=weights)
 
     # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
@@ -370,7 +363,7 @@ def squeezenet1_0(
 
 @register_arch
 def densenet121(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for densenet121 architecture
 
@@ -380,16 +373,15 @@ def densenet121(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
 
     """
-    architecture_ft = models.densenet121(pretrained=use_pretrained)
-
-    # prevent weights of feature extractor from being trained, if desired
+    model_ft = models.densenet121(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -408,7 +400,7 @@ def densenet121(
 
 @register_arch
 def inception_v3(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for Inception v3 architecture
 
@@ -423,13 +415,14 @@ def inception_v3(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.inception_v3(pretrained=use_pretrained)
+    model_ft = models.inception_v3(pretrained=use_pretrained)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
     # Handle the auxilary net
@@ -453,7 +446,7 @@ def inception_v3(
 
 @register_arch
 def efficientnet_b0(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for efficientnet_b0 architecture
 
@@ -463,9 +456,10 @@ def efficientnet_b0(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
 
@@ -496,7 +490,7 @@ def efficientnet_b0(
 
 @register_arch
 def efficientnet_b4(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for efficientnet_b4 architecture
 
@@ -506,9 +500,10 @@ def efficientnet_b4(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
 
@@ -539,7 +534,7 @@ def efficientnet_b4(
 
 @register_arch
 def efficientnet_widese_b0(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for efficientnet_widese_b0 architecture
 
@@ -549,9 +544,10 @@ def efficientnet_widese_b0(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
 
@@ -582,7 +578,7 @@ def efficientnet_widese_b0(
 
 @register_arch
 def efficientnet_widese_b4(
-    num_classes, freeze_feature_extractor=False, use_pretrained=True, num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for efficientnet_widese_b4 architecture
 
@@ -592,9 +588,10 @@ def efficientnet_widese_b4(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
 
@@ -689,9 +686,6 @@ def change_conv2d_channels(
         freeze_feature_extractor:
             if False (default), entire network will have gradients and can train
             if True, feature block is frozen and only final layer is trained
-        use_pretrained:
-            if True, uses pre-trained ImageNet features from
-            Pytorch's model zoo.
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
         reuse_weights: if True (default), averages (if num_channels<original)
