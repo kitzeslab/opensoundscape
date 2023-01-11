@@ -446,7 +446,7 @@ def inception_v3(
 
 @register_arch
 def efficientnet_b0(
-    num_classes, freeze_feature_extractor=False, weights='DEFAULT', num_channels=3
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
     """Wrapper for efficientnet_b0 architecture
 
@@ -468,7 +468,7 @@ def efficientnet_b0(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_b0",
-        weights=weights,
+        pretrained=weights,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -512,7 +512,7 @@ def efficientnet_b4(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_b4",
-        weights=weights,
+        pretrained=weights,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -556,7 +556,7 @@ def efficientnet_widese_b0(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_widese_b0",
-        weights=weights,
+        pretrained=weights,
     )
 
     # prevent weights of feature extractor from being trained, if desired
@@ -600,7 +600,7 @@ def efficientnet_widese_b4(
     architecture_ft = torch.hub.load(
         "NVIDIA/DeepLearningExamples:torchhub",
         "nvidia_efficientnet_widese_b4",
-        weights=weights,
+        pretrained=weights,
     )
 
     # prevent weights of feature extractor from being trained, if desired

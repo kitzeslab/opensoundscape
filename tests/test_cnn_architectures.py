@@ -67,11 +67,14 @@ def test_inception_v3():
 
 
 def test_use_no_weights():
-    arch = cnn_architectures.resnet50(2000, weights=None) 
+    arch = cnn_architectures.resnet50(2000, weights=None)
+
 
 def test_use_pretrained():
     arch = cnn_architectures.resnet101(4, weights="IMAGENET1K_V2")
 
+def test_efficientnet_noweights():
+    arch = cnn_architectures.efficientnet_b0(2, weights=None) 
 
 def test_efficientnet_b0():
     arch = cnn_architectures.efficientnet_b0(2, weights="DEFAULT")
