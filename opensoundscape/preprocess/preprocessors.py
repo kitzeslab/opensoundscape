@@ -219,8 +219,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
 
         super(SpectrogramPreprocessor, self).__init__(sample_duration=sample_duration)
 
-        # define a default set of
-        Actions
+        # define a default set of Actions
         self.pipeline = pd.Series(
             {
                 "load_audio": AudioClipLoader(),
