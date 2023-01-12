@@ -41,6 +41,11 @@ class AudioFileDataset(torch.utils.data.Dataset):
             If label_df has no labels (no columns), use return_labels=False
             [default: True]
 
+    Returns:
+        depends on value of return_labels:
+        if True, the __getitem__ method will return {X:sample,y:labels}
+        If False, the __getitem__ method will return {X:sample}
+
     Raises:
         PreprocessingError if exception is raised during __getitem__
 
