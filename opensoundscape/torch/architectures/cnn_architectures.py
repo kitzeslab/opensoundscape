@@ -617,49 +617,6 @@ def efficientnet_widese_b4(
     return architecture_ft
 
 
-# @register_arch
-# def efficientnet(
-#     num_classes,
-#     freeze_feature_extractor=False,
-#     use_pretrained=True,
-#     num_channels=3,
-#     torchhub_entrypoint="nvidia_efficientnet_b4",
-# ):
-#     """Wrapper for EfficientNet architecture
-
-#     Args:
-#         num_classes:
-#             number of output nodes for the final layer
-#         freeze_feature_extractor:
-#             if False (default), entire network will have gradients and can train
-#             if True, feature block is frozen and only final layer is trained
-#         use_pretrained:
-#             if True, uses pre-trained ImageNet features from
-#             Pytorch's model zoo.
-#         num_channels:
-#             specify channels in input sample, eg [channels h,w] sample shape
-#         torchhub_entrypoint:
-#             Choose torchhub architecture from ['nvidia_efficientnet_b0',
-#             'nvidia_efficientnet_b4','nvidia_efficientnet_widese_b0',
-#             'nvidia_efficientnet_widese_b4']. [default: nvidia_efficientnet_b4]
-#     """
-#     architecture_ft = torch.hub.load(
-#         "NVIDIA/DeepLearningExamples:torchhub",
-#         torchhub_entrypoint,
-#         pretrained=use_pretrained,
-#     )
-#     if freeze_feature_extractor:
-#         freeze_params(architecture_ft)
-#     num_ftrs = architecture_ft.classifier.fc.in_features
-#     architecture_ft.classifier = nn.Linear(num_ftrs, num_classes)
-#     # change input shape num_channels
-#     if num_channels != 3:
-#         architecture_ft.features[0] = nn.Conv2d(
-#             num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
-#         )
-#     return architecture_ft
-
-
 def change_conv2d_channels(
     conv2d,
     num_channels=3,

@@ -70,7 +70,7 @@ def test_use_no_weights():
     arch = cnn_architectures.resnet50(2000, weights=None)
 
 
-def test_use_pretrained():
+def test_load_specific_weights():
     arch = cnn_architectures.resnet101(4, weights="IMAGENET1K_V2")
 
 

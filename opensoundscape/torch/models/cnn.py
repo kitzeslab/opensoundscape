@@ -56,9 +56,9 @@ class CNN(BaseModule):
             *OR* a string matching one of the architectures listed by
             cnn_architectures.list_architectures(), eg 'resnet18'.
             - If a string is provided, uses default parameters
-                (including use_pretrained=True)
-                Note: For resnet architectures, if num_channels != 3,
-                averages the conv1 weights across all channels.
+                (including pretrained weights, `weights="DEFAULT"`)
+                Note: if num channels != 3, copies weights from original
+                channels by averaging (<3 channels) or recycling (>3 channels)
         classes:
             list of class names. Must match with training dataset classes if training.
         single_target:
@@ -1105,7 +1105,6 @@ class InceptionV3(CNN):
         preprocessor_class=SpectrogramPreprocessor,
         freeze_feature_extractor=False,
         weights="DEFAULT",
-        use_pretrained=True,
         sample_shape=(299, 299, 3),
     ):
         """Model object for InceptionV3 architecture subclassing CNN
@@ -1115,16 +1114,19 @@ class InceptionV3(CNN):
         Args:
             classes:
                 list of output classes (usually strings)
+            sample_duration: duration in seconds of one audio sample
+            single_target: if True, predict exactly one class per sample
+                [default:False]
+            preprocessor_class: a class to use for preprocessor object
             freeze-feature_extractor:
                 if True, feature weights don't have
                 gradient, and only final classification layer is trained
-            pretrained_weights:
-                set of pretrained weights to use for the model
-                (all sets found on torch model hub https://pytorch.org/vision/stable/models.html).
-                None if no pretrained weights
-            single_target:
-                if True, predict exactly one class per sample
-
+            weights:
+                string containing version name of the pre-trained classification weights to use for
+                this architecture. if 'DEFAULT', model is loaded with best available weights (note
+                that these may change across versions). Pre-trained weights available for each
+                architecture are listed at https://pytorch.org/vision/stable/models.html
+            sample_shape: dimensions of a sample Tensor (height,width,channels)
         """
 
         self.classes = classes
