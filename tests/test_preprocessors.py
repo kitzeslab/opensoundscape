@@ -81,6 +81,9 @@ def test_trace_on(preprocessor, row):
     assert (
         sample_info["_trace"].index == sample_info["_preprocessor"].pipeline.index
     ).all()
+    # check that the saved values in the _trace match the expected
+    # type returned by an action:
+    assert isinstance(sample_info["_trace"]["load_audio"], Audio)
 
 
 # several specific scenarios are tested using DataSets in test_datasets.py
