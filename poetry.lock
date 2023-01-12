@@ -282,7 +282,7 @@ python-versions = ">=3.5"
 
 [[package]]
 name = "defusedxml"
-version = "0.8.0"
+version = "0.7.1"
 description = "XML bomb protection for Python stdlib modules"
 category = "main"
 optional = false
