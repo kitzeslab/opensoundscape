@@ -154,7 +154,7 @@ class BasePreprocessor:
             "_end_time": clip_end_time,
             "_sample_duration": self.sample_duration,
             "_preprocessor": self,
-            "_trace": self.pipeline.copy(deep=True) if trace else None,
+            "_trace": pd.Series(index=self.pipeline.index) if trace else None,
         }
 
         try:
@@ -163,6 +163,7 @@ class BasePreprocessor:
             for k, action in self.pipeline.items():
                 if type(action) == break_on_type or k == break_on_key:
                     if trace:
+                        # saved "output" of this step informs user pipeline was stopped
                         sample_info["_trace"][
                             k
                         ] = f"## Pipeline terminated ## {sample_info['_trace'][k]}"
@@ -182,6 +183,7 @@ class BasePreprocessor:
                 else:
                     x = action.go(x, **extra_args)
                 if trace:
+                    # save output of each preprocessor action in a dictionary
                     sample_info["_trace"][k] = x
         except Exception as exc:
             # treat any exceptions raised during forward as PreprocessingErrors
