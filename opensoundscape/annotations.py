@@ -328,7 +328,7 @@ class BoxedAnnotations:
         df = self.df.dropna(subset=["annotation"])
 
         if class_subset is None:  # include all annotations
-            class_subset = df["annotation"].unique()
+            classes = df["annotation"].unique()
         else:  # the user specified a list of classes
             classes = class_subset
             # subset annotations to user-specified classes,
