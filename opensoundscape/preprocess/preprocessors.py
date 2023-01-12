@@ -160,14 +160,9 @@ class BasePreprocessor:
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
                 if type(action) == break_on_type or k == break_on_key:
-<<<<<<< HEAD
                     if (
                         trace
                     ):  # if tracing, add a note to the trace that the pipeline was terminated
-=======
-                    if trace:
-                        # saved "output" of this step informs user pipeline was stopped
->>>>>>> 47b64ac6a8061b1b826e1544d40a7ddbc2033297
                         sample_info["_trace"][
                             k
                         ] = f"## Pipeline terminated ## {sample_info['_trace'][k]}"
@@ -188,12 +183,7 @@ class BasePreprocessor:
                     sample_info["_labels"] = labels
                 else:
                     x = action.go(x, **extra_args)
-<<<<<<< HEAD
                 if trace:  # if tracing, add the output of the action to the trace
-=======
-                if trace:
-                    # save output of each preprocessor action in a dictionary
->>>>>>> 47b64ac6a8061b1b826e1544d40a7ddbc2033297
                     sample_info["_trace"][k] = x
         except Exception as exc:
             # treat any exceptions raised during forward as PreprocessingErrors
