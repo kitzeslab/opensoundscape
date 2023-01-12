@@ -56,15 +56,18 @@ class CNN(BaseModule):
             *OR* a string matching one of the architectures listed by
             cnn_architectures.list_architectures(), eg 'resnet18'.
             - If a string is provided, uses default parameters
-                (including use_pretrained=True)
-                Note: For resnet architectures, if num_channels != 3,
-                averages the conv1 weights across all channels.
+                (including pretrained weights, `weights="DEFAULT"`)
+                Note: if num channels != 3, copies weights from original
+                channels by averaging (<3 channels) or recycling (>3 channels)
         classes:
             list of class names. Must match with training dataset classes if training.
         single_target:
             - True: model expects exactly one positive class per sample
             - False: samples can have any number of positive classes
             [default: False]
+        preprocessor_class: class of Preprocessor object
+        sample_shape: tuple of height, width, channels for created sample
+            [default: (224,224,3)]
 
     """
 
@@ -75,7 +78,7 @@ class CNN(BaseModule):
         sample_duration,
         single_target=False,
         preprocessor_class=SpectrogramPreprocessor,
-        sample_shape=[224, 224, 3],
+        sample_shape=(224, 224, 3),
     ):
 
         super(CNN, self).__init__()
@@ -251,11 +254,13 @@ class CNN(BaseModule):
         train_dataset = AudioFileDataset(train_df, self.preprocessor)
         train_dataset.bypass_augmentations = False
 
-        # SafeDataset loads a new sample if loading a sample throws an error
-        # indices of bad samples are appended to ._unsafe_indices
-        unsafe_behavior = "raise" if raise_errors else "substitute"
-
-        train_safe_dataset = SafeDataset(train_dataset, unsafe_behavior=unsafe_behavior)
+        # With "substitute" behavior, SafeDataset loads a new sample if
+        # loading a sample raises an Exception. "raise" raises the Exception
+        # indices of bad samples are appended to SafeDataset._invalid_indices
+        invalid_sample_behavior = "raise" if raise_errors else "substitute"
+        train_safe_dataset = SafeDataset(
+            train_dataset, invalid_sample_behavior=invalid_sample_behavior
+        )
 
         # train_loader samples batches of images + labels from training set
         self.train_loader = self._init_dataloader(
@@ -438,7 +443,7 @@ class CNN(BaseModule):
         save_interval=1,  # save weights every n epochs
         log_interval=10,  # print metrics every n batches
         validation_interval=1,  # compute validation metrics every n epochs
-        unsafe_samples_log="./unsafe_training_samples.log",
+        invalid_samples_log="./invalid_training_samples.log",
         raise_errors=False,
         wandb_session=None,
     ):
@@ -476,7 +481,7 @@ class CNN(BaseModule):
                 interval in epochs to test the model on the validation set
                 Note that model will only update it's best score and save best.model
                 file on epochs that it performs validation.
-            unsafe_samples_log:
+            invalid_samples_log:
                 file path: log all samples that failed in preprocessing
                 (file written when training completes)
                 - if None,  does not write a file
@@ -647,14 +652,14 @@ class CNN(BaseModule):
             f"with Validation score {self.best_score:.3f}."
         )
 
-        # warn the user if there were unsafe samples (samples that failed to preprocess)
-        unsafe_samples = self.train_loader.dataset.report(log=unsafe_samples_log)
+        # warn the user if there were invalid samples (samples that failed to preprocess)
+        invalid_samples = self.train_loader.dataset.report(log=invalid_samples_log)
         self._log(
-            f"{len(unsafe_samples)} of {len(train_df)} total training "
+            f"{len(invalid_samples)} of {len(train_df)} total training "
             f"samples failed to preprocess",
             level=2,
         )
-        self._log(f"List of unsafe samples: {unsafe_samples}", level=3)
+        self._log(f"List of invalid samples: {invalid_samples}", level=3)
 
     def eval(self, targets, scores, logging_offset=0):
         """compute single-target or multi-target metrics from targets and scores
@@ -769,9 +774,10 @@ class CNN(BaseModule):
         overlap_fraction=0,
         final_clip=None,
         bypass_augmentations=True,
-        unsafe_samples_log=None,
+        invalid_samples_log=None,
         raise_errors=False,
         wandb_session=None,
+        return_invalid_samples=False,
     ):
         """Generate predictions on a dataset
 
@@ -811,7 +817,7 @@ class CNN(BaseModule):
             final_clip: see `opensoundscape.helpers.generate_clip_times_df`
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
-            unsafe_samples_log: if not None, samples that failed to preprocess
+            invalid_samples_log: if not None, samples that failed to preprocess
                 will be listed in this text file.
             raise_errors:
                 if True, raise errors when preprocessing fails
@@ -820,9 +826,14 @@ class CNN(BaseModule):
                 - pass the value returned by wandb.init() to progress log to a
                 Weights and Biases run
                 - if None, does not log to wandb
+            return_invalid_samples: bool, if True, returns second argument, a set
+                containing file paths of samples that caused errors during preprocessing
+                [default: False]
 
         Returns:
             df of post-activation_layer scores
+            - if return_invalid_samples is True, returns (df,invalid_samples)
+            where invalid_samples is a set of file paths that failed to preprocess
 
         Effects:
             (1) wandb logging
@@ -884,12 +895,15 @@ class CNN(BaseModule):
 
         # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
-        # with np.nan for the bad samples (using safe_dataset._unsafe_indices)
+        # with np.nan for the bad samples (using safe_dataset._invalid_indices)
         # this approach to error handling feels hacky
         # however, returning None would break the batching of samples
-        unsafe_behavior = "raise" if raise_errors else "substitute"
+        # "raise" behavior will raise exceptions
+        invalid_sample_behavior = "raise" if raise_errors else "substitute"
 
-        safe_dataset = SafeDataset(prediction_dataset, unsafe_behavior=unsafe_behavior)
+        safe_dataset = SafeDataset(
+            prediction_dataset, invalid_sample_behavior=invalid_sample_behavior
+        )
 
         dataloader = torch.utils.data.DataLoader(
             safe_dataset,
@@ -899,8 +913,10 @@ class CNN(BaseModule):
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=torch.cuda.is_available(),
         )
-        # add any paths that failed to generate a clip df to _unsafe_samples
-        dataloader.dataset._unsafe_samples += prediction_dataset.unsafe_samples
+        # add any paths that failed to generate a clip df to _invalid_samples
+        dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
+            prediction_dataset.invalid_samples
+        )
 
         # Initialize Weights and Biases (wandb) logging
         if wandb_session is not None:
@@ -967,15 +983,15 @@ class CNN(BaseModule):
         # replace scores with nan for samples that failed in preprocessing
         # this feels hacky (we predicted on substitute-samples rather than
         # skipping the samples that failed preprocessing)
-        total_scores[dataloader.dataset._unsafe_indices, :] = np.nan
+        total_scores[dataloader.dataset._invalid_indices, :] = np.nan
 
         # return DataFrame with same index/columns as prediction_dataset's df
         df_index = prediction_dataset.label_df.index
         score_df = pd.DataFrame(index=df_index, data=total_scores, columns=self.classes)
 
-        # warn the user if there were unsafe samples (failed to preprocess)
+        # warn the user if there were invalid samples (failed to preprocess)
         # and log them to a file
-        dataloader.dataset.report(log=unsafe_samples_log)
+        invalid_samples = dataloader.dataset.report(log=invalid_samples_log)
 
         # log top-scoring samples per class to wandb table
         if wandb_session is not None:
@@ -1000,7 +1016,10 @@ class CNN(BaseModule):
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
 
-        return score_df
+        if return_invalid_samples:
+            return score_df, invalid_samples
+        else:
+            return score_df
 
 
 def use_resample_loss(model):
@@ -1097,8 +1116,8 @@ class InceptionV3(CNN):
         single_target=False,
         preprocessor_class=SpectrogramPreprocessor,
         freeze_feature_extractor=False,
-        use_pretrained=True,
-        sample_shape=[299, 299, 3],
+        weights="DEFAULT",
+        sample_shape=(299, 299, 3),
     ):
         """Model object for InceptionV3 architecture subclassing CNN
 
@@ -1107,14 +1126,19 @@ class InceptionV3(CNN):
         Args:
             classes:
                 list of output classes (usually strings)
+            sample_duration: duration in seconds of one audio sample
+            single_target: if True, predict exactly one class per sample
+                [default:False]
+            preprocessor_class: a class to use for preprocessor object
             freeze-feature_extractor:
                 if True, feature weights don't have
                 gradient, and only final classification layer is trained
-            use_pretrained:
-                if True, use pre-trained InceptionV3 Imagenet weights
-            single_target:
-                if True, predict exactly one class per sample
-
+            weights:
+                string containing version name of the pre-trained classification weights to use for
+                this architecture. if 'DEFAULT', model is loaded with best available weights (note
+                that these may change across versions). Pre-trained weights available for each
+                architecture are listed at https://pytorch.org/vision/stable/models.html
+            sample_shape: dimensions of a sample Tensor (height,width,channels)
         """
 
         self.classes = classes
@@ -1122,7 +1146,7 @@ class InceptionV3(CNN):
         architecture = inception_v3(
             len(self.classes),
             freeze_feature_extractor=freeze_feature_extractor,
-            use_pretrained=use_pretrained,
+            weights=weights,
         )
 
         super(InceptionV3, self).__init__(
@@ -1156,7 +1180,7 @@ class InceptionV3(CNN):
             # all augmentation occurs in the Preprocessor (train_loader)
             batch_tensors = batch_data["X"].to(self.device)
             batch_labels = batch_data["y"].to(self.device)
-            batch_labels = batch_labels.squeeze(1)
+            # batch_labels = batch_labels.squeeze(1)
 
             ####################
             # Forward and loss #

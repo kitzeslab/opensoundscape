@@ -141,7 +141,7 @@ def test_predict_all_arch_4ch(test_df):
     for arch_name in cnn_architectures.ARCH_DICT.keys():
         try:
             arch = cnn_architectures.ARCH_DICT[arch_name](
-                num_classes=2, num_channels=4, use_pretrained=False
+                num_classes=2, num_channels=4, weights=None
             )
             if "inception" in arch_name:
                 model = cnn.InceptionV3(
@@ -164,7 +164,7 @@ def test_predict_all_arch_1ch(test_df):
     for arch_name in cnn_architectures.ARCH_DICT.keys():
         try:
             arch = cnn_architectures.ARCH_DICT[arch_name](
-                num_classes=2, num_channels=1, use_pretrained=False
+                num_classes=2, num_channels=1, weights=None
             )
             if "inception" in arch_name:
                 model = cnn.InceptionV3(
@@ -185,8 +185,7 @@ def test_predict_all_arch_1ch(test_df):
 
 def test_predict_on_clip_df(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=1.0)
-    clip_df, _ = make_clip_df(test_df.index.values[0:1], clip_duration=1.0)
-    clip_df = clip_df.reset_index().set_index(["file", "start_time", "end_time"])
+    clip_df = make_clip_df(test_df.index.values[0:1], clip_duration=1.0)
     scores = model.predict(clip_df)
     assert len(scores) == 10
 
@@ -206,14 +205,23 @@ def test_multi_target_prediction(train_df, test_df):
     assert len(scores) == 2
 
 
-def test_predict_missing_file_is_unsafe_sample(missing_file_df):
+def test_predict_missing_file_is_invalid_sample(missing_file_df, test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    scores = model.predict(missing_file_df)
 
-    assert len(scores) == 0
+    with pytest.raises(IndexError):
+        # if all samples are invalid, will give IndexError
+        model.predict(missing_file_df)
 
-    # TODO get the unsafe samples from log file, then delete it
-    # assert len(unsafe_samples) == 1
+    scores, invalid_samples = model.predict(
+        pd.concat([missing_file_df, test_df.head(1)]), return_invalid_samples=True
+    )
+    assert (
+        len(scores) == 3
+    )  # should have one row with nan values for the invalid sample
+    isnan = lambda x: x != x
+    assert np.all([isnan(score) for score in scores.iloc[0].values])
+    assert len(invalid_samples) == 1
+    assert missing_file_df.index.values[0] in invalid_samples
 
 
 def test_predict_wrong_input_error(test_df):
@@ -228,7 +236,7 @@ def test_predict_wrong_input_error(test_df):
 
 
 def test_train_predict_inception(train_df):
-    model = cnn.InceptionV3([0, 1], 5.0, use_pretrained=False)
+    model = cnn.InceptionV3([0, 1], 5.0, weights=None)
     model.train(
         train_df,
         train_df,
@@ -244,7 +252,7 @@ def test_train_predict_inception(train_df):
 
 def test_train_predict_architecture(train_df):
     """test passing architecture object to CNN class"""
-    arch = alexnet(2, use_pretrained=False)
+    arch = alexnet(2, weights=None)
     model = cnn.CNN(arch, [0, 1], sample_duration=2)
     model.train(
         train_df,
@@ -267,8 +275,7 @@ def test_train_on_clip_df(train_df):
     file and get its labels from the dataframe
     """
     model = cnn.CNN("resnet18", [0, 1], sample_duration=2)
-    train_df, _ = make_clip_df(train_df.index.values, clip_duration=2)
-    train_df = train_df.reset_index().set_index(["file", "start_time", "end_time"])
+    train_df = make_clip_df(train_df.index.values, clip_duration=2)
     train_df[0] = np.random.choice([0, 1], size=10)
     train_df[1] = np.random.choice([0, 1], size=10)
     model.train(
@@ -298,7 +305,7 @@ def test_predict_splitting_short_file(short_file_df):
 
 
 def test_save_and_load_model(model_save_path):
-    arch = alexnet(2, use_pretrained=False)
+    arch = alexnet(2, weights=None)
     classes = [0, 1]
 
     cnn.CNN(arch, classes, 1.0).save(model_save_path)
@@ -306,14 +313,14 @@ def test_save_and_load_model(model_save_path):
     assert m.classes == classes
     assert type(m) == cnn.CNN
 
-    cnn.InceptionV3(classes, 1.0, use_pretrained=False).save(model_save_path)
+    cnn.InceptionV3(classes, 1.0, weights=None).save(model_save_path)
     m = cnn.load_model(model_save_path)
     assert m.classes == classes
     assert type(m) == cnn.InceptionV3
 
 
 def test_save_load_and_train_model_resample_loss(train_df):
-    arch = alexnet(2, use_pretrained=False)
+    arch = alexnet(2, weights=None)
     classes = [0, 1]
 
     m = cnn.CNN(arch, classes, 1.0)
@@ -359,7 +366,7 @@ def test_prediction_returns_consistent_values(train_df):
 
 
 def test_save_and_load_weights(model_save_path):
-    arch = resnet18(2, use_pretrained=False)
+    arch = resnet18(2, weights=None)
     model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)
     model.save_weights(model_save_path)
     model1 = cnn.CNN(arch, classes=["a", "b"], sample_duration=5.0)

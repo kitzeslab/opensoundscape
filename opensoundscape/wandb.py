@@ -5,7 +5,7 @@ from opensoundscape.annotations import one_hot_to_categorical
 from opensoundscape.audio import Audio
 
 
-def wandb_table(dataset, n=None, classes_to_extract=[], random_state=None):
+def wandb_table(dataset, n=None, classes_to_extract=(), random_state=None):
     """Generate a wandb Table visualizing n random samples from a sample_df
 
     Args:
@@ -13,7 +13,7 @@ def wandb_table(dataset, n=None, classes_to_extract=[], random_state=None):
         n: number of samples to generate (randomly selected from df)
             - if None, does not subsample or change order
         bypass_augmentations: if True, augmentations in Preprocessor are skipped
-        classes_to_extract: list of classes - will create columns containing the scores/labels
+        classes_to_extract: tuple of classes - will create columns containing the scores/labels
         random_state: default None; if integer provided, used for reproducible random sample
 
     Returns: a W&B Table of preprocessed samples with labels and playable audio
@@ -33,7 +33,7 @@ def wandb_table(dataset, n=None, classes_to_extract=[], random_state=None):
         table_columns += ["clip start time"]
         table_columns += ["clip end time"]
     for c in classes_to_extract:
-        table_columns += classes_to_extract
+        table_columns += c
 
     classes = dataset.label_df.columns
 

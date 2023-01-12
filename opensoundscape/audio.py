@@ -292,7 +292,7 @@ class Audio:
         # temporary workaround for soundfile issue #349
         # which causes empty sample array if loading float32 from mp3:
         # pass dtype=None, then change it afterwards
-        samples = samples.astype(np.float32)
+        samples = samples.astype(dtype)
         warnings.resetwarnings()
 
         # out of bounds warning/exception user if no samples or too short
@@ -587,7 +587,7 @@ class Audio:
             metadata=self.metadata,
         )
 
-    def apply_gain(self, dB, clip_range=[-1, 1]):
+    def apply_gain(self, dB, clip_range=(-1, 1)):
         """apply dB (decibels) of gain to audio signal
 
         Specifically, multiplies samples by 10^(dB/20)
@@ -821,6 +821,7 @@ def load_channels_as_audio(
     path,
     sample_rate=None,
     resample_type="kaiser_fast",
+    dtype=np.float32,
     offset=0,
     duration=None,
     metadata=True,
@@ -849,14 +850,20 @@ def load_channels_as_audio(
 
     ## Load samples ##
     warnings.filterwarnings("ignore")
-    samples, sample_rate = librosa.load(
+    samples, sr = librosa.load(
         path,
         sr=sample_rate,
         res_type=resample_type,
         mono=False,
         offset=offset,
         duration=duration,
+        dtype=None,
     )
+    # temporary workaround for soundfile issue #349
+    # which causes empty sample array if loading float32 from mp3:
+    # pass dtype=None, then change it afterwards
+    samples = samples.astype(dtype)
+
     warnings.resetwarnings()
     if len(np.shape(samples)) == 1:
         samples = [samples]
@@ -872,7 +879,7 @@ def load_channels_as_audio(
         audio_objects.append(
             Audio(
                 samples=samples_channel,
-                sample_rate=sample_rate,
+                sample_rate=sr,
                 resample_type=resample_type,
                 metadata=channel_metadata,
             )
@@ -917,7 +924,7 @@ def mix(
     gain=-3,
     offsets=None,
     sample_rate=None,
-    clip_range=[-1, 1],
+    clip_range=(-1, 1),
 ):
     """mixdown (superimpose) Audio signals into a single Audio object
 
@@ -950,7 +957,7 @@ def mix(
         clip_range: minimum and maximum sample values. Samples outside
             this range will be replaced by the range limit values
             Pass None to keep sample values without clipping.
-            [default: [-1,1]]
+            [default: (-1,1)]
 
 
     Returns:
