@@ -50,6 +50,13 @@ def test_load_raven_annotations(raven_file):
     assert set(a.df["annotation"]) == {"WOTH", "EATO", "LOWA", np.nan}
 
 
+def test_load_raven_no_annotation_column(raven_file):
+    a = BoxedAnnotations.from_raven_file(raven_file, annotation_column=None)
+    # we should now have a dataframe with a column "Species"
+    assert len(a.df) == 10
+    assert set(a.df["Species"]) == {"WOTH", "EATO", "LOWA", np.nan}
+
+
 def test_load_raven_annotations_empty(raven_file_empty):
     a = BoxedAnnotations.from_raven_file(raven_file_empty, annotation_column="Species")
     assert len(a.df) == 0
@@ -119,7 +126,7 @@ def test_global_one_hot_labels(boxed_annotations):
 def test_one_hot_labels_like(boxed_annotations):
     clip_df = generate_clip_times_df(5, clip_duration=1.0, clip_overlap=0)
     labels = boxed_annotations.one_hot_labels_like(
-        clip_df, classes=["a"], min_label_overlap=0.25
+        clip_df, class_subset=["a"], min_label_overlap=0.25
     )
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
 
@@ -127,7 +134,7 @@ def test_one_hot_labels_like(boxed_annotations):
 def test_one_hot_labels_like_overlap(boxed_annotations):
     clip_df = generate_clip_times_df(3, clip_duration=1.0, clip_overlap=0.5)
     labels = boxed_annotations.one_hot_labels_like(
-        clip_df, classes=["a"], min_label_overlap=0.25
+        clip_df, class_subset=["a"], min_label_overlap=0.25
     )
     assert np.array_equal(labels.values, np.array([[1, 1, 0, 0, 0]]).transpose())
 
@@ -137,7 +144,7 @@ def test_one_hot_clip_labels(boxed_annotations):
         full_duration=5,
         clip_duration=1.0,
         clip_overlap=0,
-        classes=["a"],
+        class_subset=["a"],
         min_label_overlap=0.25,
     )
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
@@ -148,7 +155,7 @@ def test_one_hot_clip_labels_overlap(boxed_annotations):
         full_duration=3,
         clip_duration=1.0,
         clip_overlap=0.5,
-        classes=["a"],
+        class_subset=["a"],
         min_label_overlap=0.25,
     )
     assert np.array_equal(labels.values, np.array([[1, 1, 0, 0, 0]]).transpose())

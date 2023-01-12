@@ -43,10 +43,10 @@ class BoxedAnnotations:
         Returns:
             BoxedAnnotations object
         """
-        needed_cols = ["annotation", "start_time", "end_time", "low_f", "high_f"]
-        for col in needed_cols:
+        required_cols = ["annotation", "start_time", "end_time", "low_f", "high_f"]
+        for col in required_cols:
             assert col in df.columns, (
-                f"df columns must include all of these: {str(needed_cols)}\n"
+                f"df columns must include all of these: {str(required_cols)}\n"
                 f"columns in df: {list(df.columns)}"
             )
         self.df = df
@@ -67,6 +67,9 @@ class BoxedAnnotations:
         Args:
             path: location of raven .txt file, str or pathlib.Path
             annotation_column: (str) column containing annotations
+                - pass `None` to load the raven file without explicitly
+                assigning a column as the annotation column. The resulting
+                object's `.df` will have an `annotation` column with nan values!
             keep_extra_columns: keep or discard extra Raven file columns
                 (always keeps start_time, end_time, low_f, high_f, annotation
                 audio_file). [default: True]
@@ -80,13 +83,24 @@ class BoxedAnnotations:
             BoxedAnnotations object containing annotaitons from the Raven file
         """
         df = pd.read_csv(path, delimiter="\t")
-        assert annotation_column in df.columns, (
-            f"Raven file does not contain annotation_column={annotation_column}\n"
-            f"(columns in file: {list(df.columns)})"
-        )
+        if annotation_column is not None:
+            assert annotation_column in df.columns, (
+                f"Raven file does not contain annotation_column={annotation_column}\n"
+                f"(columns in file: {list(df.columns)})"
+            )
+            df = df.rename(
+                columns={
+                    annotation_column: "annotation",
+                }
+            )
+        else:
+            # user laoded table without specifying annotation column
+            # we'll create an empty `annotation` column
+            df["annotation"] = np.nan
+
+        # rename Raven columns to standard opso names
         df = df.rename(
             columns={
-                annotation_column: "annotation",
                 "Begin Time (s)": "start_time",
                 "End Time (s)": "end_time",
                 "Low Freq (Hz)": "low_f",
@@ -95,7 +109,10 @@ class BoxedAnnotations:
         )
 
         # remove undesired columns
-        standard_columns = ["start_time", "end_time", "low_f", "high_f", "annotation"]
+        standard_columns = ["start_time", "end_time", "low_f", "high_f"]
+        if annotation_column is not None:
+            standard_columns.append("annotation")
+
         if hasattr(keep_extra_columns, "__iter__"):
             # keep the desired columns
             df = df[standard_columns + list(keep_extra_columns)]
