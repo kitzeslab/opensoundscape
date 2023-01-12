@@ -98,7 +98,6 @@ autodoc_mock_imports = [
     "torchvision",
     "matplotlib",
     "pywt",
-    "tinytag",
     "deprecated",
 ]
 

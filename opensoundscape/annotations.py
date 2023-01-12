@@ -3,19 +3,22 @@
 includes BoxedAnnotations class and utilities to combine or "diff" annotations,
 etc.
 """
-from opensoundscape.helpers import overlap, overlap_fraction, generate_clip_times_df
+from pathlib import Path
+from itertools import chain
 import pandas as pd
 import numpy as np
-from pathlib import Path
+
+from opensoundscape.helpers import overlap, overlap_fraction, generate_clip_times_df
 
 
 class BoxedAnnotations:
     """container for "boxed" (frequency-time) annotations of audio
-
     (for instance, annotations created in Raven software)
-    includes functionality to load annotations from Raven txt files,
-    output one-hot labels for specific clip lengths or clip start/end times,
-    apply corrections/conversions to annotations, and more.
+
+    includes functionality to load annotations from Pandas DataFrame
+    or Raven Selection tables (.txt files), output one-hot labels for
+    specific clip lengths or clip start/end times, apply
+    corrections/conversions to annotations, and more.
 
     Contains some analogous functions to Audio and Spectrogram, such as
     trim() [limit time range] and bandpass() [limit frequency range]
@@ -25,16 +28,17 @@ class BoxedAnnotations:
         """
         create object directly from DataFrame of frequency-time annotations
 
-        For loading annotations from Raven txt files, use from_raven_file()
+        For loading annotations from Raven txt files, use `from_raven_file`
 
         Args:
             df: DataFrame of frequency-time labels. Columns must include:
                 - "annotation": string or numeric labels (can be None/nan)
                 - "start_time": left bound, sec since beginning of audio
                 - "end_time": right bound, sec since beginning of audio
-                - "low_f": upper frequency bound (values can be None/nan)
+                - "low_f": lower frequency bound (values can be None/nan)
                 - "high_f": upper frequency bound (values can be None/nan)
             audio_file: optionally include the name or path of corresponding
+            audio clip for which annotations are loaded from the DataFrame
 
         Returns:
             BoxedAnnotations object
@@ -49,7 +53,10 @@ class BoxedAnnotations:
         self.audio_file = audio_file
 
     def __repr__(self):
-        return f"<opensoundscape.annotations.BoxedAnnotations object with audio_file={self.audio_file}.>"
+        return (
+            f"<opensoundscape.annotations.BoxedAnnotations object with "
+            f"audio_file={self.audio_file}>"
+        )
 
     @classmethod
     def from_raven_file(
@@ -172,11 +179,12 @@ class BoxedAnnotations:
         df = self.df.copy()
 
         # remove annotations that don't overlap with window
-        df = df[
+        df = df.loc[
             [
                 overlap([start_time, end_time], [t0, t1]) > 0
                 for t0, t1 in zip(df["start_time"], df["end_time"])
-            ]
+            ],
+            :,
         ]
 
         if edge_mode == "trim":  # trim boxes to start and end times
@@ -220,11 +228,12 @@ class BoxedAnnotations:
         df = self.df.copy()
 
         # remove annotations that don't overlap with bandpass range
-        df = df[
+        df = df.loc[
             [
                 overlap([low_f, high_f], [f0, f1]) > 0
                 for f0, f1 in zip(df["low_f"], df["high_f"])
-            ]
+            ],
+            :,
         ]
 
         # handle edges
@@ -305,7 +314,7 @@ class BoxedAnnotations:
             classes = np.unique(df["annotation"])
         else:  # the user specified a list of classes
             # subset annotations to user-specified classes
-            df = df[df["annotation"].apply(lambda x: x in classes)]
+            df = df[df["annotation"].isin(classes)]
 
         # if we want to keep the original index, the best way is
         # to store it and add again later
@@ -375,10 +384,13 @@ class BoxedAnnotations:
                 seconds long. By default, discards remaining time if less than
                 clip_duration seconds long [default: None].
                 Options:
-                    - None:         Discard the remainder (do not make a clip)
-                    - "extend":     Extend the final clip beyond full_duration to reach clip_duration length
-                    - "remainder":  Use only remainder of full_duration (final clip will be shorter than clip_duration)
-                    - "full":       Increase overlap with previous clip to yield a clip with clip_duration length
+                - None: Discard the remainder (do not make a clip)
+                - "extend": Extend the final clip beyond full_duration to reach
+                    clip_duration length
+                - "remainder": Use only remainder of full_duration
+                    (final clip will be shorter than clip_duration)
+                - "full": Increase overlap with previous clip to yield a
+                    clip with clip_duration length
         Returns:
             dataframe with index ['start_time','end_time'] and columns=classes
         """
@@ -556,8 +568,6 @@ def categorical_to_one_hot(labels, classes=None):
         classes: list of classes corresponding to columns in the array
     """
     if classes is None:
-        from itertools import chain
-
         classes = list(set(chain(*labels)))
 
     one_hot = np.zeros([len(labels), len(classes)]).astype(int)

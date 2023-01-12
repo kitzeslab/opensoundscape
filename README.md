@@ -72,7 +72,7 @@ files = glob('./dir/*.WAV')
 
 #generate predictions with a model
 model = load_model('/path/to/saved.model')
-scores, _, _ = model.predict(files)
+scores = model.predict(files)
 
 #scores is a dataframe with MultiIndex: file, start_time, end_time
 #containing inference scores for each class and each audio window

@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
-import pandas as pd
+"""tools for subsetting and resampling collections"""
 from itertools import repeat
+import pandas as pd
 
 
 def resample(
@@ -78,13 +78,13 @@ def upsample(input_df, label_column="Labels", with_replace=False, random_state=N
     categorical labels in a specified label_columns
 
     Args:
-        input_df:       A DataFrame to upsample
-        label_column:   The column to draw unique labels from
-        with_replace: flag to enable sampling of the same row more than once, default False
-        random_state:   Set the random_state during sampling
+        input_df: A DataFrame to upsample
+        label_column: The column to draw unique labels from
+        with_replace flag to enable sampling of the same row more than once, default False
+        random_state: Set the random_state during sampling
 
     Returns:
-        df:             An upsampled DataFrame
+        df: An upsampled DataFrame
     """
 
     unique_labels = input_df[label_column].unique()

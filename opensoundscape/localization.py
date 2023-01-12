@@ -1,5 +1,6 @@
-import numpy as np
+"""Tools for localizing audio events from synchronized recording arrays"""
 import warnings
+import numpy as np
 
 
 def calc_speed_of_sound(temperature=20):

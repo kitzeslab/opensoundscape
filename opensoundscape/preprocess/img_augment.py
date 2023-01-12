@@ -1,7 +1,7 @@
 """Transforms and augmentations for PIL.Images"""
-from PIL import Image
-import numpy as np
 import random
+import numpy as np
+from PIL import Image
 
 
 def time_split(img, seed=None):

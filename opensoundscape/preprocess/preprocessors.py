@@ -1,9 +1,7 @@
-import pandas as pd
-import numpy as np
-import torch
+"""Preprocessor classes: tools for preparing and augmenting audio samples"""
 from pathlib import Path
 import copy
-import warnings
+import pandas as pd
 
 from opensoundscape.preprocess.utils import PreprocessingError
 from opensoundscape.preprocess import actions
@@ -86,7 +84,6 @@ class BasePreprocessor:
         sample,
         break_on_type=None,
         break_on_key=None,
-        clip_times=None,
         bypass_augmentations=False,
         trace=False,
     ):
@@ -105,6 +102,10 @@ class BasePreprocessor:
             break_on_key: if not None, the pipeline will be stopped when it
                 reaches an Action whose index equals this value. The matching
                 action is not performed.
+            clip_times: can be either
+                - None: the file is treated as a single sample
+                - dictionary {"start_time":float,"end_time":float}:
+                    the start and end time of clip in audio
             bypass_augmentations: if True, actions with .is_augmentatino=True
                 are skipped
             trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for debugging on samples of interest
@@ -126,24 +127,38 @@ class BasePreprocessor:
             assert type(sample) == pd.Series, (
                 "sample must be pd.Series with "
                 "path as .name OR file path (str or pathlib.Path), "
+                "OR have multi-index (file,start_time,end_time)"
                 f"was {type(sample)}"
             )
             label_df_row = sample
 
-        # Series.name (dataframe index) contains a path to a file
-        x = Path(label_df_row.name)
+        has_clips = type(label_df_row.name) == tuple
+        if has_clips:
+            # if the dataframe has a multi-index, it should be (file,start_time,end_time)
+            assert (
+                len(label_df_row.name) == 3
+            ), "multi-index must be ('file','start_time','end_time')"
+            sample_path, clip_start_time, clip_end_time = label_df_row.name
+        else:
+            # Series.name (dataframe index) contains a path to a file
+            # No clip times are provided, so the entire file will be loaded
+            sample_path = Path(label_df_row.name)
+            clip_start_time = None
+            clip_end_time = None
 
         # a list of additional variables that an action may request from the preprocessor
         sample_info = {
-            "_path": Path(label_df_row.name),
+            "_path": sample_path,
             "_labels": copy.deepcopy(label_df_row),
-            "_start_time": None if clip_times is None else clip_times["start_time"],
+            "_start_time": clip_start_time,
+            "_end_time": clip_end_time,
             "_sample_duration": self.sample_duration,
             "_preprocessor": self,
             "_trace": self.pipeline.copy(deep=True) if trace else None,
         }
 
         try:
+            x = sample_path
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
                 if type(action) == break_on_type or k == break_on_key:
@@ -168,11 +183,11 @@ class BasePreprocessor:
                     x = action.go(x, **extra_args)
                 if trace:
                     sample_info["_trace"][k] = x
-        except:
+        except Exception as exc:
             # treat any exceptions raised during forward as PreprocessingErrors
             raise PreprocessingError(
                 f"failed to preprocess sample from path: {label_df_row.name}"
-            )
+            ) from exc
 
         return x, sample_info
 
@@ -212,10 +227,10 @@ class SpectrogramPreprocessor(BasePreprocessor):
         overlay_df: if not None, will include an overlay action drawing
             samples from this df
         out_shape:
-            output shape of tensor h,w,channels [default: [224,224,3]]
+            output shape of tensor h,w,channels [default: (224,224,3)]
     """
 
-    def __init__(self, sample_duration, overlay_df=None, out_shape=[224, 224, 3]):
+    def __init__(self, sample_duration, overlay_df=None, out_shape=(224, 224, 3)):
 
         super(SpectrogramPreprocessor, self).__init__(sample_duration=sample_duration)
 
