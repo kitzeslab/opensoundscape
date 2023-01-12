@@ -106,7 +106,7 @@ class BasePreprocessor:
                     the start and end time of clip in audio
             bypass_augmentations: if True, actions with .is_augmentatino=True
                 are skipped
-            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for debugging on samples of interest
+            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for analysis/debugging on samples of interest
 
         Returns:
             {'X':preprocessed sample, 'y':labels} if return_labels==True,
@@ -160,8 +160,9 @@ class BasePreprocessor:
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
                 if type(action) == break_on_type or k == break_on_key:
-                    if trace:
-                        # saved "output" of this step informs user pipeline was stopped
+                    if (
+                        trace
+                    ):  # if tracing, add a note to the trace that the pipeline was terminated
                         sample_info["_trace"][
                             k
                         ] = f"## Pipeline terminated ## {sample_info['_trace'][k]}"
@@ -169,7 +170,9 @@ class BasePreprocessor:
                 if action.bypass:
                     continue
                 if action.is_augmentation and bypass_augmentations:
-                    if trace:
+                    if (
+                        trace
+                    ):  # if tracing, add a note to the trace that the augmentation was bypassed
                         sample_info["_trace"][
                             k
                         ] = f"## Bypassed ## {sample_info['_trace'][k]}"
@@ -180,8 +183,7 @@ class BasePreprocessor:
                     sample_info["_labels"] = labels
                 else:
                     x = action.go(x, **extra_args)
-                if trace:
-                    # save output of each preprocessor action in a dictionary
+                if trace:  # if tracing, add the output of the action to the trace
                     sample_info["_trace"][k] = x
         except Exception as exc:
             # treat any exceptions raised during forward as PreprocessingErrors
