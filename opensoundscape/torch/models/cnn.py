@@ -229,13 +229,15 @@ class CNN(BaseModule):
             pin_memory=True,
         )
 
-    def _set_train(self, train_df, batch_size, num_workers):
+    def _set_train(self, train_df, batch_size, num_workers, raise_errors):
         """Prepare network for training on train_df
 
         Args:
             batch_size: number of training files to load/process before
                         re-calculating the loss function and backpropagation
             num_workers: parallelization (number of cores or cpus)
+            raise_errors: if True, raise errors when loading samples
+                            if False, skip samples that throw errors
 
         Effects:
             Sets up the optimization, loss function, and network
@@ -252,10 +254,12 @@ class CNN(BaseModule):
         train_dataset = AudioFileDataset(train_df, self.preprocessor)
         train_dataset.bypass_augmentations = False
 
-        # SafeDataset loads a new sample if loading a sample throws an error
-        # indices of bad samples are appended to ._invalid_indices
+        # With "substitute" behavior, SafeDataset loads a new sample if
+        # loading a sample raises an Exception. "raise" raises the Exception
+        # indices of bad samples are appended to SafeDataset._invalid_indices
+        invalid_sample_behavior = "raise" if raise_errors else "substitute"
         train_safe_dataset = SafeDataset(
-            train_dataset, invalid_sample_behavior="substitute"
+            train_dataset, invalid_sample_behavior=invalid_sample_behavior
         )
 
         # train_loader samples batches of images + labels from training set
@@ -440,6 +444,7 @@ class CNN(BaseModule):
         log_interval=10,  # print metrics every n batches
         validation_interval=1,  # compute validation metrics every n epochs
         invalid_samples_log="./invalid_training_samples.log",
+        raise_errors=False,
         wandb_session=None,
     ):
         """train the model on samples from train_dataset
@@ -480,6 +485,9 @@ class CNN(BaseModule):
                 file path: log all samples that failed in preprocessing
                 (file written when training completes)
                 - if None,  does not write a file
+            raise_errors:
+                if True, raise errors when preprocessing fails
+                if False, just log the errors to unsafe_samples_log
             wandb_session: a wandb session to log to
                 - pass the value returned by wandb.init() to progress log to a
                 Weights and Biases run
@@ -568,7 +576,7 @@ class CNN(BaseModule):
             )
 
         ### Set Up Loss and Optimization ###
-        self._set_train(train_df, batch_size, num_workers)
+        self._set_train(train_df, batch_size, num_workers, raise_errors)
         self.best_score = 0.0
         self.best_epoch = 0
 
@@ -581,8 +589,7 @@ class CNN(BaseModule):
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
             train_targets, _, train_scores = self._train_epoch(
-                self.train_loader,
-                wandb_session,
+                self.train_loader, wandb_session
             )
 
             ### Evaluate ###
@@ -768,6 +775,7 @@ class CNN(BaseModule):
         final_clip=None,
         bypass_augmentations=True,
         invalid_samples_log=None,
+        raise_errors=False,
         wandb_session=None,
         return_invalid_samples=False,
     ):
@@ -811,6 +819,9 @@ class CNN(BaseModule):
                 is_augmentation==True are performed. Default True.
             invalid_samples_log: if not None, samples that failed to preprocess
                 will be listed in this text file.
+            raise_errors:
+                if True, raise errors when preprocessing fails
+                if False, just log the errors to unsafe_samples_log
             wandb_session: a wandb session to log to
                 - pass the value returned by wandb.init() to progress log to a
                 Weights and Biases run
@@ -882,13 +893,16 @@ class CNN(BaseModule):
             )
             return pd.DataFrame(columns=self.classes)
 
-        # SafeDataset will not fail on bad files,
+        # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
         # with np.nan for the bad samples (using safe_dataset._invalid_indices)
         # this approach to error handling feels hacky
         # however, returning None would break the batching of samples
+        # "raise" behavior will raise exceptions
+        invalid_sample_behavior = "raise" if raise_errors else "substitute"
+
         safe_dataset = SafeDataset(
-            prediction_dataset, invalid_sample_behavior="substitute"
+            prediction_dataset, invalid_sample_behavior=invalid_sample_behavior
         )
 
         dataloader = torch.utils.data.DataLoader(
@@ -923,8 +937,7 @@ class CNN(BaseModule):
             wandb_session.log(
                 {
                     "Samples / Preprocessed samples": opensoundscape.wandb.wandb_table(
-                        prediction_dataset,
-                        self.wandb_logging["n_preview_samples"],
+                        prediction_dataset, self.wandb_logging["n_preview_samples"]
                     )
                 }
             )
@@ -999,8 +1012,7 @@ class CNN(BaseModule):
                     bypass_augmentations=True,
                 )
                 table = opensoundscape.wandb.wandb_table(
-                    dataset=dataset,
-                    classes_to_extract=[c],
+                    dataset=dataset, classes_to_extract=[c]
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
 
