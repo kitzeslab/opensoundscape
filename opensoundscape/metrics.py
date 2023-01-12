@@ -7,36 +7,138 @@ from sklearn.metrics import (
     average_precision_score,
     roc_auc_score,
 )
+import pandas as pd
 
 # from scipy.sparse import csr_matrix
 import numpy as np
+import torch
+from torch.nn.functional import one_hot
 
 
-def binary_predictions(scores, single_target=False, threshold=0.5):  # TODO rename
-    """convert numeric scores to binary predictions
+def predict_single_target_labels(scores):
+    """Generate boolean single target predicted labels from continuous scores
 
-    return 0/1 for an array of scores: samples (rows) x classes (columns)
+    For each row, the single highest scoring class will be labeled 1 and
+    all other classes will be labeled 0.
+
+    This function internally uses torch.Tensors to optimize performance
 
     Args:
-        scores:
-            a 2-d list or np.array. row=sample, columns=classes
-        single_target:
-            if True, predict 1 for highest scoring class per sample,
-            0 for other classes. If False, predict 1 for all scores > threshold
-            [default: False]
-        threshold:
-            Predict 1 for score > threshold. only used if single_target = False.
-            [default: 0.5]
-    """
-    scores = np.array(scores)
-    if single_target:  # predict highest scoring class only
-        preds = np.zeros(np.shape(scores)).astype(int)
-        for i, score_row in enumerate(scores):
-            preds[i, np.argmax(score_row)] = 1
-    else:
-        preds = (scores >= threshold).astype(int)
+        scores: 2d np.array, 2d list, 2d torch.Tensor, or pd.DataFrame
+            containing continuous scores
 
-    return preds
+    Returns: boolean value where each row has 1 for the highest scoring class and
+    0 for all other classes. Returns same datatype as input.
+
+    See also: predict_multi_target_labels
+
+    """
+    # allow 2d arrays / numpy arrays or pd.dataframe
+    return_type = None
+    df = None
+
+    if isinstance(scores, pd.DataFrame):
+        df = scores
+        scores = torch.Tensor(df.values)
+        return_type = "pandas"
+    elif isinstance(scores, np.ndarray):
+        scores = torch.Tensor(scores)
+        return_type = "numpy"
+    elif isinstance(scores, list):
+        scores = torch.Tensor(scores)
+        return_type = "list"
+    elif isinstance(scores, torch.Tensor):
+        return_type = "torch"
+    else:
+        raise ValueError(
+            f"Expected input type numpy.ndarray, torch.tensor, list, "
+            f"or pandas.DataFrame. Got {type(scores)}."
+        )
+
+    preds = one_hot(scores.argmax(1), len(scores[0]))
+
+    if return_type == "pandas":
+        return pd.DataFrame(preds.numpy(), index=df.index, columns=df.columns)
+    elif return_type == "numpy":
+        return preds.numpy()
+    elif return_type == "list":
+        return preds.tolist()
+    else:
+        return preds
+
+
+def predict_multi_target_labels(scores, threshold):
+    """Generate boolean multi-target predicted labels from continuous scores
+
+    For each sample, each class score is compared to a threshold. Any
+    class can be predicted 1 or 0, independent of other
+    classes.
+
+    This function internally uses torch.Tensors to optimize performance
+
+    Note: threshold can be a single value or list of per-class thresholds
+
+    Args:
+        scores: 2d np.array, 2d list, 2d torch.Tensor, or pd.DataFrame
+            containing continuous scores
+        threshold: a number or list of numbers with a threshold for each class
+            - if a single number, used as a threshold for all classes (columns)
+            - if a list, length should match number of columns in scores. Each
+                value in the list will be used as a threshold for each respective
+                class (column).
+
+    Returns: 1/0 values with 1 if score exceeded threshold and 0 otherwise
+
+    See also: predict_single_target_labels
+    """
+    # allow 2d arrays / numpy arrays or pd.dataframe
+    return_type = None
+    df = None
+
+    if isinstance(scores, pd.DataFrame):
+        df = scores
+        scores = torch.Tensor(df.values)
+        return_type = "pandas"
+    elif isinstance(scores, np.ndarray):
+        scores = torch.Tensor(scores)
+        return_type = "numpy"
+    elif isinstance(scores, list):
+        scores = torch.Tensor(scores)
+        return_type = "list"
+    elif isinstance(scores, torch.Tensor):
+        return_type = "torch"
+    else:
+        raise ValueError(
+            f"Expected input type numpy.ndarray, torch.Tensor, list, "
+            f"or pandas.DataFrame. Got {type(scores)}."
+        )
+    # will make predictions for either a single threshold value
+    # or list of class-specific threshold values
+    # the threshold should either be a list of numbers or a single number
+    if type(threshold) in [np.array, list, torch.Tensor, tuple]:
+        assert len(threshold) == 1 or len(threshold) == len(scores[0]), (
+            "threshold must be a single value, or have "
+            "the same number of values as there are classes"
+        )
+        threshold = torch.Tensor(threshold)
+    elif not type(threshold) in [float, np.float32, np.float64, int]:
+        raise ValueError(
+            f"threshold must be a single number or "
+            f"a list/torch.Tensor/tuple/np.array of numbers with one "
+            f"threshold per class. Got type {type(threshold)}"
+        )
+
+    # predict 0/1 based on a fixed threshold or per-class threshold
+    preds = (scores >= threshold).int()
+
+    if return_type == "pandas":
+        return pd.DataFrame(preds.numpy(), index=df.index, columns=df.columns)
+    elif return_type == "numpy":
+        return preds.numpy()
+    elif return_type == "list":
+        return preds.tolist()
+    else:
+        return preds
 
 
 def multi_target_metrics(targets, scores, class_names, threshold):
@@ -54,7 +156,7 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     """
     metrics_dict = {}
 
-    preds = binary_predictions(scores, single_target=False, threshold=threshold)
+    preds = predict_multi_target_labels(scores=scores, threshold=threshold)
 
     # Store per-class precision, recall, and f1
     class_pre, class_rec, class_f1, _ = precision_recall_fscore_support(
@@ -97,7 +199,7 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     return metrics_dict
 
 
-def single_target_metrics(targets, scores, class_names):
+def single_target_metrics(targets, scores):
     """generate various metrics for a set of scores and labels (targets)
 
     Predicts 1 for the highest scoring class per sample and 0 for
@@ -106,7 +208,6 @@ def single_target_metrics(targets, scores, class_names):
     Args:
         targets: 0/1 lables in 2d array
         scores: continuous values in 2d array
-        class_names: list of strings
 
     Returns:
         metrics_dict: dictionary of various overall and per-class metrics
@@ -121,7 +222,7 @@ def single_target_metrics(targets, scores, class_names):
 
     metrics_dict = {}
 
-    preds = binary_predictions(scores, single_target=True)
+    preds = predict_single_target_labels(scores=scores)
 
     # Confusion matrix requires numbered-class not one-hot labels
     t = np.argmax(targets, 1)

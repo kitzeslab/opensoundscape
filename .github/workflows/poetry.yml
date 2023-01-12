@@ -7,19 +7,24 @@ on:
     branches: [ master, develop ]
 
 jobs:
-  test:
+  test_ubuntu:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8]
+        python-version: [3.7, 3.8, 3.9]
+      # Ensure that all flavours are run to completion even if an other flavor failed
+      fail-fast: false
+    
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Update package list for apt-get
+        run: sudo apt-get update
       - name: Install libsndfile1
-        run: sudo apt install libsndfile1
+        run: sudo apt-get install libsndfile1
       - name: Install ffmpeg v4
         run: sudo snap install ffmpeg
       - name: Install poetry
@@ -30,3 +35,65 @@ jobs:
         run: /home/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
         run: /home/runner/.local/bin/poetry run black . --check --diff
+  test_macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8, 3.9]
+      # Ensure that all flavours are run to completion even if an other flavor failed
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install libsndfile
+        run: brew install libsndfile
+      - name: Install ffmpeg v4
+        run: brew install ffmpeg
+      - name: Install poetry
+        run: curl -sSL https://install.python-poetry.org | python
+      - name: Poetry install
+        run: /Users/runner/.local/bin/poetry install
+      - name: Poetry run pytest
+        run: /Users/runner/.local/bin/poetry run pytest
+      - name: Poetry run black check
+        run: /Users/runner/.local/bin/poetry run black . --check --diff
+## ------------------------------------------------------------------------
+## The below job installs opensoundscape on a windows machine using WSL.
+## It is commented out, as it keeps hanging on the final step 'Poetry run pytest'
+## even if only one test (that passes) is run instead of whole suite (e.g. run pytest tests/test_helpers.py)
+## the job hangs and is eventually auto-killed by the github runner.
+# ## Louis F-H Nov 2022
+#   test_windows:
+#     runs-on: windows-latest
+#     defaults:
+#       run:
+#         shell: wsl-bash {0} #use wsl-bash shell
+#     steps: 
+#       - uses: Vampire/setup-wsl@v1 #github action that installs wsl1
+#         with:
+#           distribution: Ubuntu-20.04
+#       - uses: actions/checkout@v2
+#       - name: Add repository with ffmpeg
+#         run: |
+#           sudo apt-get install software-properties-common
+#           sudo add-apt-repository ppa:savoury1/ffmpeg4
+#       - name: Install ffmpeg
+#         run: sudo apt-get install -y ffmpeg
+#       - name: Install libsndfile1
+#         run: sudo apt install libsndfile1
+#       - name: print ffmpeg version
+#         run: | 
+#           ffmpeg -version
+#       - name: print python version
+#         run: python3 --version 
+#       - name: Install poetry
+#         run: curl -sSL https://install.python-poetry.org | python3
+#       - name: Poetry install
+#         run: /root/.local/bin/poetry install
+#       - name: Poetry run black check
+#         run: /root/.local/bin/poetry run black . --check --diff
+#       - name: Poetry run pytest
+#         run: /root/.local/bin/poetry run pytest tests/test_datasets.py

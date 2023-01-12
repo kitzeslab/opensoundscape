@@ -75,7 +75,7 @@ def test_parse_audiomoth_metadata():
         "audio_offest": 352,
     }
     new_metadata = audiomoth.parse_audiomoth_metadata(metadata)
-    assert new_metadata["audiomoth_id"] == "24526B065D325963"
+    assert new_metadata["device_id"] == "AudioMoth 24526B065D325963"
     assert new_metadata["gain_setting"] == 2
     assert new_metadata["battery_state"] == 4.7
     assert new_metadata["recording_start_time"] == pytz.utc.localize(

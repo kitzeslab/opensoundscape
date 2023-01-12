@@ -1,6 +1,9 @@
 from opensoundscape.torch.architectures import cnn_architectures
 import pytest
 
+# test_cnn.py tests that all registered architectures are able to
+# predict on a sample (with modified input channels and output size)
+
 
 def test_freeze_feature_extractor():
     """should disable grad on featur extractor but not classifier"""
@@ -9,8 +12,8 @@ def test_freeze_feature_extractor():
     assert arch.fc.parameters().__next__().requires_grad
 
 
-def test_modify_resnet():
-    """test modifying number of output nodes"""
+def test_modify_out_shape():
+    """test modifying number of output nodes (classes)"""
     arch = cnn_architectures.resnet18(10)
     assert arch.fc.out_features == 10
 
@@ -65,6 +68,22 @@ def test_inception_v3():
 
 def test_use_pretrained():
     arch = cnn_architectures.resnet101(4, use_pretrained=True)
+
+
+def test_efficientnet_b0():
+    arch = cnn_architectures.efficientnet_b0(2, use_pretrained=False)
+
+
+def test_efficientnet_b4():
+    arch = cnn_architectures.efficientnet_b4(2, use_pretrained=False)
+
+
+def test_efficientnet_widese_b0():
+    arch = cnn_architectures.efficientnet_widese_b0(2, use_pretrained=False)
+
+
+def test_efficientnet_widese_b4():
+    arch = cnn_architectures.efficientnet_widese_b4(2, use_pretrained=False)
 
 
 def test_noninteger_output_nodes():
