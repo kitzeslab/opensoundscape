@@ -114,7 +114,7 @@ class Action(BaseAction):
         return (
             f"{'## Bypassed ## ' if self.bypass else ''}"
             f"{'Augmentation ' if self.is_augmentation else ''}"
-            f"Action {self.action_fn}"
+            f"Action calling {self.action_fn}"
         )
 
     def go(self, x, **kwargs):
