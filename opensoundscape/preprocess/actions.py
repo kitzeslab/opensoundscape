@@ -574,7 +574,7 @@ def overlay(
     # up to a max number of max_overlay_num overlays
     overlays_performed = 0
 
-    while overlay_prob > random.uniform(0, 1) and overlays_performed < max_overlay_num:
+    while overlay_prob > np.random.uniform() and overlays_performed < max_overlay_num:
 
         try:
 
@@ -615,7 +615,7 @@ def overlay(
                 # however, in the case of a fixed overlay class, we could
                 # pass an overlay_df containing only that class)
                 choose_from = overlay_df[overlay_df[overlay_class] == 1]
-                overlay_path = random.choice(choose_from.index.values)
+                overlay_path = np.random.choice(choose_from.index.values)
 
             # now we have picked a file to overlay (overlay_path)
             # we also know its labels, if we need them
