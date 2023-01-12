@@ -34,7 +34,7 @@ class BasePreprocessor:
         self.sample_duration = sample_duration
 
     def __repr__(self):
-        return f"Preprocessor with pipeline: {self.pipeline}"
+        return f"Preprocessor with pipeline:\n{self.pipeline}"
 
     def insert_action(self, action_index, action, after_key=None, before_key=None):
         """insert an action in specific specific position
@@ -83,6 +83,7 @@ class BasePreprocessor:
         break_on_type=None,
         break_on_key=None,
         bypass_augmentations=False,
+        trace=False,
     ):
         """perform actions in self.pipeline on a sample (until a break point)
 
@@ -105,6 +106,7 @@ class BasePreprocessor:
                     the start and end time of clip in audio
             bypass_augmentations: if True, actions with .is_augmentatino=True
                 are skipped
+            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for debugging on samples of interest
 
         Returns:
             {'X':preprocessed sample, 'y':labels} if return_labels==True,
@@ -150,6 +152,7 @@ class BasePreprocessor:
             "_end_time": clip_end_time,
             "_sample_duration": self.sample_duration,
             "_preprocessor": self,
+            "_trace": pd.Series(index=self.pipeline.index) if trace else None,
         }
 
         try:
@@ -157,10 +160,19 @@ class BasePreprocessor:
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
                 if type(action) == break_on_type or k == break_on_key:
+                    if trace:
+                        # saved "output" of this step informs user pipeline was stopped
+                        sample_info["_trace"][
+                            k
+                        ] = f"## Pipeline terminated ## {sample_info['_trace'][k]}"
                     break
                 if action.bypass:
                     continue
                 if action.is_augmentation and bypass_augmentations:
+                    if trace:
+                        sample_info["_trace"][
+                            k
+                        ] = f"## Bypassed ## {sample_info['_trace'][k]}"
                     continue
                 extra_args = {key: sample_info[key] for key in action.extra_args}
                 if action.returns_labels:
@@ -168,6 +180,9 @@ class BasePreprocessor:
                     sample_info["_labels"] = labels
                 else:
                     x = action.go(x, **extra_args)
+                if trace:
+                    # save output of each preprocessor action in a dictionary
+                    sample_info["_trace"][k] = x
         except Exception as exc:
             # treat any exceptions raised during forward as PreprocessingErrors
             raise PreprocessingError(
