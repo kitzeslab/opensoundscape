@@ -135,7 +135,7 @@ def test_predict_all_arch_4ch(test_df):
     for arch_name in cnn_architectures.ARCH_DICT.keys():
         try:
             arch = cnn_architectures.ARCH_DICT[arch_name](
-                num_classes=2, num_channels=4, use_pretrained=False
+                num_classes=2, num_channels=4, weights=None
             )
             if "inception" in arch_name:
                 model = cnn.InceptionV3(
@@ -158,7 +158,7 @@ def test_predict_all_arch_1ch(test_df):
     for arch_name in cnn_architectures.ARCH_DICT.keys():
         try:
             arch = cnn_architectures.ARCH_DICT[arch_name](
-                num_classes=2, num_channels=1, use_pretrained=False
+                num_classes=2, num_channels=1, weights=None
             )
             if "inception" in arch_name:
                 model = cnn.InceptionV3(
@@ -230,7 +230,7 @@ def test_predict_wrong_input_error(test_df):
 
 
 def test_train_predict_inception(train_df):
-    model = cnn.InceptionV3([0, 1], 5.0, use_pretrained=False)
+    model = cnn.InceptionV3([0, 1], 5.0, weights=None)
     model.train(
         train_df,
         train_df,
@@ -246,7 +246,7 @@ def test_train_predict_inception(train_df):
 
 def test_train_predict_architecture(train_df):
     """test passing architecture object to CNN class"""
-    arch = alexnet(2, use_pretrained=False)
+    arch = alexnet(2, weights=None)
     model = cnn.CNN(arch, [0, 1], sample_duration=2)
     model.train(
         train_df,
@@ -299,7 +299,7 @@ def test_predict_splitting_short_file(short_file_df):
 
 
 def test_save_and_load_model(model_save_path):
-    arch = alexnet(2, use_pretrained=False)
+    arch = alexnet(2, weights=None)
     classes = [0, 1]
 
     cnn.CNN(arch, classes, 1.0).save(model_save_path)
@@ -307,14 +307,14 @@ def test_save_and_load_model(model_save_path):
     assert m.classes == classes
     assert type(m) == cnn.CNN
 
-    cnn.InceptionV3(classes, 1.0, use_pretrained=False).save(model_save_path)
+    cnn.InceptionV3(classes, 1.0, weights=None).save(model_save_path)
     m = cnn.load_model(model_save_path)
     assert m.classes == classes
     assert type(m) == cnn.InceptionV3
 
 
 def test_save_load_and_train_model_resample_loss(train_df):
-    arch = alexnet(2, use_pretrained=False)
+    arch = alexnet(2, weights=None)
     classes = [0, 1]
 
     m = cnn.CNN(arch, classes, 1.0)
@@ -360,7 +360,7 @@ def test_prediction_returns_consistent_values(train_df):
 
 
 def test_save_and_load_weights(model_save_path):
-    arch = resnet18(2, use_pretrained=False)
+    arch = resnet18(2, weights=None)
     model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)
     model.save_weights(model_save_path)
     model1 = cnn.CNN(arch, classes=["a", "b"], sample_duration=5.0)
