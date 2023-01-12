@@ -1,11 +1,15 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from opensoundscape.torch.sampling import ClassAwareSampler
-from torch.utils.data import DataLoader
-from torch.nn.functional import softmax
+"""Utilties for .torch.models"""
+import warnings
 import pandas as pd
 import numpy as np
+import torch
+from torch import nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from torch.nn.functional import softmax
+
+
+from opensoundscape.torch.sampling import ClassAwareSampler
 
 
 class BaseModule(nn.Module):
@@ -16,9 +20,6 @@ class BaseModule(nn.Module):
     """
 
     name = None
-
-    def __init__(self):
-        super(BaseModule, self).__init__()
 
     def setup_net(self):
         pass
@@ -81,51 +82,6 @@ def cas_dataloader(dataset, batch_size, num_workers):
     return loader
 
 
-def collate_lists_of_audio_clips(batch):
-    """
-    Collate function for splitting + prediction of long audio files
-
-    Puts each data field into a tensor with outer dimension batch size
-
-    Additionally, concats the dfs from each audio file into one long df for the entire batch
-    """
-
-    # first, we remove all None elements: these failed to preprocess
-    batch = [x for x in batch if x is not None]
-
-    if len(batch) == 0:
-        return {"X": torch.Tensor(), "y": torch.Tensor(), "df": None}
-
-    has_labels = "y" in batch[0].keys()
-    if has_labels:
-        labels = [d["y"] for d in batch]
-
-    data = [d["X"] for d in batch]
-
-    dfs = [d["df"] for d in batch]
-
-    elem = data[0]
-    if isinstance(elem, torch.Tensor):
-        out = None
-        if torch.utils.data.get_worker_info() is not None:
-            # If we're in a background process, concatenate directly into a
-            # shared memory tensor to avoid an extra copy
-            numel = sum([x.numel() for x in data])
-            storage = elem.storage()._new_shared(numel)
-            out = elem.new(storage)
-
-        if has_labels:
-            return {
-                "X": torch.cat(data, 0, out=out),
-                "y": torch.stack(labels),
-                "df": pd.concat(dfs),
-            }
-        else:
-            return {"X": torch.cat(data, 0, out=out), "df": pd.concat(dfs)}
-
-    raise TypeError(f"not a tensor. Got {elem}")
-
-
 def get_batch(array, batch_size, batch_number):
     """get a single slice of a larger array
 
@@ -167,64 +123,25 @@ def apply_activation_layer(x, activation_layer=None):
         values with activation layer applied
 
     """
-    if activation_layer == None:  # scores [-inf,inf]
+    if activation_layer is None:  # scores [-inf,inf]
         pass
     elif activation_layer == "softmax":
         # "softmax" activation: preds across all classes sum to 1
-        x = softmax(x, 1)
+        x = softmax(x, dim=1)
     elif activation_layer == "sigmoid":
         # map [-inf,inf] to [0,1]
         x = torch.sigmoid(x)
     elif activation_layer == "softmax_and_logit":
         # softmax, then remap scores from [0,1] to [-inf,inf]
-        x = torch.logit(softmax(x, 1))
+        try:
+            x = torch.logit(softmax(x, dim=1))
+        except NotImplementedError:
+            # use cpu because mps aten::logit is not implemented yet
+            warnings.warn("falling back to CPU for logit operation")
+            original_device = x.device
+            x = torch.logit(softmax(x, dim=1).cpu()).to(original_device)
+
     else:
         raise ValueError(f"invalid option for activation_layer: {activation_layer}")
 
     return x
-
-
-def tensor_binary_predictions(scores, mode, threshold=None):
-    """generate binary 0/1 predictions from continuous scores
-
-    Does not transform scores: compares scores directly to threshold.
-
-    Args:
-        scores: torch.Tensor of dim (batch_size, n_classes) with input scores [-inf:inf]
-        mode: 'single_target', 'multi_target', or None (return empty tensor)
-        threshold: minimum score to predict 1, if mode=='multi_target'. threshold
-        can be a single value for all classes or a list of class-specific values.
-    Returns:
-        torch.Tensor of 0/1 predictions in same shape as scores
-
-    Note: expects real-valued (unbounded) input scores, i.e. scores take
-    values in [-inf, inf]. Sigmoid layer is applied before multi-target
-    prediction, so the threshold should be in [0,1].
-    """
-    if mode == "single_target":
-        # predict highest scoring class only
-        preds = F.one_hot(scores.argmax(1), len(scores[0]))
-    elif mode == "multi_target":
-        if threshold is None:
-            raise ValueError(f"threshold must be specified for multi_target prediction")
-        # predict 0 or 1 based on a fixed threshold
-        elif type(threshold) in [float, np.float32, np.float64, int]:
-            preds = scores >= threshold
-        elif type(threshold) in [np.array, list, torch.Tensor, tuple]:
-            if len(threshold) == 1 or len(threshold) == len(scores[0]):
-                # will make predictions for either a single threshold value or list of class-specific threshold values
-                preds = scores >= torch.tensor(threshold)
-            else:
-                raise ValueError(
-                    f"threshold must be a single value, or have the same number of values as there are classes"
-                )
-
-    elif mode is None:
-        preds = torch.Tensor([])
-    else:
-        raise ValueError(
-            f"invalid option for mode: {mode}. "
-            "Expected 'single_target', 'multi_target', or None."
-        )
-
-    return preds

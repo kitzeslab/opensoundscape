@@ -2,8 +2,12 @@ from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.torch.datasets import AudioFileDataset
 from opensoundscape.torch.loss import ResampleLoss
 from opensoundscape.torch.models import cnn
+from opensoundscape.preprocess.utils import PreprocessingError
 
 from opensoundscape.torch.architectures.cnn_architectures import alexnet, resnet18
+from opensoundscape.torch.architectures import cnn_architectures
+
+from opensoundscape.helpers import make_clip_df
 import pandas as pd
 from pathlib import Path
 
@@ -50,6 +54,11 @@ def short_file_df():
 @pytest.fixture()
 def missing_file_df():
     return pd.DataFrame(index=["tests/audio/not_a_file.wav"])
+
+
+@pytest.fixture()
+def onemin_wav_df():
+    return pd.DataFrame(index=["tests/audio/1min.wav"])
 
 
 def test_init_with_str():
@@ -118,39 +127,101 @@ def test_train_one_class(train_df):
 def test_single_target_prediction(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     model.single_target = True
-    scores, preds, _ = model.predict(test_df, binary_preds="single_target")
-
+    scores = model.predict(test_df)
     assert len(scores) == 2
-    assert len(preds) == 2
+
+
+def test_predict_on_list_of_files(test_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    scores = model.predict(test_df.index.values)
+    assert len(scores) == 2
+
+
+def test_predict_all_arch_4ch(test_df):
+    for arch_name in cnn_architectures.ARCH_DICT.keys():
+        try:
+            arch = cnn_architectures.ARCH_DICT[arch_name](
+                num_classes=2, num_channels=4, weights=None
+            )
+            if "inception" in arch_name:
+                model = cnn.InceptionV3(
+                    classes=[0, 1], sample_duration=5.0, sample_shape=[224, 224, 4]
+                )
+            else:
+                model = cnn.CNN(
+                    arch,
+                    classes=[0, 1],
+                    sample_duration=5.0,
+                    sample_shape=[224, 224, 4],
+                )
+            scores = model.predict(test_df.index.values)
+            assert len(scores) == 2
+        except:
+            raise Exception(f"{arch_name} failed")
+
+
+def test_predict_all_arch_1ch(test_df):
+    for arch_name in cnn_architectures.ARCH_DICT.keys():
+        try:
+            arch = cnn_architectures.ARCH_DICT[arch_name](
+                num_classes=2, num_channels=1, weights=None
+            )
+            if "inception" in arch_name:
+                model = cnn.InceptionV3(
+                    classes=[0, 1], sample_duration=5.0, sample_shape=[224, 224, 4]
+                )
+            else:
+                model = cnn.CNN(
+                    arch,
+                    classes=[0, 1],
+                    sample_duration=5.0,
+                    sample_shape=[224, 224, 1],
+                )
+            scores = model.predict(test_df.index.values)
+            assert len(scores) == 2
+        except:
+            raise Exception(f"{arch_name} failed")
+
+
+def test_predict_on_clip_df(test_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=1.0)
+    clip_df = make_clip_df(test_df.index.values[0:1], clip_duration=1.0)
+    scores = model.predict(clip_df)
+    assert len(scores) == 10
 
 
 def test_prediction_overlap(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     model.single_target = True
-    scores, preds, _ = model.predict(
-        test_df, binary_preds="single_target", overlap_fraction=0.5
-    )
+    scores = model.predict(test_df, overlap_fraction=0.5)
 
     assert len(scores) == 3
-    assert len(preds) == 3
 
 
 def test_multi_target_prediction(train_df, test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    scores, preds, _ = model.predict(
-        test_df, binary_preds="multi_target", threshold=0.1
-    )
+    scores = model.predict(test_df)
 
     assert len(scores) == 2
-    assert len(preds) == 2
 
 
-def test_predict_missing_file_is_unsafe_sample(missing_file_df):
+def test_predict_missing_file_is_invalid_sample(missing_file_df, test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    scores, _, unsafe_samples = model.predict(missing_file_df, threshold=0.1)
 
-    assert len(scores) == 0
-    assert len(unsafe_samples) == 1
+    with pytest.raises(IndexError):
+        # if all samples are invalid, will give IndexError
+        model.predict(missing_file_df)
+
+    scores, invalid_samples = model.predict(
+        pd.concat([missing_file_df, test_df.head(1)]), return_invalid_samples=True
+    )
+    assert (
+        len(scores) == 3
+    )  # should have one row with nan values for the invalid sample
+    isnan = lambda x: x != x
+    assert np.all([isnan(score) for score in scores.iloc[0].values])
+    assert len(invalid_samples) == 1
+    assert missing_file_df.index.values[0] in invalid_samples
 
 
 def test_predict_wrong_input_error(test_df):
@@ -165,7 +236,7 @@ def test_predict_wrong_input_error(test_df):
 
 
 def test_train_predict_inception(train_df):
-    model = cnn.InceptionV3([0, 1], 5.0, use_pretrained=False)
+    model = cnn.InceptionV3([0, 1], 5.0, weights=None)
     model.train(
         train_df,
         train_df,
@@ -180,8 +251,8 @@ def test_train_predict_inception(train_df):
 
 
 def test_train_predict_architecture(train_df):
-    """test passing a specific architecture to PytorchModel"""
-    arch = alexnet(2, use_pretrained=False)
+    """test passing architecture object to CNN class"""
+    arch = alexnet(2, weights=None)
     model = cnn.CNN(arch, [0, 1], sample_duration=2)
     model.train(
         train_df,
@@ -196,26 +267,45 @@ def test_train_predict_architecture(train_df):
     shutil.rmtree("tests/models/")
 
 
+def test_train_on_clip_df(train_df):
+    """
+    test training a model when Audio files are long/unsplit
+    and a dataframe provides clip-level labels. Training
+    should internally load a relevant clip from the audio
+    file and get its labels from the dataframe
+    """
+    model = cnn.CNN("resnet18", [0, 1], sample_duration=2)
+    train_df = make_clip_df(train_df.index.values, clip_duration=2)
+    train_df[0] = np.random.choice([0, 1], size=10)
+    train_df[1] = np.random.choice([0, 1], size=10)
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models/",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+
+
 def test_predict_without_splitting(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    scores, preds, _ = model.predict(
-        test_df, split_files_into_clips=False, binary_preds="multi_target", threshold=0
-    )
+    scores = model.predict(test_df, split_files_into_clips=False)
     assert len(scores) == len(test_df)
-    assert len(preds) == len(test_df)
 
 
 def test_predict_splitting_short_file(short_file_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        scores, _, _ = model.predict(short_file_df)
+        scores = model.predict(short_file_df)
         assert len(scores) == 0
         assert "prediction_dataset" in str(w[0].message)
 
 
 def test_save_and_load_model(model_save_path):
-    arch = alexnet(2, use_pretrained=False)
+    arch = alexnet(2, weights=None)
     classes = [0, 1]
 
     cnn.CNN(arch, classes, 1.0).save(model_save_path)
@@ -223,14 +313,14 @@ def test_save_and_load_model(model_save_path):
     assert m.classes == classes
     assert type(m) == cnn.CNN
 
-    cnn.InceptionV3(classes, 1.0, use_pretrained=False).save(model_save_path)
+    cnn.InceptionV3(classes, 1.0, weights=None).save(model_save_path)
     m = cnn.load_model(model_save_path)
     assert m.classes == classes
     assert type(m) == cnn.InceptionV3
 
 
 def test_save_load_and_train_model_resample_loss(train_df):
-    arch = alexnet(2, use_pretrained=False)
+    arch = alexnet(2, weights=None)
     classes = [0, 1]
 
     m = cnn.CNN(arch, classes, 1.0)
@@ -270,13 +360,13 @@ def test_prediction_warns_different_classes(train_df):
 
 def test_prediction_returns_consistent_values(train_df):
     model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)
-    a, _, _ = model.predict(train_df)
-    b, _, _ = model.predict(train_df)
+    a = model.predict(train_df)
+    b = model.predict(train_df)
     assert np.allclose(a.values, b.values, 1e-6)
 
 
 def test_save_and_load_weights(model_save_path):
-    arch = resnet18(2, use_pretrained=False)
+    arch = resnet18(2, weights=None)
     model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)
     model.save_weights(model_save_path)
     model1 = cnn.CNN(arch, classes=["a", "b"], sample_duration=5.0)
@@ -289,7 +379,7 @@ def test_save_and_load_weights(model_save_path):
 
 def test_eval(train_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
-    scores, _, _ = model.predict(train_df, split_files_into_clips=False)
+    scores = model.predict(train_df, split_files_into_clips=False)
     model.eval(train_df.values, scores.values)
 
 
@@ -309,3 +399,27 @@ def test_train_no_validation(train_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
     model.train(train_df, save_path="tests/models")
     shutil.rmtree("tests/models/")
+
+
+def test_train_raise_errors(short_file_df, missing_file_df):
+    files_df = pd.concat(
+        [short_file_df, missing_file_df]
+    )  # use 2 files. 1 file wrong is manually caught and userwarning raised
+    files_df["class"] = [0, 1]  # add labels for training
+    model = cnn.CNN("resnet18", classes=["class"], sample_duration=2)
+    with pytest.raises(PreprocessingError):
+        model.train(files_df, raise_errors=True)
+
+
+def test_predict_raise_errors(short_file_df, onemin_wav_df):
+    files_df = pd.concat(
+        [short_file_df, onemin_wav_df]
+    )  # use 2 files. 1 file wrong is manually caught and userwarning raised
+    model = cnn.CNN("resnet18", classes=["class"], sample_duration=30)
+    model.preprocessor.pipeline.bandpass.bypass = False  # ensure bandpass happens
+    model.preprocessor.pipeline.bandpass.params[
+        "low"
+    ] = 1  # add a bad param. this should be min_f
+
+    with pytest.raises(PreprocessingError):
+        model.predict(files_df, raise_errors=True)

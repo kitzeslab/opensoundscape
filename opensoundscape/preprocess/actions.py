@@ -8,14 +8,14 @@ or augmented sample, which may or may not be the same type as the original.
 See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
-import numpy as np
 import random
+import warnings
+import numpy as np
 from torchvision import transforms
 import torch
-import warnings
 import pandas as pd
 
-from opensoundscape.audio import Audio
+from opensoundscape.audio import Audio, mix
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 
@@ -46,15 +46,16 @@ class BaseAction:
             "Action"
         )
 
-    def go(self, x, **kwargs):
+    def go(self, x):
         return x
 
     def set(self, **kwargs):
         """only allow keys that exist in self.params"""
         unmatched_args = set(list(kwargs.keys())) - set(list(self.params.keys()))
-        assert unmatched_args == set(
-            []
-        ), f"unexpected arguments: {unmatched_args}. The valid arguments and current values are: \n{self.params}"
+        assert unmatched_args == set([]), (
+            f"unexpected arguments: {unmatched_args}. "
+            f"The valid arguments and current values are: \n{self.params}"
+        )
         self.params.update(pd.Series(kwargs, dtype=object))
 
     def get(self, arg):
@@ -75,7 +76,7 @@ class Action(BaseAction):
     Other arguments are an arbitrary list of kwargs.
     """
 
-    def __init__(self, fn, is_augmentation=False, extra_args=[], **kwargs):
+    def __init__(self, fn, is_augmentation=False, extra_args=(), **kwargs):
         super(Action, self).__init__()
 
         self.action_fn = fn
@@ -129,6 +130,9 @@ class AudioClipLoader(Action):
 
     Loads an audio file or part of a file to an Audio object.
     Will load entire audio file if _start_time and _end_time are None.
+    If _start_time and _end_time are provided, loads the audio only in the
+    specified interval.
+
     see Audio.from_file() for documentation.
 
     Args:
@@ -137,16 +141,14 @@ class AudioClipLoader(Action):
 
     def __init__(self, **kwargs):
         super(AudioClipLoader, self).__init__(
-            Audio.from_file, extra_args=["_start_time", "_sample_duration"], **kwargs
+            Audio.from_file, extra_args=["_start_time", "_end_time"], **kwargs
         )
-        # two params are replaced by "_start_time" and "_sample_duration"
+        # two params are replaced by "_start_time" and "_end_time"
         self.params = self.params.drop(["offset", "duration"])
 
-    def go(self, path, _start_time, _sample_duration, **kwargs):
+    def go(self, path, _start_time, _end_time, **kwargs):
         offset = 0 if _start_time is None else _start_time
-        # only trim to _sample_duration if _start_time is provided
-        # ie, we are loading clips from a long audio file
-        duration = None if _start_time is None else _sample_duration
+        duration = None if _end_time is None else _end_time - _start_time
         return self.action_fn(
             path, offset=offset, duration=duration, **dict(self.params, **kwargs)
         )
@@ -161,7 +163,7 @@ class AudioTrim(Action):
 
     def __init__(self, **kwargs):
         super(AudioTrim, self).__init__(
-            trim_audio, extra_args=["_sample_duration"], **kwargs
+            trim_audio, extra_args=("_sample_duration",), **kwargs
         )
 
 
@@ -190,20 +192,20 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False, tol=1e-5
         raise ValueError("recieved zero-length audio")
 
     if _sample_duration is not None:
-        if audio.duration() + tol <= _sample_duration:
+        if audio.duration + tol <= _sample_duration:
             # input audio is not as long as desired length
             if extend:  # extend clip sith silence
                 audio = audio.extend(_sample_duration)
             else:
                 raise ValueError(
-                    f"the length of the original file ({audio.duration()} "
+                    f"the length of the original file ({audio.duration} "
                     f"sec) was less than the length to extract "
                     f"({_sample_duration} sec). To extend short "
                     f"clips, use extend=True"
                 )
         if random_trim:
             # uniformly randomly choose clip time from full audio
-            extra_time = audio.duration() - _sample_duration
+            extra_time = audio.duration - _sample_duration
             start_time = np.random.uniform() * extra_time
         else:
             start_time = 0
@@ -212,6 +214,59 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False, tol=1e-5
         audio = audio.trim(start_time, end_time)
 
     return audio
+
+
+def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
+    """Applies a randomly selected gain level to an Audio object
+
+    Gain is selected from a uniform distribution in the range dB_range
+
+    Args:
+        audio: an Audio object
+        dB_range: (min,max) decibels of gain to apply
+            - dB gain applied is chosen from a uniform random
+            distribution in this range
+
+    Returns: Audio object with gain applied
+    """
+    gain = random.uniform(dB_range[0], dB_range[1])
+    return audio.apply_gain(dB=gain, clip_range=clip_range)
+
+
+def audio_add_noise(audio, noise_dB=-30, signal_dB=0, color="white"):
+    """Generates noise and adds to audio object
+
+    Args:
+        audio: an Audio object
+        noise_dB: number or range: dBFS of noise signal generated
+            - if number, crates noise with `dB` dBFS level
+            - if (min,max) tuple, chooses noise `dBFS` randomly
+            from range with a uniform distribution
+        signal_dB: dB (decibels) gain to apply to the incoming Audio
+            before mixing with noise [default: -3 dB]
+            - like noise_dB, can specify (min,max) tuple to
+            use random uniform choice in range
+
+    Returns: Audio object with noise added
+    """
+    if hasattr(noise_dB, "__iter__"):
+        # choose noise level randomly from dB range
+        noise_dB = random.uniform(noise_dB[0], noise_dB[1])
+    # otherwise, it should just be a number
+
+    if hasattr(signal_dB, "__iter__"):
+        # choose signal level randomly from dB range
+        signal_dB = random.uniform(signal_dB[0], signal_dB[1])
+    # otherwise, it should just be a number
+
+    noise = Audio.noise(
+        duration=audio.duration,
+        sample_rate=audio.sample_rate,
+        color=color,
+        dBFS=noise_dB,
+    )
+
+    return mix([audio, noise], gain=[signal_dB, 0])
 
 
 def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue=0):
@@ -392,7 +447,7 @@ class Overlay(Action):
         super(Overlay, self).__init__(
             overlay,
             is_augmentation=is_augmentation,
-            extra_args=["_labels", "_preprocessor"],
+            extra_args=("_labels", "_preprocessor"),
             **kwargs,
         )
 
@@ -401,7 +456,8 @@ class Overlay(Action):
         overlay_df = kwargs["overlay_df"]
         overlay_df = overlay_df[~overlay_df.index.duplicated()]  # remove duplicates
 
-        # warn the user if using "different" as overlay_class and "different" is one of the model classes
+        # warn the user if using "different" as overlay_class
+        # and "different" is one of the model classes
         if (
             "different" in overlay_df.columns
             and "overlay_class" in kwargs
@@ -414,7 +470,7 @@ class Overlay(Action):
                 "Consider renaming the `different` class. "
             )
 
-        # move overlay_df from params to its own space, so that it doesn't display with print(params)
+        # move overlay_df from params to its own space so that it doesn't display with print(params)
         self.overlay_df = overlay_df
         self.params = self.params.drop("overlay_df")  # removes it
 
@@ -504,7 +560,7 @@ def overlay(
         ), "overlay_df must have labels if overlay_class is specified"
         if overlay_class != "different":  # user specified a single class
             assert (
-                np.sum(overlay_df[overlay_class]) > 0
+                overlay_df[overlay_class].sum() > 0
             ), "overlay_df did not contain positive labels for overlay_class"
 
     if len(overlay_df.columns) > 0:
@@ -572,16 +628,17 @@ def overlay(
             # it will cut off the preprocessing of the overlayed sample before
             # the first Overlay object. This may or may not be the desired behavior,
             # but it will at least "work".
-            x2, sample_info = _preprocessor.forward(overlay_row, break_on_type=Overlay)
+            x2, _ = _preprocessor.forward(overlay_row, break_on_type=Overlay)
 
             # now we blend the two tensors together with a weighted average
             # Select weight of overlay; <0.5 means more emphasis on original sample
             # Supports uniform-random selection from a range of weights eg [0.1,0.7]
             weight = overlay_weight
             if hasattr(weight, "__iter__"):
-                assert (
-                    len(weight) == 2
-                ), f"overlay_weight must specify a single value or range of 2 values, got {overlay_weight}"
+                assert len(weight) == 2, (
+                    f"overlay_weight must specify a single value or range of 2 values, "
+                    f"got {overlay_weight}"
+                )
                 weight = random.uniform(weight[0], weight[1])
 
             # use a weighted sum to overlay (blend) the samples
@@ -597,11 +654,11 @@ def overlay(
             # overlay was successful, update count:
             overlays_performed += 1
 
-        except PreprocessingError:
+        except PreprocessingError as ex:
             # don't try to load this sample again: remove from overlay df
             overlay_df = overlay_df.drop(overlay_path)
-            warnings.warn(f"unsafe overlay sample: {overlay_path}")
+            warnings.warn(f"Invalid overlay sample: {overlay_path}")
             if len(overlay_df) < 1:
-                raise ValueError("tried all overlay_df samples, none were safe")
+                raise ValueError("tried all overlay_df samples, none were safe") from ex
 
     return x, _labels

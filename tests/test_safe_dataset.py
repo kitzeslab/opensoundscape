@@ -22,7 +22,7 @@ def dataset(preprocessor):
 
 def test_safe_dataset_handles_short_file(dataset):
     """should raise warning but not fail"""
-    dataset = SafeDataset(dataset, unsafe_behavior="substitute")
+    dataset = SafeDataset(dataset, invalid_sample_behavior="substitute")
     dataset.dataset.preprocessor.pipeline.trim_audio.set(extend=False)
     dataset.dataset.preprocessor.pipeline.random_trim_audio.set(extend=False)
     sample = dataset[0]
@@ -30,26 +30,26 @@ def test_safe_dataset_handles_short_file(dataset):
     # skips first sample when it fails and loads next
     assert np.array_equal(sample["y"].numpy(), [1, 0])
 
-    # stores failed samples in ._unsafe_indices
-    assert len(dataset._unsafe_indices) == 1
+    # stores failed samples in ._invalid_indices
+    assert len(dataset._invalid_indices) == 1
 
 
 def test_safe_dataset_returns_none(preprocessor):
     """should give None for the sample"""
-    dataset = SafeDataset(preprocessor, unsafe_behavior="none")
+    dataset = SafeDataset(preprocessor, invalid_sample_behavior="none")
 
     sample = dataset[0]
 
     # returns None for the sample
     assert sample is None
 
-    # stores failed samples in ._unsafe_indices
-    assert len(dataset._unsafe_indices) == 1
+    # stores failed samples in ._invalid_indices
+    assert len(dataset._invalid_indices) == 1
 
 
 def test_safe_dataset_raises(preprocessor):
     """should raise an exception on bad sample"""
-    dataset = SafeDataset(preprocessor, unsafe_behavior="raise")
+    dataset = SafeDataset(preprocessor, invalid_sample_behavior="raise")
 
     with pytest.raises(Exception):
         sample = dataset[0]

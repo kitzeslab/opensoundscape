@@ -1,8 +1,9 @@
 """Utilities specifically for audio files recoreded by AudioMoths"""
-import pytz
-import datetime
-from opensoundscape.helpers import hex_to_time
 from pathlib import Path
+import datetime
+
+import pytz
+from opensoundscape.helpers import hex_to_time, load_metadata
 
 
 def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):
@@ -36,12 +37,12 @@ def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):
         localized_dt = hex_to_time(Path(file).stem)  # returns UTC localized dt
     elif len(name) == 15:
         # human-readable format (newer firmware)
-        dt = datetime.datetime.strptime(name, "%Y%m%d_%H%M%S")
+        file_datetime = datetime.datetime.strptime(name, "%Y%m%d_%H%M%S")
 
         # convert the naive datetime into a localized datetime based on the
         # timezone provided by the user. (This is the time zone that the AudioMoth
         # uses to record its name, not the time zone local to the recording site.)
-        localized_dt = pytz.timezone(filename_timezone).localize(dt)
+        localized_dt = pytz.timezone(filename_timezone).localize(file_datetime)
 
     else:
         raise ValueError(f"file had unsupported name format: {name}")
@@ -76,9 +77,6 @@ def parse_audiomoth_metadata(metadata):
     Returns:
         metadata dictionary with added keys and values
     """
-    import datetime
-    import pytz
-
     comment = metadata["comment"]
 
     # parse recording start time (can have timzeone info like "UTC-5")
@@ -94,7 +92,7 @@ def parse_audiomoth_metadata(metadata):
         metadata["gain_setting"] = comment.split(" gain")[0].split(" ")[-1]
 
     metadata["battery_state"] = _parse_audiomoth_battery_info(comment)
-    metadata["audiomoth_id"] = metadata["artist"].split(" ")[1]
+    metadata["device_id"] = metadata["artist"]
     if "temperature" in comment:
         metadata["temperature_C"] = float(
             comment.split("temperature was ")[1].split("C")[0]
@@ -104,14 +102,12 @@ def parse_audiomoth_metadata(metadata):
 
 
 def parse_audiomoth_metadata_from_path(file_path):
-    from tinytag import TinyTag
-
-    metadata = TinyTag.get(file_path)
+    """Wrapper function to parse audiomoth metadata from file path"""
+    metadata = load_metadata(file_path)
 
     if metadata is None:
         raise ValueError(f"{file_path} does not contain metadata")
     else:
-        metadata = metadata.as_dict()
         artist = metadata["artist"]
         if not artist or (not "AudioMoth" in artist):
             raise ValueError(
@@ -151,10 +147,10 @@ def _parse_audiomoth_comment_dt(comment):
         dt_str = f"{dt_str.split(marker)[0]}{dt_str_tz_str})"
     else:  #
         dt_str = dt_str.replace("(UTC)", "(UTC-0000)")
-    dt = datetime.datetime.strptime(
+    parsed_datetime = datetime.datetime.strptime(
         dt_str, "%H:%M:%S %d/%m/%Y (%Z%z)"
     )  # .astimezone(final_tz)
-    return dt
+    return parsed_datetime
 
 
 def _parse_audiomoth_battery_info(comment):

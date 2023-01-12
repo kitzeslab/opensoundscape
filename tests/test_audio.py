@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
 import pytest
 from pathlib import Path
 import io
@@ -8,7 +6,11 @@ from random import uniform
 from math import isclose
 import numpy.testing as npt
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
+
+from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
+from opensoundscape import audio
+import opensoundscape
 
 
 @pytest.fixture()
@@ -41,6 +43,11 @@ def empty_wav_str():
 @pytest.fixture()
 def veryshort_wav_str():
     return "tests/audio/veryshort.wav"
+
+
+@pytest.fixture()
+def veryshort_wav_audio(veryshort_wav_str):
+    return Audio.from_file(veryshort_wav_str)
 
 
 @pytest.fixture()
@@ -115,10 +122,66 @@ def stereo_wav_str():
     return "tests/audio/stereo.wav"
 
 
+def test_init_with_list():
+    a = Audio([0] * 10, sample_rate=10)
+    assert len(a.samples) == 10
+
+
+def test_init_with_nparray():
+    a = Audio(np.zeros(10), sample_rate=10)
+    assert len(a.samples) == 10
+
+
 def test_load_channels_as_audio(stereo_wav_str):
     s = load_channels_as_audio(stereo_wav_str)
     assert max(s[0].samples) == 0  # channel 1 of stereo.wav is all 0
     assert max(s[1].samples) == 1  # channel 2 of stereo.wav is all 1
+    assert len(s) == 2
+    assert type(s[0]) == Audio
+
+    assert s[0].metadata["channel"] == "1 of 2"
+    assert s[0].metadata["channels"] == 1
+
+
+def test_load_channels_as_audio_from_mono(veryshort_wav_str):
+    s = load_channels_as_audio(veryshort_wav_str)
+    assert len(s) == 1
+    assert type(s[0]) == Audio
+
+
+def test_duration(veryshort_wav_audio):
+    assert isclose(veryshort_wav_audio.duration, 0.14208616780045352, abs_tol=1e-7)
+
+
+def test_normalize(veryshort_wav_audio):
+    assert isclose(
+        max(abs(veryshort_wav_audio.normalize(peak_level=0.5).samples)),
+        0.5,
+        abs_tol=1e-4,
+    )
+
+
+def test_apply_gain():
+    a = Audio([1, -1, 0], sample_rate=10).apply_gain(dB=-20)
+    assert isclose(a.samples.max(), 0.1, abs_tol=1e-6)
+    assert isclose(a.samples.min(), -0.1, abs_tol=1e-6)
+
+
+def test_gain_clips():
+    a = Audio([0.5, -0.5, 0], sample_rate=10).apply_gain(dB=10)
+    assert isclose(a.samples.max(), 1, abs_tol=1e-6)
+    assert isclose(a.samples.min(), -1, abs_tol=1e-6)
+
+
+def test_normalize_by_db(veryshort_wav_audio):
+    assert isclose(
+        max(abs(veryshort_wav_audio.normalize(peak_dBFS=0).samples)), 1, abs_tol=1e-4
+    )
+
+
+def test_normalize_doesnt_allow_both_arguments(veryshort_wav_audio):
+    with pytest.raises(ValueError):
+        veryshort_wav_audio.normalize(peak_dBFS=0, peak_level=0.2)
 
 
 def test_load_incorrect_timestamp(onemin_wav_str):
@@ -168,15 +231,30 @@ def test_load_timestamp_before_warnmode(metadata_wav_str):
         assert s.metadata["recording_start_time"] == correct_ts
 
 
-def test_retain_metadata(metadata_wav_str, new_metadata_wav_str):
+def test_retain_metadata_soundfile(metadata_wav_str, new_metadata_wav_str):
     a = Audio.from_file(metadata_wav_str)
-    a.save(new_metadata_wav_str)
+    a.save(new_metadata_wav_str, metadata_format="soundfile")
     new_a = Audio.from_file(new_metadata_wav_str)
 
     # file size may differ slightly, other fields should be the same
-    new_a.metadata["filesize"] = None
-    a.metadata["filesize"] = None
     assert new_a.metadata == a.metadata
+
+
+def test_save_load_opso_metadata(metadata_wav_str, new_metadata_wav_str):
+    # add more tests if more versions are added
+
+    a = Audio.from_file(metadata_wav_str)
+    a.save(new_metadata_wav_str, metadata_format="opso")
+    new_md = Audio.from_file(new_metadata_wav_str).metadata
+
+    assert new_md["opensoundscape_version"] == opensoundscape.__version__
+    assert new_md["opso_metadata_version"] == "v0.1"  # current default version
+
+    # file size may differ slightly, other fields should be the same
+    # all other keys/values should be equivalent:
+    del new_md["opensoundscape_version"]
+    del new_md["opso_metadata_version"]
+    assert new_md == a.metadata
 
 
 def test_update_metadata(metadata_wav_str, new_metadata_wav_str):
@@ -240,41 +318,56 @@ def test_load_metadata(veryshort_wav_str):
 #         a=Audio.from_file(path_with_no_metadata)
 
 
+def test_calculate_rms(veryshort_wav_audio):
+    assert isclose(veryshort_wav_audio.rms, 0.0871002, abs_tol=1e-7)
+
+
+def test_calculate_dBFS(veryshort_wav_audio):
+    assert isclose(veryshort_wav_audio.dBFS, -18.189316963185377, abs_tol=1e-5)
+
+
 def test_property_trim_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
-    duration = audio.duration()
+    duration = audio.duration
     for _ in range(100):
         [first, second] = sorted([uniform(0, duration), uniform(0, duration)])
-        assert isclose(
-            audio.trim(first, second).duration(), second - first, abs_tol=1e-4
-        )
+        assert isclose(audio.trim(first, second).duration, second - first, abs_tol=1e-4)
+
+
+def test_trim_updates_metadata(metadata_wav_str):
+    a = Audio.from_file(metadata_wav_str)
+    a2 = a.trim(1, 2)
+    assert a2.metadata["recording_start_time"] == a.metadata[
+        "recording_start_time"
+    ] + timedelta(seconds=1)
+    assert a2.metadata["duration"] == 1
 
 
 def test_trim_from_negative_time(silence_10s_mp3_str):
     """correct behavior is to trim from time zero"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(-1, 5)
-    assert isclose(audio.duration(), 5, abs_tol=1e-5)
+    assert isclose(audio.duration, 5, abs_tol=1e-5)
 
 
 def test_trim_past_end_of_clip(silence_10s_mp3_str):
     """correct behavior is to trim to the end of the clip"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(9, 11)
-    assert isclose(audio.duration(), 1, abs_tol=1e-5)
+    assert isclose(audio.duration, 1, abs_tol=1e-5)
 
 
 def test_resample_veryshort_wav(veryshort_wav_str):
     audio = Audio.from_file(veryshort_wav_str)
-    dur = audio.duration()
+    dur = audio.duration
     resampled_audio = audio.resample(22050)
-    assert resampled_audio.duration() == dur
+    assert resampled_audio.duration == dur
     assert resampled_audio.samples.shape == (3133,)
 
 
 def test_resample_mp3_nonstandard_sr(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
-    dur = audio.duration()
+    dur = audio.duration
     resampled_audio = audio.resample(5000)
-    assert resampled_audio.duration() == dur
+    assert resampled_audio.duration == dur
     assert resampled_audio.sample_rate == 5000
 
 
@@ -287,11 +380,11 @@ def test_resample_classmethod_vs_instancemethod(silence_10s_mp3_str):
 
 def test_extend_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
-    duration = audio.duration()
+    duration = audio.duration
     for _ in range(100):
         extend_length = uniform(duration, duration * 10)
         assert isclose(
-            audio.extend(extend_length).duration(), extend_length, abs_tol=1e-4
+            audio.extend(extend_length).duration, extend_length, abs_tol=1e-4
         )
 
 
@@ -327,9 +420,15 @@ def test_save(silence_10s_mp3_str, saved_wav):
     assert saved_wav.exists()
 
 
-def test_save_extension_error(silence_10s_mp3_str, saved_mp3):
-    with pytest.raises(TypeError):
+def test_save_mp3(silence_10s_mp3_str, saved_mp3):
+    try:
         Audio.from_file(silence_10s_mp3_str).save(saved_mp3)
+        assert saved_mp3.exists()
+        Audio.from_file(saved_mp3)  # make sure we can still load it as audio
+    except NotImplementedError:
+        # only supported by libsndfile>=1.1.0, which is not available yet
+        # on ubuntu as of Dec 2022. So, we just give the user a helpful error.
+        pass
 
 
 def test_audio_constructor_should_fail_on_file(veryshort_wav_str):
@@ -455,5 +554,74 @@ def test_non_integer_overlaplen_split_and_save(silence_10s_mp3_pathlib):
 
 
 def test_skip_loading_metadata(metadata_wav_str):
-    a = Audio.from_file(metadata_wav_str, metadata=False)
+    a = Audio.from_file(metadata_wav_str, load_metadata=False)
     assert a.metadata is None
+
+
+def test_silent_classmethod():
+    a = Audio.silence(10, 200)
+    assert len(a.samples) == 2000
+    assert max(a.samples) == 0
+
+
+def test_noise_classmethod():
+    for c in ["white", "blue", "violet", "brown", "pink"]:
+        a = Audio.noise(1, 200, color=c)
+        assert len(a.samples) == 200
+
+
+def test_concat(veryshort_wav_audio):
+    a = audio.concat([veryshort_wav_audio, veryshort_wav_audio])
+    assert a.duration == 2 * veryshort_wav_audio.duration
+
+
+def test_mix(veryshort_wav_audio):
+    m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], gain=0)
+    assert isclose(max(veryshort_wav_audio.samples) * 2, max(m.samples), abs_tol=1e-6)
+
+
+def test_mix_duration(veryshort_wav_audio):
+    m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], duration=1)
+    assert isclose(m.duration, 1, abs_tol=1e-6)
+
+
+def test_mix_duration_extends(veryshort_wav_audio):
+    m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], duration=1)
+    assert isclose(m.duration, 1, abs_tol=1e-3)
+
+
+def test_mix_duration_truncates(veryshort_wav_audio):
+    a = Audio.silence(10, veryshort_wav_audio.sample_rate)
+    m = audio.mix([a, veryshort_wav_audio], duration=1)
+    assert isclose(m.duration, 1, abs_tol=1e-3)
+
+
+def test_mix_offsets(veryshort_wav_audio):
+    m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], offsets=[0, 1])
+    # expected behavior: length will be offset + audio length
+    assert isclose(m.duration, 1 + veryshort_wav_audio.duration, abs_tol=1e-3)
+
+
+def test_mix_clip(veryshort_wav_audio):
+    # should never have values outside of [-1,1]
+    m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], gain=100)
+    assert max(abs(m.samples)) <= 1
+
+
+def test_loop(veryshort_wav_audio):
+    veryshort_wav_audio.metadata = {"duration": veryshort_wav_audio.duration}
+    a2 = veryshort_wav_audio.loop(n=2)
+    assert isclose(a2.duration, veryshort_wav_audio.duration * 2, abs_tol=1e-5)
+    assert isclose(a2.duration, a2.metadata["duration"])
+
+    a3 = veryshort_wav_audio.loop(length=1)
+    assert isclose(a3.duration, 1.0, abs_tol=1e-5)
+    assert isclose(a3.metadata["duration"], 1.0, abs_tol=1e-5)
+
+
+def test_extend(veryshort_wav_audio):
+    a = veryshort_wav_audio.extend(length=1)
+    assert isclose(a.duration, 1.0, abs_tol=1e-5)
+    assert isclose(a.metadata["duration"], 1.0, abs_tol=1e-5)
+    # samples should be zero
+    assert isclose(0.0, np.max(a.samples[-100:]), abs_tol=1e-7)

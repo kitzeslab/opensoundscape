@@ -5,14 +5,17 @@ from torch.utils.data.sampler import Sampler
 import torch
 import torch.utils.data
 
-# Imbalanced Dataset Sampling by davinnovation
-# (https://github.com/ufoym/imbalanced-dataset-sampler)
+
 class ImbalancedDatasetSampler(Sampler):
     """Samples elements randomly from a given list of indices for imbalanced dataset
     Args:
         indices (list, optional): a list of indices
         num_samples (int, optional): number of samples to draw
-        callback_get_label func: a callback-like function which takes two arguments - dataset and index
+        callback_get_label func: a callback-like function which takes two arguments:
+            dataset and index
+
+    Based on Imbalanced Dataset Sampling by davinnovation
+    (https://github.com/ufoym/imbalanced-dataset-sampler)
     """
 
     def __init__(

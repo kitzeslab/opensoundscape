@@ -2,25 +2,27 @@
 
 For tutorials, see notebooks on opensoundscape.org
 """
-
-import os
-import numpy as np
-import pandas as pd
 from pathlib import Path
 import warnings
+import copy
+import os
+import types
+import yaml
 
+import numpy as np
+import pandas as pd
+from pandas.core.indexes.multi import MultiIndex
 
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-
+import opensoundscape
 from opensoundscape.torch.architectures import cnn_architectures
 from opensoundscape.torch.models.utils import (
     BaseModule,
     apply_activation_layer,
-    tensor_binary_predictions,
 )
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.torch.loss import (
@@ -30,7 +32,13 @@ from opensoundscape.torch.loss import (
 )
 from opensoundscape.torch.safe_dataset import SafeDataset
 from opensoundscape.torch.datasets import AudioFileDataset, AudioSplittingDataset
-import opensoundscape
+from opensoundscape.torch.architectures.cnn_architectures import inception_v3
+from opensoundscape.metrics import (
+    predict_multi_target_labels,
+    predict_single_target_labels,
+    single_target_metrics,
+    multi_target_metrics,
+)
 
 
 class CNN(BaseModule):
@@ -48,15 +56,18 @@ class CNN(BaseModule):
             *OR* a string matching one of the architectures listed by
             cnn_architectures.list_architectures(), eg 'resnet18'.
             - If a string is provided, uses default parameters
-                (including use_pretrained=True)
-                Note: For resnet architectures, if num_channels != 3,
-                averages the conv1 weights across all channels.
+                (including pretrained weights, `weights="DEFAULT"`)
+                Note: if num channels != 3, copies weights from original
+                channels by averaging (<3 channels) or recycling (>3 channels)
         classes:
             list of class names. Must match with training dataset classes if training.
         single_target:
             - True: model expects exactly one positive class per sample
             - False: samples can have any number of positive classes
             [default: False]
+        preprocessor_class: class of Preprocessor object
+        sample_shape: tuple of height, width, channels for created sample
+            [default: (224,224,3)]
 
     """
 
@@ -67,7 +78,7 @@ class CNN(BaseModule):
         sample_duration,
         single_target=False,
         preprocessor_class=SpectrogramPreprocessor,
-        sample_shape=[224, 224, 3],
+        sample_shape=(224, 224, 3),
     ):
 
         super(CNN, self).__init__()
@@ -79,6 +90,15 @@ class CNN(BaseModule):
         self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
+        # number of samples to preprocess and log to wandb during train/predict
+        self.wandb_logging = dict(
+            n_preview_samples=8,  # before train/predict, log n random samples
+            top_samples_classes=None,  # specify list of classes to see top samples from
+            n_top_samples=3,  # after prediction, log n top scoring samples per class
+        )
+        self.loss_fn = None
+        self.train_loader = None
+        self.scheduler = None
 
         ### architecture ###
         # can be a pytorch CNN such as Resnet18 or a custom object
@@ -91,6 +111,7 @@ class CNN(BaseModule):
                 f"architecture must be a pytorch model object or string matching "
                 f"one of cnn_architectures.list_architectures() options. Got {architecture}"
             )
+            self.architecture_name = architecture
             architecture = cnn_architectures.ARCH_DICT[architecture](
                 len(classes), num_channels=num_channels
             )
@@ -100,9 +121,11 @@ class CNN(BaseModule):
             ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
             if num_channels != 3:
                 warnings.warn(
-                    f"Make sure your architecture expects the number of channels in your input sampels ({num_channels}). "
-                    "Pytorch architectures expect 3 channels by default."
+                    f"Make sure your architecture expects the number of channels in "
+                    f"your input samples ({num_channels}). "
+                    f"Pytorch architectures expect 3 channels by default."
                 )
+            self.architecture_name = str(type(architecture))
         self.network = architecture
 
         ### network device ###
@@ -161,8 +184,8 @@ class CNN(BaseModule):
         self.valid_metrics = {}
         self.loss_hist = {}  # could add TensorBoard tracking
 
-    def _log(self, input, level=1):
-        txt = str(input)
+    def _log(self, message, level=1):
+        txt = str(message)
         if self.logging_level >= level and self.log_file is not None:
             with open(self.log_file, "a") as logfile:
                 logfile.write(txt + "\n")
@@ -206,13 +229,15 @@ class CNN(BaseModule):
             pin_memory=True,
         )
 
-    def _set_train(self, train_df, batch_size, num_workers):
+    def _set_train(self, train_df, batch_size, num_workers, raise_errors):
         """Prepare network for training on train_df
 
         Args:
             batch_size: number of training files to load/process before
                         re-calculating the loss function and backpropagation
             num_workers: parallelization (number of cores or cpus)
+            raise_errors: if True, raise errors when loading samples
+                            if False, skip samples that throw errors
 
         Effects:
             Sets up the optimization, loss function, and network
@@ -229,9 +254,13 @@ class CNN(BaseModule):
         train_dataset = AudioFileDataset(train_df, self.preprocessor)
         train_dataset.bypass_augmentations = False
 
-        # SafeDataset loads a new sample if loading a sample throws an error
-        # indices of bad samples are appended to ._unsafe_indices
-        train_safe_dataset = SafeDataset(train_dataset, unsafe_behavior="substitute")
+        # With "substitute" behavior, SafeDataset loads a new sample if
+        # loading a sample raises an Exception. "raise" raises the Exception
+        # indices of bad samples are appended to SafeDataset._invalid_indices
+        invalid_sample_behavior = "raise" if raise_errors else "substitute"
+        train_safe_dataset = SafeDataset(
+            train_dataset, invalid_sample_behavior=invalid_sample_behavior
+        )
 
         # train_loader samples batches of images + labels from training set
         self.train_loader = self._init_dataloader(
@@ -269,8 +298,17 @@ class CNN(BaseModule):
             last_epoch=self.current_epoch - 1,
         )
 
-    def _train_epoch(self, train_loader):
-        """perform forward pass, loss, backpropagation for one epoch
+    def _train_epoch(self, train_loader, wandb_session=None):
+        """perform forward pass, loss, and backpropagation for one epoch
+
+        If wandb_session is passed, logs progress to wandb run
+
+        Args:
+            train_loader: DataLoader object to create samples
+            wandb_session: a wandb session to log to
+                - pass the value returned by wandb.init() to progress log to a
+                Weights and Biases run
+                - if None, does not log to wandb
 
         Returns: (targets, predictions, scores) on training files
         """
@@ -300,12 +338,14 @@ class CNN(BaseModule):
             total_scores.append(logits.detach().cpu().numpy())
             total_tgts.append(batch_labels.detach().cpu().numpy())
 
-            # generate binary predictions
+            # generate boolean predictions
             if self.single_target:  # predict highest scoring class only
-                batch_preds = F.one_hot(logits.argmax(1), len(logits[0]))
+                batch_preds = predict_single_target_labels(scores=logits)
             else:  # multi-target: predict 0 or 1 based on a fixed threshold
-                batch_preds = torch.sigmoid(logits) >= self.prediction_threshold
-            total_preds.append(batch_preds.int().detach().cpu().numpy())
+                batch_preds = predict_multi_target_labels(
+                    scores=torch.sigmoid(logits), threshold=self.prediction_threshold
+                )
+            total_preds.append(batch_preds.detach().int().cpu().numpy())
 
             # calculate loss
             loss = self.loss_fn(logits, batch_labels)
@@ -329,12 +369,11 @@ class CNN(BaseModule):
             ###########
             # log basic train info (used to print every batch)
             if batch_idx % self.log_interval == 0:
-                """show some basic progress metrics during the epoch"""
+                # show some basic progress metrics during the epoch
                 N = len(train_loader)
                 self._log(
-                    "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
-                        self.current_epoch, batch_idx, N, 100 * batch_idx / N
-                    )
+                    f"Epoch: {self.current_epoch} "
+                    f"[batch {batch_idx}/{N}, {100 * batch_idx / N :.2f}%] "
                 )
 
                 # Log the Jaccard score and Hamming loss, and Loss function
@@ -353,12 +392,45 @@ class CNN(BaseModule):
         # save the loss averaged over all batches
         self.loss_hist[self.current_epoch] = np.mean(batch_loss)
 
+        if wandb_session is not None:
+            wandb_session.log({"loss": np.mean(batch_loss)})
+
         # return targets, preds, scores
         total_tgts = np.concatenate(total_tgts, axis=0)
         total_preds = np.concatenate(total_preds, axis=0)
         total_scores = np.concatenate(total_scores, axis=0)
 
         return total_tgts, total_preds, total_scores
+
+    def _generate_wandb_config(self):
+        # create a dictinoary of parameters to save for this run
+        wandb_config = dict(
+            architecture=self.architecture_name,
+            sample_duration=self.preprocessor.sample_duration,
+            cuda_device_count=torch.cuda.device_count(),
+            mps_available=torch.backends.mps.is_available(),
+            classes=self.classes,
+            single_target=self.single_target,
+            opensoundscape_version=self.opensoundscape_version,
+        )
+        if "weight_decay" in self.optimizer_params:
+            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
+        else:
+            wandb_config["l2_regularization"] = "n/a"
+
+        if "lr" in self.optimizer_params:
+            wandb_config["learning_rate"] = self.optimizer_params["lr"]
+        else:
+            wandb_config["learning_rate"] = "n/a"
+
+        try:
+            wandb_config["sample_shape"] = self.preprocessor.pipeline.to_img.params[
+                "shape"
+            ] + [self.preprocessor.pipeline.to_img.params["channels"]]
+        except:
+            wandb_config["sample_shape"] = "n/a"
+
+        return wandb_config
 
     def train(
         self,
@@ -371,7 +443,9 @@ class CNN(BaseModule):
         save_interval=1,  # save weights every n epochs
         log_interval=10,  # print metrics every n batches
         validation_interval=1,  # compute validation metrics every n epochs
-        unsafe_samples_log="./unsafe_training_samples.log",
+        invalid_samples_log="./invalid_training_samples.log",
+        raise_errors=False,
+        wandb_session=None,
     ):
         """train the model on samples from train_dataset
 
@@ -381,6 +455,7 @@ class CNN(BaseModule):
         Args:
             train_df:
                 a dataframe of files and labels for training the model
+                - either has index `file` or multi-index (file,start_time,end_time)
             validation_df:
                 a dataframe of files and labels for evaluating the model
                 [default: None means no validation is performed]
@@ -406,11 +481,34 @@ class CNN(BaseModule):
                 interval in epochs to test the model on the validation set
                 Note that model will only update it's best score and save best.model
                 file on epochs that it performs validation.
-            unsafe_samples_log:
+            invalid_samples_log:
                 file path: log all samples that failed in preprocessing
                 (file written when training completes)
                 - if None,  does not write a file
+            raise_errors:
+                if True, raise errors when preprocessing fails
+                if False, just log the errors to unsafe_samples_log
+            wandb_session: a wandb session to log to
+                - pass the value returned by wandb.init() to progress log to a
+                Weights and Biases run
+                - if None, does not log to wandb
+                For example:
+                ```
+                import wandb
+                wandb.login(key=api_key) #find your api_key at https://wandb.ai/settings
+                session = wandb.init(enitity='mygroup',project='project1',name='first_run')
+                ...
+                model.train(...,wandb_session=session)
+                session.finish()
+                ```
 
+        Effects:
+            If wandb_session is provided, logs progress and samples to Weights
+            and Biases. A random set of training and validation samples
+            are preprocessed and logged to a table. Training progress, loss,
+            and metrics are also logged.
+            Use self.wandb_logging dictionary to change the number of samples
+            logged.
         """
 
         ### Input Validation ###
@@ -434,13 +532,55 @@ class CNN(BaseModule):
         self.save_interval = save_interval
         self.save_path = save_path
 
-        ####################
-        # Set Up Loss, Opt #
-        ####################
-        self._set_train(train_df, batch_size, num_workers)
+        # Initialize Weights and Biases (wandb) logging ###
+        if wandb_session is not None:
 
+            # update the run config with information about the model
+            wandb_session.config.update(self._generate_wandb_config())
+
+            # update the run config with training parameters
+            wandb_session.config.update(
+                dict(
+                    epochs=epochs,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    lr_update_interval=self.lr_update_interval,
+                    lr_cooling_factor=self.lr_cooling_factor,
+                    optimizer_cls=self.optimizer_cls,
+                    model_save_path=Path(save_path).resolve(),
+                )
+            )
+
+            # log tables of preprocessed samples
+            wandb_session.log(
+                {
+                    "Samples / training samples w/augmentation": opensoundscape.wandb.wandb_table(
+                        AudioFileDataset(
+                            train_df, self.preprocessor, bypass_augmentations=False
+                        ),
+                        self.wandb_logging["n_preview_samples"],
+                    ),
+                    "Samples / training samples w/o augmentation": opensoundscape.wandb.wandb_table(
+                        AudioFileDataset(
+                            train_df, self.preprocessor, bypass_augmentations=True
+                        ),
+                        self.wandb_logging["n_preview_samples"],
+                    ),
+                    "Samples / validation samples": opensoundscape.wandb.wandb_table(
+                        AudioFileDataset(
+                            validation_df, self.preprocessor, bypass_augmentations=True
+                        ),
+                        self.wandb_logging["n_preview_samples"],
+                    ),
+                }
+            )
+
+        ### Set Up Loss and Optimization ###
+        self._set_train(train_df, batch_size, num_workers, raise_errors)
         self.best_score = 0.0
         self.best_epoch = 0
+
+        ### Train ###
 
         for epoch in range(epochs):
             # 1 epoch = 1 view of each training file
@@ -448,19 +588,21 @@ class CNN(BaseModule):
 
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
-            train_targets, train_preds, train_scores = self._train_epoch(
-                self.train_loader
+            train_targets, _, train_scores = self._train_epoch(
+                self.train_loader, wandb_session
             )
 
             ### Evaluate ###
             train_score, self.train_metrics[self.current_epoch] = self.eval(
                 train_targets, train_scores
             )
+            if wandb_session is not None:
+                wandb_session.log({"training": self.train_metrics[self.current_epoch]})
 
             #### Validation ###
-            if validation_df is not None:
+            if validation_df is not None and epoch % validation_interval == 0:
                 self._log("\nValidation.")
-                validation_scores, _, unsafe_val_samples = self.predict(
+                validation_scores = self.predict(
                     validation_df,
                     batch_size=batch_size,
                     num_workers=num_workers,
@@ -476,8 +618,13 @@ class CNN(BaseModule):
                     validation_targets, validation_scores
                 )
                 score = validation_score
-            else:  # Evaluate model w/validation score unless no validation
+            else:  # Evaluate model w/train_score if no validation_df given
                 score = train_score
+
+            if wandb_session is not None:
+                wandb_session.log(
+                    {"validation": self.valid_metrics[self.current_epoch]}
+                )
 
             ### Save ###
             if (
@@ -494,22 +641,25 @@ class CNN(BaseModule):
                 self._log("Updating best model", level=2)
                 self.save(f"{self.save_path}/best.model")
 
+            if wandb_session is not None:
+                wandb_session.log({"epoch": epoch})
             self.current_epoch += 1
 
         ### Logging ###
         self._log("Training complete", level=2)
         self._log(
-            f"\nBest Model Appears at Epoch {self.best_epoch} with Validation score {self.best_score:.3f}."
+            f"\nBest Model Appears at Epoch {self.best_epoch} "
+            f"with Validation score {self.best_score:.3f}."
         )
 
-        # warn the user if there were unsafe samples (failed to preprocess)
-        unsafe_samples = self.train_loader.dataset.report(log=unsafe_samples_log)
+        # warn the user if there were invalid samples (samples that failed to preprocess)
+        invalid_samples = self.train_loader.dataset.report(log=invalid_samples_log)
         self._log(
-            f"{len(unsafe_samples)} of {len(train_df)} total training "
+            f"{len(invalid_samples)} of {len(train_df)} total training "
             f"samples failed to preprocess",
             level=2,
         )
-        self._log(f"List of unsafe sampels: {unsafe_samples}", level=3)
+        self._log(f"List of invalid samples: {invalid_samples}", level=3)
 
     def eval(self, targets, scores, logging_offset=0):
         """compute single-target or multi-target metrics from targets and scores
@@ -528,7 +678,6 @@ class CNN(BaseModule):
             logging_offset: modify verbosity - for example, -1 will reduce
                 the amount of printing/logging by 1 level
         """
-        from opensoundscape.metrics import single_target_metrics, multi_target_metrics
 
         # remove all samples with NaN for a prediction
         targets = targets[~np.isnan(scores).any(axis=1), :]
@@ -539,14 +688,14 @@ class CNN(BaseModule):
             return np.nan, np.nan
 
         if self.single_target:
-            metrics_dict = single_target_metrics(targets, scores, self.classes)
+            metrics_dict = single_target_metrics(targets, scores)
         else:
             metrics_dict = multi_target_metrics(
                 targets, scores, self.classes, self.prediction_threshold
             )
 
         # decide what to print/log:
-        self._log(f"Metrics:")
+        self._log("Metrics:")
         if not self.single_target:
             self._log(f"\tMAP: {metrics_dict['map']:0.3f}", level=1 - logging_offset)
             self._log(
@@ -572,24 +721,23 @@ class CNN(BaseModule):
 
         return score, metrics_dict
 
-    def save(self, path, save_datasets=False):
-        import copy
-
+    def save(self, path, save_train_loader=False):
         """save model with weights using torch.save()
 
         load from saved file with torch.load(path) or cnn.load_model(path)
 
         Args:
             path: file path for saved model object
+            save_train_loader: retrain .train_loader in saved object
+                [default: False]
         """
         os.makedirs(Path(path).parent, exist_ok=True)
         model_copy = copy.deepcopy(self)
-        if not save_datasets:
-            for atr in ["train_loader"]:  # attributes to remove
-                try:
-                    delattr(model_copy, atr)
-                except AttributeError:
-                    pass
+        if not save_train_loader:
+            try:
+                delattr(model_copy, "train_loader")
+            except AttributeError:
+                pass
         torch.save(model_copy, path)
 
     def save_weights(self, path):
@@ -614,7 +762,7 @@ class CNN(BaseModule):
             path: file path with saved weights
             strict: (bool) see torch.load()
         """
-        self.network.load_state_dict(torch.load(path))
+        self.network.load_state_dict(torch.load(path), strict=strict)
 
     def predict(
         self,
@@ -622,13 +770,14 @@ class CNN(BaseModule):
         batch_size=1,
         num_workers=0,
         activation_layer=None,
-        binary_preds=None,
-        threshold=None,
         split_files_into_clips=True,
         overlap_fraction=0,
         final_clip=None,
         bypass_augmentations=True,
-        unsafe_samples_log=None,
+        invalid_samples_log=None,
+        raise_errors=False,
+        wandb_session=None,
+        return_invalid_samples=False,
     ):
         """Generate predictions on a dataset
 
@@ -643,6 +792,7 @@ class CNN(BaseModule):
             samples:
                 the files to generate predictions for. Can be:
                 - a dataframe with index containing audio paths, OR
+                - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
             batch_size:
                 Number of files to load simultaneously [default: 1]
@@ -658,60 +808,79 @@ class CNN(BaseModule):
                 - 'sigmoid': all scores in [0,1] but don't sum to 1
                 - 'softmax_and_logit': applies softmax first then logit
                 [default: None]
-            binary_preds:
-                Optionally return binary (thresholded 0/1) predictions
-                options:
-                - 'single_target': max scoring class = 1, others = 0
-                - 'multi_target': scores above threshold = 1, others = 0
-                - None: do not create or return binary predictions
-                [default: None]
-                Note: if you choose multi-target, you must specify `threshold`
-            threshold:
-                prediction threshold(s) for post-activation layer scores.
-                Only relevant when binary_preds == 'multi_target'
-                If activation layer is sigmoid, choose value in [0,1]
-                If activation layer is None or softmax_and_logit, in [-inf,inf]
+            split_files_into_clips:
+                If True, internally splits and predicts on clips from longer audio files
+                Otherwise, assumes each row of `samples` corresponds to one complete sample
             overlap_fraction: fraction of overlap between consecutive clips when
                 predicting on clips of longer audio files. For instance, 0.5
                 gives 50% overlap between consecutive clips.
             final_clip: see `opensoundscape.helpers.generate_clip_times_df`
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
-            unsafe_samples_log: if not None, samples that failed to preprocess
+            invalid_samples_log: if not None, samples that failed to preprocess
                 will be listed in this text file.
+            raise_errors:
+                if True, raise errors when preprocessing fails
+                if False, just log the errors to unsafe_samples_log
+            wandb_session: a wandb session to log to
+                - pass the value returned by wandb.init() to progress log to a
+                Weights and Biases run
+                - if None, does not log to wandb
+            return_invalid_samples: bool, if True, returns second argument, a set
+                containing file paths of samples that caused errors during preprocessing
+                [default: False]
 
         Returns:
-            scores: df of post-activation_layer scores
-            predictions: df of 0/1 preds for each class
-            unsafe_samples: list of samples that failed to preprocess
+            df of post-activation_layer scores
+            - if return_invalid_samples is True, returns (df,invalid_samples)
+            where invalid_samples is a set of file paths that failed to preprocess
+
+        Effects:
+            (1) wandb logging
+            If wandb_session is provided, logs progress and samples to Weights
+            and Biases. A random set of samples is preprocessed and logged to
+            a table. Progress over all batches is logged. Afte prediction,
+            top scoring samples are logged.
+            Use self.wandb_logging dictionary to change the number of samples
+            logged or which classes have top-scoring samples logged.
+
+            (2) unsafe sample logging
+            If unsafe_samples_log is not None, saves a list of all file paths that
+            failed to preprocess in unsafe_samples_log as a text file
 
         Note: if loading an audio file raises a PreprocessingError, the scores
-            and predictions for that sample will be np.nan
+            for that sample will be np.nan
 
-        Note: if no return type is selected for `binary_preds`, returns None
-        instead of a DataFrame for `predictions`
         """
-        if binary_preds == "multi_target":
-            assert threshold is not None, (
-                "Must specify a threshold when" " generating multi_target predictions"
-            )
+        assert type(samples) in (list, np.ndarray, pd.DataFrame), (
+            "`samples` must be either: "
+            "(a) list or np.array of files, or DataFrame with (b) file as Index or "
+            "(c) (file,start_time,end_time) as MultiIndex"
+        )
 
-        # set up prediction Dataset
-        if split_files_into_clips:
+        # set up prediction Dataset, considering three possible cases:
+        # (c1) user provided multi-index df with file,start_time,end_time of clips
+        # (c2) user provided file list and wants clips to be split out automatically
+        # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
+        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor, return_labels=False
+            )
+        elif split_files_into_clips:  # c2
             prediction_dataset = AudioSplittingDataset(
                 samples=samples,
                 preprocessor=self.preprocessor,
                 overlap_fraction=overlap_fraction,
                 final_clip=final_clip,
             )
-        else:
+        else:  # c3
             prediction_dataset = AudioFileDataset(
                 samples=samples, preprocessor=self.preprocessor, return_labels=False
             )
         prediction_dataset.bypass_augmentations = bypass_augmentations
 
         ## Input Validation ##
-        if len(prediction_dataset.classes) > 0 and not list(self.classes) == list(
+        if len(prediction_dataset.classes) > 0 and list(self.classes) != list(
             prediction_dataset.classes
         ):
             warnings.warn(
@@ -722,16 +891,19 @@ class CNN(BaseModule):
             warnings.warn(
                 "prediction_dataset has zero samples. No predictions will be generated."
             )
-            scores = pd.DataFrame(columns=self.classes)
-            preds = None if binary_preds is None else pd.DataFrame(columns=self.classes)
-            return scores, preds, prediction_dataset.unsafe_samples
+            return pd.DataFrame(columns=self.classes)
 
-        # SafeDataset will not fail on bad files,
+        # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
-        # with np.nan for the bad samples (using safe_dataset._unsafe_indices)
+        # with np.nan for the bad samples (using safe_dataset._invalid_indices)
         # this approach to error handling feels hacky
         # however, returning None would break the batching of samples
-        safe_dataset = SafeDataset(prediction_dataset, unsafe_behavior="substitute")
+        # "raise" behavior will raise exceptions
+        invalid_sample_behavior = "raise" if raise_errors else "substitute"
+
+        safe_dataset = SafeDataset(
+            prediction_dataset, invalid_sample_behavior=invalid_sample_behavior
+        )
 
         dataloader = torch.utils.data.DataLoader(
             safe_dataset,
@@ -741,8 +913,34 @@ class CNN(BaseModule):
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=torch.cuda.is_available(),
         )
-        # add any paths that failed to generate a clip df to _unsafe_samples
-        dataloader.dataset._unsafe_samples += prediction_dataset.unsafe_samples
+        # add any paths that failed to generate a clip df to _invalid_samples
+        dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
+            prediction_dataset.invalid_samples
+        )
+
+        # Initialize Weights and Biases (wandb) logging
+        if wandb_session is not None:
+
+            # update the run config with information about the model
+            wandb_session.config.update(self._generate_wandb_config())
+
+            # update the run config with prediction parameters
+            wandb_session.config.update(
+                dict(
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                    activation_layer=activation_layer,
+                )
+            )
+
+            # Log a table of preprocessed samples to wandb
+            wandb_session.log(
+                {
+                    "Samples / Preprocessed samples": opensoundscape.wandb.wandb_table(
+                        prediction_dataset, self.wandb_logging["n_preview_samples"]
+                    )
+                }
+            )
 
         ### Prediction/Inference ###
 
@@ -750,14 +948,13 @@ class CNN(BaseModule):
         self.network.to(self.device)
         self.network.eval()
 
-        # initialize scores and preds
+        # initialize scores
         total_scores = []
-        total_preds = []
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
 
-            for batch in dataloader:
+            for i, batch in enumerate(dataloader):
                 # get batch of Tensors
                 batch_tensors = batch["X"].to(self.device)
                 batch_tensors.requires_grad = False
@@ -768,53 +965,61 @@ class CNN(BaseModule):
                 ### Activation layer ###
                 scores = apply_activation_layer(logits, activation_layer)
 
-                ### Binary predictions ###
-                batch_preds = tensor_binary_predictions(
-                    scores=scores, mode=binary_preds, threshold=threshold
-                )
-
                 # disable gradients on returned values
                 total_scores.append(scores.detach().cpu().numpy())
-                total_preds.append(batch_preds.float().detach().cpu().numpy())
+
+                if wandb_session is not None:
+                    wandb_session.log(
+                        {
+                            "progress": i / len(dataloader),
+                            "completed_batches": i,
+                            "total_batches": len(dataloader),
+                        }
+                    )
 
         # aggregate across all batches
         total_scores = np.concatenate(total_scores, axis=0)
-        total_preds = np.concatenate(total_preds, axis=0)
 
-        # replace scores/preds with nan for samples that failed in preprocessing
+        # replace scores with nan for samples that failed in preprocessing
         # this feels hacky (we predicted on substitute-samples rather than
         # skipping the samples that failed preprocessing)
-        total_scores[dataloader.dataset._unsafe_indices, :] = np.nan
-        if binary_preds is not None:
-            total_preds[dataloader.dataset._unsafe_indices, :] = np.nan
+        total_scores[dataloader.dataset._invalid_indices, :] = np.nan
 
-        # return 2 DataFrames with same index/columns as prediction_dataset's df
-        # use None for placeholder if no preds
-        samples = prediction_dataset.label_df.index.values
-        score_df = pd.DataFrame(index=samples, data=total_scores, columns=self.classes)
-        if split_files_into_clips:  # return a multi-index
-            score_df.index = pd.MultiIndex.from_frame(
-                prediction_dataset.clip_times_df.reset_index()
-            )
-        # binary 0/1 predictions
-        if binary_preds is None:
-            pred_df = None
-        else:
-            pred_df = pd.DataFrame(
-                index=samples, data=total_preds, columns=self.classes
-            )
-            if split_files_into_clips:  # return a multi-index
-                pred_df.index = pd.MultiIndex.from_frame(
-                    prediction_dataset.clip_times_df.reset_index()
-                )
+        # return DataFrame with same index/columns as prediction_dataset's df
+        df_index = prediction_dataset.label_df.index
+        score_df = pd.DataFrame(index=df_index, data=total_scores, columns=self.classes)
 
-        print(dataloader.dataset._unsafe_samples)
-
-        # warn the user if there were unsafe samples (failed to preprocess)
+        # warn the user if there were invalid samples (failed to preprocess)
         # and log them to a file
-        unsafe_samples = dataloader.dataset.report(log=unsafe_samples_log)
+        invalid_samples = dataloader.dataset.report(log=invalid_samples_log)
 
-        return score_df, pred_df, unsafe_samples
+        # log top-scoring samples per class to wandb table
+        if wandb_session is not None:
+            classes_to_log = self.wandb_logging["top_samples_classes"]
+            if classes_to_log is None:  # pick the first few classes if none specified
+                classes_to_log = self.classes
+                if len(classes_to_log) > 5:  # don't accidentally log hundreds of tables
+                    classes_to_log = classes_to_log[0:5]
+
+            for i, c in enumerate(classes_to_log):
+                top_samples = score_df.nlargest(
+                    n=self.wandb_logging["n_top_samples"], columns=[c]
+                )
+                dataset = AudioFileDataset(
+                    samples=top_samples,
+                    preprocessor=self.preprocessor,
+                    return_labels=False,
+                    bypass_augmentations=True,
+                )
+                table = opensoundscape.wandb.wandb_table(
+                    dataset=dataset, classes_to_extract=[c]
+                )
+                wandb_session.log({f"Samples / Top scoring [{c}]": table})
+
+        if return_invalid_samples:
+            return score_df, invalid_samples
+        else:
+            return score_df
 
 
 def use_resample_loss(model):
@@ -823,7 +1028,6 @@ def use_resample_loss(model):
     ResampleLoss may perform better than BCE Loss for multitarget problems
     in some scenarios.
     """
-    import types
 
     model.loss_cls = ResampleLoss
 
@@ -849,14 +1053,13 @@ def separate_resnet_feat_clf(model):
     Args:
         model: an opso model object with a pytorch resnet architecture
 
-    Returs:
+    Returns:
         model with modified .optimizer_params and ._init_optimizer() method
 
     Effects:
         creates a new self.opt_net object that replaces the old one
         resets self.current_epoch to 0
     """
-    import types
 
     # optimization parameters for parts of the networks - see
     # https://pytorch.org/docs/stable/optim.html#per-parameter-options
@@ -904,6 +1107,8 @@ def separate_resnet_feat_clf(model):
 
 
 class InceptionV3(CNN):
+    """Child of CNN class for InceptionV3 architecture"""
+
     def __init__(
         self,
         classes,
@@ -911,8 +1116,8 @@ class InceptionV3(CNN):
         single_target=False,
         preprocessor_class=SpectrogramPreprocessor,
         freeze_feature_extractor=False,
-        use_pretrained=True,
-        sample_shape=[299, 299, 3],
+        weights="DEFAULT",
+        sample_shape=(299, 299, 3),
     ):
         """Model object for InceptionV3 architecture subclassing CNN
 
@@ -921,23 +1126,27 @@ class InceptionV3(CNN):
         Args:
             classes:
                 list of output classes (usually strings)
+            sample_duration: duration in seconds of one audio sample
+            single_target: if True, predict exactly one class per sample
+                [default:False]
+            preprocessor_class: a class to use for preprocessor object
             freeze-feature_extractor:
                 if True, feature weights don't have
                 gradient, and only final classification layer is trained
-            use_pretrained:
-                if True, use pre-trained InceptionV3 Imagenet weights
-            single_target:
-                if True, predict exactly one class per sample
-
+            weights:
+                string containing version name of the pre-trained classification weights to use for
+                this architecture. if 'DEFAULT', model is loaded with best available weights (note
+                that these may change across versions). Pre-trained weights available for each
+                architecture are listed at https://pytorch.org/vision/stable/models.html
+            sample_shape: dimensions of a sample Tensor (height,width,channels)
         """
-        from opensoundscape.torch.architectures.cnn_architectures import inception_v3
 
         self.classes = classes
 
         architecture = inception_v3(
             len(self.classes),
             freeze_feature_extractor=freeze_feature_extractor,
-            use_pretrained=use_pretrained,
+            weights=weights,
         )
 
         super(InceptionV3, self).__init__(
@@ -950,7 +1159,7 @@ class InceptionV3(CNN):
         )
         self.name = "InceptionV3"
 
-    def _train_epoch(self, train_loader):
+    def _train_epoch(self, train_loader, wandb_session=None):
         """perform forward pass, loss, backpropagation for one epoch
 
         need to override parent because Inception returns different outputs
@@ -971,7 +1180,7 @@ class InceptionV3(CNN):
             # all augmentation occurs in the Preprocessor (train_loader)
             batch_tensors = batch_data["X"].to(self.device)
             batch_labels = batch_data["y"].to(self.device)
-            batch_labels = batch_labels.squeeze(1)
+            # batch_labels = batch_labels.squeeze(1)
 
             ####################
             # Forward and loss #
@@ -1018,12 +1227,11 @@ class InceptionV3(CNN):
             ###########
             # log basic train info (used to print every batch)
             if batch_idx % self.log_interval == 0:
-                """show some basic progress metrics during the epoch"""
+                # show some basic progress metrics during the epoch
                 N = len(train_loader)
                 self._log(
-                    "Epoch: {} [batch {}/{} ({:.2f}%)] ".format(
-                        self.current_epoch, batch_idx, N, 100 * batch_idx / N
-                    )
+                    f"Epoch: {self.current_epoch} "
+                    f"[batch {batch_idx}/{N}, {100 * batch_idx / N :.2f}%] "
                 )
 
                 # Log the Jaccard score and Hamming loss, and Loss function
@@ -1032,9 +1240,14 @@ class InceptionV3(CNN):
 
                 # Evaluate with model's eval function
                 tgts = batch_labels.int().detach().cpu().numpy()
-                # preds = batch_preds.int().detach().cpu().numpy()
                 scores = logits.int().detach().cpu().numpy()
                 self.eval(tgts, scores, logging_offset=-1)
+
+            if wandb_session is not None:
+                wandb_session.log({"batch": batch_idx})
+                wandb_session.log(
+                    {"epoch_progress": self.current_epoch + batch_idx / N}
+                )
 
         # update learning parameters each epoch
         self.scheduler.step()
@@ -1114,7 +1327,8 @@ def load_outdated_model(
             (pass None if the class __init__ does not take architecture as an argument)
         sample_duration: length of samples in seconds
         model_class: class to construct. Normally CNN.
-        device: optionally specify a device to map tensors onto, eg 'cpu', 'cuda:0', 'cuda:1'[default: None]
+        device: optionally specify a device to map tensors onto,
+        eg 'cpu', 'cuda:0', 'cuda:1'[default: None]
             - if None, will choose cuda:0 if cuda is available, otherwise chooses cpu
 
     Returns:
@@ -1128,13 +1342,13 @@ def load_outdated_model(
     try:
         # use torch to load the saved model object
         model_dict = torch.load(path, map_location=device)
-    except AttributeError:
+    except AttributeError as exc:
         raise Exception(
             "This model could not be loaded in this version of "
             "OpenSoundscape. You may need to load the model with the version "
             "of OpenSoundscape that created it and torch.save() the "
             "model.network.state_dict(), then load the weights with model.load_weights"
-        )
+        ) from exc
 
     if type(model_dict) != dict:
         raise ValueError(
@@ -1145,8 +1359,6 @@ def load_outdated_model(
     if "classes" in model_dict:
         classes = model_dict["classes"]
     elif "labels_yaml" in model_dict:
-        import yaml
-
         classes = list(yaml.safe_load(model_dict["labels_yaml"]).values())
     else:
         raise ValueError("Could not get a list of classes from the saved model.")

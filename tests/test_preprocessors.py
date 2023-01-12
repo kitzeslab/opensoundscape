@@ -71,4 +71,24 @@ def test_insert_action(preprocessor):
         preprocessor.insert_action("new4", action)
 
 
+def test_trace_off(preprocessor, row):
+    x, sample_info = preprocessor.forward(row)
+    assert sample_info["_trace"] is None
+
+
+def test_trace_on(preprocessor, row):
+    x, sample_info = preprocessor.forward(row, trace=True)
+    assert (
+        sample_info["_trace"].index == sample_info["_preprocessor"].pipeline.index
+    ).all()
+    # check that the saved values in the _trace match the expected
+    # type returned by an action:
+    assert isinstance(sample_info["_trace"]["load_audio"], Audio)
+
+
+def test_trace_output(preprocessor, row):
+    x, sample_info = preprocessor.forward(row, trace=True)
+    assert isinstance(sample_info["_trace"]["load_audio"], Audio)
+
+
 # several specific scenarios are tested using DataSets in test_datasets.py

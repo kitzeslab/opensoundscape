@@ -1,11 +1,7 @@
-import pandas as pd
-import numpy as np
-import torch
+"""Preprocessor classes: tools for preparing and augmenting audio samples"""
 from pathlib import Path
-import copy
-import warnings
+import pandas as pd
 
-from opensoundscape.preprocess.utils import PreprocessingError
 from opensoundscape.preprocess import actions
 from opensoundscape.preprocess.actions import (
     Action,
@@ -13,7 +9,7 @@ from opensoundscape.preprocess.actions import (
     AudioClipLoader,
     AudioTrim,
 )
-
+from opensoundscape.preprocess.utils import PreprocessingError
 from opensoundscape.spectrogram import Spectrogram
 
 
@@ -38,7 +34,7 @@ class BasePreprocessor:
         self.sample_duration = sample_duration
 
     def __repr__(self):
-        return f"Preprocessor with pipeline: {self.pipeline}"
+        return f"Preprocessor with pipeline:\n{self.pipeline}"
 
     def insert_action(self, action_index, action, after_key=None, before_key=None):
         """insert an action in specific specific position
@@ -86,8 +82,8 @@ class BasePreprocessor:
         sample,
         break_on_type=None,
         break_on_key=None,
-        clip_times=None,
         bypass_augmentations=False,
+        trace=False,
     ):
         """perform actions in self.pipeline on a sample (until a break point)
 
@@ -104,8 +100,13 @@ class BasePreprocessor:
             break_on_key: if not None, the pipeline will be stopped when it
                 reaches an Action whose index equals this value. The matching
                 action is not performed.
+            clip_times: can be either
+                - None: the file is treated as a single sample
+                - dictionary {"start_time":float,"end_time":float}:
+                    the start and end time of clip in audio
             bypass_augmentations: if True, actions with .is_augmentatino=True
                 are skipped
+            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for analysis/debugging on samples of interest
 
         Returns:
             {'X':preprocessed sample, 'y':labels} if return_labels==True,
@@ -124,30 +125,57 @@ class BasePreprocessor:
             assert type(sample) == pd.Series, (
                 "sample must be pd.Series with "
                 "path as .name OR file path (str or pathlib.Path), "
+                "OR have multi-index (file,start_time,end_time)"
                 f"was {type(sample)}"
             )
             label_df_row = sample
 
-        # Series.name (dataframe index) contains a path to a file
-        x = Path(label_df_row.name)
+        has_clips = type(label_df_row.name) == tuple
+        if has_clips:
+            # if the dataframe has a multi-index, it should be (file,start_time,end_time)
+            assert (
+                len(label_df_row.name) == 3
+            ), "multi-index must be ('file','start_time','end_time')"
+            sample_path, clip_start_time, clip_end_time = label_df_row.name
+        else:
+            # Series.name (dataframe index) contains a path to a file
+            # No clip times are provided, so the entire file will be loaded
+            sample_path = Path(label_df_row.name)
+            clip_start_time = None
+            clip_end_time = None
 
         # a list of additional variables that an action may request from the preprocessor
         sample_info = {
-            "_path": Path(label_df_row.name),
-            "_labels": copy.deepcopy(label_df_row),
-            "_start_time": None if clip_times is None else clip_times["start_time"],
+            "_path": sample_path,
+            "_labels": label_df_row.copy(deep=True),
+            "_start_time": clip_start_time,
+            "_end_time": clip_end_time,
             "_sample_duration": self.sample_duration,
             "_preprocessor": self,
+            "_trace": pd.Series(index=self.pipeline.index) if trace else None,
         }
 
         try:
+            x = sample_path
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
                 if type(action) == break_on_type or k == break_on_key:
+                    if (
+                        trace
+                    ):  # if tracing, add a note to the trace that the pipeline was terminated
+                        sample_info["_trace"][
+                            k
+                        ] = f"## Pipeline terminated ## {sample_info['_trace'][k]}"
                     break
                 if action.bypass:
                     continue
                 if action.is_augmentation and bypass_augmentations:
+                    if (
+                        trace
+                    ):  # if tracing, add a note to the trace that the augmentation was bypassed
+                        sample_info["_trace"][
+                            k
+                        ] = f"## Bypassed ## {sample_info['_trace'][k]}"
                     continue
                 extra_args = {key: sample_info[key] for key in action.extra_args}
                 if action.returns_labels:
@@ -155,11 +183,13 @@ class BasePreprocessor:
                     sample_info["_labels"] = labels
                 else:
                     x = action.go(x, **extra_args)
-        except:
+                if trace:  # if tracing, add the output of the action to the trace
+                    sample_info["_trace"][k] = x
+        except Exception as exc:
             # treat any exceptions raised during forward as PreprocessingErrors
             raise PreprocessingError(
                 f"failed to preprocess sample from path: {label_df_row.name}"
-            )
+            ) from exc
 
         return x, sample_info
 
@@ -199,10 +229,10 @@ class SpectrogramPreprocessor(BasePreprocessor):
         overlay_df: if not None, will include an overlay action drawing
             samples from this df
         out_shape:
-            output shape of tensor h,w,channels [default: [224,224,3]]
+            output shape of tensor h,w,channels [default: (224,224,3)]
     """
 
-    def __init__(self, sample_duration, overlay_df=None, out_shape=[224, 224, 3]):
+    def __init__(self, sample_duration, overlay_df=None, out_shape=(224, 224, 3)):
 
         super(SpectrogramPreprocessor, self).__init__(sample_duration=sample_duration)
 

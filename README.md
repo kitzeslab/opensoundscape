@@ -12,14 +12,15 @@ OpenSoundscape is currently in active development. If you find a bug, please sub
 
 #### Suggested Citation
 ```
-Lapp, Rhinehart, Freeland-Haynes, Khilnani, Syunkova, and Kitzes, 2022. "OpenSoundscape v0.7.1".
+Lapp, Rhinehart, Freeland-Haynes, Khilnani, Syunkova, and Kitzes, 2022. "OpenSoundscape v0.8.0".
 ```
 
 # Installation
 
-OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.7 and 3.8. However, for Apple Silicon (M1 chip) users, Python 3.9 is recommended and may be required to avoid dependency issues. 
+OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.7, 3.8, and 3.9. For Apple Silicon (M1 chip) users, Python 3.9 is recommended and may be required to avoid dependency issues. Python version 3.7.0 causes dependency issues 
+and should be avoided. 
 
-Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.7.1`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
+Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.8.0`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
 
 For more detailed instructions on how to install OpenSoundscape and use it in Jupyter, see the [documentation](http://opensoundscape.org).
 
@@ -72,7 +73,7 @@ files = glob('./dir/*.WAV')
 
 #generate predictions with a model
 model = load_model('/path/to/saved.model')
-scores, _, _ = model.predict(files)
+scores = model.predict(files)
 
 #scores is a dataframe with MultiIndex: file, start_time, end_time
 #containing inference scores for each class and each audio window

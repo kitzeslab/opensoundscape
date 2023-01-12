@@ -1,6 +1,9 @@
 from opensoundscape.torch.architectures import cnn_architectures
 import pytest
 
+# test_cnn.py tests that all registered architectures are able to
+# predict on a sample (with modified input channels and output size)
+
 
 def test_freeze_feature_extractor():
     """should disable grad on featur extractor but not classifier"""
@@ -9,8 +12,8 @@ def test_freeze_feature_extractor():
     assert arch.fc.parameters().__next__().requires_grad
 
 
-def test_modify_resnet():
-    """test modifying number of output nodes"""
+def test_modify_out_shape():
+    """test modifying number of output nodes (classes)"""
     arch = cnn_architectures.resnet18(10)
     assert arch.fc.out_features == 10
 
@@ -24,47 +27,71 @@ def test_freeze_params():
 
 
 def test_resnet18():
-    arch = cnn_architectures.resnet18(0, use_pretrained=False)
+    arch = cnn_architectures.resnet18(0, weights="DEFAULT")
 
 
 def test_resnet34():
-    arch = cnn_architectures.resnet34(10, use_pretrained=False)
+    arch = cnn_architectures.resnet34(10, weights="DEFAULT")
 
 
 def test_resnet50():
-    arch = cnn_architectures.resnet50(2000, use_pretrained=False)
+    arch = cnn_architectures.resnet50(2000, weights="DEFAULT")
 
 
 def test_resnet101():
-    arch = cnn_architectures.resnet101(4, use_pretrained=False)
+    arch = cnn_architectures.resnet101(4, weights="DEFAULT")
 
 
 def test_resnet152():
-    arch = cnn_architectures.resnet152(3, use_pretrained=False)
+    arch = cnn_architectures.resnet152(3, weights="DEFAULT")
 
 
 def test_alexnet():
-    arch = cnn_architectures.alexnet(2, use_pretrained=False)
+    arch = cnn_architectures.alexnet(2, weights="DEFAULT")
 
 
 def test_vgg11_bn():
-    arch = cnn_architectures.vgg11_bn(2, use_pretrained=False)
+    arch = cnn_architectures.vgg11_bn(2, weights="DEFAULT")
 
 
 def test_squeezenet1_0():
-    arch = cnn_architectures.squeezenet1_0(10, use_pretrained=False)
+    arch = cnn_architectures.squeezenet1_0(10, weights="DEFAULT")
 
 
 def test_densenet121():
-    arch = cnn_architectures.densenet121(111, use_pretrained=False)
+    arch = cnn_architectures.densenet121(111, weights="DEFAULT")
 
 
 def test_inception_v3():
-    arch = cnn_architectures.inception_v3(1, use_pretrained=False)
+    arch = cnn_architectures.inception_v3(1, weights="DEFAULT")
 
 
-def test_use_pretrained():
-    arch = cnn_architectures.resnet101(4, use_pretrained=True)
+def test_use_no_weights():
+    arch = cnn_architectures.resnet50(2000, weights=None)
+
+
+def test_load_specific_weights():
+    arch = cnn_architectures.resnet101(4, weights="IMAGENET1K_V2")
+
+
+def test_efficientnet_noweights():
+    arch = cnn_architectures.efficientnet_b0(2, weights=None)
+
+
+def test_efficientnet_b0():
+    arch = cnn_architectures.efficientnet_b0(2, weights="DEFAULT")
+
+
+def test_efficientnet_b4():
+    arch = cnn_architectures.efficientnet_b4(2, weights="DEFAULT")
+
+
+def test_efficientnet_widese_b0():
+    arch = cnn_architectures.efficientnet_widese_b0(2, weights="DEFAULT")
+
+
+def test_efficientnet_widese_b4():
+    arch = cnn_architectures.efficientnet_widese_b4(2, weights="DEFAULT")
 
 
 def test_noninteger_output_nodes():

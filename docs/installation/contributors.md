@@ -5,7 +5,7 @@ Contributors and advanced users can use this workflow to install OpenSoundscape 
 ## Poetry installation
 
 * Install [poetry](https://poetry.eustace.io/docs/#installation)
-* Create a new virtual environment for the OpenSoundscape installation. If you are using Anaconda, you can create a new environment with `conda create -n opso-dev python==3.8` where `opso-dev` is the name of the new virtual environment. Use `conda activate opso-dev` to enter the environment to work on OpenSoundscape and `conda deactivate opso-dev` to return to your base Python installation. If you are not using Anaconda, other packages such as `virtualenv` should work as well. Ensure that the Python version is compatible with the current version of OpenSoundscape.
+* Create a new virtual environment for the OpenSoundscape installation. If you are using Anaconda, you can create a new environment with `conda create -n opso-dev python=3.9` where `opso-dev` is the name of the new virtual environment. Use `conda activate opso-dev` to enter the environment to work on OpenSoundscape and `conda deactivate opso-dev` to return to your base Python installation. If you are not using Anaconda, other packages such as `virtualenv` should work as well. Ensure that the Python version is compatible with the current version of OpenSoundscape.
 * **Internal Contributors**: Clone this github repository to your machine:
 `git clone https://github.com/kitzeslab/opensoundscape.git`
 * **External Contributors**: Fork this github repository and clone the fork to your machine

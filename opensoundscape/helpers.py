@@ -1,6 +1,13 @@
+"""Utilities for opensoundscape"""
+
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
-import requests
+import pytz
+import soundfile
+
+import librosa
 
 
 def isNan(x):
@@ -11,11 +18,6 @@ def isNan(x):
 def sigmoid(x):
     """sigmoid function"""
     return 1 / (1 + np.exp(-x))
-
-
-def bound(x, bounds):
-    """restrict x to a range of bounds = [min, max]"""
-    return min(max(x, bounds[0]), bounds[1])
 
 
 def overlap(r1, r2):
@@ -29,8 +31,7 @@ def overlap(r1, r2):
 
 def overlap_fraction(r1, r2):
     """ "calculate the fraction of r1 (low, high range) that overlaps with r2"""
-    ol = overlap(r1, r2)
-    return ol / (r1[1] - r1[0])
+    return overlap(r1, r2) / (r1[1] - r1[0])
 
 
 def inrange(x, r):
@@ -49,14 +50,6 @@ def binarize(x, threshold):
     return [1 if xi > threshold else 0 for xi in x]
 
 
-def run_command(cmd):
-    """run a bash command with Popen, return response"""
-    from subprocess import Popen, PIPE
-    from shlex import split
-
-    return Popen(split(cmd), stdout=PIPE, stderr=PIPE).communicate()
-
-
 def rescale_features(X, rescaling_vector=None):
     """rescale all features by dividing by the max value for each feature
 
@@ -64,19 +57,10 @@ def rescale_features(X, rescaling_vector=None):
     so that you can rescale a new dataset consistently with an old one
 
     returns rescaled feature set and rescaling vector"""
-    import numpy as np
-
     if rescaling_vector is None:
         rescaling_vector = 1 / np.nanmax(X, 0)
-    rescaledX = np.multiply(X, rescaling_vector).tolist()
-    return rescaledX, rescaling_vector
-
-
-def file_name(path):
-    """get file name without extension from a path"""
-    import os
-
-    return os.path.splitext(os.path.basename(path))[0]
+    rescaled_x = np.multiply(X, rescaling_vector).tolist()
+    return rescaled_x, rescaling_vector
 
 
 def hex_to_time(s):
@@ -98,9 +82,6 @@ def hex_to_time(s):
     Returns:
         datetime.datetime object representing the date and time in UTC
     """
-    from datetime import datetime
-    import pytz
-
     sec = int(s, 16)
     timestamp = datetime.utcfromtimestamp(sec).replace(tzinfo=pytz.utc)
     return timestamp
@@ -151,8 +132,41 @@ def jitter(x, width, distribution="gaussian"):
     )
 
 
+def load_metadata(path, raise_exceptions=False):
+    """use soundfile to load metadata from WAV or AIFF file
+
+    Args:
+        path: file path to WAV of AIFF file
+        raise_exceptions: if True, raises exception,
+            if False returns None if exception occurs
+            [default: False]
+
+    Returns:
+        dictionary containing audio file metadata
+    """
+
+    try:
+        with soundfile.SoundFile(path, "r") as f:
+            metadata = f.copy_metadata()
+            metadata["samplerate"] = f.samplerate
+            metadata["format"] = f.format
+            metadata["frames"] = f.frames
+            metadata["sections"] = f.sections
+            metadata["subtype"] = f.subtype
+            return metadata
+    except:
+        if raise_exceptions:
+            raise
+        else:
+            return None
+
+
 def generate_clip_times_df(
-    full_duration, clip_duration, clip_overlap=0, final_clip=None
+    full_duration,
+    clip_duration,
+    clip_overlap=0,
+    final_clip=None,
+    rounding_precision=10,
 ):
     """generate start and end times for even-lengthed clips
 
@@ -171,10 +185,16 @@ def generate_clip_times_df(
             clip_duration seconds long [default: None].
             Options:
                 - None:         Discard the remainder (do not make a clip)
-                - "extend":     Extend the final clip beyond full_duration to reach clip_duration length
-                - "remainder":  Use only remainder of full_duration (final clip will be shorter than clip_duration)
-                - "full":       Increase overlap with previous clip to yield a clip with clip_duration length.
-                                Note: returns entire original audio if it is shorter than clip_duration
+                - "extend":     Extend the final clip beyond full_duration to reach clip_duration
+                  length
+                - "remainder":  Use only remainder of full_duration (final clip will be shorter than
+                  clip_duration)
+                - "full":       Increase overlap with previous clip to yield a clip with
+                  clip_duration length.
+                    Note: returns entire original audio if it is shorter than clip_duration
+        rounding_precision (int or None): number of decimals to round start/end times to
+            - pass None to skip rounding
+
     Returns:
         clip_df: DataFrame with columns for 'start_time' and 'end_time' of each clip
     """
@@ -216,11 +236,17 @@ def generate_clip_times_df(
         # Keep the end values that extend beyond full_duration
         pass
 
+    if rounding_precision is not None:
+        starts = starts.round(rounding_precision)
+        ends = ends.round(rounding_precision)
+
     return pd.DataFrame({"start_time": starts, "end_time": ends}).drop_duplicates()
 
 
-def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
-    """generate df of fixed-length clip times for a set of file_batch_size
+def make_clip_df(
+    files, clip_duration, clip_overlap=0, final_clip=None, return_invalid_samples=False
+):
+    """generate df of fixed-length clip start/end times for a set of files
 
     Used internally to prepare a dataframe listing clips of longer audio files
 
@@ -228,29 +254,56 @@ def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
     the index and columns: 'start_time', 'end_time'. It will list
     clips of a fixed duration from the beginning to end of each audio file.
 
+    Note: if a label dataframe is passed as `files`, the labels for each file
+    will be copied to all clips having the corresponding file. If the label dataframe
+    contains multiple rows for a single file, the labels in the _first_ row containing
+    the file path are used as labels for resulting clips.
+
     Args:
-        files: list of audio file paths
+        files: list of audio file paths, or dataframe with file path as index
+            - if dataframe, columns represent classes and values represent
+            class labels. Labels for a file will be copied to all clips
+            belonging to that file in the returned clip dataframe.
         clip_duration (float): see generate_clip_times_df
         clip_overlap (float): see generate_clip_times_df
         final_clip (str): see generate_clip_times_df
+        return_invalid_samples (bool): if true, returns additional value,
+            a list of samples that caused exceptions
 
     Returns:
-        clip_df: dataframe with columns 'start_time', 'end_time' and
-            file paths as index
-        unsafe_samples: list of file paths that did not exist or failed to
-            produce a valid list of clips
+        clip_df: dataframe multi-index ('file','start_time','end_time')
+            - if files is a dataframe, will contain same columns as files
+            - otherwise, will have no columns
+
+        if return_invalid_samples==True, returns (clip_df, invalid_samples)
+
+    Note: if an exception is raised (for instance, trying to get the duration of the file),
+        the dataframe will have one row with np.nan for 'start_time' and 'end_time' for that
+        file path.
     """
-
-    import librosa
-
     if isinstance(files, str):
         raise TypeError(
             "make_clip_df expects a list of files, it looks like you passed it a string"
         )
 
+    label_df = None  # assume no labels to begin with, just a list of paths
+    if isinstance(files, pd.DataFrame):
+        file_list = files.index.values
+        # use the dataframe as labels, keeping each column as a class
+        # if paths are duplicated in index, keep only the first of each
+        label_df = files[~files.index.duplicated(keep="first")]
+    else:
+        assert hasattr(files, "__iter__"), (
+            f"`files` should be a dataframe with paths as "
+            f"the index, or an iterable of file paths. Got {type(files)}."
+        )
+        file_list = files
+
+    assert len(files) > 0, "files list has length zero!"
+
     clip_dfs = []
-    unsafe_samples = []
-    for f in files:
+    invalid_samples = set()
+    for f in file_list:
         try:
             t = librosa.get_duration(filename=f)
             clips = generate_clip_times_df(
@@ -259,14 +312,24 @@ def make_clip_df(files, clip_duration, clip_overlap=0, final_clip=None):
                 clip_overlap=clip_overlap,
                 final_clip=final_clip,
             )
-            clips.index = [f] * len(clips)
-            clips.index.name = "file"
-            clip_dfs.append(clips)
-        except:
-            unsafe_samples.append(f)
+            clips["file"] = f
 
-    if len(clip_dfs) > 0:
-        clip_df = pd.concat(clip_dfs)
+        except:
+            # make one row for this file with nan for start/end times
+            clips = pd.DataFrame(
+                {"file": [f], "start_time": np.nan, "end_time": np.nan}
+            )
+            invalid_samples.add(f)
+
+        if label_df is not None:
+            # copy labels for this file to all of its clips
+            clips[label_df.columns] = label_df.loc[f]
+
+        clip_dfs.append(clips)
+
+    clip_df = pd.concat(clip_dfs).set_index(["file", "start_time", "end_time"])
+
+    if return_invalid_samples:
+        return clip_df, invalid_samples
     else:
-        clip_df = None
-    return clip_df, unsafe_samples
+        return clip_df
