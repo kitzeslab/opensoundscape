@@ -283,9 +283,9 @@ class BoxedAnnotations:
     def one_hot_labels_like(
         self,
         clip_df,
-        classes,
         min_label_overlap,
         min_label_fraction=None,
+        class_subset=None,
         keep_index=False,
     ):
         """create a dataframe of one-hot clip labels based on given starts/ends
@@ -315,7 +315,7 @@ class BoxedAnnotations:
                 is used). A value of 0.5 for ths parameter would ensure that all
                 annotations result in at least one clip being labeled 1
                 (if there are no gaps between clips).
-            classes: list of classes for one-hot labels. If None, classes will
+            class_subset: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
             keep_index: if True, keeps the index of clip_df as an index
                 in the returned DataFrame. [default:False]
@@ -327,10 +327,12 @@ class BoxedAnnotations:
         # drop nan annotations
         df = self.df.dropna(subset=["annotation"])
 
-        if classes is None:  # include all annotations
+        if class_subset is None:  # include all annotations
             classes = np.unique(df["annotation"])
         else:  # the user specified a list of classes
-            # subset annotations to user-specified classes
+            classes = class_subset
+            # subset annotations to user-specified classes,
+            # removing rows with annotations for other classes
             df = df[df["annotation"].isin(classes)]
 
         # if we want to keep the original index, the best way is
@@ -350,7 +352,7 @@ class BoxedAnnotations:
                 end_time=end,
                 min_label_overlap=min_label_overlap,
                 min_label_fraction=min_label_fraction,
-                classes=classes,
+                class_subset=classes,
             )
 
         # re-add the original index, if desired
@@ -366,9 +368,9 @@ class BoxedAnnotations:
         full_duration,
         clip_duration,
         clip_overlap,
-        classes,
         min_label_overlap,
         min_label_fraction=1,
+        class_subset=None,
         final_clip=None,
     ):
         """Generate one-hot labels for clips of fixed duration
@@ -381,8 +383,6 @@ class BoxedAnnotations:
             full_duration: The amount of time (seconds) to split into clips
             clip_duration (float):  The duration in seconds of the clips
             clip_overlap (float):   The overlap of the clips in seconds [default: 0]
-            classes: list of classes for one-hot labels. If None, classes will
-                be all unique values of self.df['annotation']
             min_label_overlap: minimum duration (seconds) of annotation within the
                 time interval for it to count as a label. Note that any annotation
                 of length less than this value will be discarded.
@@ -397,6 +397,8 @@ class BoxedAnnotations:
                 is used). A value of 0.5 for ths parameter would ensure that all
                 annotations result in at least one clip being labeled 1
                 (if there are no gaps between clips).
+            class_subset: list of classes for one-hot labels. If None, classes will
+                be all unique values of self.df['annotation']
             final_clip (str):       Behavior if final_clip is less than clip_duration
                 seconds long. By default, discards remaining time if less than
                 clip_duration seconds long [default: None].
@@ -421,7 +423,7 @@ class BoxedAnnotations:
         # then create 0/1 labels for each clip and each class
         return self.one_hot_labels_like(
             clip_df=clip_df,
-            classes=classes,
+            class_subset=class_subset,
             min_label_overlap=min_label_overlap,
             min_label_fraction=min_label_fraction,
         )
@@ -502,7 +504,7 @@ def diff(base_annotations, comparison_annotations):
 
 
 def one_hot_labels_on_time_interval(
-    df, classes, start_time, end_time, min_label_overlap, min_label_fraction=None
+    df, class_subset, start_time, end_time, min_label_overlap, min_label_fraction=None
 ):
     """generate a dictionary of one-hot labels for given time-interval
 
@@ -548,8 +550,8 @@ def one_hot_labels_on_time_interval(
         for t0, t1 in zip(df["start_time"], df["end_time"])
     ]
 
-    one_hot_labels = [0] * len(classes)
-    for i, c in enumerate(classes):
+    one_hot_labels = [0] * len(class_subset)
+    for i, c in enumerate(class_subset):
         # subset annotations to those of this class
         df_cls = df[df["annotation"] == c]
 
@@ -569,10 +571,10 @@ def one_hot_labels_on_time_interval(
             pass
 
     # return a dictionary mapping classes to 0/1 labels
-    return {c: l for c, l in zip(classes, one_hot_labels)}
+    return {c: l for c, l in zip(class_subset, one_hot_labels)}
 
 
-def categorical_to_one_hot(labels, classes=None):
+def categorical_to_one_hot(labels, class_subset=None):
     """transform multi-target categorical labels (list of lists) to one-hot array
 
     Args:
@@ -582,18 +584,18 @@ def categorical_to_one_hot(labels, classes=None):
             taken to be the unique set of values in `labels`
     Returns:
         one_hot: 2d array with 0 for absent and 1 for present
-        classes: list of classes corresponding to columns in the array
+        class_subset: list of classes corresponding to columns in the array
     """
-    if classes is None:
-        classes = list(set(chain(*labels)))
+    if class_subset is None:
+        class_subset = list(set(chain(*labels)))
 
-    one_hot = np.zeros([len(labels), len(classes)]).astype(int)
+    one_hot = np.zeros([len(labels), len(class_subset)]).astype(int)
     for i, sample_labels in enumerate(labels):
         for label in sample_labels:
-            if label in classes:
-                one_hot[i, classes.index(label)] = 1
+            if label in class_subset:
+                one_hot[i, class_subset.index(label)] = 1
 
-    return one_hot, classes
+    return one_hot, class_subset
 
 
 def one_hot_to_categorical(one_hot, classes):

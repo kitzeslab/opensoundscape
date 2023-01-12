@@ -189,7 +189,7 @@ def test_one_hot_labels_on_time_interval(boxed_annotations):
         start_time=0,
         end_time=3.5,
         min_label_overlap=0.25,
-        classes=["a", "b"],
+        class_subset=["a", "b"],
     )
     assert a["a"] == 1 and a["b"] == 1
 
@@ -198,7 +198,7 @@ def test_one_hot_labels_on_time_interval(boxed_annotations):
         start_time=0,
         end_time=3.5,
         min_label_overlap=0.75,
-        classes=["a", "b"],
+        class_subset=["a", "b"],
     )
     assert a["a"] == 1 and a["b"] == 0
 
@@ -212,7 +212,7 @@ def test_one_hot_labels_on_time_interval_fractional(boxed_annotations):
         end_time=3,
         min_label_overlap=2,
         min_label_fraction=0.5,
-        classes=["a"],
+        class_subset=["a"],
     )
     assert a["a"] == 1
 
@@ -223,7 +223,7 @@ def test_one_hot_labels_on_time_interval_fractional(boxed_annotations):
         end_time=3,
         min_label_overlap=2,
         min_label_fraction=0.9,
-        classes=["a"],
+        class_subset=["a"],
     )
     assert a["a"] == 0
 
@@ -234,7 +234,7 @@ def test_one_hot_labels_on_time_interval_fractional(boxed_annotations):
         end_time=3,
         min_label_overlap=0.5,
         min_label_fraction=0.9,
-        classes=["a"],
+        class_subset=["a"],
     )
     assert a["a"] == 1
 
@@ -242,7 +242,7 @@ def test_one_hot_labels_on_time_interval_fractional(boxed_annotations):
 def test_categorical_to_one_hot():
     cat_labels = [["a", "b"], ["a", "c"]]
     one_hot, classes = annotations.categorical_to_one_hot(
-        cat_labels, classes=["a", "b", "c", "d"]
+        cat_labels, class_subset=["a", "b", "c", "d"]
     )
     assert set(classes) == {"a", "b", "c", "d"}
     assert np.array_equal(one_hot, [[1, 1, 0, 0], [1, 0, 1, 0]])
@@ -283,10 +283,10 @@ def test_raven_annotation_methods_empty(raven_file_empty):
         clip_duration=2,
     )
 
-    # classes = None
+    # class_subset = None: keep all
     labels_df = a.one_hot_labels_like(
         clip_df,
-        classes=None,
+        class_subset=None,
         min_label_overlap=0.25,
     )
 
@@ -295,7 +295,7 @@ def test_raven_annotation_methods_empty(raven_file_empty):
     # classes = subset
     labels_df = a.one_hot_labels_like(
         clip_df,
-        classes=["Species1", "Species2"],
+        class_subset=["Species1", "Species2"],
         min_label_overlap=0.25,
     )
 
