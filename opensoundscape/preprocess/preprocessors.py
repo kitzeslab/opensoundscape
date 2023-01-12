@@ -1,9 +1,7 @@
 """Preprocessor classes: tools for preparing and augmenting audio samples"""
 from pathlib import Path
-import copy
 import pandas as pd
 
-from opensoundscape.preprocess.utils import PreprocessingError
 from opensoundscape.preprocess import actions
 from opensoundscape.preprocess.actions import (
     Action,
@@ -11,7 +9,7 @@ from opensoundscape.preprocess.actions import (
     AudioClipLoader,
     AudioTrim,
 )
-
+from opensoundscape.preprocess.utils import PreprocessingError
 from opensoundscape.spectrogram import Spectrogram
 
 
@@ -149,7 +147,7 @@ class BasePreprocessor:
         # a list of additional variables that an action may request from the preprocessor
         sample_info = {
             "_path": sample_path,
-            "_labels": copy.deepcopy(label_df_row),
+            "_labels": label_df_row.copy(deep=True),
             "_start_time": clip_start_time,
             "_end_time": clip_end_time,
             "_sample_duration": self.sample_duration,
