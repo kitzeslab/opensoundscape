@@ -2,6 +2,7 @@ from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.torch.datasets import AudioFileDataset
 from opensoundscape.torch.loss import ResampleLoss
 from opensoundscape.torch.models import cnn
+from opensoundscape.preprocess.utils import PreprocessingError
 
 from opensoundscape.torch.architectures.cnn_architectures import alexnet, resnet18
 from opensoundscape.torch.architectures import cnn_architectures
@@ -53,6 +54,11 @@ def short_file_df():
 @pytest.fixture()
 def missing_file_df():
     return pd.DataFrame(index=["tests/audio/not_a_file.wav"])
+
+
+@pytest.fixture()
+def onemin_wav_df():
+    return pd.DataFrame(index=["tests/audio/1min.wav"])
 
 
 def test_init_with_str():
@@ -388,15 +394,25 @@ def test_train_no_validation(train_df):
     shutil.rmtree("tests/models/")
 
 
-def test_train_raise_errors(missing_file_df):
-    # test that model.train raises errors if raise_errors=True
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
-    with pytest.raises(ValueError):
-        model.train(missing_file_df, raise_errors=True)
+def test_train_raise_errors(short_file_df, missing_file_df):
+    files_df = pd.concat(
+        [short_file_df, missing_file_df]
+    )  # use 2 files. 1 file wrong is manually caught and userwarning raised
+    files_df["class"] = [0, 1]  # add labels for training
+    model = cnn.CNN("resnet18", classes=["class"], sample_duration=2)
+    with pytest.raises(PreprocessingError):
+        model.train(files_df, raise_errors=True)
 
 
-def test_predict_raise_errors(missing_file_df):
-    # test that model.predict raises errors if raise_errors=True
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
-    with pytest.raises(ValueError):
-        model.predict(missing_file_df, raise_errors=True)
+def test_predict_raise_errors(short_file_df, onemin_wav_df):
+    files_df = pd.concat(
+        [short_file_df, onemin_wav_df]
+    )  # use 2 files. 1 file wrong is manually caught and userwarning raised
+    model = cnn.CNN("resnet18", classes=["class"], sample_duration=30)
+    model.preprocessor.pipeline.bandpass.bypass = False  # ensure bandpass happens
+    model.preprocessor.pipeline.bandpass.params[
+        "low"
+    ] = 1  # add a bad param. this should be min_f
+
+    with pytest.raises(PreprocessingError):
+        model.predict(files_df, raise_errors=True)

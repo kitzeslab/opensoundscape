@@ -882,7 +882,7 @@ class CNN(BaseModule):
             )
             return pd.DataFrame(columns=self.classes)
 
-        # SafeDataset will not fail on bad files,
+        # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
         # with np.nan for the bad samples (using safe_dataset._unsafe_indices)
         # this approach to error handling feels hacky
