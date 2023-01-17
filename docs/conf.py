@@ -99,6 +99,8 @@ autodoc_mock_imports = [
     "matplotlib",
     "pywt",
     "deprecated",
+    "skimage",
+    "wandb",
 ]
 
 master_doc = "index"
