@@ -70,10 +70,11 @@ class Localizer:
         files,
         aru_coords,
         sample_rate,
-        min_number_of_arus,
+        min_number_of_receivers,
+        max_distance_between_receivers,
         thresholds=None,
         predictions=None,
-        bandpass_range=None,
+        bandpass_ranges=None,
         max_delay=None,
         cc_threshold=0,
     ):
@@ -88,9 +89,10 @@ class Localizer:
         self.aru_coords = aru_coords
         self.thresholds = thresholds
         self.SAMPLE_RATE = sample_rate
-        self.min_number_of_arus = min_number_of_arus
+        self.min_number_of_receivers = min_number_of_receivers
+        self.max_distance_between_receivers = max_distance_between_receivers
         self.predictions = predictions
-        self.bandpass_range = bandpass_range
+        self.bandpass_ranges = bandpass_ranges
         self.max_delay = max_delay
         self.cc_threshold = cc_threshold
 
@@ -117,22 +119,26 @@ class Localizer:
             self.get_predictions()
         all_sp_detections = []
         for species in self.predictions.columns:
-            df = predictions_df.loc[:, [species]]  # must be a dataframe
+            df = self.predictions.loc[:, [species]]  # must be a dataframe
             detections = Localizer._get_detections(
                 df, cnn_score_threshold=self.thresholds[species]
             )
             grouped_detections = Localizer._group_detections(
-                detections, self.aru_coords, self.max_distance_between_recorders
+                detections,
+                self.aru_coords,
+                self.min_number_of_receivers,
+                self.max_distance_between_receivers,
             )
+            grouped_detections["species"] = species
             all_sp_detections.append(grouped_detections)
-        detections_df = pandas.concat(all_sp_detections, axis=1)
+        detections_df = pandas.concat(all_sp_detections)
         self.detections = detections_df
         return detections_df
 
     def cross_correlate(self):
         # cross correlate the predictions
         # return a pandas dataframe with the results
-        if self.bandpass_range is None:
+        if self.bandpass_ranges is None:
             raise UserWarning("No bandpass range specified")
         if self.max_delay is None:
             raise UserWarning("No max delay specified")
@@ -143,6 +149,7 @@ class Localizer:
         all_ccs = []
         all_tds = []
         for index, row in self.detections.iterrows():
+            species = row["species"]
             cc, td = Localizer._get_cross_correlations(
                 reference_file=row["reference_file"],
                 other_files=row["other_files"],
@@ -192,13 +199,13 @@ class Localizer:
         filtered_cross_correlations["other_files"] = filtered_files
         filtered_cross_correlations["time_delays"] = filtered_tdoas
 
-        # Filter by the cc scores. If less than min_number_of_ARUs have cc_score above threshold, drop them.
+        # Filter by the cc scores. If less than min_number_of_receivers have cc_score above threshold, drop them.
         ccs = [
             np.array(scores)
             for scores in filtered_cross_correlations["cross_correlations"]
         ]
         num_ccs_above_threshold = [sum(a > self.cc_threshold) for a in ccs]
-        mask = np.array(num_ccs_above_threshold) >= self.min_number_of_ARUs - 1
+        mask = np.array(num_ccs_above_threshold) >= self.min_number_of_receivers - 1
         filtered_cross_correlations = filtered_cross_correlations[mask]
 
         n_after = len(filtered_cross_correlations)  # number of rows after filtering
@@ -206,7 +213,7 @@ class Localizer:
         self.filtered_cross_correlations = filtered_cross_correlations
         return filtered_cross_correlations
 
-    def localize(algorithm="gillette"):
+    def localize(self, algorithm="gillette"):
         # localize the detections
         # return a pandas dataframe with the results
         # TODO: make work for 3d
@@ -224,8 +231,8 @@ class Localizer:
             for index, row in self.filtered_cross_correlations.iterrows():
                 reference = row["reference_file"]
                 others = row["other_files"]
-                reference_coords = aru_coords_df.loc[reference]
-                others_coords = [aru_coords_df.loc[i] for i in others]
+                reference_coords = self.aru_coords.loc[reference]
+                others_coords = [self.aru_coords.loc[i] for i in others]
                 all_coords = [reference_coords] + others_coords
                 # add 0 tdoa for reference receiver
                 delays = np.insert(row["time_delays"], 0, 0)
@@ -255,6 +262,8 @@ class Localizer:
             ]
         else:
             raise UserWarning("Algorithm not recognized")
+        self.locations = localized
+        return localized
 
     def _get_cross_correlations(
         reference_file,
@@ -337,10 +346,11 @@ class Localizer:
 
     def _get_detections(predictions_df, cnn_score_threshold):
         """
-        Takes the predictions_df of CNN scores, chooses only detections > cnn_score_threshold
+        Takes the predictions_df of CNN scores *FOR A SINGLE SPECIES*, chooses only detections > cnn_score_threshold
         and outputs a dictionary of times at which events were detected, and the ARU files they were detected in.
         args:
-            predictions_array: a dataframe with multi-index of (file, start, end) with a column that is values for model predictions.
+            predictions_array: a dataframe with multi-index of (file, start, end) with a column that is values for model predictions
+            *FOR A SINGLE SPECIES*
             cnn_score_threshold: the minimum CNN score needed for a time-window to be considered a detection.
         returns:
             A dictionary of predictions, with key (start_time, end_time), and value list of files with detection triggered
@@ -374,38 +384,40 @@ class Localizer:
             recorders_list.append(recorders_in_time)
         return dict(zip(dataframe.index.unique(), recorders_list))
 
-    def _group_detections(detections, aru_coords, max_distance_between_recorders):
+    def _group_detections(
+        detections, aru_coords, min_number_of_receivers, max_distance_between_receivers
+    ):
         """
-        Takes the detections dictionary and groups detections that are within max_distance_between_recorders of each other.
+        Takes the detections dictionary and groups detections that are within max_distance_between_receivers of each other.
         args:
             detections: a dictionary of detections, with key (start_time, end_time), and value list of files with detection triggered
             aru_coords: a dictionary of aru coordinates, with key aru file path, and value (x,y) coordinates
-            max_distance_between_recorders: the maximum distance between recorders to consider a detection as a single event
+            max_distance_between_receivers: the maximum distance between recorders to consider a detection as a single event
         returns:
             A dictionary of grouped detections, with key (start_time, end_time), and value list of files with detection triggered
             e.g. {(0.0,2.0): [ARU_0.mp3. ARU_1.mp3]}
         """
-        # group detections that are within max_distance_between_recorders of each other
+        # group detections that are within max_distance_between_receivers of each other
         # return a dictionary of grouped detections
         # get the coordinates of the recorders
         # get the distance between recorders
-        # if the distance is less than max_distance_between_recorders, group the detections
+        # if the distance is less than max_distance_between_receivers, group the detections
         from itertools import product
 
-        # Group recorders based on being within < max_distance_between_recorders.
+        # Group recorders based on being within < max_distance_between_receivers.
         # recorders_in_distance is dictionary in
-        # form {ARU_0.mp3: [ARU_1.mp3, ARU_2.mp3...] for all recorders within max_distance_between_recorders }
+        # form {ARU_0.mp3: [ARU_1.mp3, ARU_2.mp3...] for all recorders within max_distance_between_receivers }
         recorders_in_distance = dict()
 
-        aru_files = aru_coords_df.index
+        aru_files = aru_coords.index
         for aru in aru_files:  # loop over the aru files
-            pos_aru = np.array(aru_coords_df.loc[aru])
-            other_arus = np.array(aru_coords_df)
+            pos_aru = np.array(aru_coords.loc[aru])
+            other_arus = np.array(aru_coords)
             distances = other_arus - pos_aru
             euclid_distances = [np.linalg.norm(d) for d in distances]
 
             mask = [
-                0 < i <= max_distance_between_recorders for i in euclid_distances
+                0 < i <= max_distance_between_receivers for i in euclid_distances
             ]  # boolean mask
             recorders_in_distance[aru] = list(aru_files[mask])
 
@@ -426,7 +438,7 @@ class Localizer:
                 ]  # ARUs close enough
 
                 if (
-                    len(others_in_distance) + 1 >= min_number_of_ARUs
+                    len(others_in_distance) + 1 >= min_number_of_receivers
                 ):  # minimum number of ARUs needed to localize.
                     times.append(time_segment)
                     reference_files.append(reference)
