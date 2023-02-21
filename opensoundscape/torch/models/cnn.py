@@ -39,6 +39,18 @@ from opensoundscape.metrics import (
     single_target_metrics,
     multi_target_metrics,
 )
+from pytorch_grad_cam import GradCAM
+
+# TODO: add other CAMs,
+#     HiResCAM,
+#     ScoreCAM,
+#     GradCAMPlusPlus,
+#     AblationCAM,
+#     XGradCAM,
+#     EigenCAM,
+#     FullGrad,
+# )
+from opensoundscape.torch.cam import ActivationMap
 
 
 class CNN(BaseModule):
@@ -1020,6 +1032,103 @@ class CNN(BaseModule):
             return score_df, invalid_samples
         else:
             return score_df
+
+    def saliency_map(
+        self,
+        samples,
+        classes=None,
+        method="gradcam",
+        target_layers=None,
+        split_files_into_clips=True,
+        bypass_augmentations=False,
+    ):
+        """
+        Generate a GradCAM heatmap for each sample in samples_df
+        Args:
+            samples:
+                the files to generate predictions for. Can be:
+                - a dataframe with index containing audio paths, OR
+                - a dataframe with multi-index (file, start_time, end_time), OR
+                - a list (or np.ndarray) of audio file paths
+            method (str): method to use for salience map. Currently only "gradcam" is supported
+            classes (list): list of class names
+            target_layers (list): list of target layers for GradCAM
+            split_files_into_clips (bool): whether to split files into clips
+            bypass_augmentations (bool): whether to bypass augmentations
+        Returns:
+            a list of cam class activation objects. see the cam class for more details
+
+        """
+        # initialize GradCAM
+        if target_layers == None:
+            try:
+                target_layers = self.network.grad_cam_target_layers
+            except AttributeError:
+                raise AttributeError(
+                    "Please specify target_layers. Models trained with older versions of Opensoundscape do not have default target layers"
+                    "For a ResNET model, try target_layers=[model.network.layer4[-1]"
+                )
+
+        if method == "gradcam":
+            cam = GradCAM(model=self.network, target_layers=target_layers)
+        else:
+            raise ValueError(f"Method {method} not supported")
+
+        # set classes
+        if classes is None:
+            classes = self.classes
+
+        # move model to device
+        self.network.to(self.device)
+        self.network.eval()
+
+        # TODO: the below is repeated from predict. Refactor.
+        #### Prediction/Inference ####
+        # set up prediction Dataset, considering three possible cases:
+        # (c1) user provided multi-index df with file,start_time,end_time of clips
+        # (c2) user provided file list and wants clips to be split out automatically
+        # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
+        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor, return_labels=False
+            )
+        elif split_files_into_clips:  # c2
+            prediction_dataset = AudioSplittingDataset(
+                samples=samples,
+                preprocessor=self.preprocessor,
+                overlap_fraction=0,
+                final_clip=None,
+            )
+        else:  # c3
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor, return_labels=False
+            )
+        prediction_dataset.bypass_augmentations = bypass_augmentations
+
+        # set up DataLoader
+        dataloader = torch.utils.data.DataLoader(
+            prediction_dataset,
+            batch_size=1,  # TODO: make this a parameter
+            num_workers=0,  # TODO: make this a parameter
+            shuffle=False,
+            # use pin_memory=True when loading files on CPU and training on GPU
+            pin_memory=torch.cuda.is_available(),
+        )
+        #### End Prediction/Inference ####
+
+        outputs = []
+
+        for i, batch in enumerate(dataloader):
+            # get batch of Tensors
+            batch_tensors = batch["X"].to(self.device)
+            batch_tensors.requires_grad = False
+
+            # forward pass of network: feature extractor + classifier
+            output_tensors = cam(batch_tensors)
+            activation_map = ActivationMap(batch_tensors, output_tensors, classes)
+            outputs.append(activation_map)
+
+        return outputs
 
 
 def use_resample_loss(model):
