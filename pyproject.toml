@@ -40,6 +40,7 @@ jupyter-server = ">=1.17.0"
 protobuf = ">=4.21.6"
 joblib = ">=1.2.0"
 certifi = ">=2022.12.7"
+grad-cam = "^1.4.6"
 
 [tool.poetry.dev-dependencies]
 black = "~=22.8"
