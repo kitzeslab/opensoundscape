@@ -34,7 +34,6 @@ class BaseAction:
 
     def __init__(self):
         self.params = pd.Series(dtype="object")
-        self.extra_args = []
         self.returns_labels = False
         self.is_augmentation = False
         self.bypass = False
@@ -76,14 +75,11 @@ class Action(BaseAction):
     Other arguments are an arbitrary list of kwargs.
     """
 
-    def __init__(self, fn, is_augmentation=False, extra_args=(), **kwargs):
+    def __init__(self, fn, is_augmentation=False, **kwargs):
         super(Action, self).__init__()
 
         self.action_fn = fn
         self.is_augmentation = is_augmentation
-
-        # args that vary for each sample, will be passed from preprocessor
-        self.extra_args = extra_args
 
         # query action_fn for arguments and default values
         self.params = pd.Series(get_args(self.action_fn), dtype=object)
@@ -92,19 +88,12 @@ class Action(BaseAction):
         # we remove it from the params dict
         self.params = self.params[1:]
 
-        # remove "extra_args" from self.params if they are present:
-        # these sample-specific arguments will be passed to action.go()
-        # directly, so they should not be part of the self.params dictionary
-        self.params = self.params.drop([p for p in extra_args if p in self.params])
-
         # update self.params with any user-provided parameters
         self.set(**kwargs)
 
         # make sure all required args are given (skipping the first, which will be provided by go)
-        unmatched_reqd_args = (
-            set(get_reqd_args(self.action_fn)[1:])
-            - set(list(kwargs.keys()))
-            - set(self.extra_args)
+        unmatched_reqd_args = set(get_reqd_args(self.action_fn)[1:]) - set(
+            list(kwargs.keys())
         )
 
         assert unmatched_reqd_args == set(
@@ -118,11 +107,18 @@ class Action(BaseAction):
             f"Action calling {self.action_fn}"
         )
 
-    def go(self, x, **kwargs):
+    def go(self, sample, **kwargs):
         # the syntax is the same regardless of whether
         # first argument is "self" (for a class method) or not
         # we pass self.params to kwargs along with any additional kwargs
-        return self.action_fn(x, **dict(self.params, **kwargs))
+
+        # only pass (and get back) the data of the sample to the action function
+        # to use other attributes of sample.data, write another class and override
+        # this go() method, for example:
+        # def go(self, sample, **kwargs):
+        #   return self.action_fn(sample, **dict(self.params, **kwargs))
+        sample.data = self.action_fn(sample.data, **dict(self.params, **kwargs))
+        return sample
 
 
 class AudioClipLoader(Action):
@@ -140,18 +136,17 @@ class AudioClipLoader(Action):
     """
 
     def __init__(self, **kwargs):
-        super(AudioClipLoader, self).__init__(
-            Audio.from_file, extra_args=["_start_time", "_end_time"], **kwargs
-        )
-        # two params are replaced by "_start_time" and "_end_time"
+        super(AudioClipLoader, self).__init__(Audio.from_file, **kwargs)
+        # two params are provided by sample.start_time and sample.duration
         self.params = self.params.drop(["offset", "duration"])
 
-    def go(self, path, _start_time, _end_time, **kwargs):
-        offset = 0 if _start_time is None else _start_time
-        duration = None if _end_time is None else _end_time - _start_time
-        return self.action_fn(
-            path, offset=offset, duration=duration, **dict(self.params, **kwargs)
+    def go(self, sample, **kwargs):
+        offset = 0 if sample.start_time is None else sample.start_time
+        duration = None if sample.duration is None else sample.duration
+        sample.data = self.action_fn(
+            sample.data, offset=offset, duration=duration, **dict(self.params, **kwargs)
         )
+        return sample
 
 
 class AudioTrim(Action):
@@ -162,12 +157,13 @@ class AudioTrim(Action):
     """
 
     def __init__(self, **kwargs):
-        super(AudioTrim, self).__init__(
-            trim_audio, extra_args=("_sample_duration",), **kwargs
-        )
+        super(AudioTrim, self).__init__(trim_audio, **kwargs)
+
+    def go(self, sample, **kwargs):
+        return self.action_fn(sample, **dict(self.params, **kwargs))
 
 
-def trim_audio(audio, _sample_duration, extend=True, random_trim=False, tol=1e-5):
+def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
     """trim audio clips (Audio -> Audio)
 
     Trims an audio file to desired length
@@ -175,45 +171,53 @@ def trim_audio(audio, _sample_duration, extend=True, random_trim=False, tol=1e-5
     Optionally extends audio shorter than clip_length with silence
 
     Args:
-        audio: Audio object
-        _sample_duration: desired final length (sec)
-            - if None, no trim is performed
-        extend: if True, clips shorter than _sample_duration are
+        sample: AudioSample with .data=Audio object, .duration as sample duration
+        extend: if True, clips shorter than sample.duration are
             extended with silence to required length
-        random_trim: if True, chooses a random segment of length _sample_duration
+        random_trim: if True, chooses a random segment of length sample.duration
             from the input audio. If False, the file is trimmed from 0 seconds
-            to _sample_duration seconds.
+            to sample.duration seconds.
         tol: tolerance for considering a clip to be of the correct length (sec)
 
     Returns:
         trimmed audio
     """
+    audio = sample.data
+
     if len(audio.samples) == 0:
         raise ValueError("recieved zero-length audio")
 
-    if _sample_duration is not None:
-        if audio.duration + tol <= _sample_duration:
+    if sample.target_duration is not None:
+        if audio.duration + tol <= sample.target_duration:
             # input audio is not as long as desired length
             if extend:  # extend clip sith silence
-                audio = audio.extend(_sample_duration)
+                audio = audio.extend(sample.target_duration)
             else:
                 raise ValueError(
                     f"the length of the original file ({audio.duration} "
                     f"sec) was less than the length to extract "
-                    f"({_sample_duration} sec). To extend short "
+                    f"({sample.target_duration} sec). To extend short "
                     f"clips, use extend=True"
                 )
         if random_trim:
             # uniformly randomly choose clip time from full audio
-            extra_time = audio.duration - _sample_duration
+            extra_time = audio.duration - sample.target_duration
             start_time = np.random.uniform() * extra_time
         else:
             start_time = 0
 
-        end_time = start_time + _sample_duration
+        end_time = start_time + sample.target_duration
         audio = audio.trim(start_time, end_time)
 
-    return audio
+        # update the sample
+        sample.data = audio
+        if sample.start_time is None:
+            sample.start_time = start_time
+        else:
+            sample.start_time += start_time
+        sample.duration = sample.target_duration
+
+    return sample
 
 
 def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
@@ -447,7 +451,6 @@ class Overlay(Action):
         super(Overlay, self).__init__(
             overlay,
             is_augmentation=is_augmentation,
-            extra_args=("_labels", "_preprocessor"),
             **kwargs,
         )
 
@@ -474,16 +477,14 @@ class Overlay(Action):
         self.overlay_df = overlay_df
         self.params = self.params.drop("overlay_df")  # removes it
 
-    def go(self, x, **kwargs):
+    def go(self, sample, **kwargs):
         return self.action_fn(
-            x, overlay_df=self.overlay_df, **dict(self.params, **kwargs)
+            sample, overlay_df=self.overlay_df, **dict(self.params, **kwargs)
         )
 
 
 def overlay(
-    x,
-    _labels,
-    _preprocessor,
+    sample,
     overlay_df,
     update_labels,
     overlay_class=None,
@@ -505,10 +506,11 @@ def overlay(
             for overlays
 
     Args:
+        sample: AudioSample with .labels: labels of the original sample
+            and .preprocessor: the preprocessing pipeline
         overlay_df: a labels dataframe with audio files as the index and
             classes as columns
-        _labels: labels of the original sample
-        _preprocessor: the preprocessing pipeline
+
         update_labels: if True, add overlayed sample's labels to original sample
         overlay_class: how to choose files from overlay_df to overlay
             Options [default: "different"]:
@@ -565,7 +567,7 @@ def overlay(
 
     if len(overlay_df.columns) > 0:
         assert list(overlay_df.columns) == list(
-            _labels.index
+            sample.labels.index
         ), "overlay_df mast have same columns as sample's _labels or no columns"
 
     ## OVERLAY ##
@@ -628,7 +630,9 @@ def overlay(
             # it will cut off the preprocessing of the overlayed sample before
             # the first Overlay object. This may or may not be the desired behavior,
             # but it will at least "work".
-            x2, _ = _preprocessor.forward(overlay_row, break_on_type=Overlay)
+            overlay_data, _ = sample.preprocessor.forward(
+                overlay_row, break_on_type=Overlay
+            )
 
             # now we blend the two tensors together with a weighted average
             # Select weight of overlay; <0.5 means more emphasis on original sample
@@ -641,14 +645,14 @@ def overlay(
                 )
                 weight = random.uniform(weight[0], weight[1])
 
-            # use a weighted sum to overlay (blend) the samples
-            x = x * (1 - weight) + x2 * weight
+            # use a weighted sum to overlay (blend) the samples (arrays or tensors)
+            sample.data = sample.data * (1 - weight) + overlay_data * weight
 
             # update the labels with new classes
             if update_labels and len(overlay_labels) > 0:
                 # update labels as union of both files' labels
-                _labels.values[:] = np.logical_or(
-                    _labels.values, overlay_labels
+                sample.labels.values[:] = np.logical_or(
+                    sample.labels.values, overlay_labels
                 ).astype(int)
 
             # overlay was successful, update count:
@@ -661,4 +665,4 @@ def overlay(
             if len(overlay_df) < 1:
                 raise ValueError("tried all overlay_df samples, none were safe") from ex
 
-    return x, _labels
+    return sample

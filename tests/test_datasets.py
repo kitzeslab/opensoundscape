@@ -120,14 +120,6 @@ def test_overlay_no_valid_samples(dataset_df, overlay_df_all_positive):
         sample1 = dataset[0]["X"]  # no samples with "different" labels
 
 
-def test_return_labels_no_columns_warning(dataset_df, pre):
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        # raises warning bc return_labels=True but no columns in df
-        AudioFileDataset(dataset_df[[]], pre)
-        assert "return_labels" in str(w[0].message)
-
-
 def test_overlay_specific_class(dataset_df, overlay_pre):
     """just make sure it runs and doesn't hang"""
     dataset = AudioFileDataset(dataset_df, overlay_pre)

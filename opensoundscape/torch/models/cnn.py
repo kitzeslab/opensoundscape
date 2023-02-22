@@ -39,6 +39,7 @@ from opensoundscape.metrics import (
     single_target_metrics,
     multi_target_metrics,
 )
+from opensoundscape.sample import collate_samples
 
 
 class CNN(BaseModule):
@@ -215,7 +216,12 @@ class CNN(BaseModule):
         self.loss_fn = self.loss_cls()
 
     def _init_dataloader(
-        self, safe_dataset, batch_size=64, num_workers=1, shuffle=False
+        self,
+        safe_dataset,
+        batch_size=64,
+        num_workers=1,
+        shuffle=False,
+        collate_fn=collate_samples,
     ):
         """initialize dataloader for training
 
@@ -227,6 +233,7 @@ class CNN(BaseModule):
             shuffle=shuffle,
             num_workers=num_workers,
             pin_memory=True,
+            collate_fn=collate_fn,
         )
 
     def _set_train(self, train_df, batch_size, num_workers, raise_errors):
@@ -322,8 +329,8 @@ class CNN(BaseModule):
         for batch_idx, batch_data in enumerate(train_loader):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
-            batch_tensors = batch_data["X"].to(self.device)
-            batch_labels = batch_data["y"].to(self.device)
+            batch_tensors = batch_data["samples"].to(self.device)
+            batch_labels = batch_data["labels"].to(self.device)
             if len(self.classes) > 1:  # squeeze one dimension [1,2] -> [1,1]
                 batch_labels = batch_labels.squeeze(1)
 
@@ -864,7 +871,7 @@ class CNN(BaseModule):
         # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
         if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
             prediction_dataset = AudioFileDataset(
-                samples=samples, preprocessor=self.preprocessor, return_labels=False
+                samples=samples, preprocessor=self.preprocessor
             )
         elif split_files_into_clips:  # c2
             prediction_dataset = AudioSplittingDataset(
@@ -875,7 +882,7 @@ class CNN(BaseModule):
             )
         else:  # c3
             prediction_dataset = AudioFileDataset(
-                samples=samples, preprocessor=self.preprocessor, return_labels=False
+                samples=samples, preprocessor=self.preprocessor
             )
         prediction_dataset.bypass_augmentations = bypass_augmentations
 
@@ -912,6 +919,7 @@ class CNN(BaseModule):
             shuffle=False,
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=torch.cuda.is_available(),
+            collate_fn=collate_samples,
         )
         # add any paths that failed to generate a clip df to _invalid_samples
         dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
@@ -956,7 +964,7 @@ class CNN(BaseModule):
 
             for i, batch in enumerate(dataloader):
                 # get batch of Tensors
-                batch_tensors = batch["X"].to(self.device)
+                batch_tensors = batch["samples"].to(self.device)
                 batch_tensors.requires_grad = False
 
                 # forward pass of network: feature extractor + classifier
@@ -1008,7 +1016,6 @@ class CNN(BaseModule):
                 dataset = AudioFileDataset(
                     samples=top_samples,
                     preprocessor=self.preprocessor,
-                    return_labels=False,
                     bypass_augmentations=True,
                 )
                 table = opensoundscape.wandb.wandb_table(
@@ -1178,8 +1185,8 @@ class InceptionV3(CNN):
         for batch_idx, batch_data in enumerate(train_loader):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
-            batch_tensors = batch_data["X"].to(self.device)
-            batch_labels = batch_data["y"].to(self.device)
+            batch_tensors = batch_data["samples"].to(self.device)
+            batch_labels = batch_data["labels"].to(self.device)
             # batch_labels = batch_labels.squeeze(1)
 
             ####################

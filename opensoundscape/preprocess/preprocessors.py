@@ -1,6 +1,7 @@
 """Preprocessor classes: tools for preparing and augmenting audio samples"""
 from pathlib import Path
 import pandas as pd
+import copy
 
 from opensoundscape.preprocess import actions
 from opensoundscape.preprocess.actions import (
@@ -11,6 +12,7 @@ from opensoundscape.preprocess.actions import (
 )
 from opensoundscape.preprocess.utils import PreprocessingError
 from opensoundscape.spectrogram import Spectrogram
+from opensoundscape.sample import Sample, AudioSample
 
 
 class BasePreprocessor:
@@ -109,8 +111,7 @@ class BasePreprocessor:
             trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for debugging on samples of interest
 
         Returns:
-            {'X':preprocessed sample, 'y':labels} if return_labels==True,
-            otherwise {'X':preprocessed sample}
+            sample (instance of AudioSample class)
 
         """
         if break_on_key is not None:
@@ -120,76 +121,51 @@ class BasePreprocessor:
 
         # handle paths or pd.Series as input for `sample`
         if type(sample) == str or issubclass(type(sample), Path):
-            label_df_row = pd.Series(dtype=object, name=sample)
+            label_df_row = AudioSample(sample)  # initialize with source = file path
         else:
-            assert type(sample) == pd.Series, (
-                "sample must be pd.Series with "
-                "path as .name OR file path (str or pathlib.Path), "
-                "OR have multi-index (file,start_time,end_time)"
+            assert isinstance(sample, AudioSample), (
+                "sample must be AudioSample OR file path (str or pathlib.Path), "
                 f"was {type(sample)}"
             )
-            label_df_row = sample
 
-        has_clips = type(label_df_row.name) == tuple
-        if has_clips:
-            # if the dataframe has a multi-index, it should be (file,start_time,end_time)
-            assert (
-                len(label_df_row.name) == 3
-            ), "multi-index must be ('file','start_time','end_time')"
-            sample_path, clip_start_time, clip_end_time = label_df_row.name
-        else:
-            # Series.name (dataframe index) contains a path to a file
-            # No clip times are provided, so the entire file will be loaded
-            sample_path = Path(label_df_row.name)
-            clip_start_time = None
-            clip_end_time = None
+        # add attributes to the sample that might be needed by actions in the pipeline
+        sample.preprocessor = self
+        sample.target_duration = self.sample_duration
+        if trace:
+            sample.trace = pd.Series(index=self.pipeline.index)
 
-        # a list of additional variables that an action may request from the preprocessor
-        sample_info = {
-            "_path": sample_path,
-            "_labels": label_df_row.copy(deep=True),
-            "_start_time": clip_start_time,
-            "_end_time": clip_end_time,
-            "_sample_duration": self.sample_duration,
-            "_preprocessor": self,
-            "_trace": pd.Series(index=self.pipeline.index) if trace else None,
-        }
-
+        # run the pipeline by performing each Action on the sample
         try:
-            x = sample_path
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
                 if type(action) == break_on_type or k == break_on_key:
                     if trace:
                         # saved "output" of this step informs user pipeline was stopped
-                        sample_info["_trace"][
-                            k
-                        ] = f"## Pipeline terminated ## {sample_info['_trace'][k]}"
+                        sample.trace[k] = f"## Pipeline terminated ## {sample.trace[k]}"
                     break
                 if action.bypass:
                     continue
                 if action.is_augmentation and bypass_augmentations:
                     if trace:
-                        sample_info["_trace"][
-                            k
-                        ] = f"## Bypassed ## {sample_info['_trace'][k]}"
+                        sample.trace[k] = f"## Bypassed ## {sample.trace[k]}"
                     continue
-                extra_args = {key: sample_info[key] for key in action.extra_args}
-                if action.returns_labels:
-                    x, labels = action.go(x, **extra_args)
-                    sample_info["_labels"] = labels
-                else:
-                    x = action.go(x, **extra_args)
+
+                # perform the action
+                sample = action.go(sample)
+
                 if trace:
                     # save output of each preprocessor action in a dictionary
-                    sample_info["_trace"][k] = x
+                    sample.trace[k] = copy.deepcopy(sample.data)
+
         except Exception as exc:
             # treat any exceptions raised during forward as PreprocessingErrors
             raise PreprocessingError(
                 f"failed to preprocess sample from path: {label_df_row.name}"
             ) from exc
 
-        return x, sample_info
+        # remove temporary attributes from sample
+        del sample.preprocessor, sample.target_duration
+        return sample
 
     def _insert_action_before(self, idx, name, value):
         """insert an item before a spcific index in a series"""
