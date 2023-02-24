@@ -41,6 +41,9 @@ from opensoundscape.metrics import (
 )
 from opensoundscape.sample import collate_samples
 
+from opensoundscape.torch.cam import ActivationMap
+from pytorch_grad_cam import GradCAM
+
 
 class CNN(BaseModule):
     """
@@ -780,6 +783,7 @@ class CNN(BaseModule):
         bypass_augmentations=True,
         batch_size=1,
         num_workers=0,
+        raise_errors=False,
     ):
         assert type(samples) in (list, np.ndarray, pd.DataFrame), (
             "`samples` must be either: "
@@ -847,6 +851,8 @@ class CNN(BaseModule):
         dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
             prediction_dataset.invalid_samples
         )
+
+        return dataloader
 
     def predict(
         self,
@@ -938,7 +944,7 @@ class CNN(BaseModule):
         """
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self._create_dataloader(
+        dataloader = self._create_dataloader(  # TODO rename
             samples,
             split_files_into_clips=True,
             overlap_fraction=0,
@@ -946,6 +952,7 @@ class CNN(BaseModule):
             bypass_augmentations=True,
             batch_size=batch_size,
             num_workers=num_workers,
+            raise_errors=raise_errors,
         )
 
         # Initialize Weights and Biases (wandb) logging
@@ -1051,6 +1058,78 @@ class CNN(BaseModule):
             return score_df, invalid_samples
         else:
             return score_df
+
+    def saliency_map(
+        self,
+        samples,
+        classes=None,
+        method="gradcam",
+        target_layers=None,
+        split_files_into_clips=True,
+        bypass_augmentations=False,
+    ):
+        """
+        Generate a GradCAM heatmap for each sample in samples_df
+        Args:
+            samples:
+                the files to generate predictions for. Can be:
+                - a dataframe with index containing audio paths, OR
+                - a dataframe with multi-index (file, start_time, end_time), OR
+                - a list (or np.ndarray) of audio file paths
+            method (str): method to use for salience map. Currently only "gradcam" is supported
+            classes (list): list of class names
+            target_layers (list): list of target layers for GradCAM
+            split_files_into_clips (bool): whether to split files into clips
+            bypass_augmentations (bool): whether to bypass augmentations
+        Returns:
+            a list of cam class activation objects. see the cam class for more details
+        """
+        # initialize GradCAM
+        if target_layers == None:
+            try:
+                target_layers = self.network.grad_cam_target_layers
+            except AttributeError:
+                raise AttributeError(
+                    "Please specify target_layers. Models trained with older versions of Opensoundscape do not have default target layers"
+                    "For a ResNET model, try target_layers=[model.network.layer4[-1]"
+                )
+
+        if method == "gradcam":
+            cam = GradCAM(model=self.network, target_layers=target_layers)
+        else:
+            raise ValueError(f"Method {method} not supported")
+
+        # set classes
+        if classes is None:
+            classes = self.classes
+
+        dataloader = self._create_dataloader(
+            samples,
+            split_files_into_clips=split_files_into_clips,
+            overlap_fraction=0,
+            final_clip=None,
+            bypass_augmentations=bypass_augmentations,
+            # batch_size=batch_size,
+            # num_workers=num_workers,
+        )
+
+        # move model to device
+        self.network.to(self.device)
+        self.network.eval()
+
+        outputs = []
+
+        for i, batch in enumerate(dataloader):
+            # get batch of Tensors
+            batch_tensors = batch["samples"].to(self.device)
+            batch_tensors.requires_grad = False
+
+            # forward pass of network: feature extractor + classifier
+            output_tensors = cam(batch_tensors)
+            activation_map = ActivationMap(batch_tensors, output_tensors, classes)
+            outputs.append(activation_map)
+
+        return outputs
 
 
 def use_resample_loss(model):
