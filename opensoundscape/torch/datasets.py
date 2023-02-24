@@ -102,9 +102,8 @@ class AudioFileDataset(torch.utils.data.Dataset):
         sample = AudioSample.from_series(self.label_df.iloc[idx])
 
         # preprocessor.forward will raise PreprocessingError if something fails
-        # the preprocessor handles label_df_row having index of file or (file,start_time,end_time)
         sample = self.preprocessor.forward(
-            sample,  # was label_df_row; #TODO change preprocessor
+            sample,
             bypass_augmentations=self.bypass_augmentations,
             break_on_key=break_on_key,
             break_on_type=break_on_type,

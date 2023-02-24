@@ -18,6 +18,7 @@ import pandas as pd
 from opensoundscape.audio import Audio, mix
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
+from opensoundscape.sample import AudioSample
 
 
 class BaseAction:
@@ -604,7 +605,7 @@ def overlay(
 
                     # check if this candidate sample has zero overlapping labels
                     label_intersection = np.logical_and(
-                        overlay_df.values[candidate_idx, :], _labels.values
+                        overlay_df.values[candidate_idx, :], sample.labels.values
                     )
                     good_choice = sum(label_intersection) == 0
 
@@ -624,8 +625,7 @@ def overlay(
 
             # now we have picked a file to overlay (overlay_path)
             # we also know its labels, if we need them
-            overlay_row = overlay_df.loc[overlay_path]
-            overlay_labels = overlay_row.values
+            overlay_sample = AudioSample.from_series(overlay_df.loc[overlay_path])
 
             # now we need to run the pipeline to do everything up until the Overlay step
             # create a preprocessor for loading the overlay samples
@@ -633,8 +633,8 @@ def overlay(
             # it will cut off the preprocessing of the overlayed sample before
             # the first Overlay object. This may or may not be the desired behavior,
             # but it will at least "work".
-            overlay_data, _ = sample.preprocessor.forward(
-                overlay_row, break_on_type=Overlay
+            overlay_sample = sample.preprocessor.forward(
+                overlay_sample, break_on_type=Overlay
             )
 
             # now we blend the two tensors together with a weighted average
@@ -649,13 +649,13 @@ def overlay(
                 weight = random.uniform(weight[0], weight[1])
 
             # use a weighted sum to overlay (blend) the samples (arrays or tensors)
-            sample.data = sample.data * (1 - weight) + overlay_data * weight
+            sample.data = sample.data * (1 - weight) + overlay_sample.data * weight
 
             # update the labels with new classes
-            if update_labels and len(overlay_labels) > 0:
+            if update_labels and len(overlay_sample.labels) > 0:
                 # update labels as union of both files' labels
                 sample.labels.values[:] = np.logical_or(
-                    sample.labels.values, overlay_labels
+                    sample.labels.values, overlay_sample.labels.values
                 ).astype(int)
 
             # overlay was successful, update count:

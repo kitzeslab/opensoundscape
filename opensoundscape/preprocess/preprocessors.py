@@ -121,7 +121,7 @@ class BasePreprocessor:
 
         # handle paths or pd.Series as input for `sample`
         if type(sample) == str or issubclass(type(sample), Path):
-            label_df_row = AudioSample(sample)  # initialize with source = file path
+            sample = AudioSample(sample)  # initialize with source = file path
         else:
             assert isinstance(sample, AudioSample), (
                 "sample must be AudioSample OR file path (str or pathlib.Path), "
@@ -151,7 +151,7 @@ class BasePreprocessor:
                     continue
 
                 # perform the action
-                sample = action.go(sample)
+                action.go(sample)
 
                 if trace:
                     # save output of each preprocessor action in a dictionary
@@ -160,7 +160,7 @@ class BasePreprocessor:
         except Exception as exc:
             # treat any exceptions raised during forward as PreprocessingErrors
             raise PreprocessingError(
-                f"failed to preprocess sample from path: {label_df_row.name}"
+                f"failed to preprocess sample from path: {sample.source}"
             ) from exc
 
         # remove temporary attributes from sample
