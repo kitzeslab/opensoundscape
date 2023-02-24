@@ -48,7 +48,6 @@ class AudioSample(Sample):
         self.start_time = start_time
         self.duration = duration
         self.labels = labels
-        self.classes = classes
         self.trace = trace
         self.preprocessing_exception = None
 
@@ -56,6 +55,12 @@ class AudioSample(Sample):
         # the data will be updated, so make a copy
         # to avoid mutating the original object
         self.data = copy.deepcopy(self.source)
+
+    def __repr__(self):
+        return (
+            f"AudioSample(source={self.source}, start_time={self.start_time},"
+            f"end_time={self.end_time}, labels={self.labels})"
+        )
 
     @classmethod
     def from_series(cls, labels_series):
@@ -123,7 +128,6 @@ def collate_samples(samples):
         with attributes .data as Tensor and .labels as list/array)
 
     Returns:
-
         dictionary of {
             "samples":batched tensor of samples,
             "labels": batched tensor of labels,
