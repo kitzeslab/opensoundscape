@@ -771,6 +771,83 @@ class CNN(BaseModule):
         """
         self.network.load_state_dict(torch.load(path), strict=strict)
 
+    def _create_dataloader(
+        self,
+        samples,
+        split_files_into_clips=True,
+        overlap_fraction=0,
+        final_clip=None,
+        bypass_augmentations=True,
+        batch_size=1,
+        num_workers=0,
+    ):
+        assert type(samples) in (list, np.ndarray, pd.DataFrame), (
+            "`samples` must be either: "
+            "(a) list or np.array of files, or DataFrame with (b) file as Index or "
+            "(c) (file,start_time,end_time) as MultiIndex"
+        )
+
+        # set up prediction Dataset, considering three possible cases:
+        # (c1) user provided multi-index df with file,start_time,end_time of clips
+        # (c2) user provided file list and wants clips to be split out automatically
+        # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
+        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor
+            )
+        elif split_files_into_clips:  # c2
+            prediction_dataset = AudioSplittingDataset(
+                samples=samples,
+                preprocessor=self.preprocessor,
+                overlap_fraction=overlap_fraction,
+                final_clip=final_clip,
+            )
+        else:  # c3
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor
+            )
+        prediction_dataset.bypass_augmentations = bypass_augmentations
+
+        ## Input Validation ##
+        if len(prediction_dataset.classes) > 0 and list(self.classes) != list(
+            prediction_dataset.classes
+        ):
+            warnings.warn(
+                "The columns of input samples df differ from `model.classes`."
+            )
+
+        if len(prediction_dataset) < 1:
+            warnings.warn(
+                "prediction_dataset has zero samples. No predictions will be generated."
+            )
+            return pd.DataFrame(columns=self.classes)
+
+        # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
+        # but will provide a different sample! Later we go back and replace scores
+        # with np.nan for the bad samples (using safe_dataset._invalid_indices)
+        # this approach to error handling feels hacky
+        # however, returning None would break the batching of samples
+        # "raise" behavior will raise exceptions
+        invalid_sample_behavior = "raise" if raise_errors else "substitute"
+
+        safe_dataset = SafeDataset(
+            prediction_dataset, invalid_sample_behavior=invalid_sample_behavior
+        )
+
+        dataloader = torch.utils.data.DataLoader(
+            safe_dataset,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            shuffle=False,
+            # use pin_memory=True when loading files on CPU and training on GPU
+            pin_memory=torch.cuda.is_available(),
+            collate_fn=collate_samples,
+        )
+        # add any paths that failed to generate a clip df to _invalid_samples
+        dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
+            prediction_dataset.invalid_samples
+        )
+
     def predict(
         self,
         samples,
@@ -859,71 +936,16 @@ class CNN(BaseModule):
             for that sample will be np.nan
 
         """
-        assert type(samples) in (list, np.ndarray, pd.DataFrame), (
-            "`samples` must be either: "
-            "(a) list or np.array of files, or DataFrame with (b) file as Index or "
-            "(c) (file,start_time,end_time) as MultiIndex"
-        )
 
-        # set up prediction Dataset, considering three possible cases:
-        # (c1) user provided multi-index df with file,start_time,end_time of clips
-        # (c2) user provided file list and wants clips to be split out automatically
-        # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
-        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
-            prediction_dataset = AudioFileDataset(
-                samples=samples, preprocessor=self.preprocessor
-            )
-        elif split_files_into_clips:  # c2
-            prediction_dataset = AudioSplittingDataset(
-                samples=samples,
-                preprocessor=self.preprocessor,
-                overlap_fraction=overlap_fraction,
-                final_clip=final_clip,
-            )
-        else:  # c3
-            prediction_dataset = AudioFileDataset(
-                samples=samples, preprocessor=self.preprocessor
-            )
-        prediction_dataset.bypass_augmentations = bypass_augmentations
-
-        ## Input Validation ##
-        if len(prediction_dataset.classes) > 0 and list(self.classes) != list(
-            prediction_dataset.classes
-        ):
-            warnings.warn(
-                "The columns of input samples df differ from `model.classes`."
-            )
-
-        if len(prediction_dataset) < 1:
-            warnings.warn(
-                "prediction_dataset has zero samples. No predictions will be generated."
-            )
-            return pd.DataFrame(columns=self.classes)
-
-        # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
-        # but will provide a different sample! Later we go back and replace scores
-        # with np.nan for the bad samples (using safe_dataset._invalid_indices)
-        # this approach to error handling feels hacky
-        # however, returning None would break the batching of samples
-        # "raise" behavior will raise exceptions
-        invalid_sample_behavior = "raise" if raise_errors else "substitute"
-
-        safe_dataset = SafeDataset(
-            prediction_dataset, invalid_sample_behavior=invalid_sample_behavior
-        )
-
-        dataloader = torch.utils.data.DataLoader(
-            safe_dataset,
+        # create dataloader to generate batches of AudioSamples
+        dataloader = self._create_dataloader(
+            samples,
+            split_files_into_clips=True,
+            overlap_fraction=0,
+            final_clip=None,
+            bypass_augmentations=True,
             batch_size=batch_size,
             num_workers=num_workers,
-            shuffle=False,
-            # use pin_memory=True when loading files on CPU and training on GPU
-            pin_memory=torch.cuda.is_available(),
-            collate_fn=collate_samples,
-        )
-        # add any paths that failed to generate a clip df to _invalid_samples
-        dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
-            prediction_dataset.invalid_samples
         )
 
         # Initialize Weights and Biases (wandb) logging
@@ -945,7 +967,9 @@ class CNN(BaseModule):
             wandb_session.log(
                 {
                     "Samples / Preprocessed samples": opensoundscape.wandb.wandb_table(
-                        prediction_dataset, self.wandb_logging["n_preview_samples"]
+                        dataloader.dataset.dataset,
+                        self.wandb_logging["n_preview_samples"]
+                        # todo: check that this is how to access the dataset
                     )
                 }
             )
@@ -994,7 +1018,7 @@ class CNN(BaseModule):
         total_scores[dataloader.dataset._invalid_indices, :] = np.nan
 
         # return DataFrame with same index/columns as prediction_dataset's df
-        df_index = prediction_dataset.label_df.index
+        df_index = dataloader.dataset.dataset.label_df.index
         score_df = pd.DataFrame(index=df_index, data=total_scores, columns=self.classes)
 
         # warn the user if there were invalid samples (failed to preprocess)
