@@ -46,7 +46,8 @@ class BaseAction:
         )
 
     def go(self, x):
-        return x
+        # modifies the sample in-place
+        pass
 
     def set(self, **kwargs):
         """only allow keys that exist in self.params"""
@@ -116,9 +117,12 @@ class Action(BaseAction):
         # to use other attributes of sample.data, write another class and override
         # this go() method, for example:
         # def go(self, sample, **kwargs):
-        #   return self.action_fn(sample, **dict(self.params, **kwargs))
+        #   self.action_fn(sample, **dict(self.params, **kwargs))
+
+        # should we make a copy to avoid modifying the original object?
+        # or accept that we are modifying the original sample in-place?
+        # I think its in-place since we now pass an object and update the data
         sample.data = self.action_fn(sample.data, **dict(self.params, **kwargs))
-        return sample
 
 
 class AudioClipLoader(Action):
@@ -146,7 +150,6 @@ class AudioClipLoader(Action):
         sample.data = self.action_fn(
             sample.data, offset=offset, duration=duration, **dict(self.params, **kwargs)
         )
-        return sample
 
 
 class AudioTrim(Action):
@@ -160,7 +163,7 @@ class AudioTrim(Action):
         super(AudioTrim, self).__init__(trim_audio, **kwargs)
 
     def go(self, sample, **kwargs):
-        return self.action_fn(sample, **dict(self.params, **kwargs))
+        self.action_fn(sample, **dict(self.params, **kwargs))
 
 
 def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
@@ -478,7 +481,7 @@ class Overlay(Action):
         self.params = self.params.drop("overlay_df")  # removes it
 
     def go(self, sample, **kwargs):
-        return self.action_fn(
+        self.action_fn(
             sample, overlay_df=self.overlay_df, **dict(self.params, **kwargs)
         )
 

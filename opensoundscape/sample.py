@@ -31,7 +31,6 @@ class AudioSample(Sample):
         start_time=None,
         duration=None,
         labels=None,
-        classes=None,
         trace=None,
     ):
         """initialize AudioSample
