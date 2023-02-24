@@ -112,10 +112,6 @@ class AudioFileDataset(torch.utils.data.Dataset):
 
         return sample
 
-        # TODO: consider changing the preprocessor to return a Sample
-        # as is, it will collate into batches with DataLoader no problem which is nice
-        # but we lose everything else about the samples
-
     def __repr__(self):
         return f"{self.__class__} object with preprocessor: {self.preprocessor}"
 
@@ -162,6 +158,10 @@ class AudioSplittingDataset(AudioFileDataset):
     Internally creates even-lengthed clips split from long audio files.
 
     If file labels are provided, applies copied labels to all clips from a file
+
+    NOTE: If you've already created a dataframe with clip start and end times,
+    you can use AudioFileDataset. This class is only necessary if you wish to
+    automatically split longer files into clips (providing only the file paths).
 
     Args:
         see AudioFileDataset and make_clip_df
