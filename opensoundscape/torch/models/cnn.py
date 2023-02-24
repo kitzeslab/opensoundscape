@@ -104,6 +104,11 @@ class CNN(BaseModule):
         self.train_loader = None
         self.scheduler = None
 
+        # to use a custom DataLoader or Sampler, change these attributes
+        # to the custom class (init must take same arguments)
+        self.train_dataloader_cls = DataLoader
+        self.inference_dataloader_cls = DataLoader
+
         ### architecture ###
         # can be a pytorch CNN such as Resnet18 or a custom object
         # must have .forward(), .train(), .eval(), .to(), .state_dict()
@@ -218,27 +223,6 @@ class CNN(BaseModule):
         """
         self.loss_fn = self.loss_cls()
 
-    def _init_dataloader(
-        self,
-        safe_dataset,
-        batch_size=64,
-        num_workers=1,
-        shuffle=False,
-        collate_fn=collate_samples,
-    ):
-        """initialize dataloader for training
-
-        Override this function to use a different DataLoader or sampler
-        """
-        return DataLoader(
-            safe_dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            pin_memory=True,
-            collate_fn=collate_fn,
-        )
-
     def _set_train(self, train_df, batch_size, num_workers, raise_errors):
         """Prepare network for training on train_df
 
@@ -273,11 +257,14 @@ class CNN(BaseModule):
         )
 
         # train_loader samples batches of images + labels from training set
-        self.train_loader = self._init_dataloader(
+        self.train_loader = self.train_dataloader_cls(
             train_safe_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
-            shuffle=True,
+            shuffle=True,  # SHUFFLE SAMPLES because we are training
+            # use pin_memory=True when loading files on CPU and training on GPU
+            pin_memory=False if self.device == torch.device("cpu") else True,
+            collate_fn=lambda x: x,
         )
 
         ###########################
@@ -329,9 +316,12 @@ class CNN(BaseModule):
         total_scores = []
         batch_loss = []
 
-        for batch_idx, batch_data in enumerate(train_loader):
+        for batch_idx, samples in enumerate(train_loader):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
+            # we collate here rather than in the DataLoader so that
+            # we can still access the AudioSamples and thier information
+            batch_data = collate_samples(samples)
             batch_tensors = batch_data["samples"].to(self.device)
             batch_labels = batch_data["labels"].to(self.device)
             if len(self.classes) > 1:  # squeeze one dimension [1,2] -> [1,1]
@@ -774,7 +764,7 @@ class CNN(BaseModule):
         """
         self.network.load_state_dict(torch.load(path), strict=strict)
 
-    def _create_dataloader(
+    def _init_inference_dataloader(
         self,
         samples,
         split_files_into_clips=True,
@@ -785,6 +775,20 @@ class CNN(BaseModule):
         num_workers=0,
         raise_errors=False,
     ):
+        """Create DataLoader for inference
+
+        During inference, we allow the user to pass any of 3 things to samples:
+        - list of file paths
+        - Dataframe with file as index
+        - Dataframe with file, start_time, end_time of clips as index
+
+        If file as index, default split_files_into_clips=True means that it will
+        automatically determine the number of clips that can be created from the file
+        (with overlap between subsequent clips based on overlap_fraction)
+
+        Returns:
+            DataLoader that creates lists of AudioSample objects
+        """
         assert type(samples) in (list, np.ndarray, pd.DataFrame), (
             "`samples` must be either: "
             "(a) list or np.array of files, or DataFrame with (b) file as Index or "
@@ -838,14 +842,14 @@ class CNN(BaseModule):
             prediction_dataset, invalid_sample_behavior=invalid_sample_behavior
         )
 
-        dataloader = torch.utils.data.DataLoader(
+        dataloader = self.inference_dataloader_cls(
             safe_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
-            shuffle=False,
+            shuffle=False,  # DONT CHANGE the order of samples during inference!
             # use pin_memory=True when loading files on CPU and training on GPU
-            pin_memory=torch.cuda.is_available(),
-            collate_fn=collate_samples,
+            pin_memory=False if self.device == torch.device("cpu") else True,
+            collate_fn=lambda x: x,
         )
         # add any paths that failed to generate a clip df to _invalid_samples
         dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
@@ -944,12 +948,12 @@ class CNN(BaseModule):
         """
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self._create_dataloader(  # TODO rename
+        dataloader = self._init_inference_dataloader(  # TODO rename
             samples,
-            split_files_into_clips=True,
-            overlap_fraction=0,
-            final_clip=None,
-            bypass_augmentations=True,
+            split_files_into_clips=split_files_into_clips,
+            overlap_fraction=overlap_fraction,
+            final_clip=final_clip,
+            bypass_augmentations=bypass_augmentations,
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
@@ -993,9 +997,12 @@ class CNN(BaseModule):
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
 
-            for i, batch in enumerate(dataloader):
-                # get batch of Tensors
-                batch_tensors = batch["samples"].to(self.device)
+            for i, samples in enumerate(dataloader):
+                # load a batch of images and labels from the  dataloader
+                # we collate here rather than in the DataLoader so that
+                # we can still access the AudioSamples and thier information
+                batch_data = collate_samples(samples)
+                batch_tensors = batch_data["samples"].to(self.device)
                 batch_tensors.requires_grad = False
 
                 # forward pass of network: feature extractor + classifier
@@ -1103,7 +1110,7 @@ class CNN(BaseModule):
         if classes is None:
             classes = self.classes
 
-        dataloader = self._create_dataloader(
+        dataloader = self._init_inference_dataloader(
             samples,
             split_files_into_clips=split_files_into_clips,
             overlap_fraction=0,
@@ -1119,16 +1126,25 @@ class CNN(BaseModule):
 
         outputs = []
 
-        for i, batch in enumerate(dataloader):
-            # get batch of Tensors
-            batch_tensors = batch["samples"].to(self.device)
+        for i, samples in enumerate(dataloader):
+            # load a batch of images and labels from the dataloader
+            # we collate here rather than in the DataLoader so that
+            # we can still access the AudioSamples and thier information
+            batch_data = collate_samples(samples)
+            batch_tensors = batch_data["samples"].to(self.device)
             batch_tensors.requires_grad = False
 
             # forward pass of network: feature extractor + classifier
             output_tensors = cam(batch_tensors)
-            activation_map = ActivationMap(batch_tensors, output_tensors, classes)
-            outputs.append(activation_map)
 
+            # update the AudioSample objects to include the activation maps
+            for sample in samples:
+                sample.activation_map = ActivationMap(
+                    batch_tensors, output_tensors, classes
+                )
+                outputs.append(sample)
+
+        # return list of AudioSamples containing .activation_maps
         return outputs
 
 
@@ -1285,9 +1301,12 @@ class InceptionV3(CNN):
         total_scores = []
         batch_loss = []
 
-        for batch_idx, batch_data in enumerate(train_loader):
+        for batch_idx, samples in enumerate(train_loader):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
+            # we collate here rather than in the DataLoader so that
+            # we can still access the AudioSamples and thier information
+            batch_data = collate_samples(samples)
             batch_tensors = batch_data["samples"].to(self.device)
             batch_labels = batch_data["labels"].to(self.device)
             # batch_labels = batch_labels.squeeze(1)

@@ -13,13 +13,24 @@ class ActivationMap:
         self.activation_map = self.activation_map.squeeze(0)
         self.class_name = class_name
 
-    def plot(self, alpha=0.5, cmap="jet", interpolation="bilinear", figsize=(10, 10)):
+    def plot(
+        self,
+        alpha=0.5,
+        cmap="jet",
+        interpolation="bilinear",
+        figsize=(10, 10),
+        show=True,
+    ):
         """Plot the activation map
         Args:
             alpha: opacity of the activation map overlap
             cmap: the colormap for the activation map
             interpolation: the interpolation method for the activation map
             figsize: the figure size for the plot
+            show: if True, runs plt.show()
+
+        Returns:
+            (fig, ax) of matplotlib figure
         """
         fig, ax = plt.subplots(figsize=figsize)
 
@@ -33,20 +44,26 @@ class ActivationMap:
         )
         ax.set_title(f"Activation Map for {self.class_name}")
         ax.axis("off")
-        plt.show()
 
-    def save(self, path):
+        if show:
+            plt.show()
+
+        return fig, ax
+
+    def save(self, path, alpha=0.5, cmap="jet", interpolation="bilinear"):
         """Save the activation map to a file
         Args:
             path: the path to save the activation map to
+            alpha: opacity of the activation map overlap
+            cmap: the colormap for the activation map
+            interpolation: the interpolation method for the activation map
         """
-        fig, ax = plt.subplots()
-        ax.imshow(self.base_image, alpha=alpha)
-        ax.imshow(
-            self.activation_map, cmap=cmap, alpha=alpha, interpolation=interpolation
+        fig, ax = self.plot(
+            alpha=alpha,
+            cmap=cmap,
+            interpolation=interpolation,
+            show=False,
         )
-        ax.set_title(f"Activation Map for {self.class_name}")
-        ax.axis("off")
         fig.savefig(path)
         plt.close(fig)
 
