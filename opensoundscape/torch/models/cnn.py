@@ -828,7 +828,9 @@ class CNN(BaseModule):
             warnings.warn(
                 "prediction_dataset has zero samples. No predictions will be generated."
             )
-            return pd.DataFrame(columns=self.classes)
+            prediction_dataset = AudioFileDataset(
+                samples=[], preprocessor=self.preprocessor
+            )
 
         # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
@@ -996,7 +998,6 @@ class CNN(BaseModule):
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
-
             for i, samples in enumerate(dataloader):
                 # load a batch of images and labels from the  dataloader
                 # we collate here rather than in the DataLoader so that
@@ -1024,12 +1025,14 @@ class CNN(BaseModule):
                     )
 
         # aggregate across all batches
-        total_scores = np.concatenate(total_scores, axis=0)
-
-        # replace scores with nan for samples that failed in preprocessing
-        # this feels hacky (we predicted on substitute-samples rather than
-        # skipping the samples that failed preprocessing)
-        total_scores[dataloader.dataset._invalid_indices, :] = np.nan
+        if len(total_scores) > 0:
+            total_scores = np.concatenate(total_scores, axis=0)
+            # replace scores with nan for samples that failed in preprocessing
+            # this feels hacky (we predicted on substitute-samples rather than
+            # skipping the samples that failed preprocessing)
+            total_scores[dataloader.dataset._invalid_indices, :] = np.nan
+        else:
+            total_scores = None
 
         # return DataFrame with same index/columns as prediction_dataset's df
         df_index = dataloader.dataset.dataset.label_df.index
