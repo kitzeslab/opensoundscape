@@ -21,10 +21,11 @@ class BasePreprocessor:
     Custom Preprocessor classes should subclass this class or its children
 
     Preprocessors have one job: to transform samples from some input (eg
-    a file path) to some output (eg a torch.Tensor) using a specific procedure.
-    The procedure consists of Actions ordered by the Preprocessor's index.
-    Preprocessors have a forward() method which runs the set of Actions
-    specified in the index.
+    a file path) to some output (eg an AudioSample with .data as torch.Tensor)
+    using a specific procedure defined by the .pipeline attribute.
+    The procedure consists of Actions ordered by the Preprocessor's .pipeline.
+    Preprocessors have a forward() method which sequentially applies the Actions
+    in the pipeline to produce a sample.
 
     Args:
         action_dict: dictionary of name:Action actions to perform sequentially
@@ -134,7 +135,7 @@ class BasePreprocessor:
         if trace:
             sample.trace = pd.Series(index=self.pipeline.index)
 
-        # run the pipeline by performing each Action on the sample
+        # run the pipeline by performing each Action on the AudioSample
         try:
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
@@ -150,11 +151,12 @@ class BasePreprocessor:
                         sample.trace[k] = f"## Bypassed ## {sample.trace[k]}"
                     continue
 
-                # perform the action
+                # perform the action (modifies the AudioSample in-place)
                 action.go(sample)
 
-                if trace:
-                    # save output of each preprocessor action in a dictionary
+                if trace:  # user requested record of preprocessing steps
+                    # save the current state of the sample's data
+                    # (trace is a Series with index matching self.pipeline)
                     sample.trace[k] = copy.deepcopy(sample.data)
 
         except Exception as exc:
@@ -185,11 +187,11 @@ class BasePreprocessor:
 class SpectrogramPreprocessor(BasePreprocessor):
     """Child of BasePreprocessor that creates specrogram Tensors w/augmentation
 
-    loads audio, creates spectrogram, performs augmentations, returns tensor
+    loads audio, creates spectrogram, performs augmentations, creates tensor
 
     by default, does not resample audio, but bandpasses to 0-11.025 kHz
     (to ensure all outputs have same scale in y-axis)
-    can change with .load_audio.set(sample_rate=sr)
+    can change with .pipeline.bandpass.set(min_f=,max_f=)
 
     during prediction, will load clips from long audio files rather than entire
     audio files.
