@@ -157,7 +157,15 @@ class BasePreprocessor:
                 if trace:  # user requested record of preprocessing steps
                     # save the current state of the sample's data
                     # (trace is a Series with index matching self.pipeline)
-                    sample.trace[k] = copy.deepcopy(sample.data)
+                    try:
+                        sample.trace[k] = copy.deepcopy(sample.data)
+                    # this will fail on Spectrogram and Audio class, which are immutable, implemented by
+                    # raising an AttributeError if .__setattr__ is called. Since deepcopy calls setattr,
+                    # we can't deepcopy those. As a temporary fix, we can add the original object because
+                    # it is immutable. However, we should re-factor immmutable classes to avoid this issue
+                    # (see Issue #671)
+                    except AttributeError:
+                        sample.trace[k] = sample.data
 
         except Exception as exc:
             # treat any exceptions raised during forward as PreprocessingErrors
