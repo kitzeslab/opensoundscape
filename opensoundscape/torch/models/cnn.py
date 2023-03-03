@@ -334,7 +334,7 @@ class CNN(BaseModule):
             ####################
 
             # forward pass: feature extractor and classifier
-            logits = self.network.forward(batch_tensors)
+            logits = self.network(batch_tensors)
 
             # save targets and predictions
             total_scores.append(logits.detach().cpu().numpy())
@@ -983,7 +983,7 @@ class CNN(BaseModule):
                 batch_tensors.requires_grad = False
 
                 # forward pass of network: feature extractor + classifier
-                logits = self.network.forward(batch_tensors)
+                logits = self.network(batch_tensors)
 
                 ### Activation layer ###
                 scores = apply_activation_layer(logits, activation_layer)
@@ -1211,7 +1211,7 @@ class InceptionV3(CNN):
 
             # forward pass: feature extractor and classifier
             # inception returns two sets of outputs
-            inception_outputs = self.network.forward(batch_tensors)
+            inception_outputs = self.network(batch_tensors)
             logits = inception_outputs.logits
             aux_logits = inception_outputs.aux_logits
 
