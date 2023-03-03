@@ -553,6 +553,14 @@ class CNN(BaseModule):
                 )
             )
 
+            # use wandb.watch to log histograms of parameter and gradient values
+            # value of None for log_freq means do not use wandb.watch()
+            log_freq = self.wandb_logging["watch_freq"]
+            if log_freq is not None:
+                wandb_session.watch(
+                    self.network, log="all", log_freq=log_freq, log_graph=(True)
+                )
+
             # log tables of preprocessed samples
             wandb_session.log(
                 {
@@ -723,7 +731,7 @@ class CNN(BaseModule):
 
         return score, metrics_dict
 
-    def save(self, path, save_train_loader=False):
+    def save(self, path, save_train_loader=False, save_hooks=False):
         """save model with weights using torch.save()
 
         load from saved file with torch.load(path) or cnn.load_model(path)
@@ -732,14 +740,27 @@ class CNN(BaseModule):
             path: file path for saved model object
             save_train_loader: retrain .train_loader in saved object
                 [default: False]
+            save_hooks: retain forward and backward hooks on modules
+                [default: False] Note: True can cause issues when using
+                wandb.watch()
         """
         os.makedirs(Path(path).parent, exist_ok=True)
         model_copy = copy.deepcopy(self)
+
         if not save_train_loader:
             try:
                 delattr(model_copy, "train_loader")
             except AttributeError:
                 pass
+
+        if not save_hooks:
+            # remove all forward and backward hooks on network.modules()
+            from collections import OrderedDict
+
+            for m in model_copy.network.modules():
+                m._forward_hooks = OrderedDict()
+                m._backward_hooks = OrderedDict()
+
         torch.save(model_copy, path)
 
     def save_weights(self, path):
@@ -1177,16 +1198,6 @@ class InceptionV3(CNN):
         total_scores = []
         batch_loss = []
 
-        # use wandb.watch to log histograms of parameter and gradient values
-        # value of None for log_freq means do not use wandb.watch()
-        log_freq = self.wandb_logging["watch_freq"]
-        if log_freq is not None:
-            wandb_session.watch(
-                self.network, log="all", log_freq=log_freq, log_graph=(True)
-            )
-        # we use watch and unwatch within this function because leaving the model watched
-        # is undesirable (eg, cannot pickle model object)
-
         for batch_idx, batch_data in enumerate(train_loader):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
@@ -1271,8 +1282,6 @@ class InceptionV3(CNN):
         total_tgts = np.concatenate(total_tgts, axis=0)
         total_preds = np.concatenate(total_preds, axis=0)
         total_scores = np.concatenate(total_scores, axis=0)
-
-        wandb_session.unwatch(self.network)
 
         return total_tgts, total_preds, total_scores
 
