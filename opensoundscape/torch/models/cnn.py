@@ -95,7 +95,7 @@ class CNN(BaseModule):
             n_preview_samples=8,  # before train/predict, log n random samples
             top_samples_classes=None,  # specify list of classes to see top samples from
             n_top_samples=3,  # after prediction, log n top scoring samples per class
-            # logs histograms of params & grads every n steps;
+            # logs histograms of params & grads every n batches;
             watch_freq=10,  # use  None for no logging of params & grads
         )
         self.loss_fn = None
