@@ -2,6 +2,7 @@
 import warnings
 import numpy as np
 import pandas as pd
+from opensoundscape.audio import Audio
 
 
 def gcc(x, y, max_delay_samples=None, filter="phat", epsilon=0.01):
