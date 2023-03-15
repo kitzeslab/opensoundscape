@@ -3,6 +3,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from opensoundscape.audio import Audio
+from scipy.signal import correlate, correlation_lags
 
 
 def gcc(x, y, max_delay_samples=None, filter="phat", epsilon=0.01):
