@@ -131,7 +131,7 @@ class Localizer:
             )
             grouped_detections["species"] = species
             all_sp_detections.append(grouped_detections)
-        detections_df = pandas.concat(all_sp_detections)
+        detections_df = pd.concat(all_sp_detections)
         self.detections = detections_df
         return detections_df
 
