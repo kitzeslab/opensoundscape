@@ -95,6 +95,8 @@ class CNN(BaseModule):
             n_preview_samples=8,  # before train/predict, log n random samples
             top_samples_classes=None,  # specify list of classes to see top samples from
             n_top_samples=3,  # after prediction, log n top scoring samples per class
+            # logs histograms of params & grads every n batches;
+            watch_freq=10,  # use  None for no logging of params & grads
         )
         self.loss_fn = None
         self.train_loader = None
@@ -332,7 +334,7 @@ class CNN(BaseModule):
             ####################
 
             # forward pass: feature extractor and classifier
-            logits = self.network.forward(batch_tensors)
+            logits = self.network(batch_tensors)
 
             # save targets and predictions
             total_scores.append(logits.detach().cpu().numpy())
@@ -551,16 +553,24 @@ class CNN(BaseModule):
                 )
             )
 
+            # use wandb.watch to log histograms of parameter and gradient values
+            # value of None for log_freq means do not use wandb.watch()
+            log_freq = self.wandb_logging["watch_freq"]
+            if log_freq is not None:
+                wandb_session.watch(
+                    self.network, log="all", log_freq=log_freq, log_graph=(True)
+                )
+
             # log tables of preprocessed samples
             wandb_session.log(
                 {
-                    "Samples / training samples w/augmentation": opensoundscape.wandb.wandb_table(
+                    "Samples / training samples": opensoundscape.wandb.wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=False
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
-                    "Samples / training samples w/o augmentation": opensoundscape.wandb.wandb_table(
+                    "Samples / training samples no aug": opensoundscape.wandb.wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=True
                         ),
@@ -721,7 +731,7 @@ class CNN(BaseModule):
 
         return score, metrics_dict
 
-    def save(self, path, save_train_loader=False):
+    def save(self, path, save_train_loader=False, save_hooks=False):
         """save model with weights using torch.save()
 
         load from saved file with torch.load(path) or cnn.load_model(path)
@@ -730,14 +740,27 @@ class CNN(BaseModule):
             path: file path for saved model object
             save_train_loader: retrain .train_loader in saved object
                 [default: False]
+            save_hooks: retain forward and backward hooks on modules
+                [default: False] Note: True can cause issues when using
+                wandb.watch()
         """
         os.makedirs(Path(path).parent, exist_ok=True)
         model_copy = copy.deepcopy(self)
+
         if not save_train_loader:
             try:
                 delattr(model_copy, "train_loader")
             except AttributeError:
                 pass
+
+        if not save_hooks:
+            # remove all forward and backward hooks on network.modules()
+            from collections import OrderedDict
+
+            for m in model_copy.network.modules():
+                m._forward_hooks = OrderedDict()
+                m._backward_hooks = OrderedDict()
+
         torch.save(model_copy, path)
 
     def save_weights(self, path):
@@ -960,7 +983,7 @@ class CNN(BaseModule):
                 batch_tensors.requires_grad = False
 
                 # forward pass of network: feature extractor + classifier
-                logits = self.network.forward(batch_tensors)
+                logits = self.network(batch_tensors)
 
                 ### Activation layer ###
                 scores = apply_activation_layer(logits, activation_layer)
@@ -1188,7 +1211,7 @@ class InceptionV3(CNN):
 
             # forward pass: feature extractor and classifier
             # inception returns two sets of outputs
-            inception_outputs = self.network.forward(batch_tensors)
+            inception_outputs = self.network(batch_tensors)
             logits = inception_outputs.logits
             aux_logits = inception_outputs.aux_logits
 
