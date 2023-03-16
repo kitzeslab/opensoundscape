@@ -108,7 +108,7 @@ class BasePreprocessor:
                     the start and end time of clip in audio
             bypass_augmentations: if True, actions with .is_augmentatino=True
                 are skipped
-            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for debugging on samples of interest
+            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for analysis/debugging on samples of interest
 
         Returns:
             sample (instance of AudioSample class)
