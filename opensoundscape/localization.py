@@ -419,7 +419,7 @@ class Localizer:
             euclid_distances = [np.linalg.norm(d) for d in distances]
 
             mask = [
-                0 < i <= max_distance_between_receivers for i in euclid_distances
+                0 <= i <= max_distance_between_receivers for i in euclid_distances
             ]  # boolean mask
             recorders_in_distance[aru] = list(aru_files[mask])
 
@@ -796,3 +796,24 @@ def gillette_localize(
     )
     if summary == True:
         return location.summary()
+
+
+def calc_tdoa_errors(receivers, tdoas, estimate, temp=20):
+    """
+    From a set of TDOAs, receivers, and an estimated location,
+    calculate the errors in the TDOAs.
+    Args:
+        - receivers: a list of receiver locations
+        - tdoa: a list of time delays
+        - estimate: the estimated location of the source
+        - temp: ambient temperature in Celsius. Defaults to 20.
+        Otherwise, returns the total error in the TDOAs.
+    Returns:
+        - a list of errors (in seconds) of the TDOAs
+    """
+    speed_of_sound = calc_speed_of_sound(temperature=temp)
+    expected_delays = [
+        np.linalg.norm(mic - estimate) / speed_of_sound for mic in receivers
+    ]
+    delay_errors = [abs(tdoa[i] - expected_delay[i]) for i in range(len(tdoa))]
+    return delay_errors
