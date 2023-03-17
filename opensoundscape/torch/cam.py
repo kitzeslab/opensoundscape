@@ -4,40 +4,44 @@ import pandas as pd
 import numpy as np
 
 
-class ActivationMap:
-    """Base class for activation maps
-    This is a container for the activation map of a given class for a given input.
+class CAM:
+    """Object to hold and view Class Activation Maps, including guided backprop
+
+    Stores activation maps as .activation_maps, and guided backprop as .gbp_cams
+
+    each is a Series indexed by class
+
+    #TODO: implement plotting multiple classes, each a different color
+    basically, create greyscale images, then convert each one to a different color from color cycler
+    getting transparency right might be tricky though
     """
 
-    def __init__(self, base_image, activation_map=None, gbp_maps=None):
+    def __init__(self, base_image, activation_maps=None, gbp_maps=None):
         """Create object to store activation and backprop maps
 
-        Create ActivationMap object holding the original sample plus
+        Create CAM object holding the original sample plus
         activation maps and guided back propogation maps for a set of classes
 
         Args:
             base_image: 3d tensor of shape [channel, w, h] containing original sample
-            activation_map: [w,h] tensor representing spatial activation
-                of some layer of a network [default: None]
+            activation_maps:  pd.Series of [w,h] tensors representing spatial activation
+                of some layer of a network, indexed by class name [default: None]
             gbp_maps: pd.Series of [channel, w, h] guided back propagation maps;
-                with class name as index
+                indexed by class name
 
-        Note: activation_maps and gbp_maps will be stored as Series indexed  by classes
+        Note: activation_maps and gbp_maps will be stored as Series indexed by classes
         """
         self.base_image = base_image
-
-        # initialize activation maps and guided back propogation maps
-        # as series indexed by classes
-        self.activation_map = activation_map
+        self.activation_maps = activation_maps
         self.gbp_maps = gbp_maps
 
     def plot(
         self,
         target_class=None,
-        mode="activation_map",
+        mode="activation",
         show_base=True,
         alpha=0.5,
-        cmap="jet",
+        cmap="inferno",
         interpolation="bilinear",
         figsize=None,
         plt_show=True,
@@ -45,12 +49,14 @@ class ActivationMap:
     ):
         """Plot the activation map, guided back propogation, or their product
         Args:
-            target_class: which class's gpb_map to visualize
-                - must be in the index of self.gbp_map; only used when plotting gbp
-            mode: choose overlay of activation map, backprop, both, or None:
-                'activation_map': overlay activation map
+            target_class: which class's maps to visualize
+                - must be in the index of self.gbp_map / self.activation_maps
+                - note that the class `None` is created when classes are not specified
+                during CNN.generate_cams() [default: None]
+            mode: str selecting which maps to visualize, one of:
+                'activation' [default]: overlay activation map
                 'backprop': overlay guided back propogation result
-                'backprop_and_activation': overlay product of these two
+                'backprop_and_activation': overlay product of both maps
                 None: do not overlay anything
             show_base: if False, does not plot the image of the original sample
                 [default: True]
@@ -64,65 +70,47 @@ class ActivationMap:
 
         Returns:
             (fig, ax) of matplotlib figure
+
+        Note: if base_image does not have 3 channels, channels are averaged then copied
+        across 3 RGB channels to create a greyscale image
         """
         fig, ax = plt.subplots(figsize=figsize)
 
-        if show_base:
-            if self.base_image is None:
-                raise ValueError(
-                    "could not plot because self.base_image is None and show_base is True"
-                )
+        if show_base:  # plot image of sample
             # remove the first (batch) dimension
             # move the first dimension (Nchannels) to last dimension for imshow
-            # make negative
-            base_image = -self.base_image.squeeze(0).permute(1, 2, 0).detach()
+            base_image = -self.base_image.permute(1, 2, 0).detach()
+            # if not 3 channels, average over channels and copy to 3 RGB channels
+            if base_image.shape[2] != 3:
+                base_image = base_image.mean(2).unsqueeze(2).tile([1, 1, 3])
             ax.imshow(base_image, alpha=1)
 
-        # choose what to show, and validate input
-        if mode == "activation_map":
-            if self.activation_map is None:
-                raise ValueError(
-                    "could not plot because self.activation_map is None and mode is activation_map"
-                )
-            overlay = self.activation_map
+        # choose what maps to show
+        if mode == "activation":
+            overlay = self.activation_maps[target_class]
         elif mode == "backprop":
-            if self.gbp_maps is None:
-                raise ValueError(
-                    "could not plot because self.gbp_maps is None and mode is backprop"
-                )
-            if target_class not in self.gbp_maps:
-                raise ValueError(
-                    f"target class {target_class} not in index of self.gbp_maps"
-                )
             overlay = self.gbp_maps[target_class]
         elif mode == "backprop_and_activation":
-            if self.activation_map is None or self.gbp_maps is None:
-                raise ValueError(
-                    "could not plot because one of (self.activation_map, self.gbp_maps) is None and mode is backprop_and_activation"
-                )
-            if target_class not in self.gbp_maps:
-                raise ValueError(
-                    f"target class {target_class} not in index of self.gbp_maps"
-                )
             # we combine them using the product of the two maps
-            overlay = self.activation_map[..., np.newaxis] * self.gbp_maps[target_class]
+            am = self.activation_maps[target_class][..., np.newaxis]  # add channel axis
+            overlay = am * self.gbp_maps[target_class]
         elif mode is None:
             pass
         else:
             raise ValueError(
-                f"unsupported mode {mode}: choose 'activation_map', 'backprop', or 'backprop_and_activation'."
+                f"unsupported mode {mode}: choose "
+                "'activation', 'backprop', or 'backprop_and_activation'."
             )
 
         if mode is not None:
             ax.imshow(overlay, cmap=cmap, alpha=alpha, interpolation=interpolation)
             ax.set_title(f"{mode} for class {target_class}")
         else:
-            ax.set_title(f"mode [None]: no overlay")
+            ax.set_title(f"sample without cam")
         ax.axis("off")
 
         if save_path is not None:
             fig.savefig(save_path)
-            # plt.close(fig) #TODO do we need to close it? we are returning it
 
         if plt_show:
             plt.show()

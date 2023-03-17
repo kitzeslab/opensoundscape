@@ -41,8 +41,9 @@ from opensoundscape.metrics import (
 )
 from opensoundscape.sample import collate_samples
 
-from opensoundscape.torch.cam import ActivationMap
+from opensoundscape.torch.cam import CAM
 import pytorch_grad_cam
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
 
 class CNN(BaseModule):
@@ -1069,11 +1070,11 @@ class CNN(BaseModule):
         else:
             return score_df
 
-    def saliency_map(  # TODO some arguments not implemented
+    def generate_cams(  # TODO some arguments not implemented
         self,
         samples,
-        classes=None,
         method="gradcam",
+        classes=None,
         target_layers=None,
         split_files_into_clips=True,
         bypass_augmentations=False,
@@ -1087,39 +1088,68 @@ class CNN(BaseModule):
                 - a dataframe with index containing audio paths, OR
                 - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
-            method (str): method to use for salience map:
-                "gradcam": pytorch_grad_cam.GradCAM,
-                "hirescam": pytorch_grad_cam.HiResCAM,
-                "scorecam": pytorch_grad_cam.ScoreCAM,
-                "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
-                "ablationcam": pytorch_grad_cam.AblationCAM,
-                "xgradcam": pytorch_grad_cam.XGradCAM,
-                "eigencam": pytorch_grad_cam.EigenCAM,
-                "eigengradcam": pytorch_grad_cam.EigenGradCAM,
-                "layercam": pytorch_grad_cam.LayerCAM,
-                "fullgrad": pytorch_grad_cam.FullGrad,
-                "gradcamelementwise": pytorch_grad_cam.GradCAMElementWise,
-                None: no activation map will be created
-            classes (list): list of class names
+            method: method to use for salience map. Can be str (choose from below)
+                or a class of pytorch_grad_cam (any subclass of BaseCAM), or None
+                if None, no activation map will be created [default:'gradcam']
+
+                str can be any of the following:
+                    "gradcam": pytorch_grad_cam.GradCAM,
+                    "hirescam": pytorch_grad_cam.HiResCAM,
+                    "scorecam": pytorch_grad_cam.ScoreCAM,
+                    "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
+                    "ablationcam": pytorch_grad_cam.AblationCAM,
+                    "xgradcam": pytorch_grad_cam.XGradCAM,
+                    "eigencam": pytorch_grad_cam.EigenCAM,
+                    "eigengradcam": pytorch_grad_cam.EigenGradCAM,
+                    "layercam": pytorch_grad_cam.LayerCAM,
+                    "fullgrad": pytorch_grad_cam.FullGrad,
+                    "gradcamelementwise": pytorch_grad_cam.GradCAMElementWise,
+
+                Note: these methods do not produce class-specific activations
             target_layers (list): list of target layers for GradCAM
-            split_files_into_clips (bool): whether to split files into clips
-            bypass_augmentations (bool): whether to bypass augmentations
-            guided_backprop: if True, performs ReLU guided backpropogation and adds
-                .backprop attribute to retuned Samples
+                - if None [default] attempts to use architecture's default target_layer
+                - Note: only architectures created with opensoundscape 0.9.0+ will
+                have a default target layer. See pytorch_grad_cam docs for suggestions.
+            split_files_into_clips (bool): see CNN.predict()
+            bypass_augmentations (bool): whether to bypass augmentations in preprocessing
+            guided_backprop_classes: tuple of class names; classes must be in self.classes.
+                Performs guided backpropogation for each class and adds .backprop
+                attribute to retuned Samples (uses pytorch_grad_cam.GuidedBackpropReLUModel)
+                .gbp_maps will be a pd.Series indexed by class name
+                if empty tuple, skips guided backpropagation
+
         Returns:
             a list of cam class activation objects. see the cam class for more details
+
+        See pytorch_grad_cam documentation for references to the source of each method.
         """
-        # initialize GradCAM
-        if target_layers == None:
+
+        ## INPUT VALIDATION ##
+
+        if classes is not None:  # check that classes are in model.classes
+            assert np.all(
+                [c in self.classes for c in classes]
+            ), "`classes` must be in self.classes"
+
+        # if target_layer is None, attempt to retrieve default target layers of network
+        if target_layers is None:
             try:
                 target_layers = self.network.grad_cam_target_layers
-            except AttributeError:
+            except AttributeError as exc:
                 raise AttributeError(
                     "Please specify target_layers. Models trained with older versions of Opensoundscape do not have default target layers"
-                    "For a ResNET model, try target_layers=[model.network.layer4[-1]"
-                )
+                    "For a ResNET model, try target_layers=[model.network.layer4]"
+                ) from exc
+        else:  # check that target_layers are modules of self.network
+            for tl in target_layers:
+                assert (
+                    tl in self.network.modules()
+                ), "target_layers must be in self.network.modules(), but {tl} is not."
 
-        methods = {
+        ## INITIALIZE CAMS AND DATALOADER ##
+
+        # initialize cam object: `method` is either str in methods_dict keys, or the class
+        methods_dict = {
             "gradcam": pytorch_grad_cam.GradCAM,
             "hirescam": pytorch_grad_cam.HiResCAM,
             "scorecam": pytorch_grad_cam.ScoreCAM,
@@ -1132,38 +1162,44 @@ class CNN(BaseModule):
             "fullgrad": pytorch_grad_cam.FullGrad,
             "gradcamelementwise": pytorch_grad_cam.GradCAMElementWise,
         }
-        if method in methods:
-            cam = methods[method](model=self.network, target_layers=target_layers)
+        if isinstance(method, str) and method in methods_dict:
+            cam = methods_dict[method](model=self.network, target_layers=target_layers)
         elif method is None:
             cam = None
+        elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
+            cam = method(model=self.network, target_layers=target_layers)
         else:
-            raise ValueError(f"Method {method} not supported")
+            raise ValueError(
+                f"`method` {method} not supported. "
+                f"Must be str from list of supported methods or a subclass of "
+                f"pytorch_grad_cam.base_cam.BaseCAM. See docstring for details. "
+            )
 
+        # initialize guided back propagation object
         if guided_backprop:
             gb_model = pytorch_grad_cam.GuidedBackpropReLUModel(
                 model=self.network, use_cuda=False
             )  # TODO cuda usage - expose? use model setting?
 
-        # set classes
-        if classes is None:
-            classes = self.classes
-
+        # create dataloader to load batches of samples
         dataloader = self._init_inference_dataloader(
             samples,
             split_files_into_clips=split_files_into_clips,
             overlap_fraction=0,
             final_clip=None,
             bypass_augmentations=bypass_augmentations,
-            # batch_size=batch_size,
+            # batch_size=batch_size, #TODO
             # num_workers=num_workers,
         )
 
         # move model to device
+        # TODO: choose cuda or not in pytorch_grad_cam methods
         self.network.to(self.device)
         self.network.eval()
 
-        outputs = []
+        ## GENERATE SAMPLES ##
 
+        generated_samples = []
         for i, samples in enumerate(dataloader):
             # load a batch of images and labels from the dataloader
             # we collate here rather than in the DataLoader so that
@@ -1172,49 +1208,69 @@ class CNN(BaseModule):
             batch_tensors = batch_data["samples"].to(self.device)
             batch_tensors.requires_grad = False
 
-            # forward pass of network: feature extractor + classifier
+            # generate class activation maps using cam object
+            def target(class_name):
+                """helper for pytorch_grad_cam class syntax"""
+                # first get integet position of class name in self.classes
+                class_idx = list(self.classes).index(class_name)
+                # then create list of class required by pytorch_grad_cam
+                return [ClassifierOutputTarget(class_idx)]
+
             if cam is not None:
-                activation_maps = cam(batch_tensors)
+                if classes is None:  # selects highest scoring class per sample
+                    batch_maps = pd.Series({None: cam(batch_tensors)})
+                else:  # one activation map per class
+                    batch_maps = pd.Series(
+                        {c: cam(batch_tensors, targets=target(c)) for c in classes}
+                    )
 
             # update the AudioSample objects to include the activation maps
+            # and create guided backprop maps, one at a time
             for i, sample in enumerate(samples):
 
-                # TODO: messy implementation with cam/gbp = None
-
                 if cam is None:
-                    activation_map = None
+                    activation_maps = None
                 else:
-                    activation_map = activation_maps[i]
+                    # extract this sample's activation maps from batch (all classes)
+                    activation_maps = pd.Series(
+                        {c: batch_maps[c][i] for c in batch_maps.index}
+                    )
 
-                # add guided back prop result to activation map
                 # if requested, calculate the ReLU backpropogation, which creates
-                # high resolution pixel-activation levels from original image
-                # GuidedBackpropReLUasModule does not support batching as of current version
-                # so we just do one sample at a time...
+                # high resolution pixel-activation levels for specific classes
+                # GuidedBackpropReLUasModule does not support batching
                 if guided_backprop:
-                    t = batch_tensors[i].unsqueeze(0)
-                    if classes is None:
-                        # by default, picks the highest scoring class to run gbp on
-                        gbp_maps = pd.Series({None: gb_model(t)})
-                    else:
-                        class_list = list(self.classes)
+                    t = batch_tensors[i].unsqueeze(0)  # "batch" with one sample
+                    # target_category expects the index position of the class eg 0 for
+                    # first class, rather than the class name
+                    # note: t.detach() to avoid bug, see https://github.com/jacobgil/pytorch-grad-cam/issues/401
+                    if classes is None:  # defaults to highest scoring class
+                        gbp_maps = pd.Series({None: gb_model(t.detach())})
+                    else:  # one for each class
+                        cls_list = list(self.classes)
                         gbp_maps = pd.Series(
                             {
-                                c: gb_model(t, target_category=class_list.index(c))
+                                c: gb_model(
+                                    t.detach(), target_category=cls_list.index(c)
+                                )
                                 for c in classes
                             }
                         )
-                else:
+                else:  # no guided backprop requested
                     gbp_maps = None
 
-                # add activation map object to sample
-                sample.activation_map = ActivationMap(
-                    batch_tensors[i], activation_map, gbp_maps
+                # add ActivationMap to sample, including activation_map and gbp_maps
+                sample.cam = CAM(
+                    base_image=batch_tensors[i],
+                    activation_maps=activation_maps,
+                    gbp_maps=gbp_maps,
                 )
-                outputs.append(sample)
 
-        # return list of AudioSamples containing .activation_maps
-        return outputs
+                # add to list of outputs to return
+                generated_samples.append(sample)
+
+        # return list of AudioSamples containing .cam's
+        return generated_samples
 
 
 def use_resample_loss(model):
