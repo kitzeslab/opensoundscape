@@ -1077,7 +1077,7 @@ class CNN(BaseModule):
         classes=None,
         target_layers=None,
         split_files_into_clips=True,
-        bypass_augmentations=False,
+        bypass_augmentations=True,
         guided_backprop=False,
     ):
         """
