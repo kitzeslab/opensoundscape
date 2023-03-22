@@ -951,7 +951,7 @@ class CNN(BaseModule):
         """
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self._init_inference_dataloader(  # TODO rename
+        dataloader = self._init_inference_dataloader(
             samples,
             split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
@@ -982,8 +982,7 @@ class CNN(BaseModule):
                 {
                     "Samples / Preprocessed samples": opensoundscape.wandb.wandb_table(
                         dataloader.dataset.dataset,
-                        self.wandb_logging["n_preview_samples"]
-                        # todo: check that this is how to access the dataset
+                        self.wandb_logging["n_preview_samples"],
                     )
                 }
             )
@@ -1070,27 +1069,30 @@ class CNN(BaseModule):
         else:
             return score_df
 
-    def generate_cams(  # TODO some arguments not implemented
+    def generate_cams(
         self,
         samples,
         method="gradcam",
         classes=None,
         target_layers=None,
+        guided_backprop=False,
         split_files_into_clips=True,
         bypass_augmentations=True,
-        guided_backprop=False,
+        batch_size=1,
+        num_workers=0,
     ):
         """
-        Generate a GradCAM heatmap for each sample in samples_df
+        Generate a activation and/or backprop heatmaps for each sample
+
         Args:
-            samples:
+            samples: (same as CNN.predict())
                 the files to generate predictions for. Can be:
                 - a dataframe with index containing audio paths, OR
                 - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
-            method: method to use for salience map. Can be str (choose from below)
+            method: method to use for activation map. Can be str (choose from below)
                 or a class of pytorch_grad_cam (any subclass of BaseCAM), or None
-                if None, no activation map will be created [default:'gradcam']
+                if None, activation maps will not be created [default:'gradcam']
 
                 str can be any of the following:
                     "gradcam": pytorch_grad_cam.GradCAM,
@@ -1105,18 +1107,23 @@ class CNN(BaseModule):
                     "fullgrad": pytorch_grad_cam.FullGrad,
                     "gradcamelementwise": pytorch_grad_cam.GradCAMElementWise,
 
-                Note: these methods do not produce class-specific activations
+            classes (list): list of classes, will create maps for each class
+                [default: None] if None, creates an activation map for the highest
+                scoring class on a sample-by-sample basis
             target_layers (list): list of target layers for GradCAM
                 - if None [default] attempts to use architecture's default target_layer
-                - Note: only architectures created with opensoundscape 0.9.0+ will
+                Note: only architectures created with opensoundscape 0.9.0+ will
                 have a default target layer. See pytorch_grad_cam docs for suggestions.
+                Note: if multiple layers are provided, the activations are merged across
+                    layers (rather than returning separate activations per layer)
+            guided_backprop: bool [default: False] if True, performs guided backpropagation
+                for each class in classes. AudioSamples will have attribute .gbp_maps,
+                a pd.Series indexed by class name
             split_files_into_clips (bool): see CNN.predict()
             bypass_augmentations (bool): whether to bypass augmentations in preprocessing
-            guided_backprop_classes: tuple of class names; classes must be in self.classes.
-                Performs guided backpropogation for each class and adds .backprop
-                attribute to retuned Samples (uses pytorch_grad_cam.GuidedBackpropReLUModel)
-                .gbp_maps will be a pd.Series indexed by class name
-                if empty tuple, skips guided backpropagation
+                see CNN.predict
+            batch_size: number of samples to simultaneously process, see CNN.predict()
+            num_workers: parallel CPU threads for preprocessing, see CNN.predict()
 
         Returns:
             a list of cam class activation objects. see the cam class for more details
@@ -1134,7 +1141,7 @@ class CNN(BaseModule):
         # if target_layer is None, attempt to retrieve default target layers of network
         if target_layers is None:
             try:
-                target_layers = self.network.grad_cam_target_layers
+                target_layers = self.network.cam_target_layers
             except AttributeError as exc:
                 raise AttributeError(
                     "Please specify target_layers. Models trained with older versions of Opensoundscape do not have default target layers"
@@ -1188,8 +1195,8 @@ class CNN(BaseModule):
             overlap_fraction=0,
             final_clip=None,
             bypass_augmentations=bypass_augmentations,
-            # batch_size=batch_size, #TODO
-            # num_workers=num_workers,
+            batch_size=batch_size,
+            num_workers=num_workers,
         )
 
         # move model to device
@@ -1243,7 +1250,8 @@ class CNN(BaseModule):
                     t = batch_tensors[i].unsqueeze(0)  # "batch" with one sample
                     # target_category expects the index position of the class eg 0 for
                     # first class, rather than the class name
-                    # note: t.detach() to avoid bug, see https://github.com/jacobgil/pytorch-grad-cam/issues/401
+                    # note: t.detach() to avoid bug,
+                    # see https://github.com/jacobgil/pytorch-grad-cam/issues/401
                     if classes is None:  # defaults to highest scoring class
                         gbp_maps = pd.Series({None: gb_model(t.detach())})
                     else:  # one for each class
@@ -1259,17 +1267,17 @@ class CNN(BaseModule):
                 else:  # no guided backprop requested
                     gbp_maps = None
 
-                # add ActivationMap to sample, including activation_map and gbp_maps
+                # add CAM object as sample.cam (includes activation_map and gbp_maps)
                 sample.cam = CAM(
                     base_image=batch_tensors[i],
                     activation_maps=activation_maps,
                     gbp_maps=gbp_maps,
                 )
 
-                # add to list of outputs to return
+                # add sample to list of outputs to return
                 generated_samples.append(sample)
 
-        # return list of AudioSamples containing .cam's
+        # return list of AudioSamples containing .cam attributes
         return generated_samples
 
 

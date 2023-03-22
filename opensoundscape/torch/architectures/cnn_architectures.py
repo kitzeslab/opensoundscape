@@ -34,7 +34,6 @@ import warnings
 from torchvision import models
 from torch import nn
 import torch
-import torchvision
 from torchvision.models.inception import BasicConv2d
 
 ARCH_DICT = dict()
@@ -90,6 +89,9 @@ def resnet18(
     # change input shape num_channels
     architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
 
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.layer4]
+
     return architecture_ft
 
 
@@ -123,6 +125,9 @@ def resnet34(
 
     # change input shape num_channels
     architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
+
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.layer4]
 
     return architecture_ft
 
@@ -158,6 +163,9 @@ def resnet50(
     # change input shape num_channels
     architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
 
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.layer4]
+
     return architecture_ft
 
 
@@ -191,6 +199,9 @@ def resnet101(
 
     # change input shape num_channels
     architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
+
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.layer4]
 
     return architecture_ft
 
@@ -230,6 +241,9 @@ def resnet152(
     # change input shape num_channels
     architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
 
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.layer4]
+
     return architecture_ft
 
 
@@ -268,6 +282,9 @@ def alexnet(
         architecture_ft.features[0], num_channels
     )
 
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
+
     return architecture_ft
 
 
@@ -305,6 +322,9 @@ def vgg11_bn(
     architecture_ft.features[0] = change_conv2d_channels(
         architecture_ft.features[0], num_channels
     )
+
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
 
     return architecture_ft
 
@@ -355,6 +375,9 @@ def squeezenet1_0(
         architecture_ft.features[0], num_channels
     )
 
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
+
     return architecture_ft
 
 
@@ -391,6 +414,9 @@ def densenet121(
     architecture_ft.features[0] = change_conv2d_channels(
         architecture_ft.features[0], num_channels
     )
+
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
 
     return architecture_ft
 
@@ -438,6 +464,10 @@ def inception_v3(
         architecture_ft.Conv2d_1a_3x3 = BasicConv2d(
             num_channels, 32, kernel_size=3, stride=2
         )
+
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.Mixed_7c]
+
     return architecture_ft
 
 
@@ -481,6 +511,9 @@ def efficientnet_b0(
     architecture_ft.stem.conv = change_conv2d_channels(
         architecture_ft.stem.conv, num_channels
     )
+
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
 
     return architecture_ft
 
@@ -526,6 +559,9 @@ def efficientnet_b4(
         architecture_ft.stem.conv, num_channels
     )
 
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
+
     return architecture_ft
 
 
@@ -570,6 +606,9 @@ def efficientnet_widese_b0(
         architecture_ft.stem.conv, num_channels
     )
 
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
+
     return architecture_ft
 
 
@@ -613,6 +652,9 @@ def efficientnet_widese_b4(
     architecture_ft.stem.conv = change_conv2d_channels(
         architecture_ft.stem.conv, num_channels
     )
+
+    # default target layers for activation maps like GradCAM and guided backpropagation
+    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
 
     return architecture_ft
 

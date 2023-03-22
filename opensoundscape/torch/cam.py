@@ -118,4 +118,4 @@ class CAM:
         return fig, ax
 
     def __repr__(self):
-        return f"ActivationMap()"
+        return f"CAM()"
