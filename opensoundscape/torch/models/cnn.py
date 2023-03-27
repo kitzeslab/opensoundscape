@@ -40,6 +40,7 @@ from opensoundscape.metrics import (
     multi_target_metrics,
 )
 from opensoundscape.sample import collate_samples
+from opensoundscape.helpers import identity
 
 from opensoundscape.torch.cam import CAM
 import pytorch_grad_cam
@@ -845,6 +846,7 @@ class CNN(BaseModule):
             prediction_dataset, invalid_sample_behavior=invalid_sample_behavior
         )
 
+        # initialize the dataloader
         dataloader = self.inference_dataloader_cls(
             safe_dataset,
             batch_size=batch_size,
@@ -852,7 +854,7 @@ class CNN(BaseModule):
             shuffle=False,  # DONT CHANGE the order of samples during inference!
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=False if self.device == torch.device("cpu") else True,
-            collate_fn=lambda x: x,
+            collate_fn=identity,
         )
         # add any paths that failed to generate a clip df to _invalid_samples
         dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
@@ -1144,7 +1146,7 @@ class CNN(BaseModule):
                 target_layers = self.network.cam_target_layers
             except AttributeError as exc:
                 raise AttributeError(
-                    "Please specify target_layers. Models trained with older versions of Opensoundscape do not have default target layers"
+                    "Please specify _init_inference_dataloadertarget_layers. Models trained with older versions of Opensoundscape do not have default target layers"
                     "For a ResNET model, try target_layers=[model.network.layer4]"
                 ) from exc
         else:  # check that target_layers are modules of self.network

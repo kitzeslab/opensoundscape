@@ -483,6 +483,9 @@ def test_generate_cams_methods(test_df):
         _ = model.generate_cams(test_df, method=method_str)
 
 
+# TODO: should we test the default target layer doesn't cause errors for each architecture in cnn_architectures?
+
+
 def test_generate_cams_target_layers(test_df):
     """specify multiple target layers for cam"""
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
