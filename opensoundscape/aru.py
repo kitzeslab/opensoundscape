@@ -1,4 +1,4 @@
-"""Utilities specifically for audio files recoreded by AudioMoths"""
+"""Utilities specifically for audio files recoreded by AudioMoths and other ARUs"""
 from pathlib import Path
 import datetime
 

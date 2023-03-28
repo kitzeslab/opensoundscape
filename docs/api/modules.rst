@@ -11,7 +11,7 @@ Audio
 
 AudioMoth
 ^^^^^^^^^
-.. automodule:: opensoundscape.audiomoth
+.. automodule:: opensoundscape.aru
  :members:
 
 Audio Tools

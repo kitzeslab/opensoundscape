@@ -1,8 +1,8 @@
-"""test for opensoundscape.audiomoth module"""
+"""test for opensoundscape.aru module"""
 from datetime import datetime
 import pytz
 import pytest
-from opensoundscape import audiomoth
+from opensoundscape import aru
 from math import isclose
 
 
@@ -20,14 +20,14 @@ def test_audiomoth_start_time():
     filename = "20191219_123300.WAV"
     dt = datetime.strptime("20191219 12:33:00", "%Y%m%d %H:%M:%S")
     dt = pytz.utc.localize(dt)
-    assert audiomoth.audiomoth_start_time(filename, filename_timezone="UTC") == dt
+    assert aru.audiomoth_start_time(filename, filename_timezone="UTC") == dt
 
 
 def test_audiomoth_start_time_hex_format():
     filename = "5DFB6DFC.WAV"
     dt = datetime.strptime("20191219 12:33:00", "%Y%m%d %H:%M:%S")
     dt = pytz.utc.localize(dt)
-    assert audiomoth.audiomoth_start_time(filename, filename_timezone="UTC") == dt
+    assert aru.audiomoth_start_time(filename, filename_timezone="UTC") == dt
 
 
 def test_audiomoth_start_time_other_timezone():
@@ -38,14 +38,14 @@ def test_audiomoth_start_time_other_timezone():
     filename = "20191219_073300.WAV"  # written in EST rather than UTC
     dt = datetime.strptime("20191219 12:33:00", "%Y%m%d %H:%M:%S")
     dt = pytz.utc.localize(dt)
-    dt_read = audiomoth.audiomoth_start_time(
+    dt_read = aru.audiomoth_start_time(
         filename, filename_timezone="US/Eastern", to_utc=False
     )
     assert dt_read == dt
     assert dt_read.tzname() == "EST"
 
     # should also work if we convert to UTC
-    dt_read = audiomoth.audiomoth_start_time(
+    dt_read = aru.audiomoth_start_time(
         filename, filename_timezone="US/Eastern", to_utc=True
     )
     assert dt_read == dt
@@ -74,7 +74,7 @@ def test_parse_audiomoth_metadata():
         "year": None,
         "audio_offest": 352,
     }
-    new_metadata = audiomoth.parse_audiomoth_metadata(metadata)
+    new_metadata = aru.parse_audiomoth_metadata(metadata)
     assert new_metadata["device_id"] == "AudioMoth 24526B065D325963"
     assert new_metadata["gain_setting"] == 2
     assert new_metadata["battery_state"] == 4.7
@@ -106,7 +106,7 @@ def test_parse_audiomoth_metadata_with_timezone():
         "year": None,
         "audio_offest": 352,
     }
-    new_metadata = audiomoth.parse_audiomoth_metadata(metadata)
+    new_metadata = aru.parse_audiomoth_metadata(metadata)
     assert new_metadata["recording_start_time"] == pytz.utc.localize(
         datetime(2020, 12, 15, 00, 22, 55)
     )
@@ -135,7 +135,7 @@ def test_parse_audiomoth_metadata_with_low_battery():
         "year": None,
         "audio_offest": 352,
     }
-    new_metadata = audiomoth.parse_audiomoth_metadata(metadata)
+    new_metadata = aru.parse_audiomoth_metadata(metadata)
     assert new_metadata["gain_setting"] == "medium"
     assert new_metadata["recording_start_time"] == pytz.utc.localize(
         datetime(2021, 5, 15, 10, 00, 00)
@@ -144,7 +144,7 @@ def test_parse_audiomoth_metadata_with_low_battery():
 
 def test_parse_audiomoth_from_path_wrong_metadata(veryshort_wav_str):
     with pytest.raises(ValueError):
-        audiomoth.parse_audiomoth_metadata_from_path(veryshort_wav_str)
+        aru.parse_audiomoth_metadata_from_path(veryshort_wav_str)
 
 
 def test_parse_audiomoth_metadata_v16_to_v181():
@@ -175,6 +175,6 @@ def test_parse_audiomoth_metadata_v16_to_v181():
         "year": None,
         "audio_offest": 352,
     }
-    new_metadata = audiomoth.parse_audiomoth_metadata(metadata)
+    new_metadata = aru.parse_audiomoth_metadata(metadata)
     assert new_metadata["gain_setting"] == "medium"
     assert isclose(new_metadata["battery_state"], 4.5, abs_tol=1e-5)
