@@ -1,29 +1,29 @@
-Annotations
-^^^^^^^^^^^
-.. automodule:: opensoundscape.annotations
- :members:
-
-Audio
+ Audio
 ^^^^^
 .. automodule:: opensoundscape.audio
   :members:
 
 
-ARU
-^^^
-.. automodule:: opensoundscape.aru
- :members:
-
 Spectrogram
 ^^^^^^^^^^^
 .. automodule:: opensoundscape.spectrogram
  :members:
-
+ 
 CNN
 ^^^
 .. automodule:: opensoundscape.ml.cnn
   :members:
 
+Annotations
+^^^^^^^^^^^
+.. automodule:: opensoundscape.annotations
+ :members:
+
+ARU
+^^^
+.. automodule:: opensoundscape.aru
+ :members:
+ 
 Machine Learning utils
 ^^^^^^^^^^^^^^^^^^^^^^
 .. automodule:: opensoundscape.ml.utils
@@ -32,10 +32,6 @@ Machine Learning utils
 CNN Architectures
 ^^^^^^^^^^^^^^^^^
 .. automodule:: opensoundscape.ml.cnn_architectures
-  :members:
-
-ml.utils
-.. automodule:: opensoundscape.ml.utils
   :members:
 
 WandB (Weights and Biases)
@@ -53,9 +49,9 @@ Datasets
 .. automodule:: opensoundscape.ml.datasets
   :members:
 
-GradCam
-^^^^^^^
-.. automodule:: opensoundscape.ml.grad_cam
+CAM (Class Activation Maps)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: opensoundscape.ml.cam
   :members:
 
 Loss
@@ -66,6 +62,11 @@ Loss
 Safe Dataset
 ^^^^^^^^^^^^
 .. automodule:: opensoundscape.ml.safe_dataset
+  :members:
+
+Sample
+^^^^^^
+.. automodule:: opensoundscape.ml.sample
   :members:
 
 Sampling
