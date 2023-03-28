@@ -10,6 +10,7 @@ from opensoundscape.preprocess import actions
 from opensoundscape.sample import AudioSample
 from PIL import Image
 import torch
+from opensoundscape.spectrogram import Spectrogram
 
 ## Fixtures: prepare objects that can be used by tests ##
 
@@ -143,6 +144,15 @@ def test_audio_add_noise(sample_audio):
         actions.audio_add_noise, noise_dB=-100, signal_dB=10, color="pink"
     )
     action.go(sample_audio)
+
+
+def test_spectrogram_to_tensor(sample, sample_audio):
+    action = actions.SpectrogramToTensor()
+    sample.data = Spectrogram.from_audio(sample_audio.data)
+    sample.target_shape = [20, 30, 3]  # note channels as dim2
+    action.go(sample)  # converts .data from Spectrogram to Tensor
+    assert isinstance(sample.data, torch.Tensor)
+    assert list(sample.data.shape) == [3, 20, 30]  # note channels as dim0
 
 
 def test_color_jitter(tensor):

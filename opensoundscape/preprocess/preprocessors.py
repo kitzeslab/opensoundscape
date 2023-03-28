@@ -9,10 +9,11 @@ from opensoundscape.preprocess.actions import (
     Overlay,
     AudioClipLoader,
     AudioTrim,
+    SpectrogramToTensor,
 )
 from opensoundscape.preprocess.utils import PreprocessingError
 from opensoundscape.spectrogram import Spectrogram
-from opensoundscape.sample import Sample, AudioSample
+from opensoundscape.sample import AudioSample
 
 
 class BasePreprocessor:
@@ -120,18 +121,8 @@ class BasePreprocessor:
                 break_on_key in self.pipeline
             ), f"break_on_key was {break_on_key} but no matching action found in pipeline"
 
-        # handle paths or pd.Series as input for `sample`
-        if type(sample) == str or issubclass(type(sample), Path):
-            sample = AudioSample(sample)  # initialize with source = file path
-        else:
-            assert isinstance(sample, AudioSample), (
-                "sample must be AudioSample OR file path (str or pathlib.Path), "
-                f"was {type(sample)}"
-            )
-
-        # add attributes to the sample that might be needed by actions in the pipeline
-        sample.preprocessor = self
-        sample.target_duration = self.sample_duration
+        # create AudioSample from input path
+        sample = self._generate_sample(sample)
         if trace:
             sample.trace = pd.Series(index=self.pipeline.index)
 
@@ -177,6 +168,27 @@ class BasePreprocessor:
         del sample.preprocessor, sample.target_duration
         return sample
 
+    def _generate_sample(self, sample):
+        """create AudioSample object from initial input (file path)
+
+        can override this method is subclasses to modify how samples
+        are created, or to add additional attributes to samples
+        """
+        # handle paths or pd.Series as input for `sample`
+        if type(sample) == str or issubclass(type(sample), Path):
+            sample = AudioSample(sample)  # initialize with source = file path
+        else:
+            assert isinstance(sample, AudioSample), (
+                "sample must be AudioSample OR file path (str or pathlib.Path), "
+                f"was {type(sample)}"
+            )
+
+        # add attributes to the sample that might be needed by actions in the pipeline
+        sample.preprocessor = self
+        sample.target_duration = self.sample_duration
+
+        return sample
+
     def _insert_action_before(self, idx, name, value):
         """insert an item before a spcific index in a series"""
         i = list(self.pipeline.index).index(idx)
@@ -219,6 +231,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
     def __init__(self, sample_duration, overlay_df=None, out_shape=(224, 224, 3)):
 
         super(SpectrogramPreprocessor, self).__init__(sample_duration=sample_duration)
+        self.out_shape = out_shape
 
         # define a default set of Actions
         self.pipeline = pd.Series(
@@ -232,12 +245,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 "bandpass": Action(
                     Spectrogram.bandpass, min_f=0, max_f=11025, out_of_bounds_ok=False
                 ),
-                "to_img": Action(
-                    Spectrogram.to_image,
-                    shape=out_shape[0:2],
-                    channels=out_shape[2],
-                    return_type="torch",
-                ),
+                "to_tensor": SpectrogramToTensor(),  # uses sample.target_shape
                 "overlay": Overlay(
                     is_augmentation=True, overlay_df=overlay_df, update_labels=False
                 )
@@ -258,3 +266,11 @@ class SpectrogramPreprocessor(BasePreprocessor):
         # remove overlay if overlay_df was not specified
         if overlay_df is None:
             self.pipeline.drop("overlay", inplace=True)
+
+    def _generate_sample(self, sample):
+        """add the target_shape attribute to the sample
+        otherwise, generate AudioSamples from paths as normal
+        """
+        sample = super()._generate_sample(sample)
+        sample.target_shape = self.out_shape
+        return sample

@@ -73,7 +73,7 @@ class CNN(BaseModule):
             [default: False]
         preprocessor_class: class of Preprocessor object
         sample_shape: tuple of height, width, channels for created sample
-            [default: (224,224,3)]
+            [default: (224,224,3)] #TODO: consider changing to (ch,h,w) to match torchww
 
     """
 
@@ -96,6 +96,7 @@ class CNN(BaseModule):
         self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
+
         # number of samples to preprocess and log to wandb during train/predict
         self.wandb_logging = dict(
             n_preview_samples=8,  # before train/predict, log n random samples
@@ -152,6 +153,7 @@ class CNN(BaseModule):
             self.device = torch.device("cpu")
 
         ### sample loading/preprocessing ###
+        # preprocessor will have attributes .sample_duration and .out_shape
         self.preprocessor = preprocessor_class(
             sample_duration=sample_duration, out_shape=sample_shape
         )
@@ -428,9 +430,7 @@ class CNN(BaseModule):
             wandb_config["learning_rate"] = "n/a"
 
         try:
-            wandb_config["sample_shape"] = self.preprocessor.pipeline.to_img.params[
-                "shape"
-            ] + [self.preprocessor.pipeline.to_img.params["channels"]]
+            wandb_config["sample_shape"] = self.preprocessor.out_shape
         except:
             wandb_config["sample_shape"] = "n/a"
 
@@ -733,7 +733,9 @@ class CNN(BaseModule):
 
         return score, metrics_dict
 
-    def save(self, path, save_train_loader=False, save_hooks=False):
+    def save(
+        self, path, save_train_loader=False, save_hooks=False, as_torch_dict=False
+    ):
         """save model with weights using torch.save()
 
         load from saved file with torch.load(path) or cnn.load_model(path)
@@ -747,6 +749,8 @@ class CNN(BaseModule):
                 wandb.watch()
         """
         os.makedirs(Path(path).parent, exist_ok=True)
+
+        # save a pickled model object; will not work across opso versions
         model_copy = copy.deepcopy(self)
 
         if not save_train_loader:
@@ -764,6 +768,77 @@ class CNN(BaseModule):
                 m._backward_hooks = OrderedDict()
 
         torch.save(model_copy, path)
+
+    def save_torch_dict(self, path):
+        """save model to file for use in other opso versions
+
+         WARNING: this does not save any preprocessing or augmentation
+            settings or parameters, or other attributes such as the training
+            parameters or loss function. It only saves architecture, weights,
+            classes, sample shape, sample duration, and single_target.
+
+        To save the entire pickled model object (recover all parameters and
+        settings), use model.save() instead. Note that models saved with
+        model.save() will not work across different versions of OpenSoundscape.
+
+        To recreate the model after saving with this function, use CNN.from_torch_dict(path)
+
+        Args:
+            path: file path for saved model object
+
+        Effects:
+            saves a file using torch.save() containing model weights and other information
+        """
+
+        # warn the user if the achirecture can't be re-created from the
+        # string name (self.architecture_name)
+        if not self.architecture_name in cnn_architectures.list_architectures():
+            warnings.warn(
+                f"""\n The value of `self.architecture_name` ({self.architecture_name})
+                    is not an architecture that can be generated in OpenSoundscape. Using
+                    CNN.from_torch_dict on the saved file will cause an error. To fix this,
+                    you can use .save() instead of .save_torch_model, or change 
+                    `self.architecture_name` to one of the architecture name strings listed by 
+                    opensoundscape.torch.architectures.cnn_architectures.list_architectures()
+                    if this architecture is supported."""
+            )
+
+        os.makedirs(Path(path).parent, exist_ok=True)
+
+        # save just the basics, loses preprocessing/other settings
+        torch.save(
+            {
+                "weights": self.network.state_dict(),
+                "classes": self.classes,
+                "architecture": self.architecture_name,
+                "sample_duration": self.preprocessor.sample_duration,
+                "single_target": self.single_target,
+                "sample_shape": self.preprocessor.out_shape,
+            },
+            path,
+        )
+
+    @classmethod
+    def from_torch_dict(cls, path):
+        """load a model saved using CNN.save_torch_dict()
+
+        Args:
+            path: path to file saved using CNN.save_torch_dict()
+
+        Returns:
+            new CNN instance
+
+        Note: if you used .save() instead of .save_torch_dict(), load
+        the model using cnn.load_model(). Note that the model object will not load properly
+        across different versions of OpenSoundscape. To save and load models across
+        different versions of OpenSoundscape, use .save_torch_dict(), but note that
+        preprocessing and other customized settings will not be retained.
+        """
+        model_dict = torch.load(path)
+        state_dict = model_dict.pop("weights")
+        model = cls(**model_dict)
+        model.network.load_state_dict(state_dict)
+        return model
 
     def save_weights(self, path):
         """save just the weights of the network
@@ -1548,6 +1623,12 @@ class InceptionV3(CNN):
         total_scores = np.concatenate(total_scores, axis=0)
 
         return total_tgts, total_preds, total_scores
+
+    @classmethod
+    def from_torch_dict(self):
+        raise NotImplementedError(
+            "Creating InceptionV3 from torch dict is not implemented."
+        )
 
 
 def load_model(path, device=None):
