@@ -304,7 +304,10 @@ def test_predict_splitting_short_file(short_file_df):
         warnings.simplefilter("always")
         scores = model.predict(short_file_df)
         assert len(scores) == 0
-        assert "prediction_dataset" in str(w[0].message)
+        all_warnings = ""
+        for wi in w:
+            all_warnings += str(wi.message)
+        assert "prediction_dataset" in all_warnings
 
 
 def test_save_and_load_model(model_save_path):
