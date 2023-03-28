@@ -803,30 +803,44 @@ python-versions = ">=3.7"
 typing-extensions = {version = "*", markers = "python_version < \"3.8\""}
 
 [[package]]
+name = "lazy-loader"
+version = "0.2"
+description = "lazy_loader"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.extras]
+lint = ["pre-commit (>=3.1)"]
+test = ["pytest (>=7.2)", "pytest-cov (>=4.0)"]
+
+[[package]]
 name = "librosa"
-version = "0.9.2"
+version = "0.10.0.post2"
 description = "Python module for audio and music processing"
 category = "main"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 
 [package.dependencies]
 audioread = ">=2.1.9"
-decorator = ">=4.0.10"
+decorator = ">=4.3.0"
 joblib = ">=0.14"
-numba = ">=0.45.1"
-numpy = ">=1.17.0"
-packaging = ">=20.0"
-pooch = ">=1.0"
-resampy = ">=0.2.2"
-scikit-learn = ">=0.19.1"
+lazy-loader = ">=0.1"
+msgpack = ">=1.0"
+numba = ">=0.51.0"
+numpy = ">=1.20.3,<1.22.0 || >1.22.0,<1.22.1 || >1.22.1,<1.22.2 || >1.22.2"
+pooch = ">=1.0,<1.7"
+scikit-learn = ">=0.20.0"
 scipy = ">=1.2.0"
-soundfile = ">=0.10.2"
+soundfile = ">=0.12.1"
+soxr = ">=0.3.2"
+typing-extensions = ">=4.1.1"
 
 [package.extras]
 display = ["matplotlib (>=3.3.0)"]
-docs = ["ipython (>=7.0)", "matplotlib (>=3.3.0)", "mir-eval (>=0.5)", "numba (<0.50)", "numpydoc", "presets", "sphinx (!=1.3.1)", "sphinx-gallery (>=0.7)", "sphinx-multiversion (>=0.2.3)", "sphinx-rtd-theme (>=1.0.0,<2.0.0)", "sphinxcontrib-svg2pdfconverter"]
-tests = ["contextlib2", "matplotlib (>=3.3.0)", "pytest", "pytest-cov", "pytest-mpl", "samplerate", "soxr"]
+docs = ["ipython (>=7.0)", "matplotlib (>=3.3.0)", "mir-eval (>=0.5)", "numba (>=0.51)", "numpydoc", "presets", "sphinx (!=1.3.1,<6)", "sphinx-gallery (>=0.7)", "sphinx-multiversion (>=0.2.3)", "sphinx-rtd-theme (>=1.0.0,<2.0.0)", "sphinxcontrib-svg2pdfconverter"]
+tests = ["matplotlib (>=3.3.0)", "packaging (>=20.0)", "pytest", "pytest-cov", "pytest-mpl", "resampy (>=0.2.2)", "samplerate", "types-decorator"]
 
 [[package]]
 name = "llvmlite"
@@ -1611,23 +1625,6 @@ socks = ["PySocks (>=1.5.6,!=1.5.7)"]
 use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 
 [[package]]
-name = "resampy"
-version = "0.4.2"
-description = "Efficient signal resampling"
-category = "main"
-optional = false
-python-versions = "*"
-
-[package.dependencies]
-numba = ">=0.53"
-numpy = ">=1.17"
-
-[package.extras]
-design = ["optuna (>=2.10.0)"]
-docs = ["numpydoc", "sphinx (!=1.3.1)"]
-tests = ["pytest (<8)", "pytest-cov", "scipy (>=1.0)"]
-
-[[package]]
 name = "schema"
 version = "0.7.5"
 description = "Simple data validation library"
@@ -1823,7 +1820,7 @@ python-versions = "*"
 
 [[package]]
 name = "soundfile"
-version = "0.11.0"
+version = "0.12.1"
 description = "An audio library based on libsndfile, CFFI and NumPy"
 category = "main"
 optional = false
@@ -1842,6 +1839,21 @@ description = "A modern CSS selector implementation for Beautiful Soup."
 category = "main"
 optional = false
 python-versions = ">=3.6"
+
+[[package]]
+name = "soxr"
+version = "0.3.4"
+description = "High quality, one-dimensional sample-rate conversion library"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+numpy = "*"
+
+[package.extras]
+docs = ["linkify-it-py", "myst-parser", "sphinx", "sphinx-book-theme"]
+test = ["pytest"]
 
 [[package]]
 name = "sphinx"
@@ -2223,7 +2235,7 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7.1,<3.10"
-content-hash = "c12b1c57cd5f9495be840d17e8f49605b7609d5d93ba34bd6cc009e909f87d4b"
+content-hash = "4e43731d1721e803592c4e543ae062e0bf8873b1fe39bb24fedc8a4fff0f9af0"
 
 [metadata.files]
 aiosignal = [
@@ -2760,9 +2772,13 @@ kiwisolver = [
     {file = "kiwisolver-1.4.4-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:36dafec3d6d6088d34e2de6b85f9d8e2324eb734162fba59d2ba9ed7a2043d5b"},
     {file = "kiwisolver-1.4.4.tar.gz", hash = "sha256:d41997519fcba4a1e46eb4a2fe31bc12f0ff957b2b81bac28db24744f333e955"},
 ]
+lazy-loader = [
+    {file = "lazy_loader-0.2-py3-none-any.whl", hash = "sha256:c35875f815c340f823ce3271ed645045397213f961b40ad0c0d395c3f5218eeb"},
+    {file = "lazy_loader-0.2.tar.gz", hash = "sha256:0edc7a5175c400acb108f283749951fefdadedeb00adcec6e88b974a9254f18a"},
+]
 librosa = [
-    {file = "librosa-0.9.2-py3-none-any.whl", hash = "sha256:322a813e6d37af9fbc369e6a637dcf5fdc5c6925ce806a0d27c68de61a81350f"},
-    {file = "librosa-0.9.2.tar.gz", hash = "sha256:5b576b5efdce428e90bc988bdd5a953d12a727e5f931f30d74c53b63abbe3c89"},
+    {file = "librosa-0.10.0.post2-py3-none-any.whl", hash = "sha256:0f3b56118cb01ea89df4b04e924c7f48c5c13d42cc55a12540eb04ae87ab5848"},
+    {file = "librosa-0.10.0.post2.tar.gz", hash = "sha256:6623673da30773beaae962cb4685f188155582f25bc60fc52da968f59eea8567"},
 ]
 llvmlite = [
     {file = "llvmlite-0.39.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:6717c7a6e93c9d2c3d07c07113ec80ae24af45cde536b34363d4bcd9188091d9"},
@@ -3498,10 +3514,6 @@ requests = [
     {file = "requests-2.28.1-py3-none-any.whl", hash = "sha256:8fefa2a1a1365bf5520aac41836fbee479da67864514bdb821f31ce07ce65349"},
     {file = "requests-2.28.1.tar.gz", hash = "sha256:7c5599b102feddaa661c826c56ab4fee28bfd17f5abca1ebbe3e7f19d7c97983"},
 ]
-resampy = [
-    {file = "resampy-0.4.2-py3-none-any.whl", hash = "sha256:4340b6c4e685a865621dfcf016e2a3dd49d865446b6025e30fe88567f22e052e"},
-    {file = "resampy-0.4.2.tar.gz", hash = "sha256:0a469e6ddb89956f4fd6c88728300e4bbd186fae569dd4fd17dae51a91cbaa15"},
-]
 schema = [
     {file = "schema-0.7.5-py2.py3-none-any.whl", hash = "sha256:f3ffdeeada09ec34bf40d7d79996d9f7175db93b7a5065de0faa7f41083c1e6c"},
     {file = "schema-0.7.5.tar.gz", hash = "sha256:f06717112c61895cabc4707752b88716e8420a8819d71404501e114f91043197"},
@@ -3698,16 +3710,48 @@ snowballstemmer = [
     {file = "snowballstemmer-2.2.0.tar.gz", hash = "sha256:09b16deb8547d3412ad7b590689584cd0fe25ec8db3be37788be3810cbf19cb1"},
 ]
 soundfile = [
-    {file = "soundfile-0.11.0-py2.py3-none-any.whl", hash = "sha256:f4e4f832b1958403fb9726eeea54e0ebf1c7fc2599ff296a7ab1ac062f8048c9"},
-    {file = "soundfile-0.11.0-py2.py3-none-macosx_10_9_arm64.macosx_11_0_arm64.whl", hash = "sha256:9e6a62eefad0a7f856cc8f5ede7f1a0c196b65d2901c00fffc74a3d7e81d89c8"},
-    {file = "soundfile-0.11.0-py2.py3-none-macosx_10_9_x86_64.macosx_11_0_x86_64.whl", hash = "sha256:12f66fe9dcddedaa6c808bc3e104fc67fcee59dc64214bf7f43605e69836c497"},
-    {file = "soundfile-0.11.0-py2.py3-none-win32.whl", hash = "sha256:08d9636815692f332e042990d449e79b888d288f0752226d8602e91523a0a29b"},
-    {file = "soundfile-0.11.0-py2.py3-none-win_amd64.whl", hash = "sha256:a4ab6f66ad222d8e144dcb6abc73fbb867c11da2934b677f9b129778a6c65112"},
-    {file = "soundfile-0.11.0.tar.gz", hash = "sha256:931738a1c93e8684c2d3e1d514ac63440ce827ec783ea0a2d3e4730e3dc58c18"},
+    {file = "soundfile-0.12.1-py2.py3-none-any.whl", hash = "sha256:828a79c2e75abab5359f780c81dccd4953c45a2c4cd4f05ba3e233ddf984b882"},
+    {file = "soundfile-0.12.1-py2.py3-none-macosx_10_9_x86_64.whl", hash = "sha256:d922be1563ce17a69582a352a86f28ed8c9f6a8bc951df63476ffc310c064bfa"},
+    {file = "soundfile-0.12.1-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:bceaab5c4febb11ea0554566784bcf4bc2e3977b53946dda2b12804b4fe524a8"},
+    {file = "soundfile-0.12.1-py2.py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:2dc3685bed7187c072a46ab4ffddd38cef7de9ae5eb05c03df2ad569cf4dacbc"},
+    {file = "soundfile-0.12.1-py2.py3-none-manylinux_2_31_x86_64.whl", hash = "sha256:074247b771a181859d2bc1f98b5ebf6d5153d2c397b86ee9e29ba602a8dfe2a6"},
+    {file = "soundfile-0.12.1-py2.py3-none-win32.whl", hash = "sha256:59dfd88c79b48f441bbf6994142a19ab1de3b9bb7c12863402c2bc621e49091a"},
+    {file = "soundfile-0.12.1-py2.py3-none-win_amd64.whl", hash = "sha256:0d86924c00b62552b650ddd28af426e3ff2d4dc2e9047dae5b3d8452e0a49a77"},
+    {file = "soundfile-0.12.1.tar.gz", hash = "sha256:e8e1017b2cf1dda767aef19d2fd9ee5ebe07e050d430f77a0a7c66ba08b8cdae"},
 ]
 soupsieve = [
     {file = "soupsieve-2.3.2.post1-py3-none-any.whl", hash = "sha256:3b2503d3c7084a42b1ebd08116e5f81aadfaea95863628c80a3b774a11b7c759"},
     {file = "soupsieve-2.3.2.post1.tar.gz", hash = "sha256:fc53893b3da2c33de295667a0e19f078c14bf86544af307354de5fcf12a3f30d"},
+]
+soxr = [
+    {file = "soxr-0.3.4-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:b7b84126643c063d5daa203f7f9137e21734dabbd7e68c097607b2ef457e2f2e"},
+    {file = "soxr-0.3.4-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:380d2d43871a68e8b1ef1702a0abe6f9e48ddb3933c7a303c45d67e121503e7c"},
+    {file = "soxr-0.3.4-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a4a1b4019c9972f57612482c4f85523d6e832e3d10935e2f070a9dcd334a4dcb"},
+    {file = "soxr-0.3.4-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e613cee023b7c3f162b9da3f6b169cd7f58de345275be1fde9f19adc9cf144df"},
+    {file = "soxr-0.3.4-cp310-cp310-win32.whl", hash = "sha256:182c02a7ba45a159a0dbb0a297335df2381ead03a65377b19663ea0ff720ecb7"},
+    {file = "soxr-0.3.4-cp310-cp310-win_amd64.whl", hash = "sha256:1e95c96ce94524fae453b4331c9910d33f97506f99bae06d76a9c0649710619e"},
+    {file = "soxr-0.3.4-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:2678d2719e7496803983584d661eb5fddc7017154a8dda4a774407c56ff07973"},
+    {file = "soxr-0.3.4-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:11bd1396052049e6d389225a0e96a9df15f706da501c619b35d3c72ac6bc7257"},
+    {file = "soxr-0.3.4-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7e23de4dfe54ac30e583bbc9cc3feda1cd776fedce13206bc4b3115b75ecab82"},
+    {file = "soxr-0.3.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3e7396498a5f5b7d8f23b656f65c24517a6ff5bdc3ee0623ccd491036a43ea08"},
+    {file = "soxr-0.3.4-cp311-cp311-win32.whl", hash = "sha256:e57e9703c2bff834cabc06800d3c11a259544891d2c24a78949f3cf2f5492cc5"},
+    {file = "soxr-0.3.4-cp311-cp311-win_amd64.whl", hash = "sha256:7c8350acd7150f74261a0569b47ccb1bb4aa39b2d575860bc97cfa69aab8aead"},
+    {file = "soxr-0.3.4-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:941f7355116fe77fe6a82938fa7799a0e466a494ebc093f676969ce32b2815b1"},
+    {file = "soxr-0.3.4-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:00fdbf24f64d8c3fb800425c383048cb24c32defac80901cde4a57fb6ce5d431"},
+    {file = "soxr-0.3.4-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7bb6d4dc807d04c536674429e2b05ae08a1efac9815c4595e41ffd6b57c2c662"},
+    {file = "soxr-0.3.4-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ff15853895b54f1b627799c6600be1ce5f7286724e7a93e4b7b9d79e5d4166f5"},
+    {file = "soxr-0.3.4-cp38-cp38-win32.whl", hash = "sha256:d858becbc1fcc7b38c3436d3276290fae09403cdcbdf1d5986a18dab7023a6c3"},
+    {file = "soxr-0.3.4-cp38-cp38-win_amd64.whl", hash = "sha256:068ab4df549df5783cc1eb4eb6c94f53823b164dc27134fc621fc9f5097f38cd"},
+    {file = "soxr-0.3.4-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:20130329985f9767c8417bbd125fe138790a71802b000481c386a800e2ad2bca"},
+    {file = "soxr-0.3.4-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:78090e97abfb326b7cf14ef37d08a17252b07d438388dcbbd82a6836a9d551b1"},
+    {file = "soxr-0.3.4-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:84e590e75b7e5dca12bf68bfb090276f34a88fbcd793781c62d47f5d7dbe525e"},
+    {file = "soxr-0.3.4-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a3479d265574b960e12bca0878baba0862c43278915e0319d84679bb4d4fcd33"},
+    {file = "soxr-0.3.4-cp39-cp39-win32.whl", hash = "sha256:83de825d6a713c7b2e76d9ec3f229a58a9ed290237e7adc05d80e8b39be995a6"},
+    {file = "soxr-0.3.4-cp39-cp39-win_amd64.whl", hash = "sha256:2082f88cae89de854c3e0d62f55d0cb31eb11764f5c2a28299121fb642a22472"},
+    {file = "soxr-0.3.4-pp38-pypy38_pp73-macosx_10_9_x86_64.whl", hash = "sha256:fe8b5f92c802f1e7793c40344f5368dc6163718c9ffa82e79ee6ad779d318ac5"},
+    {file = "soxr-0.3.4-pp38-pypy38_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d0063d5f9a4e1a367084f4705301e9da131cf4d2d32aa3fe0072a1245e18088f"},
+    {file = "soxr-0.3.4-pp38-pypy38_pp73-win_amd64.whl", hash = "sha256:a680bab57adae462cdc86abcc7330beb5daa3ba5101165583eedcda88b7ba551"},
+    {file = "soxr-0.3.4.tar.gz", hash = "sha256:fe68daf00e8f020977b187699903d219f9e39b9fb3d915f3f923eed8ba431449"},
 ]
 sphinx = [
     {file = "Sphinx-5.1.1-py3-none-any.whl", hash = "sha256:309a8da80cb6da9f4713438e5b55861877d5d7976b69d87e336733637ea12693"},
