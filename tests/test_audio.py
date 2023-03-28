@@ -356,11 +356,20 @@ def test_trim_past_end_of_clip(silence_10s_mp3_str):
 
 
 def test_resample_veryshort_wav(veryshort_wav_str):
+    """Note: default resample type changed from kaiser_Fast to soxr_hq
+
+    this change mirrors default change in librosa, and means we need to
+    require librosa>=0.10.0 or add soxr as a dependency. See issue:
+    https://github.com/kitzeslab/opensoundscape/issues/674
+
+    I've chosen to add librosa>=0.10.0 as a dependency.
+    """
     audio = Audio.from_file(veryshort_wav_str)
     dur = audio.duration
     resampled_audio = audio.resample(22050)
-    assert resampled_audio.duration == dur
+    assert np.isclose(resampled_audio.duration, dur, 1e-6)
     assert resampled_audio.samples.shape == (3133,)
+    assert resampled_audio.sample_rate == 22050
 
 
 def test_resample_mp3_nonstandard_sr(silence_10s_mp3_str):

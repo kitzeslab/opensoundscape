@@ -34,6 +34,8 @@ from opensoundscape.helpers import generate_clip_times_df, load_metadata
 from opensoundscape.audiomoth import parse_audiomoth_metadata
 from opensoundscape.audio_tools import bandpass_filter
 
+DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
+
 
 class OpsoLoadAudioInputError(Exception):
     """Custom exception indicating we can't load input"""
@@ -57,7 +59,7 @@ class Audio:
     Args:
         samples (np.array):     The audio samples
         sample_rate (integer):  The sampling rate for the audio samples
-        resample_type (str):    The resampling method to use [default: "kaiser_fast"]
+        resample_type (str):    The resampling method to use [default: "soxr_hq"]
 
     Returns:
         An initialized `Audio` object
@@ -66,7 +68,7 @@ class Audio:
     __slots__ = ("samples", "sample_rate", "resample_type", "metadata")
 
     def __init__(
-        self, samples, sample_rate, resample_type="kaiser_fast", metadata=None
+        self, samples, sample_rate, resample_type=DEFAULT_RESAMPLE_TYPE, metadata=None
     ):
         self.samples = samples
         self.sample_rate = sample_rate
@@ -169,7 +171,7 @@ class Audio:
         cls,
         path,
         sample_rate=None,
-        resample_type="kaiser_fast",
+        resample_type=DEFAULT_RESAMPLE_TYPE,
         dtype=np.float32,
         load_metadata=True,
         offset=None,
@@ -198,7 +200,7 @@ class Audio:
             path (str, Path): path to an audio file
             sample_rate (int, None): resample audio with value and resample_type,
                 if None use source sample_rate (default: None)
-            resample_type: method used to resample_type (default: kaiser_fast)
+            resample_type: method used to resample_type (default: "soxr_hq")
             dtype: data type of samples returned [Default: np.float32]
             load_metadata (bool): if True, attempts to load metadata from the audio
                 file. If an exception occurs, self.metadata will be `None`.
@@ -335,7 +337,9 @@ class Audio:
         return cls(samples, sr, resample_type=resample_type, metadata=metadata)
 
     @classmethod
-    def from_bytesio(cls, bytesio, sample_rate=None, resample_type="kaiser_fast"):
+    def from_bytesio(
+        cls, bytesio, sample_rate=None, resample_type=DEFAULT_RESAMPLE_TYPE
+    ):
         """Read from bytesio object
 
         Read an Audio object from a BytesIO object. This is primarily used for
@@ -344,7 +348,7 @@ class Audio:
         Args:
             bytesio: Contents of WAV file as BytesIO
             sample_rate: The final sampling rate of Audio object [default: None]
-            resample_type: The librosa method to do resampling [default: "kaiser_fast"]
+            resample_type: The librosa method to do resampling [default: "soxr_hq"]
 
         Returns:
             An initialized Audio object
@@ -820,7 +824,7 @@ class Audio:
 def load_channels_as_audio(
     path,
     sample_rate=None,
-    resample_type="kaiser_fast",
+    resample_type=DEFAULT_RESAMPLE_TYPE,
     dtype=np.float32,
     offset=0,
     duration=None,
