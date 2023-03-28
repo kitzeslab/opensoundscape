@@ -122,6 +122,27 @@ def stereo_wav_str():
     return "tests/audio/stereo.wav"
 
 
+@pytest.fixture()
+def silent_wav_str():
+    return "tests/audio/silence_10s.mp3"
+
+
+@pytest.fixture()
+def convolved_wav_str(out_path, request):
+    path = Path(f"{out_path}/convolved.wav")
+
+    def fin():
+        path.unlink()
+
+    request.addfinalizer(fin)
+    return path
+
+
+@pytest.fixture()
+def veryshort_audio(veryshort_wav_str):
+    return Audio.from_file(veryshort_wav_str)
+
+
 def test_init_with_list():
     a = Audio([0] * 10, sample_rate=10)
     assert len(a.samples) == 10
@@ -634,3 +655,14 @@ def test_extend(veryshort_wav_audio):
     assert isclose(a.metadata["duration"], 1.0, abs_tol=1e-5)
     # samples should be zero
     assert isclose(0.0, np.max(a.samples[-100:]), abs_tol=1e-7)
+
+
+def test_bandpass_filter(veryshort_audio):
+    bandpassed = audio.bandpass_filter(
+        veryshort_audio.samples, 1000, 2000, veryshort_audio.sample_rate
+    )
+    assert len(bandpassed) == len(veryshort_audio.samples)
+
+
+def test_clipping_detector(veryshort_audio):
+    assert audio.clipping_detector(veryshort_audio.samples) > -1

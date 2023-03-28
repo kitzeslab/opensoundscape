@@ -1,14 +1,14 @@
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
-from opensoundscape.torch.datasets import AudioFileDataset
-from opensoundscape.torch.loss import ResampleLoss
-from opensoundscape.torch.models import cnn
+from opensoundscape.ml.datasets import AudioFileDataset
+from opensoundscape.ml.loss import ResampleLoss
+from opensoundscape.ml import cnn
 from opensoundscape.preprocess.utils import PreprocessingError
 
-from opensoundscape.torch.architectures.cnn_architectures import alexnet, resnet18
-from opensoundscape.torch.architectures import cnn_architectures
+from opensoundscape.ml.cnn_architectures import alexnet, resnet18
+from opensoundscape.ml import cnn_architectures
 
 from opensoundscape.sample import AudioSample
-from opensoundscape.torch.cam import CAM
+from opensoundscape.ml.cam import CAM
 
 from opensoundscape.helpers import make_clip_df
 import pandas as pd
