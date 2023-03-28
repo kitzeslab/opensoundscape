@@ -1,11 +1,13 @@
 import pytest
 from math import isclose
+import copy
 from pathlib import Path
 import numpy as np
 import pandas as pd
 from opensoundscape.audio import Audio
 from numpy.testing import assert_allclose
 from opensoundscape.preprocess import actions
+from opensoundscape.sample import AudioSample
 from PIL import Image
 import torch
 
@@ -39,6 +41,25 @@ def tensor():
 
 
 @pytest.fixture()
+def sample(short_wav_path):
+    s = AudioSample(short_wav_path, start_time=None, duration=None)
+    return s
+
+
+@pytest.fixture()
+def sample_audio(short_wav_path, audio_short):
+    s = AudioSample(short_wav_path, start_time=None, duration=None)
+    s.data = audio_short
+    return s
+
+
+@pytest.fixture()
+def sample_clip(audio_10s_path):
+    s = AudioSample(audio_10s_path, start_time=0, duration=2)
+    return s
+
+
+@pytest.fixture()
 def img():
     x = np.random.uniform(0, 255, [10, 10, 3])
     return Image.fromarray(x, mode="RGB")
@@ -47,72 +68,81 @@ def img():
 ## Tests ##
 
 
-def test_audio_clip_loader_file(short_wav_path):
+def test_audio_clip_loader_file(sample):
     action = actions.AudioClipLoader()
-    audio = action.go(short_wav_path, _start_time=None, _end_time=None)
-    assert audio.sample_rate == 44100
+    action.go(sample)
+    assert sample.data.sample_rate == 44100
 
 
-def test_audio_clip_loader_resample(short_wav_path):
+def test_audio_clip_loader_resample(sample):
     action = actions.AudioClipLoader(sample_rate=32000)
-    audio = action.go(short_wav_path, _start_time=None, _end_time=None)
-    assert audio.sample_rate == 32000
+    action.go(sample)
+    assert sample.data.sample_rate == 32000
 
 
-def test_audio_clip_loader_clip(audio_10s_path):
+def test_audio_clip_loader_clip(sample_clip):
     action = actions.AudioClipLoader()
-    audio = action.go(audio_10s_path, _start_time=0, _end_time=2)
-    assert isclose(audio.duration, 2, abs_tol=1e-4)
+    action.go(sample_clip)
+    assert isclose(sample_clip.data.duration, 2, abs_tol=1e-4)
 
 
-def test_action_trim(audio_short):
+def test_action_trim(sample_audio):
     action = actions.AudioTrim()
-    audio = action.go(audio_short, _sample_duration=1.0)
-    assert isclose(audio.duration, 1.0, abs_tol=1e-4)
+    sample_audio.target_duration = 1.0
+    action.go(sample_audio)
+    assert isclose(sample_audio.data.duration, 1.0, abs_tol=1e-4)
 
 
-def test_action_random_trim(audio_short):
+def test_action_random_trim(sample_audio):
+    sample2 = copy.deepcopy(sample_audio)
     action = actions.AudioTrim(random_trim=True)
-    a = action.go(audio_short, _sample_duration=0.01)
-    a2 = action.go(audio_short, _sample_duration=0.01)
-    assert isclose(a.duration, 0.01, abs_tol=1e-4)
-    assert not np.array_equal(a.samples, a2.samples)
+    original_duration = sample_audio.data.duration
+    sample_audio.target_duration = sample2.target_duration = 0.01
+    action.go(sample_audio)
+    action.go(sample2)
+    assert isclose(sample_audio.data.duration, 0.01, abs_tol=1e-4)
+    # random trim should result in 2 different samples
+    assert not np.array_equal(sample_audio.data.samples, sample2.data.samples)
 
 
-def test_audio_trimmer_default(audio_10s):
+def test_audio_trimmer_default(sample_audio):
     """should not trim if no extra args"""
     action = actions.AudioTrim()
-    audio = action.go(audio_10s, _sample_duration=None)
-    assert isclose(audio.duration, 10, abs_tol=1e-4)
+    sample_audio.target_duration = None
+    action.go(sample_audio)
+    assert isclose(sample_audio.data.duration, 0.142086167800, abs_tol=1e-4)
 
 
-def test_audio_trimmer_raises_error_on_short_clip(audio_short):
+def test_audio_trimmer_raises_error_on_short_clip(sample_audio):
     action = actions.AudioTrim()
+    sample_audio.target_duration = 10
     with pytest.raises(ValueError):
-        audio = action.go(audio_short, _sample_duration=10, extend=False)
+        action.go(sample_audio, extend=False)
 
 
-def test_audio_trimmer_extend_short_clip(audio_short):
+def test_audio_trimmer_extend_short_clip(sample_audio):
     action = actions.AudioTrim()
-    audio = action.go(audio_short, _sample_duration=1.0)  # extend=True is default
-    assert isclose(audio.duration, 1.0, abs_tol=1e-4)
+    sample_audio.target_duration = 1
+    action.go(sample_audio)  # extend=True is default
+    assert isclose(sample_audio.data.duration, 1.0, abs_tol=1e-4)
 
 
-def test_audio_random_gain(audio_short):
+def test_audio_random_gain(sample_audio):
     # should reduce 10x if -20dB gain
+    original_max = max(sample_audio.data.samples)
     action = actions.Action(actions.audio_random_gain, dB_range=[-20, -20])
-    audio = action.go(audio_short)
-    assert isclose(max(audio.samples) * 10, max(audio_short.samples), abs_tol=1e-6)
+    action.go(sample_audio)
+    assert isclose(max(sample_audio.data.samples) * 10, original_max, abs_tol=1e-6)
 
 
-def test_audio_add_noise(audio_short):
+def test_audio_add_noise(sample_audio):
     """smoke test: does it run?"""
     action = actions.Action(actions.audio_add_noise)
-    audio = action.go(audio_short)
+    action.go(sample_audio)
     action = actions.Action(
         actions.audio_add_noise, noise_dB=-100, signal_dB=10, color="pink"
     )
-    audio = action.go(audio_short)
+    action.go(sample_audio)
 
 
 def test_color_jitter(tensor):
@@ -127,11 +157,12 @@ def test_scale_tensor(tensor):
     assert np.array_equal(tensor.numpy(), result.numpy())
 
 
-def test_generic_action(tensor):
+def test_generic_action(sample, tensor):
     """should be able to provide function to Action plus kwargs"""
+    sample.data = tensor
     action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
-    result = action.go(tensor)
-    assert result.max() * 2 == tensor.max()
+    action.go(sample)
+    assert sample.data.max() * 2 == tensor.max()
 
 
 def test_action_get_set():
@@ -147,17 +178,6 @@ def test_unexpected_param_raises_error():
     with pytest.raises(AssertionError):
         action = actions.Action(actions.scale_tensor)
         action.set(not_a_param=0)
-
-
-def test_extra_arg():
-    def me(x, _add):
-        return x + _add
-
-    action = actions.Action(me, extra_args=["_add"])
-    assert action.go(0, _add=1) == 1
-    with pytest.raises(TypeError):
-        """raises error if we don't pass the extra arg"""
-        action.go(0)
 
 
 def test_modify_parameter_with_series_magic(tensor):

@@ -8,6 +8,7 @@ import pandas as pd
 import torch
 
 from opensoundscape.helpers import make_clip_df
+from opensoundscape.sample import AudioSample
 
 
 class AudioFileDataset(torch.utils.data.Dataset):
@@ -35,11 +36,9 @@ class AudioFileDataset(torch.utils.data.Dataset):
         preprocessor:
             an object of BasePreprocessor or its children which defines
             the operations to perform on input samples
-        return_labels:
-            if True, the __getitem__ method will return {X:sample,y:labels}
-            If False, the __getitem__ method will return {X:sample}
-            If label_df has no labels (no columns), use return_labels=False
-            [default: True]
+
+    Returns:
+        sample (AudioSample object)
 
     Raises:
         PreprocessingError if exception is raised during __getitem__
@@ -49,9 +48,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
             produce a list of clips with start/end times, if split_files_into_clips=True
     """
 
-    def __init__(
-        self, samples, preprocessor, return_labels=True, bypass_augmentations=False
-    ):
+    def __init__(self, samples, preprocessor, bypass_augmentations=False):
 
         ## Input Validation ##
 
@@ -83,19 +80,14 @@ class AudioFileDataset(torch.utils.data.Dataset):
                     "Index of dataframe passed to "
                     f"preprocessor must be a file path. First sample {df.index[0]} was not found."
                 )
-        if return_labels and len(df.columns) == 0:
-            warnings.warn("return_labels=True but df has no columns!")
-        elif len(df) > 0 and return_labels and not df.values[0, 0] in (0, 1):
-            warnings.warn(
-                "if return_labels=True, label_df must have labels that take values of 0 and 1"
-            )
+        elif len(df) > 0 and len(df.columns) > 0 and not df.values[0, 0] in (0, 1):
+            warnings.warn("if label_df has labels, they must take values of 0 and 1")
 
         if len(df) == 0:
             warnings.warn("Zero samples!")
 
         self.classes = df.columns
         self.label_df = df
-        self.return_labels = return_labels
         self.preprocessor = preprocessor
         self.invalid_samples = set()
 
@@ -107,23 +99,17 @@ class AudioFileDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx, break_on_key=None, break_on_type=None):
 
-        label_df_row = self.label_df.iloc[idx]
+        sample = AudioSample.from_series(self.label_df.iloc[idx])
 
         # preprocessor.forward will raise PreprocessingError if something fails
-        # the preprocessor handles label_df_row having index of file or (file,start_time,end_time)
-        x, sample_info = self.preprocessor.forward(
-            label_df_row,
+        sample = self.preprocessor.forward(
+            sample,
             bypass_augmentations=self.bypass_augmentations,
             break_on_key=break_on_key,
             break_on_type=break_on_type,
         )
 
-        # Return sample & label pairs (training/validation)
-        if self.return_labels:
-            labels = torch.from_numpy(sample_info["_labels"].values)
-            return {"X": x, "y": labels}
-        else:  # Return sample only (prediction)
-            return {"X": x}
+        return sample
 
     def __repr__(self):
         return f"{self.__class__} object with preprocessor: {self.preprocessor}"
@@ -172,13 +158,17 @@ class AudioSplittingDataset(AudioFileDataset):
 
     If file labels are provided, applies copied labels to all clips from a file
 
+    NOTE: If you've already created a dataframe with clip start and end times,
+    you can use AudioFileDataset. This class is only necessary if you wish to
+    automatically split longer files into clips (providing only the file paths).
+
     Args:
         see AudioFileDataset and make_clip_df
     """
 
     def __init__(self, samples, preprocessor, overlap_fraction=0, final_clip=None):
         super(AudioSplittingDataset, self).__init__(
-            samples=samples, preprocessor=preprocessor, return_labels=False
+            samples=samples, preprocessor=preprocessor
         )
 
         self.has_clips = True

@@ -39,6 +39,12 @@ from opensoundscape.metrics import (
     single_target_metrics,
     multi_target_metrics,
 )
+from opensoundscape.sample import collate_samples
+from opensoundscape.helpers import identity
+
+from opensoundscape.torch.cam import CAM
+import pytorch_grad_cam
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
 
 class CNN(BaseModule):
@@ -101,6 +107,11 @@ class CNN(BaseModule):
         self.loss_fn = None
         self.train_loader = None
         self.scheduler = None
+
+        # to use a custom DataLoader or Sampler, change these attributes
+        # to the custom class (init must take same arguments)
+        self.train_dataloader_cls = DataLoader
+        self.inference_dataloader_cls = DataLoader
 
         ### architecture ###
         # can be a pytorch CNN such as Resnet18 or a custom object
@@ -216,21 +227,6 @@ class CNN(BaseModule):
         """
         self.loss_fn = self.loss_cls()
 
-    def _init_dataloader(
-        self, safe_dataset, batch_size=64, num_workers=1, shuffle=False
-    ):
-        """initialize dataloader for training
-
-        Override this function to use a different DataLoader or sampler
-        """
-        return DataLoader(
-            safe_dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            pin_memory=True,
-        )
-
     def _set_train(self, train_df, batch_size, num_workers, raise_errors):
         """Prepare network for training on train_df
 
@@ -265,11 +261,14 @@ class CNN(BaseModule):
         )
 
         # train_loader samples batches of images + labels from training set
-        self.train_loader = self._init_dataloader(
+        self.train_loader = self.train_dataloader_cls(
             train_safe_dataset,
             batch_size=batch_size,
             num_workers=num_workers,
-            shuffle=True,
+            shuffle=True,  # SHUFFLE SAMPLES because we are training
+            # use pin_memory=True when loading files on CPU and training on GPU
+            pin_memory=False if self.device == torch.device("cpu") else True,
+            collate_fn=lambda x: x,
         )
 
         ###########################
@@ -321,11 +320,14 @@ class CNN(BaseModule):
         total_scores = []
         batch_loss = []
 
-        for batch_idx, batch_data in enumerate(train_loader):
+        for batch_idx, samples in enumerate(train_loader):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
-            batch_tensors = batch_data["X"].to(self.device)
-            batch_labels = batch_data["y"].to(self.device)
+            # we collate here rather than in the DataLoader so that
+            # we can still access the AudioSamples and thier information
+            batch_data = collate_samples(samples)
+            batch_tensors = batch_data["samples"].to(self.device)
+            batch_labels = batch_data["labels"].to(self.device)
             if len(self.classes) > 1:  # squeeze one dimension [1,2] -> [1,1]
                 batch_labels = batch_labels.squeeze(1)
 
@@ -787,6 +789,103 @@ class CNN(BaseModule):
         """
         self.network.load_state_dict(torch.load(path), strict=strict)
 
+    def _init_inference_dataloader(
+        self,
+        samples,
+        split_files_into_clips=True,
+        overlap_fraction=0,
+        final_clip=None,
+        bypass_augmentations=True,
+        batch_size=1,
+        num_workers=0,
+        raise_errors=False,
+    ):
+        """Create DataLoader for inference
+
+        During inference, we allow the user to pass any of 3 things to samples:
+        - list of file paths
+        - Dataframe with file as index
+        - Dataframe with file, start_time, end_time of clips as index
+
+        If file as index, default split_files_into_clips=True means that it will
+        automatically determine the number of clips that can be created from the file
+        (with overlap between subsequent clips based on overlap_fraction)
+
+        Returns:
+            DataLoader that creates lists of AudioSample objects
+        """
+        assert type(samples) in (list, np.ndarray, pd.DataFrame), (
+            "`samples` must be either: "
+            "(a) list or np.array of files, or DataFrame with (b) file as Index or "
+            "(c) (file,start_time,end_time) as MultiIndex"
+        )
+
+        # set up prediction Dataset, considering three possible cases:
+        # (c1) user provided multi-index df with file,start_time,end_time of clips
+        # (c2) user provided file list and wants clips to be split out automatically
+        # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
+        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor
+            )
+        elif split_files_into_clips:  # c2
+            prediction_dataset = AudioSplittingDataset(
+                samples=samples,
+                preprocessor=self.preprocessor,
+                overlap_fraction=overlap_fraction,
+                final_clip=final_clip,
+            )
+        else:  # c3
+            prediction_dataset = AudioFileDataset(
+                samples=samples, preprocessor=self.preprocessor
+            )
+        prediction_dataset.bypass_augmentations = bypass_augmentations
+
+        ## Input Validation ##
+        if len(prediction_dataset.classes) > 0 and list(self.classes) != list(
+            prediction_dataset.classes
+        ):
+            warnings.warn(
+                "The columns of input samples df differ from `model.classes`."
+            )
+
+        if len(prediction_dataset) < 1:
+            warnings.warn(
+                "prediction_dataset has zero samples. No predictions will be generated."
+            )
+            prediction_dataset = AudioFileDataset(
+                samples=[], preprocessor=self.preprocessor
+            )
+
+        # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
+        # but will provide a different sample! Later we go back and replace scores
+        # with np.nan for the bad samples (using safe_dataset._invalid_indices)
+        # this approach to error handling feels hacky
+        # however, returning None would break the batching of samples
+        # "raise" behavior will raise exceptions
+        invalid_sample_behavior = "raise" if raise_errors else "substitute"
+
+        safe_dataset = SafeDataset(
+            prediction_dataset, invalid_sample_behavior=invalid_sample_behavior
+        )
+
+        # initialize the dataloader
+        dataloader = self.inference_dataloader_cls(
+            safe_dataset,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            shuffle=False,  # DONT CHANGE the order of samples during inference!
+            # use pin_memory=True when loading files on CPU and training on GPU
+            pin_memory=False if self.device == torch.device("cpu") else True,
+            collate_fn=identity,
+        )
+        # add any paths that failed to generate a clip df to _invalid_samples
+        dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
+            prediction_dataset.invalid_samples
+        )
+
+        return dataloader
+
     def predict(
         self,
         samples,
@@ -875,70 +974,17 @@ class CNN(BaseModule):
             for that sample will be np.nan
 
         """
-        assert type(samples) in (list, np.ndarray, pd.DataFrame), (
-            "`samples` must be either: "
-            "(a) list or np.array of files, or DataFrame with (b) file as Index or "
-            "(c) (file,start_time,end_time) as MultiIndex"
-        )
 
-        # set up prediction Dataset, considering three possible cases:
-        # (c1) user provided multi-index df with file,start_time,end_time of clips
-        # (c2) user provided file list and wants clips to be split out automatically
-        # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
-        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
-            prediction_dataset = AudioFileDataset(
-                samples=samples, preprocessor=self.preprocessor, return_labels=False
-            )
-        elif split_files_into_clips:  # c2
-            prediction_dataset = AudioSplittingDataset(
-                samples=samples,
-                preprocessor=self.preprocessor,
-                overlap_fraction=overlap_fraction,
-                final_clip=final_clip,
-            )
-        else:  # c3
-            prediction_dataset = AudioFileDataset(
-                samples=samples, preprocessor=self.preprocessor, return_labels=False
-            )
-        prediction_dataset.bypass_augmentations = bypass_augmentations
-
-        ## Input Validation ##
-        if len(prediction_dataset.classes) > 0 and list(self.classes) != list(
-            prediction_dataset.classes
-        ):
-            warnings.warn(
-                "The columns of input samples df differ from `model.classes`."
-            )
-
-        if len(prediction_dataset) < 1:
-            warnings.warn(
-                "prediction_dataset has zero samples. No predictions will be generated."
-            )
-            return pd.DataFrame(columns=self.classes)
-
-        # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
-        # but will provide a different sample! Later we go back and replace scores
-        # with np.nan for the bad samples (using safe_dataset._invalid_indices)
-        # this approach to error handling feels hacky
-        # however, returning None would break the batching of samples
-        # "raise" behavior will raise exceptions
-        invalid_sample_behavior = "raise" if raise_errors else "substitute"
-
-        safe_dataset = SafeDataset(
-            prediction_dataset, invalid_sample_behavior=invalid_sample_behavior
-        )
-
-        dataloader = torch.utils.data.DataLoader(
-            safe_dataset,
+        # create dataloader to generate batches of AudioSamples
+        dataloader = self._init_inference_dataloader(
+            samples,
+            split_files_into_clips=split_files_into_clips,
+            overlap_fraction=overlap_fraction,
+            final_clip=final_clip,
+            bypass_augmentations=bypass_augmentations,
             batch_size=batch_size,
             num_workers=num_workers,
-            shuffle=False,
-            # use pin_memory=True when loading files on CPU and training on GPU
-            pin_memory=torch.cuda.is_available(),
-        )
-        # add any paths that failed to generate a clip df to _invalid_samples
-        dataloader.dataset._invalid_samples = dataloader.dataset._invalid_samples.union(
-            prediction_dataset.invalid_samples
+            raise_errors=raise_errors,
         )
 
         # Initialize Weights and Biases (wandb) logging
@@ -960,7 +1006,8 @@ class CNN(BaseModule):
             wandb_session.log(
                 {
                     "Samples / Preprocessed samples": opensoundscape.wandb.wandb_table(
-                        prediction_dataset, self.wandb_logging["n_preview_samples"]
+                        dataloader.dataset.dataset,
+                        self.wandb_logging["n_preview_samples"],
                     )
                 }
             )
@@ -976,10 +1023,12 @@ class CNN(BaseModule):
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
-
-            for i, batch in enumerate(dataloader):
-                # get batch of Tensors
-                batch_tensors = batch["X"].to(self.device)
+            for i, samples in enumerate(dataloader):
+                # load a batch of images and labels from the  dataloader
+                # we collate here rather than in the DataLoader so that
+                # we can still access the AudioSamples and thier information
+                batch_data = collate_samples(samples)
+                batch_tensors = batch_data["samples"].to(self.device)
                 batch_tensors.requires_grad = False
 
                 # forward pass of network: feature extractor + classifier
@@ -1001,15 +1050,17 @@ class CNN(BaseModule):
                     )
 
         # aggregate across all batches
-        total_scores = np.concatenate(total_scores, axis=0)
-
-        # replace scores with nan for samples that failed in preprocessing
-        # this feels hacky (we predicted on substitute-samples rather than
-        # skipping the samples that failed preprocessing)
-        total_scores[dataloader.dataset._invalid_indices, :] = np.nan
+        if len(total_scores) > 0:
+            total_scores = np.concatenate(total_scores, axis=0)
+            # replace scores with nan for samples that failed in preprocessing
+            # this feels hacky (we predicted on substitute-samples rather than
+            # skipping the samples that failed preprocessing)
+            total_scores[dataloader.dataset._invalid_indices, :] = np.nan
+        else:
+            total_scores = None
 
         # return DataFrame with same index/columns as prediction_dataset's df
-        df_index = prediction_dataset.label_df.index
+        df_index = dataloader.dataset.dataset.label_df.index
         score_df = pd.DataFrame(index=df_index, data=total_scores, columns=self.classes)
 
         # warn the user if there were invalid samples (failed to preprocess)
@@ -1031,7 +1082,6 @@ class CNN(BaseModule):
                 dataset = AudioFileDataset(
                     samples=top_samples,
                     preprocessor=self.preprocessor,
-                    return_labels=False,
                     bypass_augmentations=True,
                 )
                 table = opensoundscape.wandb.wandb_table(
@@ -1043,6 +1093,217 @@ class CNN(BaseModule):
             return score_df, invalid_samples
         else:
             return score_df
+
+    def generate_cams(
+        self,
+        samples,
+        method="gradcam",
+        classes=None,
+        target_layers=None,
+        guided_backprop=False,
+        split_files_into_clips=True,
+        bypass_augmentations=True,
+        batch_size=1,
+        num_workers=0,
+    ):
+        """
+        Generate a activation and/or backprop heatmaps for each sample
+
+        Args:
+            samples: (same as CNN.predict())
+                the files to generate predictions for. Can be:
+                - a dataframe with index containing audio paths, OR
+                - a dataframe with multi-index (file, start_time, end_time), OR
+                - a list (or np.ndarray) of audio file paths
+            method: method to use for activation map. Can be str (choose from below)
+                or a class of pytorch_grad_cam (any subclass of BaseCAM), or None
+                if None, activation maps will not be created [default:'gradcam']
+
+                str can be any of the following:
+                    "gradcam": pytorch_grad_cam.GradCAM,
+                    "hirescam": pytorch_grad_cam.HiResCAM,
+                    "scorecam": pytorch_grad_cam.ScoreCAM,
+                    "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
+                    "ablationcam": pytorch_grad_cam.AblationCAM,
+                    "xgradcam": pytorch_grad_cam.XGradCAM,
+                    "eigencam": pytorch_grad_cam.EigenCAM,
+                    "eigengradcam": pytorch_grad_cam.EigenGradCAM,
+                    "layercam": pytorch_grad_cam.LayerCAM,
+                    "fullgrad": pytorch_grad_cam.FullGrad,
+                    "gradcamelementwise": pytorch_grad_cam.GradCAMElementWise,
+
+            classes (list): list of classes, will create maps for each class
+                [default: None] if None, creates an activation map for the highest
+                scoring class on a sample-by-sample basis
+            target_layers (list): list of target layers for GradCAM
+                - if None [default] attempts to use architecture's default target_layer
+                Note: only architectures created with opensoundscape 0.9.0+ will
+                have a default target layer. See pytorch_grad_cam docs for suggestions.
+                Note: if multiple layers are provided, the activations are merged across
+                    layers (rather than returning separate activations per layer)
+            guided_backprop: bool [default: False] if True, performs guided backpropagation
+                for each class in classes. AudioSamples will have attribute .gbp_maps,
+                a pd.Series indexed by class name
+            split_files_into_clips (bool): see CNN.predict()
+            bypass_augmentations (bool): whether to bypass augmentations in preprocessing
+                see CNN.predict
+            batch_size: number of samples to simultaneously process, see CNN.predict()
+            num_workers: parallel CPU threads for preprocessing, see CNN.predict()
+
+        Returns:
+            a list of cam class activation objects. see the cam class for more details
+
+        See pytorch_grad_cam documentation for references to the source of each method.
+        """
+
+        ## INPUT VALIDATION ##
+
+        if classes is not None:  # check that classes are in model.classes
+            assert np.all(
+                [c in self.classes for c in classes]
+            ), "`classes` must be in self.classes"
+
+        # if target_layer is None, attempt to retrieve default target layers of network
+        if target_layers is None:
+            try:
+                target_layers = self.network.cam_target_layers
+            except AttributeError as exc:
+                raise AttributeError(
+                    "Please specify _init_inference_dataloadertarget_layers. Models trained with older versions of Opensoundscape do not have default target layers"
+                    "For a ResNET model, try target_layers=[model.network.layer4]"
+                ) from exc
+        else:  # check that target_layers are modules of self.network
+            for tl in target_layers:
+                assert (
+                    tl in self.network.modules()
+                ), "target_layers must be in self.network.modules(), but {tl} is not."
+
+        ## INITIALIZE CAMS AND DATALOADER ##
+
+        # initialize cam object: `method` is either str in methods_dict keys, or the class
+        methods_dict = {
+            "gradcam": pytorch_grad_cam.GradCAM,
+            "hirescam": pytorch_grad_cam.HiResCAM,
+            "scorecam": pytorch_grad_cam.ScoreCAM,
+            "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
+            "ablationcam": pytorch_grad_cam.AblationCAM,
+            "xgradcam": pytorch_grad_cam.XGradCAM,
+            "eigencam": pytorch_grad_cam.EigenCAM,
+            "eigengradcam": pytorch_grad_cam.EigenGradCAM,
+            "layercam": pytorch_grad_cam.LayerCAM,
+            "fullgrad": pytorch_grad_cam.FullGrad,
+            "gradcamelementwise": pytorch_grad_cam.GradCAMElementWise,
+        }
+        if isinstance(method, str) and method in methods_dict:
+            cam = methods_dict[method](model=self.network, target_layers=target_layers)
+        elif method is None:
+            cam = None
+        elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
+            cam = method(model=self.network, target_layers=target_layers)
+        else:
+            raise ValueError(
+                f"`method` {method} not supported. "
+                f"Must be str from list of supported methods or a subclass of "
+                f"pytorch_grad_cam.base_cam.BaseCAM. See docstring for details. "
+            )
+
+        # initialize guided back propagation object
+        if guided_backprop:
+            gb_model = pytorch_grad_cam.GuidedBackpropReLUModel(
+                model=self.network, use_cuda=False
+            )  # TODO cuda usage - expose? use model setting?
+
+        # create dataloader to load batches of samples
+        dataloader = self._init_inference_dataloader(
+            samples,
+            split_files_into_clips=split_files_into_clips,
+            overlap_fraction=0,
+            final_clip=None,
+            bypass_augmentations=bypass_augmentations,
+            batch_size=batch_size,
+            num_workers=num_workers,
+        )
+
+        # move model to device
+        # TODO: choose cuda or not in pytorch_grad_cam methods
+        self.network.to(self.device)
+        self.network.eval()
+
+        ## GENERATE SAMPLES ##
+
+        generated_samples = []
+        for i, samples in enumerate(dataloader):
+            # load a batch of images and labels from the dataloader
+            # we collate here rather than in the DataLoader so that
+            # we can still access the AudioSamples and thier information
+            batch_data = collate_samples(samples)
+            batch_tensors = batch_data["samples"].to(self.device)
+            batch_tensors.requires_grad = False
+
+            # generate class activation maps using cam object
+            def target(class_name):
+                """helper for pytorch_grad_cam class syntax"""
+                # first get integet position of class name in self.classes
+                class_idx = list(self.classes).index(class_name)
+                # then create list of class required by pytorch_grad_cam
+                return [ClassifierOutputTarget(class_idx)]
+
+            if cam is not None:
+                if classes is None:  # selects highest scoring class per sample
+                    batch_maps = pd.Series({None: cam(batch_tensors)})
+                else:  # one activation map per class
+                    batch_maps = pd.Series(
+                        {c: cam(batch_tensors, targets=target(c)) for c in classes}
+                    )
+
+            # update the AudioSample objects to include the activation maps
+            # and create guided backprop maps, one at a time
+            for i, sample in enumerate(samples):
+
+                if cam is None:
+                    activation_maps = None
+                else:
+                    # extract this sample's activation maps from batch (all classes)
+                    activation_maps = pd.Series(
+                        {c: batch_maps[c][i] for c in batch_maps.index}
+                    )
+
+                # if requested, calculate the ReLU backpropogation, which creates
+                # high resolution pixel-activation levels for specific classes
+                # GuidedBackpropReLUasModule does not support batching
+                if guided_backprop:
+                    t = batch_tensors[i].unsqueeze(0)  # "batch" with one sample
+                    # target_category expects the index position of the class eg 0 for
+                    # first class, rather than the class name
+                    # note: t.detach() to avoid bug,
+                    # see https://github.com/jacobgil/pytorch-grad-cam/issues/401
+                    if classes is None:  # defaults to highest scoring class
+                        gbp_maps = pd.Series({None: gb_model(t.detach())})
+                    else:  # one for each class
+                        cls_list = list(self.classes)
+                        gbp_maps = pd.Series(
+                            {
+                                c: gb_model(
+                                    t.detach(), target_category=cls_list.index(c)
+                                )
+                                for c in classes
+                            }
+                        )
+                else:  # no guided backprop requested
+                    gbp_maps = None
+
+                # add CAM object as sample.cam (includes activation_map and gbp_maps)
+                sample.cam = CAM(
+                    base_image=batch_tensors[i],
+                    activation_maps=activation_maps,
+                    gbp_maps=gbp_maps,
+                )
+
+                # add sample to list of outputs to return
+                generated_samples.append(sample)
+
+        # return list of AudioSamples containing .cam attributes
+        return generated_samples
 
 
 def use_resample_loss(model):
@@ -1198,11 +1459,14 @@ class InceptionV3(CNN):
         total_scores = []
         batch_loss = []
 
-        for batch_idx, batch_data in enumerate(train_loader):
+        for batch_idx, samples in enumerate(train_loader):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
-            batch_tensors = batch_data["X"].to(self.device)
-            batch_labels = batch_data["y"].to(self.device)
+            # we collate here rather than in the DataLoader so that
+            # we can still access the AudioSamples and thier information
+            batch_data = collate_samples(samples)
+            batch_tensors = batch_data["samples"].to(self.device)
+            batch_labels = batch_data["labels"].to(self.device)
             # batch_labels = batch_labels.squeeze(1)
 
             ####################
