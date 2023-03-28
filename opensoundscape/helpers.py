@@ -20,6 +20,11 @@ def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
 
+def identity(x):
+    """return the input unchanged"""
+    return x
+
+
 def overlap(r1, r2):
     """ "calculate the amount of overlap between two real-numbered ranges"""
     assert r1[1] > r1[0]

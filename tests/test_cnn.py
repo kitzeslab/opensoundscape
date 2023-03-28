@@ -7,6 +7,9 @@ from opensoundscape.preprocess.utils import PreprocessingError
 from opensoundscape.torch.architectures.cnn_architectures import alexnet, resnet18
 from opensoundscape.torch.architectures import cnn_architectures
 
+from opensoundscape.sample import AudioSample
+from opensoundscape.torch.cam import CAM
+
 from opensoundscape.helpers import make_clip_df
 import pandas as pd
 from pathlib import Path
@@ -423,3 +426,69 @@ def test_predict_raise_errors(short_file_df, onemin_wav_df):
 
     with pytest.raises(PreprocessingError):
         model.predict(files_df, raise_errors=True)
+
+
+def test_generate_cams(test_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    samples = model.generate_cams(test_df)
+    assert len(samples) == 2
+    assert type(samples[0]) == AudioSample
+    assert type(samples[0].cam) == CAM
+    assert type(samples[0].cam.activation_maps) == pd.Series
+    assert samples[0].cam.gbp_maps is None
+
+    samples = model.generate_cams(test_df, guided_backprop=True, method=None)
+    assert type(samples[0].cam.gbp_maps) == pd.Series
+    assert samples[0].cam.activation_maps is None
+
+
+def test_generate_cams_batch_size(test_df):
+    """smoke test for batch size > 1"""
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    _ = model.generate_cams(test_df, batch_size=2)
+
+
+def test_generate_cams_num_workers(test_df):
+    # gives error about pickling #TODO
+    """smoke test for num workers > 1"""
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    _ = model.generate_cams(test_df, num_workers=2)
+
+
+def test_generate_cams_methods(test_df):
+    """test each supported method both by passing class and string name"""
+
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    import pytorch_grad_cam
+
+    methods_dict = {
+        "gradcam": pytorch_grad_cam.GradCAM,
+        "hirescam": pytorch_grad_cam.HiResCAM,
+        "scorecam": pytorch_grad_cam.ScoreCAM,
+        "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
+        "ablationcam": pytorch_grad_cam.AblationCAM,
+        "xgradcam": pytorch_grad_cam.XGradCAM,
+        "eigencam": pytorch_grad_cam.EigenCAM,
+        "eigengradcam": pytorch_grad_cam.EigenGradCAM,
+        "layercam": pytorch_grad_cam.LayerCAM,
+        "fullgrad": pytorch_grad_cam.FullGrad,
+        "gradcamelementwise": pytorch_grad_cam.GradCAMElementWise,
+    }
+    # use each class
+    for method_cls in methods_dict.values():
+        _ = model.generate_cams(test_df, method=method_cls)
+
+    # use each method's string name
+    for method_str in methods_dict.keys():
+        _ = model.generate_cams(test_df, method=method_str)
+
+
+# TODO: should we test the default target layer doesn't cause errors for each architecture in cnn_architectures?
+
+
+def test_generate_cams_target_layers(test_df):
+    """specify multiple target layers for cam"""
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    _ = model.generate_cams(
+        test_df, target_layers=[model.network.layer3, model.network.layer4]
+    )

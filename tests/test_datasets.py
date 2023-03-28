@@ -67,32 +67,32 @@ def test_audio_file_dataset(dataset_df, pre):
     """should return tensor and labels"""
     pre.bypass_augmentation = False
     dataset = AudioFileDataset(dataset_df, pre)
-    sample1 = dataset[0]["X"]
-    assert sample1.numpy().shape == (3, 224, 224)
-    assert dataset[0]["y"].numpy().shape == (2,)
+    sample1 = dataset[0]
+    assert sample1.data.numpy().shape == (3, 224, 224)
+    assert dataset[0].labels.values.shape == (2,)
 
 
 def test_spec_preprocessor_augment_off(dataset_df, pre):
     """should return same image each time"""
     dataset = AudioFileDataset(dataset_df, pre, bypass_augmentations=True)
-    sample1 = dataset[0]["X"].numpy()
-    sample2 = dataset[0]["X"].numpy()
+    sample1 = dataset[0].data.numpy()
+    sample2 = dataset[0].data.numpy()
     assert np.array_equal(sample1, sample2)
 
 
 def test_spec_preprocessor_augment_on(dataset_df, pre):
     """should return different images each time"""
     dataset = AudioFileDataset(dataset_df, pre)
-    sample1 = dataset[0]["X"]
-    sample2 = dataset[0]["X"]
+    sample1 = dataset[0].data
+    sample2 = dataset[0].data
     assert not np.array_equal(sample1, sample2)
 
 
 def test_spec_preprocessor_overlay(dataset_df, overlay_df, overlay_pre):
     dataset = AudioFileDataset(dataset_df, overlay_pre)
-    sample1 = dataset[0]["X"]
+    sample1 = dataset[0].data
     dataset.preprocessor.pipeline.overlay.bypass = True
-    sample2 = dataset[0]["X"]
+    sample2 = dataset[0].data
     assert not np.array_equal(sample1, sample2)
 
 
@@ -100,14 +100,14 @@ def test_overlay_tries_different_sample(dataset_df, bad_good_df):
     pre = SpectrogramPreprocessor(sample_duration=2.0, overlay_df=bad_good_df)
     dataset = AudioFileDataset(dataset_df, pre)
     # should try to load the bad sample, then load the good one
-    dataset[0]["X"]
+    dataset[0].data
 
 
 def test_overlay_different_class(dataset_df, overlay_pre):
     """just make sure it runs and doesn't hang"""
     overlay_pre.pipeline.overlay.set(overlay_class="different")
     dataset = AudioFileDataset(dataset_df, overlay_pre)
-    dataset[0]["X"]
+    dataset[0].data
 
 
 def test_overlay_no_valid_samples(dataset_df, overlay_df_all_positive):
@@ -117,29 +117,21 @@ def test_overlay_no_valid_samples(dataset_df, overlay_df_all_positive):
     dataset = AudioFileDataset(dataset_df, pre)
     dataset.preprocessor.pipeline.overlay.set(overlay_class="different")
     with pytest.raises(PreprocessingError):
-        sample1 = dataset[0]["X"]  # no samples with "different" labels
-
-
-def test_return_labels_no_columns_warning(dataset_df, pre):
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        # raises warning bc return_labels=True but no columns in df
-        AudioFileDataset(dataset_df[[]], pre)
-        assert "return_labels" in str(w[0].message)
+        sample1 = dataset[0]  # no samples with "different" labels
 
 
 def test_overlay_specific_class(dataset_df, overlay_pre):
     """just make sure it runs and doesn't hang"""
     dataset = AudioFileDataset(dataset_df, overlay_pre)
     dataset.preprocessor.pipeline.overlay.set(overlay_class=1)
-    dataset[0]["X"]
+    dataset[0]
 
 
 def test_overlay_with_weight_range(dataset_df, overlay_pre):
     """overlay should allow range [min,max] for overlay_weight"""
     dataset = AudioFileDataset(dataset_df, overlay_pre)
     dataset.preprocessor.pipeline.overlay.set(overlay_weight=[0.3, 0.7])
-    dataset[0]["X"]
+    dataset[0]
 
 
 def test_overlay_with_invalid_weight_range(dataset_df, overlay_pre):
@@ -147,10 +139,10 @@ def test_overlay_with_invalid_weight_range(dataset_df, overlay_pre):
     dataset = AudioFileDataset(dataset_df, overlay_pre)
     with pytest.raises(PreprocessingError):
         dataset.preprocessor.pipeline.overlay.set(overlay_weight=[0.1, 1.1])
-        sample1 = dataset[0]["X"]
+        sample1 = dataset[0]
     with pytest.raises(PreprocessingError):
         dataset.preprocessor.pipeline.overlay.set(overlay_weight=[0.1, 0.5, 0.9])
-        dataset[0]["X"]
+        dataset[0]
 
 
 def test_overlay_update_labels(dataset_df, overlay_pre):
@@ -160,7 +152,7 @@ def test_overlay_update_labels(dataset_df, overlay_pre):
     dataset.preprocessor.pipeline.overlay.set(overlay_class="different")
     dataset.preprocessor.pipeline.overlay.set(update_labels=True)
     sample = dataset[0]
-    assert np.array_equal(sample["y"].numpy(), [1, 1])
+    assert np.array_equal(sample.labels.values, [1, 1])
 
 
 def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
@@ -173,7 +165,7 @@ def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
     dataset.preprocessor.pipeline.overlay.set(overlay_class="different")
     dataset.preprocessor.pipeline.overlay.set(update_labels=True)
     sample = dataset[0]
-    assert np.array_equal(sample["y"].numpy(), [1, 1])
+    assert np.array_equal(sample.labels.values, [1, 1])
 
 
 def test_audio_splitting_dataset(dataset_df, pre):
@@ -181,7 +173,7 @@ def test_audio_splitting_dataset(dataset_df, pre):
     assert len(dataset) == 10
 
     # load a sample
-    dataset[0]["X"]
+    dataset[0]
 
 
 def test_audio_splitting_dataset_overlap(dataset_df, pre):
@@ -189,4 +181,4 @@ def test_audio_splitting_dataset_overlap(dataset_df, pre):
     assert len(dataset) == 18
 
     # load a sample
-    dataset[17]["X"]
+    dataset[17]

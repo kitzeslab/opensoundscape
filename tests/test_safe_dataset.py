@@ -28,7 +28,7 @@ def test_safe_dataset_handles_short_file(dataset):
     sample = dataset[0]
 
     # skips first sample when it fails and loads next
-    assert np.array_equal(sample["y"].numpy(), [1, 0])
+    assert np.array_equal(sample.labels.values, [1, 0])
 
     # stores failed samples in ._invalid_indices
     assert len(dataset._invalid_indices) == 1
