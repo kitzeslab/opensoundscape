@@ -15,7 +15,7 @@ from matplotlib.cm import get_cmap
 import matplotlib.colors
 
 from opensoundscape.audio import Audio
-from opensoundscape.helpers import min_max_scale, linear_scale
+from opensoundscape.utils import min_max_scale, linear_scale
 
 
 class Spectrogram:

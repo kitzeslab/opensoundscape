@@ -6,7 +6,7 @@ import pywt
 import matplotlib.pyplot as plt
 from pywt import central_frequency
 
-from opensoundscape.helpers import inrange
+from opensoundscape.utils import inrange
 
 
 def frequency2scale(frequency, wavelet, sample_rate):

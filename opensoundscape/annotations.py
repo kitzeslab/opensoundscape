@@ -8,7 +8,7 @@ from itertools import chain
 import pandas as pd
 import numpy as np
 
-from opensoundscape.helpers import overlap, overlap_fraction, generate_clip_times_df
+from opensoundscape.utils import overlap, overlap_fraction, generate_clip_times_df
 
 
 class BoxedAnnotations:
@@ -296,7 +296,7 @@ class BoxedAnnotations:
         the minimum time overlap OR minimum % overlap to be included (doesn't
         require both conditions to be met, only one)
 
-        clip_df can be created using opensoundscap.helpers.generate_clip_times_df
+        clip_df can be created using opensoundscap.utils.generate_clip_times_df
 
         Args:
             clip_df: dataframe with 'start_time' and 'end_time' columns
@@ -375,7 +375,7 @@ class BoxedAnnotations:
     ):
         """Generate one-hot labels for clips of fixed duration
 
-        wraps helpers.generate_clip_times_df() with self.one_hot_labels_like()
+        wraps utils.generate_clip_times_df() with self.one_hot_labels_like()
         - Clips are created in the same way as Audio.split()
         - Labels are applied based on overlap, using self.one_hot_labels_like()
 

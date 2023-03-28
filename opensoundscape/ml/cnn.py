@@ -40,7 +40,7 @@ from opensoundscape.metrics import (
     multi_target_metrics,
 )
 from opensoundscape.sample import collate_samples
-from opensoundscape.helpers import identity
+from opensoundscape.utils import identity
 
 from opensoundscape.ml.cam import CAM
 import pytorch_grad_cam
@@ -936,7 +936,7 @@ class CNN(BaseModule):
             overlap_fraction: fraction of overlap between consecutive clips when
                 predicting on clips of longer audio files. For instance, 0.5
                 gives 50% overlap between consecutive clips.
-            final_clip: see `opensoundscape.helpers.generate_clip_times_df`
+            final_clip: see `opensoundscape.utils.generate_clip_times_df`
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
             invalid_samples_log: if not None, samples that failed to preprocess

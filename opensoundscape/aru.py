@@ -3,7 +3,7 @@ from pathlib import Path
 import datetime
 
 import pytz
-from opensoundscape.helpers import hex_to_time, load_metadata
+from opensoundscape.utils import hex_to_time, load_metadata
 
 
 def audiomoth_start_time(file, filename_timezone="UTC", to_utc=False):

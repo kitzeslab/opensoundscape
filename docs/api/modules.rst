@@ -9,15 +9,10 @@ Audio
   :members:
 
 
-AudioMoth
-^^^^^^^^^
+ARU
+^^^
 .. automodule:: opensoundscape.aru
  :members:
-
-Audio Tools
-^^^^^^^^^^^
- .. automodule:: opensoundscape.audio_tools
-    :members:
 
 Spectrogram
 ^^^^^^^^^^^
@@ -26,22 +21,21 @@ Spectrogram
 
 CNN
 ^^^
-.. automodule:: opensoundscape.torch.models.cnn
+.. automodule:: opensoundscape.ml.cnn
   :members:
 
-torch.models.utils
-^^^^^^^^^^^^^^^^^^
-.. automodule:: opensoundscape.torch.models.utils
+Machine Learning utils
+^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: opensoundscape.ml.utils
   :members:
 
 CNN Architectures
 ^^^^^^^^^^^^^^^^^
-.. automodule:: opensoundscape.torch.architectures.cnn_architectures
+.. automodule:: opensoundscape.ml.cnn_architectures
   :members:
 
-torch.architectures.utils
-^^^^^^^^^^^^^^^^^^^^^^^^^
-.. automodule:: opensoundscape.torch.architectures.utils
+ml.utils
+.. automodule:: opensoundscape.ml.utils
   :members:
 
 WandB (Weights and Biases)
@@ -56,27 +50,27 @@ Data Selection
 
 Datasets
 ^^^^^^^^
-.. automodule:: opensoundscape.torch.datasets
+.. automodule:: opensoundscape.ml.datasets
   :members:
 
 GradCam
 ^^^^^^^
-.. automodule:: opensoundscape.torch.grad_cam
+.. automodule:: opensoundscape.ml.grad_cam
   :members:
 
 Loss
 ^^^^
-.. automodule:: opensoundscape.torch.loss
+.. automodule:: opensoundscape.ml.loss
   :members:
 
 Safe Dataset
 ^^^^^^^^^^^^
-.. automodule:: opensoundscape.torch.safe_dataset
+.. automodule:: opensoundscape.ml.safe_dataset
   :members:
 
 Sampling
 ^^^^^^^^
-.. automodule:: opensoundscape.torch.sampling
+.. automodule:: opensoundscape.ml.sampling
   :members:
 
 Metrics
@@ -129,7 +123,7 @@ Localization
 .. automodule:: opensoundscape.localization
    :members:
 
-helpers
-^^^^^^^
-.. automodule:: opensoundscape.helpers
+utils
+^^^^^
+.. automodule:: opensoundscape.utils
    :members:

@@ -30,7 +30,7 @@ import librosa
 import soundfile
 
 import opensoundscape
-from opensoundscape.helpers import generate_clip_times_df, load_metadata
+from opensoundscape.utils import generate_clip_times_df, load_metadata
 from opensoundscape.aru import parse_audiomoth_metadata
 from scipy.signal import butter, sosfiltfilt
 

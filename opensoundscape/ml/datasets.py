@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from opensoundscape.helpers import make_clip_df
+from opensoundscape.utils import make_clip_df
 from opensoundscape.sample import AudioSample
 
 

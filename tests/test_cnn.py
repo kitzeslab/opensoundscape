@@ -10,7 +10,7 @@ from opensoundscape.ml import cnn_architectures
 from opensoundscape.sample import AudioSample
 from opensoundscape.ml.cam import CAM
 
-from opensoundscape.helpers import make_clip_df
+from opensoundscape.utils import make_clip_df
 import pandas as pd
 from pathlib import Path
 
