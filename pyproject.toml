@@ -3,10 +3,12 @@ name = "opensoundscape"
 version = "0.8.0"
 description = "Open source, scalable acoustic classification for ecology and conservation"
 authors = [
-  "Justin Kitzes <justin.kitzes@pitt.edu>",
-  "Barry Moore <moore0557@gmail.com>",
+  "Sam Lapp <sammlapp@gmail.com>",
+  "Louis Freeland-Haynes <>",
+  "Sasha Syunkova <>",
+  "Jatin Khilnani <>",
   "Tessa Rhinehart <tessa.rhinehart@gmail.com>",
-  "Sam Lapp <sammlapp@gmail.com>"
+  "Justin Kitzes <justin.kitzes@pitt.edu>",
 ]
 license = "MIT"
 readme = "README.md"
