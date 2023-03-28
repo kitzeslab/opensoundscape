@@ -80,9 +80,9 @@ def test_trace_on(preprocessor, sample):
     assert isinstance(sample.trace["load_audio"], Audio)
 
 
-def test_trace_output(preprocessor, row):
-    x, sample_info = preprocessor.forward(row, trace=True)
-    assert isinstance(sample_info["_trace"]["load_audio"], Audio)
+def test_trace_output(preprocessor, sample):
+    sample = preprocessor.forward(sample, trace=True)
+    assert isinstance(sample.trace["load_audio"], Audio)
 
 
 # several specific scenarios are tested using DataSets in test_datasets.py
