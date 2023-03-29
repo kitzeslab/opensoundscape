@@ -9,7 +9,12 @@ import pandas as pd
 import numpy as np
 import librosa
 
-from opensoundscape.helpers import overlap, overlap_fraction, generate_clip_times_df
+from opensoundscape.helpers import (
+    overlap,
+    overlap_fraction,
+    generate_clip_times_df,
+    make_clip_df,
+)
 
 
 class BoxedAnnotations:
@@ -25,49 +30,69 @@ class BoxedAnnotations:
     trim() [limit time range] and bandpass() [limit frequency range]
     """
 
-    def __init__(self, df, audio_file=None):
+    def __init__(self, df):
         """
         create object directly from DataFrame of frequency-time annotations
 
-        For loading annotations from Raven txt files, use `from_raven_file`
+        For loading annotations from Raven txt files, use `from_raven_files`
 
         Args:
             df: DataFrame of frequency-time labels. Columns must include:
                 - "annotation": string or numeric labels (can be None/nan)
                 - "start_time": left bound, sec since beginning of audio
                 - "end_time": right bound, sec since beginning of audio
+                optional columns:
+                - "file": name or path of corresponding audio file
                 - "low_f": lower frequency bound (values can be None/nan)
                 - "high_f": upper frequency bound (values can be None/nan)
-            audio_file: optionally include the name or path of corresponding
-            audio clip for which annotations are loaded from the DataFrame
+            Note: other columns will be retained in the .df
 
         Returns:
             BoxedAnnotations object
+
         """
-        required_cols = ["annotation", "start_time", "end_time", "low_f", "high_f"]
+        standard_cols = [
+            "file",
+            "annotation",
+            "start_time",
+            "end_time",
+            "low_f",
+            "high_f",
+        ]
+        required_cols = ["annotation", "start_time", "end_time"]
         for col in required_cols:
             assert col in df.columns, (
                 f"df columns must include all of these: {str(required_cols)}\n"
                 f"columns in df: {list(df.columns)}"
             )
-        self.df = df
-        self.audio_file = audio_file
+        # re-order columns
+        # keep any extras from input df and add any missing standard columns
+        ordered_cols = standard_cols + list(set(df.columns) - set(standard_cols))
+        self.df = df.reindex(columns=ordered_cols)
 
     def __repr__(self):
-        return (
-            f"<opensoundscape.annotations.BoxedAnnotations object with "
-            f"audio_file={self.audio_file}>"
-        )
+        return self.df.__repr__()
+
+    def _repr_html_(self):
+        return self.df._repr_html_()
 
     @classmethod
-    def from_raven_file(
-        cls, path, annotation_column, keep_extra_columns=True, audio_file=None
+    def from_raven_files(
+        cls,
+        raven_paths,
+        audio_files=None,
+        annotation_column_idx=7,
+        keep_extra_columns=True,
     ):
-        """load annotations from Raven txt file
+        """load annotations from Raven .txt files
 
         Args:
-            path: location of raven .txt file, str or pathlib.Path
-            annotation_column: (str) column containing annotations
+            raven_paths: list of raven .txt file paths (as str or pathlib.Path)
+            audio_files: (list) optionally specify audio files corresponding to each
+                raven file (length should match raven_paths)
+            annotation_column_idx: (int) position of column containing annotations
+                - [default: 7] will be correct if the first user-created column
+                in Raven contains annotations
                 - pass `None` to load the raven file without explicitly
                 assigning a column as the annotation column. The resulting
                 object's `.df` will have an `annotation` column with nan values!
@@ -77,72 +102,88 @@ class BoxedAnnotations:
                 - True: keep all
                 - False: keep none
                 - or iterable of specific columns to keep
-            audio_file: optionally specify the name or path of a corresponding
-                audio file.
 
         Returns:
-            BoxedAnnotations object containing annotaitons from the Raven file
+            BoxedAnnotations object containing annotations from the Raven files
+            (the .df attribute is a dataframe containing each annotation)
         """
-        df = pd.read_csv(path, delimiter="\t")
-        if annotation_column is not None:
-            assert annotation_column in df.columns, (
-                f"Raven file does not contain annotation_column={annotation_column}\n"
-                f"(columns in file: {list(df.columns)})"
-            )
+        all_file_dfs = []
+        for i, raven_path in enumerate(raven_paths):
+            df = pd.read_csv(raven_path, delimiter="\t")
+            if annotation_column_idx is not None:
+                df = df.rename(
+                    columns={
+                        df.columns[annotation_column_idx]: "annotation",
+                    }
+                )
+            else:
+                # user laoded table without specifying annotation column
+                # we'll create an empty `annotation` column
+                df["annotation"] = np.nan
+
+            # rename Raven columns to standard opensoundscape names
             df = df.rename(
                 columns={
-                    annotation_column: "annotation",
+                    "Begin Time (s)": "start_time",
+                    "End Time (s)": "end_time",
+                    "Low Freq (Hz)": "low_f",
+                    "High Freq (Hz)": "high_f",
                 }
             )
-        else:
-            # user laoded table without specifying annotation column
-            # we'll create an empty `annotation` column
-            df["annotation"] = np.nan
 
-        # rename Raven columns to standard opso names
-        df = df.rename(
-            columns={
-                "Begin Time (s)": "start_time",
-                "End Time (s)": "end_time",
-                "Low Freq (Hz)": "low_f",
-                "High Freq (Hz)": "high_f",
-            }
-        )
+            # remove undesired columns
+            standard_columns = ["start_time", "end_time", "low_f", "high_f"]
+            if annotation_column_idx is not None:
+                standard_columns.append("annotation")
 
-        # remove undesired columns
-        standard_columns = ["start_time", "end_time", "low_f", "high_f"]
-        if annotation_column is not None:
-            standard_columns.append("annotation")
+            if hasattr(keep_extra_columns, "__iter__"):
+                # keep the desired columns
+                df = df[standard_columns + list(keep_extra_columns)]
+            elif not keep_extra_columns:
+                # only keep required columns
+                df = df[standard_columns]
+            else:
+                # keep all columns
+                pass
 
-        if hasattr(keep_extra_columns, "__iter__"):
-            # keep the desired columns
-            df = df[standard_columns + list(keep_extra_columns)]
-        elif not keep_extra_columns:
-            # only keep required columns
-            df = df[standard_columns]
-        else:
-            # keep all columns
-            pass
+            # add audio file column
+            if audio_files is not None:
+                df["file"] = audio_files[i]
+            else:
+                df["file"] = np.nan
 
-        return cls(df=df, audio_file=audio_file)
+            all_file_dfs.append(df)
 
-    def to_raven_file(self, path): #to_raven_files #to_csv #export labels for one audio file
-        """save annotations to a Raven-compatible tab-separated text file
+        return cls(df=pd.concat(all_file_dfs).reset_index())
+
+    def to_raven_files(
+        self, save_dir, file_subset=None
+    ):  # to_raven_files #to_csv #export labels for one audio file
+        """save annotations to a Raven-compatible tab-separated text files
+
+        Creates one file per unique audio file in 'file' column of self.df
 
         Args:
-            path: path for saved test file (extension must be ".tsv")
+            save_dir: directory for saved files
                 - can be str or pathlib.Path
+            file_subset: list of files to create annotations for;
+                must be subset of values in self.df['file'] column
+                [default: None] will save tables all files. Any
+                columns with None/nan values for 'file' will be
+                output to a single table titled "unspecified.selections.txt"
 
         Outcomes:
-            creates a file containing the annotations in a format compatible
-            with Raven Pro/Lite.
+            creates files containing the annotations for each audio file
+            in a format compatible with Raven Pro/Lite. File is tab-separated
+            and contains columns matching the Raven defaults.
 
         Note: Raven Lite does not support additional columns beyond a single
         annotation column. Additional columns will not be shown in the Raven
         Lite interface.
         """
-        assert Path(path).suffix == ".txt", "file extension must be .txt"
+        assert Path(save_dir).exists(), f"Output directory {save_dir} does not exist"
 
+        # create a copy of the labels, and rename columns to match Raven defaults
         df = self.df.copy().rename(
             columns={
                 "start_time": "Begin Time (s)",
@@ -151,7 +192,31 @@ class BoxedAnnotations:
                 "high_f": "High Freq (Hz)",
             }
         )
-        df.to_csv(path, sep="\t", index=False)
+
+        # list of files: by default, use all files
+        # we will create one selection table for each file
+        # this list may contain NaN values, which we handle below
+        unique_files = df["file"].unique() if file_subset is None else file_subset
+
+        # If file names are no unique, raise an Exception
+        # otherwise, multiple selection table files with the same name would be
+        # written to one directory
+        file_stems = set([Path(f).stem for f in unique_files])
+        if len(file_stems) < len(unique_files):  # TODO write test for this exception
+            raise Exception(
+                "File names were not unique! Some files in different folders have the same name. "
+                "Consider subsetting files to export with file_subset=[...]"
+            )
+
+        for file in unique_files:
+            # for NaN values of file, call the output file "unspecified.selections.txt"
+            if not file == file:
+                file_df = df[df["file"].isnull()]
+                fname = "unspecified_audio.selections.txt"
+            else:
+                file_df = df[df["file"] == file]
+                fname = f"{Path(file).stem}.selections.txt"
+            file_df.to_csv(f"{save_dir}/{fname}", sep="\t", index=False)
 
     def subset(self, classes):
         """subset annotations to those from a list of classes
@@ -166,10 +231,16 @@ class BoxedAnnotations:
             new BoxedAnnotations object containing only annotations in `classes`
         """
         df = self.df[self.df["annotation"].apply(lambda x: x in classes)]
-        return BoxedAnnotations(df, self.audio_file)
+        return BoxedAnnotations(df)
 
     def trim(self, start_time, end_time, edge_mode="trim"):
-        """Trim a set of annotations, analogous to Audio/Spectrogram.trim()
+        """Trim the annotations of each file in time
+
+        Trims annotations from outside of the time bounds. Note that the annotation
+        start and end times of different files may not represent the same real-world times.
+        This function only uses the numeric values of annotation start and end times in
+        the annotations, which should be relative to the beginning of the corresponding
+        audio file.
 
         Out-of-place operation: does not modify itself, returns new object
 
@@ -183,7 +254,9 @@ class BoxedAnnotations:
         Returns:
             a copy of the BoxedAnnotations object on the trimmed region.
             - note that, like Audio.trim(), there is a new reference point for
-            0.0 seconds (located at start_time in the original object)
+            0.0 seconds (located at start_time in the original object). For example,
+            calling .trim(5,10) will result in an annotation previously starting at 6s
+            to start at 1s in the new object.
 
         """
         assert edge_mode in [
@@ -192,7 +265,7 @@ class BoxedAnnotations:
             "remove",
         ], f"invalid edge_mode argument: {edge_mode} (must be 'trim','keep', or 'remove')"
         assert start_time >= 0, "start time must be non-negative"
-        assert end_time > start_time, "end time_must be > start_time"
+        assert end_time > start_time, "end time_must be greater than start_time"
 
         df = self.df.copy()
 
@@ -219,10 +292,14 @@ class BoxedAnnotations:
         df["start_time"] = df["start_time"] - start_time
         df["end_time"] = df["end_time"] - start_time
 
-        return BoxedAnnotations(df, self.audio_file)
+        return BoxedAnnotations(df)
 
     def bandpass(self, low_f, high_f, edge_mode="trim"):
         """Bandpass a set of annotations, analogous to Spectrogram.bandpass()
+
+        Reduces the range of annotation boxes overlapping with the bandpass limits,
+        and removes annotation boxes entirely if they lie completely outside of the
+        bandpass limits.
 
         Out-of-place operation: does not modify itself, returns new object
 
@@ -264,14 +341,17 @@ class BoxedAnnotations:
         else:  #'keep': leave boxes hanging over the edges
             pass
 
-        return BoxedAnnotations(df, self.audio_file)
+        return BoxedAnnotations(df)
 
     def unique_labels(self):
-        """get list of all unique (non-Falsy) labels"""
+        """get list of all unique labels
+
+        ignores null/Falsy labels by performing .df.dropna()
+        """
         return self.df.dropna(subset=["annotation"])["annotation"].unique()
 
     def global_one_hot_labels(self, classes):
-        """get a dictionary of one-hot labels for entire duration
+        """get a list of one-hot labels for entire set of annotations
         Args:
             classes: iterable of class names to give 0/1 labels
 
@@ -287,21 +367,26 @@ class BoxedAnnotations:
         min_label_overlap,
         min_label_fraction=None,
         class_subset=None,
-        keep_index=False,
     ):
         """create a dataframe of one-hot clip labels based on given starts/ends
 
-        Uses start and end clip times from clip_df to define a set of clips.
-        Then extracts annotatations associated overlapping with each clip.
-        Required overlap parameters are selected by user: annotation must satisfy
+        Uses start and end clip times from clip_df to define a set of clips
+        for each file. Then extracts annotations overlapping with each clip.
+
+        Required overlap to consider an annotation to overlap with a clip
+        is defined by user: an annotation must satisfy
         the minimum time overlap OR minimum % overlap to be included (doesn't
         require both conditions to be met, only one)
 
-        clip_df can be created using opensoundscap.helpers.generate_clip_times_df
+        clip_df can be created using `opensoundscap.helpers.make_clip_df`
+
+        See also: `.one_hot_clip_labels()`, which creates even-lengthed clips
+        automatically and can often be used instead of this function.
 
         Args:
-            clip_df: dataframe with 'start_time' and 'end_time' columns
+            clip_df: dataframe with (file, start_time, end_time) MultiIndex
                 specifying the temporal bounds of each clip
+                (clip_df can be created using `opensoundscap.helpers.make_clip_df`)
             min_label_overlap: minimum duration (seconds) of annotation within the
                 time interval for it to count as a label. Note that any annotation
                 of length less than this value will be discarded.
@@ -318,12 +403,10 @@ class BoxedAnnotations:
                 (if there are no gaps between clips).
             class_subset: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
-            keep_index: if True, keeps the index of clip_df as an index
-                in the returned DataFrame. [default:False]
 
         Returns:
-            DataFrame of one-hot labels (multi-index of (file, start_time, end_time),
-            columns for each class, values 0=absent or 1=present)
+            DataFrame of one-hot labels w/ multi-index of (file, start_time, end_time),
+            a column for each class, and values of 0=absent or 1=present
         """
         # drop nan annotations
         df = self.df.dropna(subset=["annotation"])
@@ -336,20 +419,18 @@ class BoxedAnnotations:
             # removing rows with annotations for other classes
             df = df[df["annotation"].isin(classes)]
 
-        # if we want to keep the original index, the best way is
-        # to store it and add again later
-        if keep_index:
-            og_idx = clip_df.index
-
-        # the clip_df should have ['start_time','end_time'] in columns
-        clip_df["file"] = self.audio_file
-        clip_df = clip_df.set_index(["file", "start_time", "end_time"])
-        clip_df = clip_df[[]]  # remove any additional columns
+        # the clip_df should have ['file','start_time','end_time'] as the index
         clip_df[classes] = float("nan")  # add columns for each class
 
-        for (file, start, end), _ in clip_df.iterrows():
+        for (file, start, end) in clip_df.index:
+            if not file == file:  # file is NaN, get corresponding rows
+                file_df = df[df["file"].isnull()]
+            else:  # subset annotations to this file
+                file_df = df[df.file == file]
+
+            # add clip labels for this row of clip dataframe
             clip_df.loc[(file, start, end), :] = one_hot_labels_on_time_interval(
-                df,
+                file_df,
                 start_time=start,
                 end_time=end,
                 min_label_overlap=min_label_overlap,
@@ -357,21 +438,15 @@ class BoxedAnnotations:
                 class_subset=classes,
             )
 
-        # re-add the original index, if desired
-        if keep_index:
-            old_idx = clip_df.index.to_frame()
-            old_idx.insert(0, og_idx.name, og_idx.values)
-            clip_df.index = pd.MultiIndex.from_frame(old_idx)
-
         return clip_df
 
     def one_hot_clip_labels(
         self,
-        full_duration,
         clip_duration,
         clip_overlap,
         min_label_overlap,
         min_label_fraction=1,
+        full_duration=None,
         class_subset=None,
         final_clip=None,
     ):
@@ -382,9 +457,6 @@ class BoxedAnnotations:
         - Labels are applied based on overlap, using self.one_hot_labels_like()
 
         Args:
-            full_duration: The amount of time (seconds) to split into clips
-                float or `None`; if `None`, attempts to file's duration
-                using `librosa.get_duration(path=self.audio_file)`
             clip_duration (float):  The duration in seconds of the clips
             clip_overlap (float):   The overlap of the clips in seconds [default: 0]
             min_label_overlap: minimum duration (seconds) of annotation within the
@@ -401,6 +473,9 @@ class BoxedAnnotations:
                 is used). A value of 0.5 for ths parameter would ensure that all
                 annotations result in at least one clip being labeled 1
                 (if there are no gaps between clips).
+            full_duration: The amount of time (seconds) to split into clips for each file
+                float or `None`; if `None`, attempts to get each file's duration
+                using `librosa.get_duration(path=file)`
             class_subset: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
             final_clip (str):       Behavior if final_clip is less than clip_duration
@@ -417,30 +492,30 @@ class BoxedAnnotations:
         Returns:
             dataframe with index ['file','start_time','end_time'] and columns=classes
         """
-        # if user passes None for full_duration, try to get the duration from self.audio_file
-        if full_duration is None:
-            assert self.audio_file is not None, (
-                "attempted to get audio file duration because user passed full_duration=None,"
-                "but self.audio_file is not specified"
-            )
-            assert Path(self.audio_file).exists(), (
-                f"attempted to get audio file duration because user passed full_duration=None,"
-                f"but self.audio_file path {self.audio_file} does not exist"
-            )
-            try:
-                full_duration = librosa.get_duration(self.audio_file)
-            except Exception as exc:
-                raise ValueError(
-                    f"failed to get duration of {self.audio_file}"
-                ) from exc
 
         # generate list of start and end times for each clip
-        clip_df = generate_clip_times_df(
-            full_duration=full_duration,
-            clip_duration=clip_duration,
-            clip_overlap=clip_overlap,
-            final_clip=final_clip,
-        )
+        # if user passes None for full_duration, try to get the duration from each audio file
+        files = self.df["file"].unique()
+        if full_duration is None:
+            clip_df = make_clip_df(
+                files=[f for f in files if f == f],  # remove NaN if present
+                clip_duration=clip_duration,
+                clip_overlap=clip_overlap,
+                final_clip=final_clip,
+            )
+        else:  # use fixed full_duration for all files
+            # make a clip df, will be re-used for each file
+            clip_df_template = generate_clip_times_df(
+                full_duration=full_duration,
+                clip_duration=clip_duration,
+                clip_overlap=clip_overlap,
+                final_clip=final_clip,
+            )
+            # make a clip df for all files
+            clip_df = pd.concat([clip_df_template] * len(files))
+            # add file column, repeating value of file across each clip
+            clip_df["file"] = np.repeat(files, len(clip_df_template))
+            clip_df = clip_df.set_index(["file", "start_time", "end_time"])
 
         # then create 0/1 labels for each clip and each class
         return self.one_hot_labels_like(
@@ -503,30 +578,7 @@ class BoxedAnnotations:
             for k in df["annotation"]
         ]
 
-        return BoxedAnnotations(df, self.audio_file)
-
-
-# options for single/multiple files:
-# all one class, but some methods don't make sense (trim)
-# subclass for single file
-# generic class, and subclasses for single/multiple files
-# helper functions or separate class for aggregate of one-file objects
-# (but some functionality is shared)
-# I think BoxedAnnotations is the base class; AudioFileAnnotations is subclass
-
-
-ba = BoxedAnnotations.from_files(raven_paths,audio_paths)
-
-# dataframe with file column
-ba.one_hot_clip_labels(duration=60,list of durations,or from audio file durations)
-
-
-def combine(list_of_annotation_objects):
-    """combine annotations with user-specified preferences
-    Not Implemented.
-    """
-
-    raise NotImplementedError
+        return BoxedAnnotations(df)
 
 
 def diff(base_annotations, comparison_annotations):

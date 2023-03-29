@@ -310,7 +310,7 @@ def make_clip_df(
     invalid_samples = set()
     for f in file_list:
         try:
-            t = librosa.get_duration(filename=f)
+            t = librosa.get_duration(path=f)
             clips = generate_clip_times_df(
                 full_duration=t,
                 clip_duration=clip_duration,
