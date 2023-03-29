@@ -7,6 +7,7 @@ from pathlib import Path
 from itertools import chain
 import pandas as pd
 import numpy as np
+import librosa
 
 from opensoundscape.helpers import overlap, overlap_fraction, generate_clip_times_df
 
@@ -125,7 +126,7 @@ class BoxedAnnotations:
 
         return cls(df=df, audio_file=audio_file)
 
-    def to_raven_file(self, path):
+    def to_raven_file(self, path): #to_raven_files #to_csv #export labels for one audio file
         """save annotations to a Raven-compatible tab-separated text file
 
         Args:
@@ -321,7 +322,7 @@ class BoxedAnnotations:
                 in the returned DataFrame. [default:False]
 
         Returns:
-            DataFrame of one-hot labels (multi-index of (start_time, end_time),
+            DataFrame of one-hot labels (multi-index of (file, start_time, end_time),
             columns for each class, values 0=absent or 1=present)
         """
         # drop nan annotations
@@ -341,12 +342,13 @@ class BoxedAnnotations:
             og_idx = clip_df.index
 
         # the clip_df should have ['start_time','end_time'] in columns
-        clip_df = clip_df.set_index(["start_time", "end_time"])
+        clip_df["file"] = self.audio_file
+        clip_df = clip_df.set_index(["file", "start_time", "end_time"])
         clip_df = clip_df[[]]  # remove any additional columns
         clip_df[classes] = float("nan")  # add columns for each class
 
-        for (start, end), _ in clip_df.iterrows():
-            clip_df.loc[(start, end), :] = one_hot_labels_on_time_interval(
+        for (file, start, end), _ in clip_df.iterrows():
+            clip_df.loc[(file, start, end), :] = one_hot_labels_on_time_interval(
                 df,
                 start_time=start,
                 end_time=end,
@@ -381,6 +383,8 @@ class BoxedAnnotations:
 
         Args:
             full_duration: The amount of time (seconds) to split into clips
+                float or `None`; if `None`, attempts to file's duration
+                using `librosa.get_duration(path=self.audio_file)`
             clip_duration (float):  The duration in seconds of the clips
             clip_overlap (float):   The overlap of the clips in seconds [default: 0]
             min_label_overlap: minimum duration (seconds) of annotation within the
@@ -411,8 +415,25 @@ class BoxedAnnotations:
                 - "full": Increase overlap with previous clip to yield a
                     clip with clip_duration length
         Returns:
-            dataframe with index ['start_time','end_time'] and columns=classes
+            dataframe with index ['file','start_time','end_time'] and columns=classes
         """
+        # if user passes None for full_duration, try to get the duration from self.audio_file
+        if full_duration is None:
+            assert self.audio_file is not None, (
+                "attempted to get audio file duration because user passed full_duration=None,"
+                "but self.audio_file is not specified"
+            )
+            assert Path(self.audio_file).exists(), (
+                f"attempted to get audio file duration because user passed full_duration=None,"
+                f"but self.audio_file path {self.audio_file} does not exist"
+            )
+            try:
+                full_duration = librosa.get_duration(self.audio_file)
+            except Exception as exc:
+                raise ValueError(
+                    f"failed to get duration of {self.audio_file}"
+                ) from exc
+
         # generate list of start and end times for each clip
         clip_df = generate_clip_times_df(
             full_duration=full_duration,
@@ -420,6 +441,7 @@ class BoxedAnnotations:
             clip_overlap=clip_overlap,
             final_clip=final_clip,
         )
+
         # then create 0/1 labels for each clip and each class
         return self.one_hot_labels_like(
             clip_df=clip_df,
@@ -482,6 +504,21 @@ class BoxedAnnotations:
         ]
 
         return BoxedAnnotations(df, self.audio_file)
+
+
+# options for single/multiple files:
+# all one class, but some methods don't make sense (trim)
+# subclass for single file
+# generic class, and subclasses for single/multiple files
+# helper functions or separate class for aggregate of one-file objects
+# (but some functionality is shared)
+# I think BoxedAnnotations is the base class; AudioFileAnnotations is subclass
+
+
+ba = BoxedAnnotations.from_files(raven_paths,audio_paths)
+
+# dataframe with file column
+ba.one_hot_clip_labels(duration=60,list of durations,or from audio file durations)
 
 
 def combine(list_of_annotation_objects):
