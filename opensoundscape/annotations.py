@@ -625,7 +625,7 @@ def one_hot_labels_on_time_interval(
     """
 
     # calculate amount of overlap of each clip with this time window
-    df.loc[:, "overlap"] = [
+    df["overlap"] = [
         overlap([start_time, end_time], [t0, t1])
         for t0, t1 in zip(df["start_time"], df["end_time"])
     ]
@@ -634,7 +634,7 @@ def one_hot_labels_on_time_interval(
     df = df[df["overlap"] > 0].reset_index()
 
     # calculate the fraction of each annotation that overlaps with this time window
-    df.loc[:, "overlap_fraction"] = [
+    df["overlap_fraction"] = [
         overlap_fraction([t0, t1], [start_time, end_time])
         for t0, t1 in zip(df["start_time"], df["end_time"])
     ]
