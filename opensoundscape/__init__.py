@@ -1,7 +1,6 @@
 __version__ = "0.8.0"
 
 from . import annotations
-from . import audio_tools
 from . import audio
 from . import aru
 from . import data_selection
