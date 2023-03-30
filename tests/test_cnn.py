@@ -325,6 +325,23 @@ def test_save_and_load_model(model_save_path):
     assert type(m) == cnn.InceptionV3
 
 
+def test_save_and_load_torch_dict(model_save_path):
+    arch = alexnet(2, weights=None)
+    classes = [0, 1]
+    with pytest.warns(UserWarning):
+        # warns user bc can't recreate custom architecture
+        cnn.CNN(arch, classes, 1.0).save_torch_dict(model_save_path)
+        # can do model.architecture_name='alexnet' to enable reloading
+
+    # works when arch is string
+    cnn.CNN("resnet18", classes, 1.0).save_torch_dict(model_save_path)
+    m = cnn.CNN.from_torch_dict(model_save_path)
+    assert m.classes == classes
+    assert type(m) == cnn.CNN
+
+    # not implemented for InceptionV3 (from_torch_dict raises NotImplementedError)
+
+
 def test_save_load_and_train_model_resample_loss(train_df):
     arch = alexnet(2, weights=None)
     classes = [0, 1]

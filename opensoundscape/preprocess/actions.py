@@ -224,6 +224,20 @@ def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
     return sample
 
 
+class SpectrogramToTensor(BaseAction):
+    """Action to create Tesnsor of desired shape from Spectrogram"""
+
+    def go(self, sample, **kwargs):
+        """converts sample.data from Spectrogram to Tensor"""
+        # sample.data must be Spectrogram object
+        # sample should have attribute target_shape [h,w,channels]
+        sample.data = sample.data.to_image(
+            shape=sample.target_shape[0:2],
+            channels=sample.target_shape[2],
+            return_type="torch",
+        )
+
+
 def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
     """Applies a randomly selected gain level to an Audio object
 
