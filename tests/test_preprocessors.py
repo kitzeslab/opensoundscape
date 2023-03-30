@@ -60,7 +60,7 @@ def test_insert_action(preprocessor):
     from opensoundscape.preprocess.actions import Action, tensor_add_noise
 
     action = (Action(tensor_add_noise, std=0.01),)  # the action object
-    preprocessor._insert_action_after("to_img", "add_noise_NEW", action)
+    preprocessor._insert_action_after("to_tensor", "add_noise_NEW", action)
     preprocessor._insert_action_before("add_noise_NEW", "new2", action)
     preprocessor.insert_action("new3", action, before_key="new2")
     preprocessor.insert_action("new4", action, after_key="new3")
