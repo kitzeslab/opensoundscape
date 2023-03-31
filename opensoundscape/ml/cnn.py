@@ -740,6 +740,15 @@ class CNN(BaseModule):
 
         load from saved file with torch.load(path) or cnn.load_model(path)
 
+
+        Note: saving and loading model objects across OpenSoundscape versions
+        will not work properly. Instead, use .save_torch_dict and .load_torch_dict
+        (but note that customizations to preprocessing, training params, etc will
+        not be retained using those functions).
+
+        For maximum flexibilty in further use, save the model with both .save() and
+        .save_torch_dict()
+
         Args:
             path: file path for saved model object
             save_train_loader: retrain .train_loader in saved object
@@ -1634,6 +1643,14 @@ class InceptionV3(CNN):
 def load_model(path, device=None):
     """load a saved model object
 
+    Note: saving and loading model objects across OpenSoundscape versions
+    will not work properly. Instead, use .save_torch_dict and .load_torch_dict
+    (but note that customizations to preprocessing, training params, etc will
+    not be retained using those functions).
+
+    For maximum flexibilty in further use, save the model with both .save() and
+    .save_torch_dict()
+
     Args:
         path: file path of saved model
         device: which device to load into, eg 'cuda:1'
@@ -1642,11 +1659,23 @@ def load_model(path, device=None):
     Returns:
         a model object with loaded weights
     """
+    # load the entire pickled model object from a file and
+    # move the model to the desired torch "device" (eg cpu or cuda for gpu)
     if device is None:
         device = (
             torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
         )
     model = torch.load(path, map_location=device)
+
+    # warn the user if loaded model's opso version doesn't match the current one
+    if model.opensoundscape_version != opensoundscape.__version__:
+        warnings.warn(
+            f"This model was saved with an earlier version of opensoundscape "
+            f"({model.opensoundscape_version}) and will not work properly in "
+            f"the current opensoundscape version ({opensoundscape.__version__}). "
+            f"To use models across package versions use .save_torch_dict and "
+            f".load_torch_dict"
+        )
 
     # since ResampleLoss class overrides a method of an instance,
     # we need to re-change the _init_loss_fn change when we reload
@@ -1660,7 +1689,7 @@ def load_model(path, device=None):
 def load_outdated_model(
     path, architecture, sample_duration, model_class=CNN, device=None
 ):
-    """load a CNN saved with a previous version of OpenSoundscape
+    """load a CNN saved with a version of OpenSoundscape <0.6.0
 
     This function enables you to load models saved with opso 0.4.x and 0.5.x.
     If your model was saved with .save() in a previous version of OpenSoundscape
