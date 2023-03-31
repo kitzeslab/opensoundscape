@@ -393,6 +393,22 @@ def test_resample_veryshort_wav(veryshort_wav_str):
     assert resampled_audio.sample_rate == 22050
 
 
+def test_methods_retain_metadata(metadata_wav_str):
+    """resolved issue 679 by implementing ._spawn
+    This should avoid future issues with improperly calling
+    Audio.__init__ ie if the arguments to __init__ change
+    """
+    audio = Audio.from_file(metadata_wav_str)
+    a2 = audio.resample(22050)
+    assert audio.metadata == a2.metadata
+
+    a2 = audio.apply_gain(-2)
+    assert audio.metadata == a2.metadata
+
+    a2 = audio.normalize()
+    assert audio.metadata == a2.metadata
+
+
 def test_resample_mp3_nonstandard_sr(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     dur = audio.duration
