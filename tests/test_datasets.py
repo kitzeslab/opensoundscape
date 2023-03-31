@@ -4,7 +4,7 @@ import pandas as pd
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.preprocess.utils import PreprocessingError
 import warnings
-from opensoundscape.torch.datasets import AudioFileDataset, AudioSplittingDataset
+from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
 
 
 @pytest.fixture()

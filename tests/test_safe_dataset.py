@@ -2,8 +2,8 @@ import pytest
 import pandas as pd
 import numpy as np
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
-from opensoundscape.torch.datasets import AudioFileDataset
-from opensoundscape.torch.safe_dataset import SafeDataset
+from opensoundscape.ml.datasets import AudioFileDataset
+from opensoundscape.ml.safe_dataset import SafeDataset
 
 
 @pytest.fixture()

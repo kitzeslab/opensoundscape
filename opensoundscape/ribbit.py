@@ -8,7 +8,7 @@ import warnings
 from scipy import signal
 import numpy as np
 
-from opensoundscape.helpers import generate_clip_times_df
+from opensoundscape.utils import generate_clip_times_df
 
 
 def calculate_pulse_score(
