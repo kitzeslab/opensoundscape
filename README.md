@@ -66,7 +66,7 @@ Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 
 Using a pre-trained CNN to make predictions on long audio files
 ```python
-from opensoundscape.torch.models.cnn import load_model
+from opensoundscape import load_model
 
 #get list of audio files
 files = glob('./dir/*.WAV')
@@ -81,7 +81,7 @@ scores = model.predict(files)
 
 Training a CNN with labeled audio data
 ```python
-from opensoundscape.torch.models.cnn import CNN
+from opensoundscape import CNN
 from sklearn.model_selection import train_test_split
 
 #load a DataFrame of one-hot audio clip labels

@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import librosa
 
-from opensoundscape.helpers import (
+from opensoundscape.utils import (
     overlap,
     overlap_fraction,
     generate_clip_times_df,
@@ -378,7 +378,7 @@ class BoxedAnnotations:
         the minimum time overlap OR minimum % overlap to be included (doesn't
         require both conditions to be met, only one)
 
-        clip_df can be created using `opensoundscap.helpers.make_clip_df`
+        clip_df can be created using `opensoundscap.utils.make_clip_df`
 
         See also: `.one_hot_clip_labels()`, which creates even-lengthed clips
         automatically and can often be used instead of this function.
@@ -452,7 +452,7 @@ class BoxedAnnotations:
     ):
         """Generate one-hot labels for clips of fixed duration
 
-        wraps helpers.generate_clip_times_df() with self.one_hot_labels_like()
+        wraps utils.generate_clip_times_df() with self.one_hot_labels_like()
         - Clips are created in the same way as Audio.split()
         - Labels are applied based on overlap, using self.one_hot_labels_like()
 

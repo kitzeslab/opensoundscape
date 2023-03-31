@@ -4,10 +4,10 @@ version = "0.8.0"
 description = "Open source, scalable acoustic classification for ecology and conservation"
 authors = [
   "Sam Lapp <sammlapp@gmail.com>",
-  "Louis Freeland-Haynes <>",
-  "Sasha Syunkova <>",
-  "Jatin Khilnani <>",
   "Tessa Rhinehart <tessa.rhinehart@gmail.com>",
+  "Louis Freeland-Haynes <>",
+  "Jatin Khilnani <>",
+  "Sasha Syunkova <>",
   "Justin Kitzes <justin.kitzes@pitt.edu>",
 ]
 license = "MIT"

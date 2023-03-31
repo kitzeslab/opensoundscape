@@ -1,16 +1,16 @@
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
-from opensoundscape.torch.datasets import AudioFileDataset
-from opensoundscape.torch.loss import ResampleLoss
-from opensoundscape.torch.models import cnn
+from opensoundscape.ml.datasets import AudioFileDataset
+from opensoundscape.ml.loss import ResampleLoss
+from opensoundscape.ml import cnn
 from opensoundscape.preprocess.utils import PreprocessingError
 
-from opensoundscape.torch.architectures.cnn_architectures import alexnet, resnet18
-from opensoundscape.torch.architectures import cnn_architectures
+from opensoundscape.ml.cnn_architectures import alexnet, resnet18
+from opensoundscape.ml import cnn_architectures
 
 from opensoundscape.sample import AudioSample
-from opensoundscape.torch.cam import CAM
+from opensoundscape.ml.cam import CAM
 
-from opensoundscape.helpers import make_clip_df
+from opensoundscape.utils import make_clip_df
 import pandas as pd
 from pathlib import Path
 
@@ -323,6 +323,23 @@ def test_save_and_load_model(model_save_path):
     m = cnn.load_model(model_save_path)
     assert m.classes == classes
     assert type(m) == cnn.InceptionV3
+
+
+def test_save_and_load_torch_dict(model_save_path):
+    arch = alexnet(2, weights=None)
+    classes = [0, 1]
+    with pytest.warns(UserWarning):
+        # warns user bc can't recreate custom architecture
+        cnn.CNN(arch, classes, 1.0).save_torch_dict(model_save_path)
+        # can do model.architecture_name='alexnet' to enable reloading
+
+    # works when arch is string
+    cnn.CNN("resnet18", classes, 1.0).save_torch_dict(model_save_path)
+    m = cnn.CNN.from_torch_dict(model_save_path)
+    assert m.classes == classes
+    assert type(m) == cnn.CNN
+
+    # not implemented for InceptionV3 (from_torch_dict raises NotImplementedError)
 
 
 def test_save_load_and_train_model_resample_loss(train_df):

@@ -1,4 +1,4 @@
-from opensoundscape.torch.architectures import cnn_architectures
+from opensoundscape.ml import cnn_architectures
 import pytest
 
 # test_cnn.py tests that all registered architectures are able to
