@@ -268,9 +268,15 @@ class BoxedAnnotations:
 
         # select annotations that overlap with window
         def in_bounds(t0, t1):
-            """inclusive on left, exclusive on right"""
+            """check if annotation from t0 to t1 falls within
+            the range [start_range,end_range)
+
+            inclusive on left, exclusive on right
+            """
             assert t0 <= t1
-            return t0 >= start_time and t1 < end_time
+            ends_before_bounds = t1 < start_time
+            starts_after_bounds = t0 >= end_time
+            return not (ends_before_bounds or starts_after_bounds)
 
         df = df.loc[
             [in_bounds(t0, t1) for t0, t1 in zip(df["start_time"], df["end_time"])], :
