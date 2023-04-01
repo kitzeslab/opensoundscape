@@ -26,9 +26,11 @@ def identity(x):
 
 
 def overlap(r1, r2):
-    """ "calculate the amount of overlap between two real-numbered ranges"""
-    assert r1[1] > r1[0]
-    assert r2[1] > r2[0]
+    """ "calculate the amount of overlap between two real-numbered ranges
+
+    ranges must be [low,high] where low <= high"""
+    assert r1[1] >= r1[0]
+    assert r2[1] >= r2[0]
     lower_bound = max(r1[0], r2[0])
     upper_bound = min(r1[1], r2[1])
     return max(0, upper_bound - lower_bound)
