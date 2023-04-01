@@ -105,6 +105,10 @@ class Audio:
 
         pass any desired updates as kwargs
         """
+        assert np.all(k in self.__slots__ for k in kwargs.keys()), (
+            "only pass members of Audio.__slots__ to _spawn as kwargs! "
+            f"slots: {self.__slots__}"
+        )
         # load the current values from each __slots__ key
         slots = {key: self.__getattribute__(key) for key in self.__slots__}
         # update any user-specified values

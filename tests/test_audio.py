@@ -393,6 +393,22 @@ def test_resample_veryshort_wav(veryshort_wav_str):
     assert resampled_audio.sample_rate == 22050
 
 
+def test_spawn(veryshort_wav_audio):
+    """spawn method creates copy of Audio object with any kwarg fields updated"""
+    a = veryshort_wav_audio
+    a2 = a._spawn()
+    assert np.all(a2.samples == a.samples)
+    assert a2.sample_rate == a.sample_rate
+
+    # provide an updated value for the new object
+    a3 = a._spawn(sample_rate=20)
+    assert a3.sample_rate == 20
+
+    with pytest.raises(AssertionError):
+        # should not be able to pass non __slot__ kwargs
+        a._spawn(b=1)
+
+
 def test_methods_retain_metadata(metadata_wav_str):
     """resolved issue 679 by implementing ._spawn
     This should avoid future issues with improperly calling
