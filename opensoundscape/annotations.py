@@ -7,7 +7,7 @@ from pathlib import Path
 from itertools import chain
 import pandas as pd
 import numpy as np
-import librosa
+import warnings
 
 from opensoundscape.utils import (
     overlap,
@@ -156,9 +156,7 @@ class BoxedAnnotations:
 
         return cls(df=pd.concat(all_file_dfs).reset_index())
 
-    def to_raven_files(
-        self, save_dir, file_subset=None
-    ):  # to_raven_files #to_csv #export labels for one audio file
+    def to_raven_files(self, save_dir):  # TODO implement to_csv
         """save annotations to a Raven-compatible tab-separated text files
 
         Creates one file per unique audio file in 'file' column of self.df
@@ -166,11 +164,6 @@ class BoxedAnnotations:
         Args:
             save_dir: directory for saved files
                 - can be str or pathlib.Path
-            file_subset: list of files to create annotations for;
-                must be subset of values in self.df['file'] column
-                [default: None] will save tables all files. Any
-                columns with None/nan values for 'file' will be
-                output to a single table titled "unspecified.selections.txt"
 
         Outcomes:
             creates files containing the annotations for each audio file
@@ -193,10 +186,9 @@ class BoxedAnnotations:
             }
         )
 
-        # list of files: by default, use all files
         # we will create one selection table for each file
-        # this list may contain NaN values, which we handle below
-        unique_files = df["file"].unique() if file_subset is None else file_subset
+        # this list may contain NaN, which we handle below
+        unique_files = df["file"].unique()
 
         # If file names are no unique, raise an Exception
         # otherwise, multiple selection table files with the same name would be
@@ -205,7 +197,7 @@ class BoxedAnnotations:
         if len(file_stems) < len(unique_files):  # TODO write test for this exception
             raise Exception(
                 "File names were not unique! Some files in different folders have the same name. "
-                "Consider subsetting files to export with file_subset=[...]"
+                "Consider subsetting .df to avoid this issue"
             )
 
         for file in unique_files:
@@ -242,6 +234,11 @@ class BoxedAnnotations:
         the annotations, which should be relative to the beginning of the corresponding
         audio file.
 
+        For zero-length annotations (start_time = end_time), start and end times are
+        inclusive on the left and exclusive on the right, ie [lower,upper).
+        For instance start_time=0, end_time=1 includes zero-length annotations at 0
+        but excludes zero-length annotations a 1.
+
         Out-of-place operation: does not modify itself, returns new object
 
         Args:
@@ -269,13 +266,14 @@ class BoxedAnnotations:
 
         df = self.df.copy()
 
-        # remove annotations that don't overlap with window
+        # select annotations that overlap with window
+        def in_bounds(t0, t1):
+            """inclusive on left, exclusive on right"""
+            assert t0 <= t1
+            return t0 >= start_time and t1 < end_time
+
         df = df.loc[
-            [
-                overlap([start_time, end_time], [t0, t1]) > 0
-                for t0, t1 in zip(df["start_time"], df["end_time"])
-            ],
-            :,
+            [in_bounds(t0, t1) for t0, t1 in zip(df["start_time"], df["end_time"])], :
         ]
 
         if edge_mode == "trim":  # trim boxes to start and end times
@@ -367,6 +365,7 @@ class BoxedAnnotations:
         min_label_overlap,
         min_label_fraction=None,
         class_subset=None,
+        warn_no_annotations=False,
     ):
         """create a dataframe of one-hot clip labels based on given starts/ends
 
@@ -403,6 +402,8 @@ class BoxedAnnotations:
                 (if there are no gaps between clips).
             class_subset: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
+            warn_no_annotations: bool [default:False] if True, raises warnings for
+                any files in clip_df with no corresponding annotations in self.df
 
         Returns:
             DataFrame of one-hot labels w/ multi-index of (file, start_time, end_time),
@@ -428,6 +429,13 @@ class BoxedAnnotations:
             else:  # subset annotations to this file
                 file_df = df[df.file == file]
 
+            # warn user if no annotations correspond to this file
+            if warn_no_annotations and len(file_df) == 0:
+                warnings.warn(
+                    f"No annotations matched the file {file}. All "
+                    "clip labels will be zero for this file."
+                )
+
             # add clip labels for this row of clip dataframe
             clip_df.loc[(file, start, end), :] = one_hot_labels_on_time_interval(
                 file_df,
@@ -452,7 +460,7 @@ class BoxedAnnotations:
     ):
         """Generate one-hot labels for clips of fixed duration
 
-        wraps utils.generate_clip_times_df() with self.one_hot_labels_like()
+        wraps utils.make_clip_df() with self.one_hot_labels_like()
         - Clips are created in the same way as Audio.split()
         - Labels are applied based on overlap, using self.one_hot_labels_like()
 
@@ -478,7 +486,7 @@ class BoxedAnnotations:
                 using `librosa.get_duration(path=file)`
             class_subset: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
-            final_clip (str):       Behavior if final_clip is less than clip_duration
+            final_clip (str): Behavior if final_clip is less than clip_duration
                 seconds long. By default, discards remaining time if less than
                 clip_duration seconds long [default: None].
                 Options:
