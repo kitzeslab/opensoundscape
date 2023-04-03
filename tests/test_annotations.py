@@ -5,7 +5,7 @@ from opensoundscape.annotations import BoxedAnnotations
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from opensoundscape.utils import generate_clip_times_df
+from opensoundscape.utils import generate_clip_times_df, GetDurationError
 
 
 @pytest.fixture()
@@ -28,6 +28,11 @@ def saved_raven_file(request):
 
     request.addfinalizer(fin)
     return path
+
+
+@pytest.fixture()
+def silence_10s_mp3_str():
+    return "tests/audio/silence_10s.mp3"
 
 
 @pytest.fixture()
@@ -182,7 +187,31 @@ def test_one_hot_clip_labels(boxed_annotations):
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
 
 
-# TODO add test where it gets duration of audio file (don't pass full_duration)
+def test_one_hot_clip_labels_get_duration(boxed_annotations, silence_10s_mp3_str):
+    """should get duration of audio files if full_duration is None"""
+    boxed_annotations.df["file"] = [silence_10s_mp3_str] * len(boxed_annotations.df)
+    labels = boxed_annotations.one_hot_clip_labels(
+        full_duration=None,
+        clip_duration=2.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=0.25,
+    )
+    assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
+
+
+def test_one_hot_clip_labels_exception(boxed_annotations):
+    """raises GetDurationError because file length cannot be determined
+    and full_duration is None
+    """
+    with pytest.raises(GetDurationError):
+        labels = boxed_annotations.one_hot_clip_labels(
+            full_duration=None,
+            clip_duration=2.0,
+            clip_overlap=0,
+            class_subset=["a"],
+            min_label_overlap=0.25,
+        )
 
 
 def test_one_hot_clip_labels_overlap(boxed_annotations):

@@ -14,6 +14,7 @@ from opensoundscape.utils import (
     overlap_fraction,
     generate_clip_times_df,
     make_clip_df,
+    GetDurationError,
 )
 
 
@@ -511,12 +512,22 @@ class BoxedAnnotations:
         # if user passes None for full_duration, try to get the duration from each audio file
         files = self.df["file"].unique()
         if full_duration is None:
-            clip_df = make_clip_df(
-                files=[f for f in files if f == f],  # remove NaN if present
-                clip_duration=clip_duration,
-                clip_overlap=clip_overlap,
-                final_clip=final_clip,
-            )
+            try:
+                clip_df = make_clip_df(
+                    files=[f for f in files if f == f],  # remove NaN if present
+                    clip_duration=clip_duration,
+                    clip_overlap=clip_overlap,
+                    final_clip=final_clip,
+                    raise_exceptions=True,  # raise exceptions from librosa.duration(f)
+                )
+            except GetDurationError as exc:
+                raise GetDurationError(
+                    """`full_duration` was None, but failed to retrieve the durations of 
+                    some files. This could occur if the values of 'file' in self.df are 
+                    not paths to valid audio files. Specifying `full_duration` as an 
+                    argument to `one_hot_clip_labels()` will avoid the attempt to get 
+                    audio file durations from file paths."""
+                )
         else:  # use fixed full_duration for all files
             # make a clip df, will be re-used for each file
             clip_df_template = generate_clip_times_df(
