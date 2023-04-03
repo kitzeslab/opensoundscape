@@ -100,6 +100,22 @@ class Audio:
         if samples_error:
             raise ValueError(f"Audio initialization failed with:\n{samples_error}")
 
+    def _spawn(self, **kwargs):
+        """return copy of object, replacing any desired fields from __slots__
+
+        pass any desired updates as kwargs
+        """
+        assert np.all([k in self.__slots__ for k in kwargs.keys()]), (
+            "only pass members of Audio.__slots__ to _spawn as kwargs! "
+            f"slots: {self.__slots__}"
+        )
+        # load the current values from each __slots__ key
+        slots = {key: self.__getattribute__(key) for key in self.__slots__}
+        # update any user-specified values
+        slots.update(kwargs)
+        # create new instance of the class
+        return self.__class__(**slots)
+
     @classmethod
     def silence(cls, duration, sample_rate):
         """ "Create audio object with zero-valued samples
@@ -390,7 +406,11 @@ class Audio:
             res_type=resample_type,
         )
 
-        return Audio(samples_resampled, sample_rate, resample_type=resample_type)
+        return self._spawn(
+            samples=samples_resampled,
+            sample_rate=sample_rate,
+            resample_type=resample_type,
+        )
 
     def trim(self, start_time, end_time):
         """Trim Audio object in time
@@ -420,10 +440,8 @@ class Audio:
             if "duration" in metadata:
                 metadata["duration"] = len(samples_trimmed) / self.sample_rate
 
-        return Audio(
-            samples_trimmed,
-            self.sample_rate,
-            resample_type=self.resample_type,
+        return self._spawn(
+            samples=samples_trimmed,
             metadata=metadata,
         )
 
@@ -461,10 +479,8 @@ class Audio:
             if "duration" in metadata:
                 metadata["duration"] = len(samples_extended) / self.sample_rate
 
-        return Audio(
-            samples_extended,
-            self.sample_rate,
-            resample_type=self.resample_type,
+        return self._spawn(
+            samples=samples_extended,
             metadata=metadata,
         )
 
@@ -491,10 +507,8 @@ class Audio:
             if "duration" in metadata:
                 metadata["duration"] = len(samples_extended) / self.sample_rate
 
-        return Audio(
-            samples_extended,
-            self.sample_rate,
-            resample_type=self.resample_type,
+        return self._spawn(
+            samples=samples_extended,
             metadata=metadata,
         )
 
@@ -519,9 +533,7 @@ class Audio:
         filtered_samples = bandpass_filter(
             self.samples, low_f, high_f, self.sample_rate, order=order
         )
-        return Audio(
-            filtered_samples, self.sample_rate, resample_type=self.resample_type
-        )
+        return self._spawn(samples=filtered_samples)
 
     def spectrum(self):
         """Create frequency spectrum from an Audio object using fft
@@ -584,12 +596,7 @@ class Audio:
             # don't try to normalize 0-valued samples. Return original object
             abs_max = 1
 
-        return Audio(
-            self.samples / abs_max * peak_level,
-            self.sample_rate,
-            resample_type=self.resample_type,
-            metadata=self.metadata,
-        )
+        return self._spawn(samples=self.samples / abs_max * peak_level)
 
     def apply_gain(self, dB, clip_range=(-1, 1)):
         """apply dB (decibels) of gain to audio signal
@@ -609,12 +616,7 @@ class Audio:
         samples = self.samples * (10 ** (dB / 20))
         if clip_range is not None:
             samples = np.clip(samples, clip_range[0], clip_range[1])
-        return Audio(
-            samples,
-            self.sample_rate,
-            resample_type=self.resample_type,
-            metadata=self.metadata,
-        )
+        return self._spawn(samples=samples)
 
     def save(
         self,
@@ -915,10 +917,9 @@ def concat(audio_objects, sample_rate=None):
         sample_rate = audio_objects[0].sample_rate
 
     # concatenate sample arrays to form new Audio object
-    return Audio(
-        np.hstack([a.resample(sample_rate).samples for a in audio_objects]),
-        sample_rate,
-        resample_type=audio_objects[0].resample_type,
+    return audio_objects[0]._spawn(
+        samples=np.hstack([a.resample(sample_rate).samples for a in audio_objects]),
+        sample_rate=sample_rate,
     )
 
 
@@ -1045,7 +1046,7 @@ def mix(
     if clip_range is not None:
         mixdown = np.clip(mixdown, clip_range[0], clip_range[1])
 
-    return Audio(mixdown, sample_rate, resample_type=audio_objects[0].resample_type)
+    return audio_objects[0]._spawn(samples=mixdown, sample_rate=sample_rate)
 
 
 def parse_opso_metadata(comment_string):
