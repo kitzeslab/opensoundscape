@@ -12,6 +12,7 @@ import librosa
 
 class GetDurationError(ValueError):
     """raised if librosa.get_duration(path=f) causes an error"""
+
     pass
 
 
