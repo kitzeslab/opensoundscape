@@ -270,7 +270,7 @@ class CNN(BaseModule):
             shuffle=True,  # SHUFFLE SAMPLES because we are training
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=False if self.device == torch.device("cpu") else True,
-            collate_fn=lambda x: x,
+            collate_fn=identity,
         )
 
         ###########################
