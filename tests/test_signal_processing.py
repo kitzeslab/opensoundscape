@@ -210,3 +210,21 @@ def test_thresholded_event_durations():
     )
     assert np.array_equal(starts, np.array([0, 2]))
     assert np.array_equal(lengths, np.array([1, 1]))
+
+
+def test_gcc():
+    np.random.seed(0)
+    delay = -200  # samples
+    start = 500  # start of signal
+    end = 510  # end of signal
+
+    a = np.zeros(1000)
+    a[start:end] = 3  # impulse
+    a += np.random.rand(1000)  # add noise
+    b = np.zeros(1000)
+    b[start + delay : end + delay] = 3
+    b += np.random.rand(1000)
+    gccs = sp.gcc(a, b)
+    # assert that the argmax is the correct delay
+    expected_max_cc = gccs[-delay]
+    assert expected_max_cc == np.max(gccs)

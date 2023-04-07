@@ -5,6 +5,7 @@ from scipy import signal
 import pywt
 import matplotlib.pyplot as plt
 from pywt import central_frequency
+import torch
 
 from opensoundscape.helpers import inrange
 
@@ -455,3 +456,60 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
     starts, lengths = _get_ones_sequences(x_01)
 
     return np.array(starts) / sample_rate, np.array(lengths) / sample_rate
+
+
+def gcc(x, y, filter="phat", epsilon=0.01):
+    """
+    GCC implementation based on Knapp and Carter - code adapted from
+    github.com/axeber01/ngcc
+    Args:
+        x: 1d numpy array of audio samples
+        y: 1d numpy array of audio samples
+        filter: which filter to use in the gcc.
+            'phat' - Phase transform. Default.
+            'roth',
+            'scot' - Smoothed Coherence Transform,
+            'ht' - Hannan and Thomson
+        epsilon = used to ensure denominator is non-zero.
+    Returns:
+        gcc: 1d numpy array of gcc values
+    """
+    n = x.shape[0] + y.shape[0]
+
+    # Generalized Cross Correlation Phase Transform
+    X = np.fft.rfft(x, n=n)
+    Y = np.fft.rfft(y, n=n)
+    Gxy = X * np.conj(Y)
+
+    if filter == "phat":
+        phi = 1 / (np.abs(Gxy) + epsilon)
+
+    elif filter == "roth":
+        phi = 1 / (X * torch.conj(X) + epsilon)
+
+    elif filter == "scot":
+        Gxx = X * np.conj(X)
+        Gyy = Y * np.conj(Y)
+        phi = 1 / (np.sqrt(X * Y) + epsilon)
+
+    elif filter == "ht":
+        Gxx = X * np.conj(X)
+        Gyy = Y * np.conj(Y)
+        gamma = Gxy / np.sqrt(Gxx * Gxy)
+        phi = np.abs(gamma) ** 2 / (np.abs(Gxy) * (1 - gamma) ** 2 + epsilon)
+    elif filter == "cc":
+        phi = 1.0
+    else:
+        raise ValueError(
+            "Unsupported filter. Must be one of: 'ht', 'phat', 'roth','scot'"
+        )
+
+    # set the max delay in number of samples
+    if max_delay_samples:
+        max_delay_samples = np.minimum(max_delay_samples, int(n / 2))
+    else:
+        max_delay_samples = int(n / 2)
+
+    cc = np.fft.irfft(Gxy * phi, n)
+
+    return cc
