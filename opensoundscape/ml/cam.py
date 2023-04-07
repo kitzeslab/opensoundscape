@@ -87,10 +87,28 @@ class CAM:
 
         # choose what maps to show
         if mode == "activation":
+            assert self.activation_maps is not None
+            assert target_class in self.activation_maps, (
+                f"passed target class {target_class}, which is"
+                "not a class indexed in self.activation_maps!"
+            )
             overlay = self.activation_maps[target_class]
         elif mode == "backprop":
+            assert self.gbp_maps is not None
+            assert target_class in self.gbp_maps, (
+                f"passed target class {target_class}, which is"
+                "not a class indexed in self.gbp_maps!"
+            )
             overlay = self.gbp_maps[target_class]
         elif mode == "backprop_and_activation":
+            assert self.activation_maps is not None
+            assert self.gbp_maps is not None
+            assert (
+                target_class in self.activation_maps and target_class in self.gbp_maps
+            ), (
+                f"passed target class {target_class}, which is"
+                "not a class indexed in self.gbp_maps!"
+            )
             # we combine them using the product of the two maps
             am = self.activation_maps[target_class][..., np.newaxis]  # add channel axis
             overlay = am * self.gbp_maps[target_class]
