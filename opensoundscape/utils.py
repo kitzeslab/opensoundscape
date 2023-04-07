@@ -10,6 +10,12 @@ import soundfile
 import librosa
 
 
+class GetDurationError(ValueError):
+    """raised if librosa.get_duration(path=f) causes an error"""
+
+    pass
+
+
 def isNan(x):
     """check for nan by equating x to itself"""
     return not x == x
@@ -26,9 +32,11 @@ def identity(x):
 
 
 def overlap(r1, r2):
-    """ "calculate the amount of overlap between two real-numbered ranges"""
-    assert r1[1] > r1[0]
-    assert r2[1] > r2[0]
+    """ "calculate the amount of overlap between two real-numbered ranges
+
+    ranges must be [low,high] where low <= high"""
+    assert r1[1] >= r1[0]
+    assert r2[1] >= r2[0]
     lower_bound = max(r1[0], r2[0])
     upper_bound = min(r1[1], r2[1])
     return max(0, upper_bound - lower_bound)
@@ -249,7 +257,12 @@ def generate_clip_times_df(
 
 
 def make_clip_df(
-    files, clip_duration, clip_overlap=0, final_clip=None, return_invalid_samples=False
+    files,
+    clip_duration,
+    clip_overlap=0,
+    final_clip=None,
+    return_invalid_samples=False,
+    raise_exceptions=False,
 ):
     """generate df of fixed-length clip start/end times for a set of files
 
@@ -272,8 +285,12 @@ def make_clip_df(
         clip_duration (float): see generate_clip_times_df
         clip_overlap (float): see generate_clip_times_df
         final_clip (str): see generate_clip_times_df
-        return_invalid_samples (bool): if true, returns additional value,
+        return_invalid_samples (bool): if True, returns additional value,
             a list of samples that caused exceptions
+        raise_exceptions (bool): if True, if exceptions are raised when attempting
+            to check the duration of an audio file, the exception will be raised.
+            If False [default], adds a row to the dataframe with np.nan for
+            'start_time' and 'end_time' for that file path.
 
     Returns:
         clip_df: dataframe multi-index ('file','start_time','end_time')
@@ -282,7 +299,8 @@ def make_clip_df(
 
         if return_invalid_samples==True, returns (clip_df, invalid_samples)
 
-    Note: if an exception is raised (for instance, trying to get the duration of the file),
+    Note: default behavior for raise_exceptions is the following:
+        if an exception is raised (for instance, trying to get the duration of the file),
         the dataframe will have one row with np.nan for 'start_time' and 'end_time' for that
         file path.
     """
@@ -319,12 +337,15 @@ def make_clip_df(
             )
             clips["file"] = f
 
-        except:
-            # make one row for this file with nan for start/end times
-            clips = pd.DataFrame(
-                {"file": [f], "start_time": np.nan, "end_time": np.nan}
-            )
-            invalid_samples.add(f)
+        except Exception as exc:
+            if raise_exceptions:
+                raise GetDurationError(f"Exception on file {f}") from exc
+            else:
+                # make one row for this file with nan for start/end times
+                clips = pd.DataFrame(
+                    {"file": [f], "start_time": np.nan, "end_time": np.nan}
+                )
+                invalid_samples.add(f)
 
         if label_df is not None:
             # copy labels for this file to all of its clips
