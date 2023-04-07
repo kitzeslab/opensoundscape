@@ -22,12 +22,15 @@ import warnings
 from datetime import timedelta, datetime
 from pathlib import Path
 import json
+import io
+from urllib.request import urlopen
 
 import numpy as np
 from scipy.fftpack import fft as scipyfft
 from scipy.fft import fftfreq
 import librosa
 import soundfile
+import IPython.display
 
 import opensoundscape
 from opensoundscape.utils import generate_clip_times_df, load_metadata
@@ -382,8 +385,63 @@ class Audio:
 
         return cls(samples, sample_rate, resample_type=resample_type)
 
+    @classmethod
+    def from_url(cls, url, sample_rate=None, resample_type="kaiser_fast"):
+        """Read audio file from URL
+
+        Download audio from a URL and create an Audio object
+
+        Note: averages channels of multi-channel object to create mono object
+
+        Args:
+            url: Location to download the file from
+            sample_rate: The final sampling rate of Audio object [default: None]
+                - if None, retains original sample rate
+            resample_type: The librosa method to do resampling [default: "kaiser_fast"]
+
+        Returns:
+            Audio object
+        """
+        samples, original_sample_rate = soundfile.read(io.BytesIO(urlopen(url).read()))
+        samples = samples.mean(1)  # sum to mono
+        if sample_rate is not None and sample_rate != original_sample_rate:
+            samples = librosa.resample(
+                samples,
+                orig_sr=original_sample_rate,
+                target_sr=sample_rate,
+                res_type=resample_type,
+            )
+        else:
+            sample_rate = original_sample_rate
+
+        return cls(samples, sample_rate, resample_type=resample_type)
+
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
+
+    def _to_ipdisplay_audio(self, normalize=False, autoplay=False):
+        """create interactive IPython display audio object"""
+        return IPython.display.Audio(
+            data=self.samples,
+            rate=self.sample_rate,
+            normalize=normalize,
+            autoplay=autoplay,
+        )
+
+    def _repr_html_(self):
+        """create interactive audio widget
+
+        This method is used by Jupyter Notebook if the object is returned from a cell.
+        It uses the IPython.display.Audio class to create an interactive Audio widget.
+
+        """
+        return self._to_ipdisplay_audio()._repr_html_()
+
+    def show_widget(self, normalize=False, autoplay=False):
+        """create and display IPython.display.Audio widget; see that class for docs"""
+        IPython.display.display(
+            self._to_ipdisplay_audio(normalize=normalize, autoplay=autoplay)
+        )
 
     def resample(self, sample_rate, resample_type=None):
         """Resample Audio object
