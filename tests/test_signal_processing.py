@@ -228,3 +228,8 @@ def test_gcc():
     # assert that the argmax is the correct delay
     expected_max_cc = gccs[-delay]
     assert expected_max_cc == np.max(gccs)
+
+
+def test_correlation_lags():
+    assert correlation_lags(5) == np.array([-2, -1, 0, 1, 2])
+    assert correlation_lags(6) == np.array([-2, -1, 0, 1, 2, 3])

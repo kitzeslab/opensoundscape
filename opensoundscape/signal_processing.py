@@ -460,7 +460,7 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
 
 def gcc(x, y, filter="phat", epsilon=0.01):
     """
-    GCC implementation based on Knapp and Carter - code adapted from
+    GCC implementation - code adapted from
     github.com/axeber01/ngcc
     Args:
         x: 1d numpy array of audio samples
@@ -473,8 +473,20 @@ def gcc(x, y, filter="phat", epsilon=0.01):
         epsilon = used to ensure denominator is non-zero.
     Returns:
         gcc: 1d numpy array of gcc values
+        The delay between x and y is given by len(gcc) - the index of the maximum value
+        i.e. gcc([1, 0, 0, 0, 0], [0, 1, 0, 0, 0])
+        returns [0, 0, , 0, 0]
+
+    Based on:
+    Knapp, C.H. and Carter, G.C (1976)
+    The Generalized Correlation Method for Estimation of Time Delay. IEEE Trans. Acoust. Speech Signal Process, 24, 320-327.
+    http://dx.doi.org/10.1109/TASSP.1976.1162830
     """
     n = x.shape[0] + y.shape[0]
+
+    # zero pad
+    x = np.pad(x, (0, n - x.shape[0]), "constant")
+    y = np.pad(y, (0, n - y.shape[0]), "constant")
 
     # Generalized Cross Correlation Phase Transform
     X = np.fft.rfft(x, n=n)
@@ -503,13 +515,21 @@ def gcc(x, y, filter="phat", epsilon=0.01):
         raise ValueError(
             "Unsupported filter. Must be one of: 'ht', 'phat', 'roth','scot'"
         )
-
-    # set the max delay in number of samples
-    if max_delay_samples:
-        max_delay_samples = np.minimum(max_delay_samples, int(n / 2))
-    else:
-        max_delay_samples = int(n / 2)
-
     cc = np.fft.irfft(Gxy * phi, n)
 
     return cc
+
+
+def correlation_lags(correlation_length):
+    """Get time-delays (lags) in samples for the output of a correlation function
+    Args:
+        correlation_length: length of cross-correlation output
+    Returns:
+        lags: np.array of corresponding lags
+    """
+    middle = correlation_length // 2
+    right_max = middle + 1 if correlation_length % 2 else middle
+    left_half = np.arange(0, -middle, -1)
+    right_half = np.arange(right_max, 0, -1)
+    lags = np.concatenate([left_half, right_half])
+    return lags
