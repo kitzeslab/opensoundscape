@@ -51,6 +51,7 @@ class Localizer:
 
         # troubleshoot printing
         print("Localizer initialized")
+        print("cc_filter:", self.cc_filter)
 
     def get_predictions(self):
         # get CNN predictions from synchronized audio files
@@ -225,7 +226,7 @@ class Localizer:
         bandpass_range,
         max_delay,
         SAMPLE_RATE,
-        cc_filter="phat",
+        cc_filter,
     ):
         """
         Gets the maximal cross correlations and the time-delay (in s) corresponding to that cross correlation between
@@ -271,16 +272,16 @@ class Localizer:
             sf = audio_object.samples
 
             if cc_filter == "cc":
-                # Normlized so cross-correlation will return values -1<cc<1
+                # The below normalizes so cross-correlation will return values -1<cc<1
                 # TODO: verify this makes sense, could there be some floating point issues with this? Is it the right kind
                 # of normalization
                 ff = ff / np.std(ff)
                 sf = sf / np.std(sf)
 
-                cc = sp.gcc(ff, sf, filter="cc")  # correlations are per sample
+                cc = sp.gcc(ff, sf, cc_filter="cc")  # correlations are per sample
                 cc /= min(len(ff), len(sf))
-            elif filter == "phat":
-                cc = sp.gcc(ff, sf, filter="phat")
+            else:
+                cc = sp.gcc(ff, sf, cc_filter=cc_filter)
             lags = sp.correlation_lags(len(cc))
 
             # slice cc and lags, so we only look at cross_correlations that are between -max_lag and +max_lag
