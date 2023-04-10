@@ -277,10 +277,10 @@ class Localizer:
                 ff = ff / np.std(ff)
                 sf = sf / np.std(sf)
 
-                cc = gcc(ff, sf, filter="cc")  # correlations are per sample
+                cc = sp.gcc(ff, sf, filter="cc")  # correlations are per sample
                 cc /= min(len(ff), len(sf))
             elif filter == "phat":
-                cc = gcc(ff, sf, filter="phat")
+                cc = sp.gcc(ff, sf, filter="phat")
             lags = sp.correlation_lags(len(cc))
 
             # slice cc and lags, so we only look at cross_correlations that are between -max_lag and +max_lag
