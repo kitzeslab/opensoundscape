@@ -529,7 +529,7 @@ def correlation_lags(correlation_length):
     """
     middle = correlation_length // 2
     right_max = middle + 1 if correlation_length % 2 else middle
-    left_half = np.arange(0, -middle, -1)
-    right_half = np.arange(right_max, 0, -1)
+    left_half = np.arange(0, middle, 1)
+    right_half = np.arange(-right_max, 0, 1)
     lags = np.concatenate([left_half, right_half])
     return lags
