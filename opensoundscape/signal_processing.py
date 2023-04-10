@@ -458,14 +458,14 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
     return np.array(starts) / sample_rate, np.array(lengths) / sample_rate
 
 
-def gcc(x, y, filter="phat", epsilon=0.01):
+def gcc(x, y, cc_filter="phat", epsilon=0.01):
     """
     GCC implementation - code adapted from
     github.com/axeber01/ngcc
     Args:
         x: 1d numpy array of audio samples
         y: 1d numpy array of audio samples
-        filter: which filter to use in the gcc.
+        cc_filter: which filter to use in the gcc.
             'phat' - Phase transform. Default.
             'roth',
             'scot' - Smoothed Coherence Transform,
@@ -493,27 +493,27 @@ def gcc(x, y, filter="phat", epsilon=0.01):
     Y = np.fft.rfft(y, n=n)
     Gxy = X * np.conj(Y)
 
-    if filter == "phat":
+    if cc_filter == "phat":
         phi = 1 / (np.abs(Gxy) + epsilon)
 
-    elif filter == "roth":
+    elif cc_filter == "roth":
         phi = 1 / (X * torch.conj(X) + epsilon)
 
-    elif filter == "scot":
+    elif cc_filter == "scot":
         Gxx = X * np.conj(X)
         Gyy = Y * np.conj(Y)
         phi = 1 / (np.sqrt(X * Y) + epsilon)
 
-    elif filter == "ht":
+    elif cc_filter == "ht":
         Gxx = X * np.conj(X)
         Gyy = Y * np.conj(Y)
         gamma = Gxy / np.sqrt(Gxx * Gxy)
         phi = np.abs(gamma) ** 2 / (np.abs(Gxy) * (1 - gamma) ** 2 + epsilon)
-    elif filter == "cc":
+    elif cc_filter == "cc":
         phi = 1.0
     else:
         raise ValueError(
-            "Unsupported filter. Must be one of: 'ht', 'phat', 'roth','scot'"
+            "Unsupported cc_filter. Must be one of: 'ht', 'phat', 'roth','scot'"
         )
     cc = np.fft.irfft(Gxy * phi, n)
 
