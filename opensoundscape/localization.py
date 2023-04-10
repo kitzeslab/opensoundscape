@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from opensoundscape.audio import Audio
 from scipy.signal import correlate, correlation_lags
+import opensoundscape.signal_processing as sp
 
 # make a class that we will use to contain a model object, list of files and thresholds
 # this will be called Localizer
@@ -22,6 +23,7 @@ class Localizer:
         bandpass_ranges=None,
         max_delay=None,
         cc_threshold=0,
+        cc_filter="phat",
     ):
         # initialize the class
         # model is a trained opensoundscape model
@@ -40,11 +42,15 @@ class Localizer:
         self.bandpass_ranges = bandpass_ranges
         self.max_delay = max_delay
         self.cc_threshold = cc_threshold
+        self.cc_filter = cc_filter
 
         # initialize the below intermediates as None. #TODO: work out how to do this correctly
         self.detections = None
         self.cross_correlations = None
         self.filtered_cross_correlations = None
+
+        # troubleshoot printing
+        print("Localizer initialized")
 
     def get_predictions(self):
         # get CNN predictions from synchronized audio files
@@ -103,6 +109,7 @@ class Localizer:
                 bandpass_range=self.bandpass_ranges[species],
                 max_delay=self.max_delay,
                 SAMPLE_RATE=44100,
+                cc_filter=self.cc_filter,
             )
             all_ccs.append(cc)
             all_tds.append(td)
@@ -218,6 +225,7 @@ class Localizer:
         bandpass_range,
         max_delay,
         SAMPLE_RATE,
+        cc_filter="phat",
     ):
         """
         Gets the maximal cross correlations and the time-delay (in s) corresponding to that cross correlation between
@@ -234,6 +242,7 @@ class Localizer:
                         occurs for a time-delay greater than max_delay, the function will not return it, instead it will return
                         the maximal cross correlation within +/- max_delay
             SAMPLE_RATE: the sampling rate of the audio.
+            cc_filter: the filter to use for cross-correlation. see signalprocessing.gcc for options. Options currently are "phat" or "cc"
         returns:
             ccs: list of maximal cross-correlations for each pair of files.
             time_differences: list of time differences (in seconds) that yield the maximal cross-correlation.
@@ -261,22 +270,23 @@ class Localizer:
             ff = reference_audio.samples
             sf = audio_object.samples
 
-            # TODO: Normalize these, so cross-correlation will return values -1<cc<1
-            # TODO: verify this makes sense, could there be some floating point issues with this? Is it the right kind
-            # of normalization
-            ff = ff / np.std(ff)
-            sf = sf / np.std(sf)
+            if cc_filter == "cc":
+                # Normlized so cross-correlation will return values -1<cc<1
+                # TODO: verify this makes sense, could there be some floating point issues with this? Is it the right kind
+                # of normalization
+                ff = ff / np.std(ff)
+                sf = sf / np.std(sf)
 
-            cc = correlate(ff, sf, mode="same")  # correlations are per sample
-            cc /= min(len(ff), len(sf))
-            lags = correlation_lags(ff.size, sf.size, mode="same")
+                cc = gcc(ff, sf, filter="cc")  # correlations are per sample
+                cc /= min(len(ff), len(sf))
+            elif filter == "phat":
+                cc = gcc(ff, sf, filter="phat")
+            lags = sp.correlation_lags(len(cc))
 
             # slice cc and lags, so we only look at cross_correlations that are between -max_lag and +max_lag
-            lower_limit = int(len(cc) / 2 - max_lag)
-            upper_limit = int(len(cc) / 2 + max_lag)
-
-            cc = cc[lower_limit:upper_limit]
-            lags = lags[lower_limit:upper_limit]
+            boolean_mask = [lag < max_lag and lag > -max_lag for lag in lags]
+            cc = cc[boolean_mask]
+            lags = lags[boolean_mask]
 
             # from IPython.core.debugger import Pdb; Pdb().set_trace()
             max_cc = np.max(cc)
