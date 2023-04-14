@@ -5,6 +5,7 @@ import pandas as pd
 from opensoundscape.audio import Audio
 from scipy.signal import correlate, correlation_lags
 import opensoundscape.signal_processing as sp
+import warnings
 
 # make a class that we will use to contain a model object, list of files and thresholds
 # this will be called Localizer
@@ -12,65 +13,85 @@ import opensoundscape.signal_processing as sp
 class Localizer:
     def __init__(
         self,
-        model,
         files,
+        predictions,
         aru_coords,
         sample_rate,
         min_number_of_receivers,
         max_distance_between_receivers,
+        localization_algorithm="gillette",
         thresholds=None,
-        predictions=None,
         bandpass_ranges=None,
         max_delay=None,
         cc_threshold=0,
         cc_filter="phat",
     ):
-        # initialize the class
-        # model is a trained opensoundscape model
+        # Initialize the Localizer
         # files is a list of synchronized audio files
-        # aru_coords is a dictionary of aru coordinates, with key aru file path, and value (x,y) coordinates
+        # predictions is a pandas dataframe of predictions. The multi-index must be [file, start_time, end_time]
+        # each column is a class.
+        # aru_coords is a dataframe with index filepath, and columns coordinates}. Each file must have a corresponding coordinate.
         # thresholds is a dictionary of thresholds for each class
         # predictions is a pandas dataframe of predictions
-        self.model = model
         self.files = files
+        self.predictions = predictions
         self.aru_coords = aru_coords
-        self.thresholds = thresholds
         self.SAMPLE_RATE = sample_rate
         self.min_number_of_receivers = min_number_of_receivers
         self.max_distance_between_receivers = max_distance_between_receivers
-        self.predictions = predictions
+        self.localization_algorithm = localization_algorithm
+        self.thresholds = thresholds
         self.bandpass_ranges = bandpass_ranges
         self.max_delay = max_delay
         self.cc_threshold = cc_threshold
         self.cc_filter = cc_filter
+
+        # attributes for troubleshooting
+        self.files_missing_coordinates = []
 
         # initialize the below intermediates as None. #TODO: work out how to do this correctly
         self.detections = None
         self.cross_correlations = None
         self.filtered_cross_correlations = None
 
-        # troubleshoot printing
-        print("Localizer initialized")
-        print("cc_filter:", self.cc_filter)
-
-    def get_predictions(self):
-        # get CNN predictions from synchronized audio files
-        # return a pandas dataframe with the results
-        if self.predictions is None:
-            self.predictions = self.model.predict(self.files, activation_layer=None)
-        else:
+        # check that all files have coordinates in aru_coords
+        audio_files_have_coordinates = True
+        for file in self.files:
+            if str(file) not in self.aru_coords.index:
+                audio_files_have_coordinates = False
+                self.files_missing_coordinates.append(file)
+        if not audio_files_have_coordinates:
             raise UserWarning(
-                "Predictions already exist - set predictions to None if you want to re-run predictions"
+                "WARNING: Not all audio files have corresponding coordinates. Check aru_coords contains a mapping for each file. \n Check the missing files with Localizer.files_missing_coordinates"
             )
-        return self.predictions
+        # check that bandpass_ranges have been set for all classes
+        if self.bandpass_ranges is not None:
+            if set(self.bandpass_ranges.keys()) != set(self.predictions.columns):
+                warnings.warn(
+                    "WARNING: Not all classes have corresponding bandpass ranges. Default behavior will be to not bandpass before cross-correlation for classes that do not have a corresponding bandpass range."
+                )
+
+        # check that thresholds have been set for all classes
+        # TODO: remove thresholding. Refactor so that the user passes in a predictions df that has already been filtered.
+        if self.thresholds is not None:
+            if set(self.thresholds.keys()) != set(self.predictions.columns):
+                warnings.warn(
+                    "WARNING: Not all classes have corresponding thresholds. Default behavior will be to drop classes that do not have a corresponding threshold."
+                )
+        print("Localizer initialized")
 
     def threshold_predictions(self):
         # use a set of thresholds to filter the predictions
+        # and ensure that only detections with a minimum number of receivers are returned
+        # the results are in the form of a pandas dataframe
         if self.predictions is None:
-            print("No predictions exist - running predictions")
-            self.get_predictions()
+            raise UserWarning(
+                "No predictions exist. Please initialize the Localizer with predictions"
+            )
         all_sp_detections = []
-        for species in self.predictions.columns:
+
+        # iterate over each species
+        for species in self.thresholds.keys():
             df = self.predictions.loc[:, [species]]  # must be a dataframe
             detections = Localizer._get_detections(
                 df, cnn_score_threshold=self.thresholds[species]
@@ -91,9 +112,14 @@ class Localizer:
         # cross correlate the predictions
         # return a pandas dataframe with the results
         if self.bandpass_ranges is None:
-            raise UserWarning("No bandpass range specified")
+            warnings.warn(
+                "No bandpass range set. Default behavior will be to not bandpass the audio before cross-correlation."
+            )
+
         if self.max_delay is None:
-            raise UserWarning("No max delay specified")
+            warnings.warn(
+                "No max delay set. Default behavior will be to allow for any delay between the audio files."
+            )
         if self.detections is None:
             print("No detections exist - running threshold_predictions")
             self.threshold_predictions()
@@ -101,15 +127,27 @@ class Localizer:
         all_ccs = []
         all_tds = []
         for index, row in self.detections.iterrows():
+            # TODO: remove PRINT DEBUG
+            print("index:", index, "row", row)
             species = row["species"]
+            if (
+                self.bandpass_ranges is None
+            ):  # do not bandpass if no bandpass_ranges set at all
+                bandpass_range = None
+            else:
+                try:
+                    bandpass_range = self.bandpass_ranges[species]
+                except KeyError:  # do not bandpass if no bandpass range is set for this species
+                    bandpass_range = None
+
             cc, td = Localizer._get_cross_correlations(
                 reference_file=row["reference_file"],
                 other_files=row["other_files"],
                 start_time=row["time"][0],
                 end_time=row["time"][1],
-                bandpass_range=self.bandpass_ranges[species],
+                bandpass_range=bandpass_range,
                 max_delay=self.max_delay,
-                SAMPLE_RATE=44100,
+                SAMPLE_RATE=self.SAMPLE_RATE,
                 cc_filter=self.cc_filter,
             )
             all_ccs.append(cc)
@@ -166,18 +204,19 @@ class Localizer:
         self.filtered_cross_correlations = filtered_cross_correlations
         return filtered_cross_correlations
 
-    def localize(self, algorithm="gillette"):
+    def localize(self):
         # localize the detections
         # return a pandas dataframe with the results
         # TODO: make work for 3d
+        algorithm = self.localization_algorithm
 
-        localized = self.filtered_cross_correlations.copy()
-        locations = []
         if self.filtered_cross_correlations is None:
             print(
                 "No filtered cross_correlations exist - running filter_cross_correlations"
             )
             self.filter_cross_correlations()
+        localized = self.filtered_cross_correlations.copy()
+        locations = []
         if algorithm == "gillette":
             # localize using gillette
 
@@ -195,6 +234,7 @@ class Localizer:
             localized["predicted_x"] = [locations[i][0] for i in range(len(locations))]
             localized["predicted_y"] = [locations[i][1] for i in range(len(locations))]
             localized["gillette_error"] = ["Error" for i in range(len(locations))]
+
         elif algorithm == "soundfinder":
 
             for index, row in self.filtered_cross_correlations.iterrows():
@@ -238,7 +278,7 @@ class Localizer:
             other_files: List of paths to the other files which will be cross-correlated against reference_file
             start_time: start of time segment (in seconds) to be cross-correlated
             end_time: end of time segment (in seconds) to be cross-correlated.
-            bandpass_range: [lower, higher] of bandpass range.
+            bandpass_range: [lower, higher] of bandpass range. If None, no bandpass filter is applied.
             max_delay: the maximum time (in seconds) to return cross_correlations for. i.e. if the best cross correlation
                         occurs for a time-delay greater than max_delay, the function will not return it, instead it will return
                         the maximal cross correlation within +/- max_delay
@@ -248,22 +288,32 @@ class Localizer:
             ccs: list of maximal cross-correlations for each pair of files.
             time_differences: list of time differences (in seconds) that yield the maximal cross-correlation.
         """
-        lower = min(bandpass_range)
-        higher = max(bandpass_range)
+        if bandpass_range is None:
+            # no bandpass filter
+            reference_audio = Audio.from_file(
+                reference_file, offset=start_time, duration=end_time - start_time
+            )
+            other_audio = [
+                Audio.from_file(i, offset=start_time, duration=end_time - start_time)
+                for i in other_files
+            ]
+        else:
+            lower = min(bandpass_range)
+            higher = max(bandpass_range)
 
-        reference_audio = Audio.from_file(
-            reference_file, offset=start_time, duration=end_time - start_time
-        ).bandpass(lower, higher, order=9)
-        other_audio = [
-            Audio.from_file(
-                i, offset=start_time, duration=end_time - start_time
+            reference_audio = Audio.from_file(
+                reference_file, offset=start_time, duration=end_time - start_time
             ).bandpass(lower, higher, order=9)
-            for i in other_files
-        ]
-
-        max_lag = int(
-            max_delay * SAMPLE_RATE
-        )  # Convert max_delay (in s) to max_lag in samples
+            other_audio = [
+                Audio.from_file(
+                    i, offset=start_time, duration=end_time - start_time
+                ).bandpass(lower, higher, order=9)
+                for i in other_files
+            ]
+        if max_delay:
+            max_lag = int(
+                max_delay * SAMPLE_RATE
+            )  # Convert max_delay (in s) to max_lag in samples
 
         ccs = np.zeros(len(other_audio))
         time_difference = np.zeros(len(other_audio))
@@ -284,16 +334,16 @@ class Localizer:
                 cc = sp.gcc(ff, sf, cc_filter=cc_filter)
             lags = sp.correlation_lags(len(cc))
 
-            # slice cc and lags, so we only look at cross_correlations that are between -max_lag and +max_lag
-            boolean_mask = [lag < max_lag and lag > -max_lag for lag in lags]
-            cc = cc[boolean_mask]
-            lags = lags[boolean_mask]
+            if max_delay:
+                # slice cc and lags, so we only look at cross_correlations that are between -max_lag and +max_lag
+                boolean_mask = [lag < max_lag and lag > -max_lag for lag in lags]
+                cc = cc[boolean_mask]
+                lags = lags[boolean_mask]
 
-            # from IPython.core.debugger import Pdb; Pdb().set_trace()
             max_cc = np.max(cc)
             lag = -lags[
                 np.argmax(cc)
-            ]  # in ties (>2 ccs with same max value), argmax returns the first.
+            ]  # in ties (>2 lags with same max value), argmax returns the first.
             time_difference[index] = lag
             ccs[index] = max_cc
         time_difference = [i / SAMPLE_RATE for i in time_difference]
@@ -305,7 +355,7 @@ class Localizer:
         Takes the predictions_df of CNN scores *FOR A SINGLE SPECIES*, chooses only detections > cnn_score_threshold
         and outputs a dictionary of times at which events were detected, and the ARU files they were detected in.
         args:
-            predictions_array: a dataframe with multi-index of (file, start, end) with a column that is values for model predictions
+            predictions_array: a dataframe with multi-index of (file, start_time, end_time) with a column that is values for model predictions
             *FOR A SINGLE SPECIES*
             cnn_score_threshold: the minimum CNN score needed for a time-window to be considered a detection.
         returns:
