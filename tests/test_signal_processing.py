@@ -210,3 +210,53 @@ def test_thresholded_event_durations():
     )
     assert np.array_equal(starts, np.array([0, 2]))
     assert np.array_equal(lengths, np.array([1, 1]))
+
+
+def test_gcc():
+    # test our gcc implementation with an easy case
+    np.random.seed(0)
+    delay = 200  # samples
+    start = 500  # start of signal
+    end = 510  # end of signal
+
+    a = np.zeros(1000)
+    a[start:end] = 3  # impulse
+    a += np.random.rand(1000)  # add noise
+    b = np.zeros(1000)
+    b[
+        start + delay : end + delay
+    ] = 3  # signal b is identical to a, but delayed by delay samples
+    b += np.random.rand(1000)  # add noise
+
+    for cc_filter in ["cc", "phat", "roth", "scot", "ht"]:
+        gccs = sp.gcc(a, b)
+        # assert that the argmax is the correct delay
+        expected_max_cc = gccs[-delay]
+        assert expected_max_cc == np.max(gccs)
+
+
+def test_gcc_against_scipy():
+    ## test our implementation of plain cross-correlation (no filter)
+    ## against scipy.signal.correlate, to ensure correctness
+    import scipy.signal as sig
+
+    for delay in range(-499, 489):
+
+        start = 500  # start of signal
+        end = 510  # end of signal
+
+        a = np.zeros(1000)
+        a[start:end] = 3  # impulse
+        a += np.random.rand(1000)  # add noise
+        b = np.zeros(1000)
+        b[start + delay : end + delay] = 3
+        b += np.random.rand(1000)
+        gccs = sp.gcc(a, b, cc_filter="cc")  # use plain cross-correlation
+        # assert that the argmax is the correct delay
+        opso_lags = sp.correlation_lags(len(gccs))
+        opso_delay = opso_lags[np.argmax(gccs)]
+
+        scipy_lags = sig.correlation_lags(len(a), len(b), mode="full")
+        scipy_delay = scipy_lags[np.argmax(sig.correlate(a, b, mode="full"))]
+
+        assert opso_delay == scipy_delay

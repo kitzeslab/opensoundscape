@@ -455,3 +455,82 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
     starts, lengths = _get_ones_sequences(x_01)
 
     return np.array(starts) / sample_rate, np.array(lengths) / sample_rate
+
+
+def gcc(x, y, cc_filter="phat", epsilon=0.001):
+    """
+    Generalized cross correlation implementation - code adapted from
+    github.com/axeber01/ngcc
+    Args:
+        x: 1d numpy array of audio samples
+        y: 1d numpy array of audio samples
+        cc_filter: which filter to use in the gcc.
+            'phat' - Phase transform. Default.
+            'roth',
+            'scot' - Smoothed Coherence Transform,
+            'ht' - Hannan and Thomson
+        epsilon = small value used to ensure denominator when applying a filter is non-zero.
+    Returns:
+        gcc: 1d numpy array of gcc values
+        The delay between x and y is given by len(gcc) - the index of the maximum value
+        i.e. gcc([1, 0, 0, 0, 0], [0, 1, 0, 0, 0])
+        returns [0, 0, , 0, 0]
+    The generalized cross correlation algorithm is based on:
+    Knapp, C.H. and Carter, G.C (1976)
+    The Generalized Correlation Method for Estimation of Time Delay. IEEE Trans. Acoust. Speech Signal Process, 24, 320-327.
+    http://dx.doi.org/10.1109/TASSP.1976.1162830
+    """
+    n = x.shape[0] + y.shape[0]
+
+    # Zero pad the signals. This is necessary because convolutions are
+    # circular, and 'wrap around' the end of the signal. Zero padding avoids this
+    x = np.pad(x, (0, n - x.shape[0]), "constant")
+    y = np.pad(y, (0, n - y.shape[0]), "constant")
+
+    # Take the FFT of the signals and multiply 1 by the complex conjugate of the other
+    X = np.fft.rfft(x, n=n)
+    Y = np.fft.rfft(y, n=n)
+    Gxy = X * np.conj(Y)
+
+    # Apply the filter in the fourier domain
+    if cc_filter == "phat":
+        phi = 1 / (np.abs(Gxy) + epsilon)
+
+    elif cc_filter == "roth":
+        phi = 1 / (X * torch.conj(X) + epsilon)
+
+    elif cc_filter == "scot":
+        Gxx = X * np.conj(X)
+        Gyy = Y * np.conj(Y)
+        phi = 1 / (np.sqrt(X * Y) + epsilon)
+
+    elif cc_filter == "ht":
+        Gxx = X * np.conj(X)
+        Gyy = Y * np.conj(Y)
+        gamma = Gxy / np.sqrt(Gxx * Gxy)
+        phi = np.abs(gamma) ** 2 / (np.abs(Gxy) * (1 - gamma) ** 2 + epsilon)
+    elif cc_filter == "cc":
+        phi = 1.0
+    else:
+        raise ValueError(
+            "Unsupported cc_filter. Must be one of: 'ht', 'phat', 'roth','scot'"
+        )
+    # Inverse FFT to get the GCC
+    cc = np.fft.irfft(Gxy * phi, n)
+
+    return cc
+
+
+def correlation_lags(correlation_length):
+    """Get time-delays (lags) in samples for the output of a correlation function
+    Args:
+        correlation_length: length of cross-correlation output
+    Returns:
+        lags: np.array of corresponding lags
+    """
+    middle = correlation_length // 2
+    right_max = middle + 1 if correlation_length % 2 else middle
+    left_half = np.arange(0, middle, 1)
+    right_half = np.arange(-right_max, 0, 1)
+    lags = np.concatenate([left_half, right_half])
+    return lags
