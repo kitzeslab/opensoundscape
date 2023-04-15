@@ -5,6 +5,7 @@ from scipy import signal
 import pywt
 import matplotlib.pyplot as plt
 from pywt import central_frequency
+from scipy.signal import correlation_lags
 
 from opensoundscape.utils import inrange
 
@@ -466,15 +467,20 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
         y: 1d numpy array of audio samples
         cc_filter: which filter to use in the gcc.
             'phat' - Phase transform. Default.
-            'roth',
+            'roth' -
             'scot' - Smoothed Coherence Transform,
             'ht' - Hannan and Thomson
+            'cc' - normal cross correlation with no filter
         epsilon = small value used to ensure denominator when applying a filter is non-zero.
     Returns:
         gcc: 1d numpy array of gcc values
-        The delay between x and y is given by len(gcc) - the index of the maximum value
-        i.e. gcc([1, 0, 0, 0, 0], [0, 1, 0, 0, 0])
-        returns [0, 0, , 0, 0]
+        The delay between x and y is given by:
+        ```
+        lags = scipy.signal.correlation_lags(len(x),len(y))
+        delay = lags[np.argmax(gcc)] * sample_rate
+        ```
+        ie, the peak of the cross correlation
+
     The generalized cross correlation algorithm is based on:
     Knapp, C.H. and Carter, G.C (1976)
     The Generalized Correlation Method for Estimation of Time Delay. IEEE Trans. Acoust. Speech Signal Process, 24, 320-327.
@@ -523,3 +529,24 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
     cc = np.concatenate((cc[-y.shape[0] + 1 :], cc[: x.shape[0]]))
 
     return cc
+
+
+def tdoa(x, y, cc_filter="phat", sample_rate=1):
+    """calculate time difference of arrival between two signals
+
+    estimates time delay by finding the maximum of the generalized cross correlation
+    of two signals. The two signals x and y are discrete-time series with the same sample rate.
+
+    If the second signal is delayed compared to the first, the time delay is _NEGATIVE_.
+
+    Args:
+        x,y: np.arrays of two signals
+        cc_filter: see gcc()
+        sample_rate: sample rate (Hz) of signals; both signals must have same sample rate
+
+    Returns:
+        estimated delay from signal x to signal y, seconds
+    """
+    cc = gcc(x, y, cc_filter=cc_filter)
+    lags = correlation_lags(len(x), len(y))
+    return lags[np.argmax(cc)] / sample_rate
