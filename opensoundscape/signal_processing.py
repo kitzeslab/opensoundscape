@@ -497,7 +497,7 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
         phi = 1 / (np.abs(Gxy) + epsilon)
 
     elif cc_filter == "roth":
-        phi = 1 / (X * torch.conj(X) + epsilon)
+        phi = 1 / (X * np.conj(X) + epsilon)
 
     elif cc_filter == "scot":
         Gxx = X * np.conj(X)
@@ -518,19 +518,8 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
     # Inverse FFT to get the GCC
     cc = np.fft.irfft(Gxy * phi, n)
 
+    # reorder the cross-correlation coefficients, trimming out padded regions
+    # order of outputs matches np.correlate and scipy.signal.correlate
+    cc = np.concatenate((cc[-y.shape[0] + 1 :], cc[: x.shape[0]]))
+
     return cc
-
-
-def correlation_lags(correlation_length):
-    """Get time-delays (lags) in samples for the output of a correlation function
-    Args:
-        correlation_length: length of cross-correlation output
-    Returns:
-        lags: np.array of corresponding lags
-    """
-    middle = correlation_length // 2
-    right_max = middle + 1 if correlation_length % 2 else middle
-    left_half = np.arange(0, middle, 1)
-    right_half = np.arange(-right_max, 0, 1)
-    lags = np.concatenate([left_half, right_half])
-    return lags
