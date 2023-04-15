@@ -501,13 +501,14 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
     elif cc_filter == "scot":
         Gxx = X * np.conj(X)
         Gyy = Y * np.conj(Y)
-        phi = 1 / (np.sqrt(X * Y) + epsilon)
+        phi = 1 / (np.sqrt(Gxx * Gyy) + epsilon)
 
     elif cc_filter == "ht":
         Gxx = X * np.conj(X)
         Gyy = Y * np.conj(Y)
         gamma = Gxy / np.sqrt(Gxx * Gxy)
-        phi = np.abs(gamma) ** 2 / (np.abs(Gxy) * (1 - gamma) ** 2 + epsilon)
+        coherence = np.abs(gamma) ** 2
+        phi = coherence / (np.abs(Gxy) * coherence + epsilon)
     elif cc_filter == "cc":
         phi = 1.0
     else:
