@@ -507,7 +507,7 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
         n += 1
     # by choosing an optimal length rather than the shortest possible, we can
     # optimize fft speed
-    n_fast = n  # next_fast_len(n, real=True)
+    n_fast = next_fast_len(n, real=True)
 
     # Take the reall Fast Fourier Transform of the signals
     X = torch.fft.rfft(x, n=n_fast)
