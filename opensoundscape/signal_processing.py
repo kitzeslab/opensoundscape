@@ -480,12 +480,11 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
     The Generalized Correlation Method for Estimation of Time Delay. IEEE Trans. Acoust. Speech Signal Process, 24, 320-327.
     http://dx.doi.org/10.1109/TASSP.1976.1162830
     """
-    n = x.shape[0] + y.shape[0]
 
-    # Zero pad the signals. This is necessary because convolutions are
-    # circular, and 'wrap around' the end of the signal. Zero padding avoids this
-    x = np.pad(x, (0, n - x.shape[0]), "constant")
-    y = np.pad(y, (0, n - y.shape[0]), "constant")
+    # padd the fft for "full" cross correlation of both signals
+    n = x.shape[0] + y.shape[0] - 1
+    if n % 2 != 0:
+        n += 1
 
     # Take the FFT of the signals and multiply 1 by the complex conjugate of the other
     X = np.fft.rfft(x, n=n)
