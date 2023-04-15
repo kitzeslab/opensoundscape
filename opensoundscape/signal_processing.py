@@ -5,7 +5,9 @@ from scipy import signal
 import pywt
 import matplotlib.pyplot as plt
 from pywt import central_frequency
-from scipy.signal import correlation_lags
+from scipy.signal import correlation_lags, correlate as scipy_correlate
+from scipy.fft import next_fast_len
+import torch
 
 from opensoundscape.utils import inrange
 
@@ -458,7 +460,7 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
     return np.array(starts) / sample_rate, np.array(lengths) / sample_rate
 
 
-def gcc(x, y, cc_filter="phat", epsilon=0.001):
+def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
     """
     Generalized cross correlation implementation - code adapted from
     github.com/axeber01/ngcc
@@ -471,50 +473,67 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
             'scot' - Smoothed Coherence Transform,
             'ht' - Hannan and Thomson
             'cc' - normal cross correlation with no filter
-        epsilon = small value used to ensure denominator when applying a filter is non-zero.
+        epsilon: small value used to ensure denominator when applying a filter is non-zero.
+        radius: number of samples to shift start of y by with respect to the start of x
+            Default: None performs full cross correlation of entire x and y samples ("full" mode
+            in scipy.signal.correlate).
+            For example, radius=10 will slide y start position from -10 to +10 samples relative to
+            x, resulting in a gcc with length 21.
     Returns:
         gcc: 1d numpy array of gcc values
-        The delay between x and y is given by:
-        ```
-        lags = scipy.signal.correlation_lags(len(x),len(y))
-        delay = lags[np.argmax(gcc)] * sample_rate
-        ```
-        ie, the peak of the cross correlation
+
+    see also: tdoa() uses this function to estimate time delay between two signals
 
     The generalized cross correlation algorithm is based on:
     Knapp, C.H. and Carter, G.C (1976)
     The Generalized Correlation Method for Estimation of Time Delay. IEEE Trans. Acoust. Speech Signal Process, 24, 320-327.
     http://dx.doi.org/10.1109/TASSP.1976.1162830
     """
+    # TODO limit the range of the cc offset to only a relevant range (implement `range` parameter)
 
-    # padd the fft for "full" cross correlation of both signals
+    if radius is not None:
+        raise NotImplementedError
+
+    # use scipy.signal for fastest implementation of plain cross-correlation
+    # if cc_filter == "cc":
+    #     return scipy_correlate(x, y)
+
+    x = torch.Tensor(x)
+    y = torch.Tensor(y)
+
+    # pad the fft shape for "full" cross correlation of both signals
     n = x.shape[0] + y.shape[0] - 1
     if n % 2 != 0:
         n += 1
+    # by choosing an optimal length rather than the shortest possible, we can
+    # optimize fft speed
+    n_fast = n  # next_fast_len(n, real=True)
 
-    # Take the FFT of the signals and multiply 1 by the complex conjugate of the other
-    X = np.fft.rfft(x, n=n)
-    Y = np.fft.rfft(y, n=n)
-    Gxy = X * np.conj(Y)
+    # Take the reall Fast Fourier Transform of the signals
+    X = torch.fft.rfft(x, n=n_fast)
+    Y = torch.fft.rfft(y, n=n_fast)
+
+    # multiply one by the complex conjugate of the other
+    Gxy = X * torch.conj(Y)
 
     # Apply the filter in the fourier domain
     if cc_filter == "phat":
-        phi = 1 / (np.abs(Gxy) + epsilon)
+        phi = 1 / (torch.abs(Gxy) + epsilon)
 
     elif cc_filter == "roth":
-        phi = 1 / (X * np.conj(X) + epsilon)
+        phi = 1 / (X * torch.conj(X) + epsilon)
 
     elif cc_filter == "scot":
-        Gxx = X * np.conj(X)
-        Gyy = Y * np.conj(Y)
-        phi = 1 / (np.sqrt(Gxx * Gyy) + epsilon)
+        Gxx = X * torch.conj(X)
+        Gyy = Y * torch.conj(Y)
+        phi = 1 / (torch.sqrt(Gxx * Gyy) + epsilon)
 
     elif cc_filter == "ht":
-        Gxx = X * np.conj(X)
-        Gyy = Y * np.conj(Y)
-        gamma = Gxy / np.sqrt(Gxx * Gxy)
-        coherence = np.abs(gamma) ** 2
-        phi = coherence / (np.abs(Gxy) * coherence + epsilon)
+        Gxx = X * torch.conj(X)
+        Gyy = Y * torch.conj(Y)
+        gamma = Gxy / torch.sqrt(Gxx * Gxy)
+        coherence = torch.abs(gamma) ** 2
+        phi = coherence / (torch.abs(Gxy) * coherence + epsilon)
     elif cc_filter == "cc":
         phi = 1.0
     else:
@@ -522,13 +541,13 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
             "Unsupported cc_filter. Must be one of: 'ht', 'phat', 'roth','scot'"
         )
     # Inverse FFT to get the GCC
-    cc = np.fft.irfft(Gxy * phi, n)
+    cc = torch.fft.irfft(Gxy * phi, n_fast)
 
     # reorder the cross-correlation coefficients, trimming out padded regions
-    # order of outputs matches np.correlate and scipy.signal.correlate
-    cc = np.concatenate((cc[-y.shape[0] + 1 :], cc[: x.shape[0]]))
+    # order of outputs matches torch.correlate and scipy.signal.correlate
+    cc = torch.concatenate((cc[-y.shape[0] + 1 :], cc[: x.shape[0]]))
 
-    return cc
+    return cc.numpy()
 
 
 def tdoa(x, y, cc_filter="phat", sample_rate=1):
