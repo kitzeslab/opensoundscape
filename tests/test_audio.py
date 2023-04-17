@@ -698,3 +698,23 @@ def test_bandpass_filter(veryshort_audio):
 
 def test_clipping_detector(veryshort_audio):
     assert audio.clipping_detector(veryshort_audio.samples) > -1
+
+
+def test_estimate_delay(veryshort_audio):
+    # shift signal backward
+    sig = audio.concat(
+        [Audio.silence(0.1, veryshort_audio.sample_rate), veryshort_audio]
+    )
+
+    assert isclose(audio.estimate_delay(sig, veryshort_audio), 0.1, abs_tol=1e-6)
+
+
+def test_estimate_delay_with_bandpass(veryshort_audio):
+    # shift signal backward
+    sig = audio.concat(
+        [Audio.silence(0.1, veryshort_audio.sample_rate), veryshort_audio]
+    )
+    dly = audio.estimate_delay(
+        sig, veryshort_audio, bandpass_range=[1000, 3000], bandpass_order=5
+    )
+    assert isclose(dly, 0.1, abs_tol=1e-6)
