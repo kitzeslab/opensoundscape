@@ -3,6 +3,7 @@ from opensoundscape.audio import Audio
 import pytest
 import numpy as np
 from opensoundscape import signal_processing as sp
+from numpy.testing import assert_allclose
 
 
 @pytest.fixture()
@@ -224,23 +225,44 @@ def test_gcc():
     a += np.random.rand(1000)  # add noise
     b = np.zeros(1000)
     b[
-        start + delay : end + delay
+        start - delay : end - delay
     ] = 3  # signal b is identical to a, but delayed by delay samples
     b += np.random.rand(1000)  # add noise
 
     for cc_filter in ["cc", "phat", "roth", "scot", "ht"]:
-        gccs = sp.gcc(a, b)
+        import scipy
+
+        gccs = sp.gcc(a, b, cc_filter=cc_filter)
         # assert that the argmax is the correct delay
-        expected_max_cc = gccs[-delay]
-        assert expected_max_cc == np.max(gccs)
+        lags = scipy.signal.correlation_lags(len(a), len(b))
+        assert lags[np.argmax(gccs)] == delay
 
 
-def test_gcc_against_scipy():
+def test_all_tdoa_filter_types_find_correct_delay():
+    delay = 20  # samples of delay (positive: second signal arrives before first)
+    start = 500  # start of signal
+    end = 510  # end of signal
+
+    a = np.zeros(1000)
+    a[start:end] = 3  # impulse
+    a += np.random.rand(1000)  # add noise
+    b = np.zeros(1000)
+    b[start - delay : end - delay] = 3
+    b += np.random.rand(1000)
+
+    for method in ["phat", "roth", "scot", "ht", "cc"]:
+        assert sp.tdoa(a, b, cc_filter=method, sample_rate=1) == delay
+
+        # with sample rate !=1
+        assert sp.tdoa(a, b, cc_filter=method, sample_rate=22050) == delay / 22050
+
+
+def test_cc_scipy_equivalence():
     ## test our implementation of plain cross-correlation (no filter)
     ## against scipy.signal.correlate, to ensure correctness
     import scipy.signal as sig
 
-    for delay in range(-499, 489):
+    for delay in range(-20, 20):
 
         start = 500  # start of signal
         end = 510  # end of signal
@@ -252,11 +274,5 @@ def test_gcc_against_scipy():
         b[start + delay : end + delay] = 3
         b += np.random.rand(1000)
         gccs = sp.gcc(a, b, cc_filter="cc")  # use plain cross-correlation
-        # assert that the argmax is the correct delay
-        opso_lags = sp.correlation_lags(len(gccs))
-        opso_delay = opso_lags[np.argmax(gccs)]
-
-        scipy_lags = sig.correlation_lags(len(a), len(b), mode="full")
-        scipy_delay = scipy_lags[np.argmax(sig.correlate(a, b, mode="full"))]
-
-        assert opso_delay == scipy_delay
+        # should be exactly the same as scipy.signal.correlate
+        assert_allclose(gccs, sig.correlate(a, b, mode="full"), 1e-6, 1)

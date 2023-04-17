@@ -1109,35 +1109,42 @@ def mix(
 
 
 def estimate_delay(
-    audio1, audio2, bandpass_range=None, bandpass_order=9, cc_filter="phat"
+    audio, reference_audio, bandpass_range=None, bandpass_order=9, cc_filter="phat"
 ):
     """Use generalized cross correlation to estimate time delay between signals
 
-    optionally bandpass to a frequency range
+    optionally bandpass audio signals to a frequency range
+
+    For example, if audio is delayed by 1 second compared to reference_audio,
+    result is 1.0.
 
     Args:
-        audio1, audio2: audio objects
+        audio, reference_audio: audio objects
         bandpass_range: if None, no bandpass filter is performed
             otherwise [low_f,high_f]
         bandpass_order: order of Butterworth bandpass filter
         cc_filter: generalized cross correlation type, see
             opensoundscape.signal_processing.gcc() [default: 'phat']
     Returns:
-        estimated time delay (seconds)
-        if audio2 is delayed by 1 second compared to audio1, result is -1.0
+        estimated time delay (seconds) from reference_audio to audio
 
-    Note: resamples audio2 if its sample rate does not match audio1
+    Note: resamples reference_audio if its sample rate does not match audio
     """
     # sample rates must match
-    sr = audio1.sample_rate
-    if audio2.sample_rate != sr:
-        audio2 = audio2.resample(sr)
+    sr = audio.sample_rate
+    if reference_audio.sample_rate != sr:
+        reference_audio = reference_audio.resample(sr)
 
+    # apply audio-domain butterworth bandpass filter if desired
     if bandpass_range is not None:
-        audio1 = audio1.bandpass(bandpass_range[0], bandpass_range[1], bandpass_order)
-        audio2 = audio2.bandpass(bandpass_range[0], bandpass_range[1], bandpass_order)
+        l, h = bandpass_range  # extract low and high frequencies
+        audio = audio.bandpass(l, h, bandpass_order)
+        reference_audio = reference_audio.bandpass(l, h, bandpass_order)
 
-    return tdoa(audio1.samples, audio2.samples, cc_filter=cc_filter, sample_rate=sr)
+    # estimate time delay from reference_audio to audio using generalized cross correlation
+    return tdoa(
+        audio.samples, reference_audio.samples, cc_filter=cc_filter, sample_rate=sr
+    )
 
 
 def parse_opso_metadata(comment_string):

@@ -462,8 +462,17 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
 
 def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
     """
-    Generalized cross correlation implementation - code adapted from
-    github.com/axeber01/ngcc
+    Generalized cross correlation of two signals
+
+    Computes a generalized cross correlation in frequency response.
+
+    The generalized cross correlation algorithm described in Knapp and Carter [1].
+
+    In the case of cc_filter='cc', gcc simplifies to cross correlation and is equivalent to
+    scipy.signal.correlate and numpy.correlate.
+
+    code adapted from github.com/axeber01/ngcc
+
     Args:
         x: 1d numpy array of audio samples
         y: 1d numpy array of audio samples
@@ -474,30 +483,17 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
             'ht' - Hannan and Thomson
             'cc' - normal cross correlation with no filter
         epsilon: small value used to ensure denominator when applying a filter is non-zero.
-        radius: number of samples to shift start of y by with respect to the start of x
-            Default: None performs full cross correlation of entire x and y samples ("full" mode
-            in scipy.signal.correlate).
-            For example, radius=10 will slide y start position from -10 to +10 samples relative to
-            x, resulting in a gcc with length 21.
+
     Returns:
         gcc: 1d numpy array of gcc values
 
     see also: tdoa() uses this function to estimate time delay between two signals
 
-    The generalized cross correlation algorithm is based on:
-    Knapp, C.H. and Carter, G.C (1976)
+    [1] Knapp, C.H. and Carter, G.C (1976)
     The Generalized Correlation Method for Estimation of Time Delay. IEEE Trans. Acoust. Speech Signal Process, 24, 320-327.
     http://dx.doi.org/10.1109/TASSP.1976.1162830
     """
-    # TODO limit the range of the cc offset to only a relevant range (implement `range` parameter)
-
-    if radius is not None:
-        raise NotImplementedError
-
-    # use scipy.signal for fastest implementation of plain cross-correlation
-    # if cc_filter == "cc":
-    #     return scipy_correlate(x, y)
-
+    # using torch speeds up our performance
     x = torch.Tensor(x)
     y = torch.Tensor(y)
 
@@ -550,22 +546,43 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
     return cc.numpy()
 
 
-def tdoa(x, y, cc_filter="phat", sample_rate=1):
-    """calculate time difference of arrival between two signals
+def tdoa(signal, reference_signal, cc_filter="phat", sample_rate=1, return_max=False):
+    """estimate time difference of arrival between two signals
 
-    estimates time delay by finding the maximum of the generalized cross correlation
-    of two signals. The two signals x and y are discrete-time series with the same sample rate.
+    estimates time delay by finding the maximum of the generalized cross correlation (gcc)
+    of two signals. The two signals are discrete-time series with the same sample rate.
 
-    If the second signal is delayed compared to the first, the time delay is _NEGATIVE_.
+    For example, if the signal arrives 2.5 seconds _after_ the reference signal, returns 2.5;
+    if it arrives 0.5 seconds _before_ the reference signal, returns -0.5.
 
     Args:
-        x,y: np.arrays of two signals
+        signal, reference_signal: np.arrays or lists containing each signal
         cc_filter: see gcc()
         sample_rate: sample rate (Hz) of signals; both signals must have same sample rate
 
     Returns:
-        estimated delay from signal x to signal y, seconds
+        estimated delay from reference signal to signal, in seconds
+        (note that default samping rate is 1.0 samples/second)
+
+        if return_max is True, returns a second value, the maximum value of the
+        result of generalized cross correlation
+
+    See also: gcc() if you want the raw output of generalized cross correlation
     """
-    cc = gcc(x, y, cc_filter=cc_filter)
-    lags = correlation_lags(len(x), len(y))
-    return lags[np.argmax(cc)] / sample_rate
+    # compute the generalized cross correlation between the signals
+    cc = gcc(signal, reference_signal, cc_filter=cc_filter)
+
+    # generate the relative offsets for each index position of `cc`
+    lags = correlation_lags(len(signal), len(reference_signal))
+
+    # find the time delay using the index of the maximum cc value
+    # the maximum of the cc value represents GCC's estimate of the delay
+    # between the two signals, ie how much to shift one signal against the other
+    # to maximize their product
+    tdoa = lags[np.argmax(cc)] / sample_rate
+
+    if return_max:
+        return tdoa, max(cc)
+
+    else:
+        return tdoa
