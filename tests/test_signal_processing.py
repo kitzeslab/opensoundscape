@@ -4,6 +4,7 @@ import pytest
 import numpy as np
 from opensoundscape import signal_processing as sp
 from numpy.testing import assert_allclose
+from math import isclose
 
 
 @pytest.fixture()
@@ -276,3 +277,19 @@ def test_cc_scipy_equivalence():
         gccs = sp.gcc(a, b, cc_filter="cc")  # use plain cross-correlation
         # should be exactly the same as scipy.signal.correlate
         assert_allclose(gccs, sig.correlate(a, b, mode="full"), 1e-6, 1)
+
+
+def test_tdoa_return_max():
+    # option to return max of cc as well as estimated time delay
+    delay = 20  # samples of delay (positive: second signal arrives before first)
+    start = 500  # start of signal
+    end = 510  # end of signal
+
+    a = np.zeros(1000)
+    a[start:end] = 3  # impulse
+    b = np.zeros(1000)
+    b[start - delay : end - delay] = 3
+
+    # filter methods will change the output values of cc, but plain cc gives expected value
+    delay, cc_max = sp.tdoa(a, b, cc_filter="cc", sample_rate=1, return_max=True)
+    assert isclose(cc_max, 3 * 3 * (end - start), abs_tol=1e-4)
