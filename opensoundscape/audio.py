@@ -1109,7 +1109,12 @@ def mix(
 
 
 def estimate_delay(
-    audio, reference_audio, bandpass_range=None, bandpass_order=9, cc_filter="phat"
+    audio,
+    reference_audio,
+    bandpass_range=None,
+    bandpass_order=9,
+    cc_filter="phat",
+    return_cc_max=False,
 ):
     """Use generalized cross correlation to estimate time delay between signals
 
@@ -1125,8 +1130,13 @@ def estimate_delay(
         bandpass_order: order of Butterworth bandpass filter
         cc_filter: generalized cross correlation type, see
             opensoundscape.signal_processing.gcc() [default: 'phat']
+        return_cc_max: if True, returns cross correlation max value as second argument
+            (see opensoundscape.signal_processing.tdoa)
     Returns:
         estimated time delay (seconds) from reference_audio to audio
+
+        if return_cc_max is True, returns second value, the max of the cross correlation
+        of the two signals
 
     Note: resamples reference_audio if its sample rate does not match audio
     """
@@ -1143,7 +1153,11 @@ def estimate_delay(
 
     # estimate time delay from reference_audio to audio using generalized cross correlation
     return tdoa(
-        audio.samples, reference_audio.samples, cc_filter=cc_filter, sample_rate=sr
+        audio.samples,
+        reference_audio.samples,
+        cc_filter=cc_filter,
+        sample_rate=sr,
+        return_max=return_cc_max,
     )
 
 
