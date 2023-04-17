@@ -1107,34 +1107,38 @@ def mix(
 
     return audio_objects[0]._spawn(samples=mixdown, sample_rate=sample_rate)
 
-def estimate_delay(audio1,audio2,bandpass_range=None,bandpass_order=9,cc_filter='phat'):
+
+def estimate_delay(
+    audio1, audio2, bandpass_range=None, bandpass_order=9, cc_filter="phat"
+):
     """Use generalized cross correlation to estimate time delay between signals
-    
+
     optionally bandpass to a frequency range
-    
+
     Args:
         audio1, audio2: audio objects
         bandpass_range: if None, no bandpass filter is performed
             otherwise [low_f,high_f]
         bandpass_order: order of Butterworth bandpass filter
-        cc_filter: generalized cross correlation type, see 
+        cc_filter: generalized cross correlation type, see
             opensoundscape.signal_processing.gcc() [default: 'phat']
     Returns:
-        estimated time delay (seconds) 
+        estimated time delay (seconds)
         if audio2 is delayed by 1 second compared to audio1, result is -1.0
 
     Note: resamples audio2 if its sample rate does not match audio1
     """
     # sample rates must match
     sr = audio1.sample_rate
-    if audio2.sample_rate != sr
+    if audio2.sample_rate != sr:
         audio2 = audio2.resample(sr)
-    
-    if bandpass_range is not None:
-        audio1=audio1.bandpass(bandpass_range[0],bandpass_range[1],bandpass_order)
-        audio2=audio2.bandpass(bandpass_range[0],bandpass_range[1],bandpass_order)
 
-    return tdoa(audio1.samples,audio2.samples,cc_filter=cc_filter,sample_rate=sr)
+    if bandpass_range is not None:
+        audio1 = audio1.bandpass(bandpass_range[0], bandpass_range[1], bandpass_order)
+        audio2 = audio2.bandpass(bandpass_range[0], bandpass_range[1], bandpass_order)
+
+    return tdoa(audio1.samples, audio2.samples, cc_filter=cc_filter, sample_rate=sr)
+
 
 def parse_opso_metadata(comment_string):
     """parse metadata saved by opensoundcsape as json in comment field
