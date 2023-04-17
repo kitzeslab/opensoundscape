@@ -527,9 +527,9 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
     elif cc_filter == "ht":
         Gxx = X * torch.conj(X)
         Gyy = Y * torch.conj(Y)
-        gamma = Gxy / torch.sqrt(Gxx * Gxy)
+        gamma = Gxy / torch.sqrt(Gxx * Gyy)
         coherence = torch.abs(gamma) ** 2
-        phi = coherence / (torch.abs(Gxy) * coherence + epsilon)
+        phi = coherence / (torch.abs(Gxy) * (1 - coherence) + epsilon)
     elif cc_filter == "cc":
         phi = 1.0
     else:
