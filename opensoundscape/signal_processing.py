@@ -5,6 +5,9 @@ from scipy import signal
 import pywt
 import matplotlib.pyplot as plt
 from pywt import central_frequency
+from scipy.signal import correlation_lags, correlate as scipy_correlate
+from scipy.fft import next_fast_len
+import torch
 
 from opensoundscape.utils import inrange
 
@@ -455,3 +458,131 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
     starts, lengths = _get_ones_sequences(x_01)
 
     return np.array(starts) / sample_rate, np.array(lengths) / sample_rate
+
+
+def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
+    """
+    Generalized cross correlation of two signals
+
+    Computes a generalized cross correlation in frequency response.
+
+    The generalized cross correlation algorithm described in Knapp and Carter [1].
+
+    In the case of cc_filter='cc', gcc simplifies to cross correlation and is equivalent to
+    scipy.signal.correlate and numpy.correlate.
+
+    code adapted from github.com/axeber01/ngcc
+
+    Args:
+        x: 1d numpy array of audio samples
+        y: 1d numpy array of audio samples
+        cc_filter: which filter to use in the gcc.
+            'phat' - Phase transform. Default.
+            'roth' -
+            'scot' - Smoothed Coherence Transform,
+            'ht' - Hannan and Thomson
+            'cc' - normal cross correlation with no filter
+        epsilon: small value used to ensure denominator when applying a filter is non-zero.
+
+    Returns:
+        gcc: 1d numpy array of gcc values
+
+    see also: tdoa() uses this function to estimate time delay between two signals
+
+    [1] Knapp, C.H. and Carter, G.C (1976)
+    The Generalized Correlation Method for Estimation of Time Delay. IEEE Trans. Acoust. Speech Signal Process, 24, 320-327.
+    http://dx.doi.org/10.1109/TASSP.1976.1162830
+    """
+    # using torch speeds up our performance
+    x = torch.Tensor(x)
+    y = torch.Tensor(y)
+
+    # pad the fft shape for "full" cross correlation of both signals
+    n = x.shape[0] + y.shape[0] - 1
+    if n % 2 != 0:
+        n += 1
+    # by choosing an optimal length rather than the shortest possible, we can
+    # optimize fft speed
+    n_fast = next_fast_len(n, real=True)
+
+    # Take the reall Fast Fourier Transform of the signals
+    X = torch.fft.rfft(x, n=n_fast)
+    Y = torch.fft.rfft(y, n=n_fast)
+
+    # multiply one by the complex conjugate of the other
+    Gxy = X * torch.conj(Y)
+
+    # Apply the filter in the fourier domain
+    if cc_filter == "phat":
+        phi = 1 / (torch.abs(Gxy) + epsilon)
+
+    elif cc_filter == "roth":
+        phi = 1 / (X * torch.conj(X) + epsilon)
+
+    elif cc_filter == "scot":
+        Gxx = X * torch.conj(X)
+        Gyy = Y * torch.conj(Y)
+        phi = 1 / (torch.sqrt(Gxx * Gyy) + epsilon)
+
+    elif cc_filter == "ht":
+        Gxx = X * torch.conj(X)
+        Gyy = Y * torch.conj(Y)
+        gamma_xy = Gxy / (torch.sqrt(Gxx * Gyy) + epsilon)
+        coherence = torch.abs(gamma_xy) ** 2
+        phi = coherence / (torch.abs(Gxy) * (1 - coherence) + epsilon)
+    elif cc_filter == "cc":
+        phi = 1.0
+    else:
+        raise ValueError(
+            "Unsupported cc_filter. Must be one of: 'ht', 'phat', 'roth','scot'"
+        )
+    # Inverse FFT to get the GCC
+    cc = torch.fft.irfft(Gxy * phi, n_fast)
+
+    # reorder the cross-correlation coefficients, trimming out padded regions
+    # order of outputs matches torch.correlate and scipy.signal.correlate
+    cc = torch.concatenate((cc[-y.shape[0] + 1 :], cc[: x.shape[0]]))
+
+    return cc.numpy()
+
+
+def tdoa(signal, reference_signal, cc_filter="phat", sample_rate=1, return_max=False):
+    """estimate time difference of arrival between two signals
+
+    estimates time delay by finding the maximum of the generalized cross correlation (gcc)
+    of two signals. The two signals are discrete-time series with the same sample rate.
+
+    For example, if the signal arrives 2.5 seconds _after_ the reference signal, returns 2.5;
+    if it arrives 0.5 seconds _before_ the reference signal, returns -0.5.
+
+    Args:
+        signal, reference_signal: np.arrays or lists containing each signal
+        cc_filter: see gcc()
+        sample_rate: sample rate (Hz) of signals; both signals must have same sample rate
+
+    Returns:
+        estimated delay from reference signal to signal, in seconds
+        (note that default samping rate is 1.0 samples/second)
+
+        if return_max is True, returns a second value, the maximum value of the
+        result of generalized cross correlation
+
+    See also: gcc() if you want the raw output of generalized cross correlation
+    """
+    # compute the generalized cross correlation between the signals
+    cc = gcc(signal, reference_signal, cc_filter=cc_filter)
+
+    # generate the relative offsets for each index position of `cc`
+    lags = correlation_lags(len(signal), len(reference_signal))
+
+    # find the time delay using the index of the maximum cc value
+    # the maximum of the cc value represents GCC's estimate of the delay
+    # between the two signals, ie how much to shift one signal against the other
+    # to maximize their product
+    tdoa = lags[np.argmax(cc)] / sample_rate
+
+    if return_max:
+        return tdoa, max(cc)
+
+    else:
+        return tdoa
