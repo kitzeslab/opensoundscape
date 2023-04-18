@@ -546,7 +546,14 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
     return cc.numpy()
 
 
-def tdoa(signal, reference_signal, cc_filter="phat", sample_rate=1, return_max=False):
+def tdoa(
+    signal,
+    reference_signal,
+    cc_filter="phat",
+    sample_rate=1,
+    return_max=False,
+    max_delay=None,
+):
     """estimate time difference of arrival between two signals
 
     estimates time delay by finding the maximum of the generalized cross correlation (gcc)
@@ -559,6 +566,8 @@ def tdoa(signal, reference_signal, cc_filter="phat", sample_rate=1, return_max=F
         signal, reference_signal: np.arrays or lists containing each signal
         cc_filter: see gcc()
         sample_rate: sample rate (Hz) of signals; both signals must have same sample rate
+        return_max: if True, returns the maximum value of the generalized cross correlation
+        max_delay: maximum delay to consider in seconds
 
     Returns:
         estimated delay from reference signal to signal, in seconds
@@ -574,6 +583,15 @@ def tdoa(signal, reference_signal, cc_filter="phat", sample_rate=1, return_max=F
 
     # generate the relative offsets for each index position of `cc`
     lags = correlation_lags(len(signal), len(reference_signal))
+
+    if max_delay:
+        max_lag = int(
+            max_delay * sample_rate
+        )  # convert max_delay to max_lag in samples
+        # slice cc and lags, so we only look at cross_correlations that are between -max_lag and +max_lag
+        boolean_mask = [lag < max_lag and lag > -max_lag for lag in lags]
+        cc = cc[boolean_mask]
+        lags = lags[boolean_mask]
 
     # find the time delay using the index of the maximum cc value
     # the maximum of the cc value represents GCC's estimate of the delay

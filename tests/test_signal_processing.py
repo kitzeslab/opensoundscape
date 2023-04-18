@@ -293,3 +293,41 @@ def test_tdoa_return_max():
     # filter methods will change the output values of cc, but plain cc gives expected value
     delay, cc_max = sp.tdoa(a, b, cc_filter="cc", sample_rate=1, return_max=True)
     assert isclose(cc_max, 3 * 3 * (end - start), abs_tol=1e-4)
+
+
+def test_tdoa_max_delay_true_delay_higher():
+    # test if max_delay works in limiting the search space
+    # by setting the true delay to be higher than max_delay
+    delay = 100  # samples of delay (positive: second signal arrives before first)
+    start = 500  # start of signal
+    end = 510  # end of signal
+
+    a = np.zeros(1000)
+    a[start:end] = 3  # impulse
+    a += np.random.rand(1000)  # add noise
+    b = np.zeros(1000)
+    b[start - delay : end - delay] = 3
+    b += np.random.rand(1000)
+    delay, cc_max = sp.tdoa(
+        a, b, cc_filter="cc", sample_rate=1, return_max=True, max_delay=50
+    )
+    assert abs(delay) <= 50
+
+
+def test_tdoa_max_delay_true_delay_within():
+    # test if max_delay works in limiting the search space
+    # this time, ensure that the true delay is within the search space
+    delay = 49  # samples of delay (positive: second signal arrives before first)
+    start = 500  # start of signal
+    end = 510  # end of signal
+
+    a = np.zeros(1000)
+    a[start:end] = 3  # impulse
+    a += np.random.rand(1000)  # add noise
+    b = np.zeros(1000)
+    b[start - delay : end - delay] = 3
+    b += np.random.rand(1000)
+    delay, cc_max = sp.tdoa(
+        a, b, cc_filter="cc", sample_rate=1, return_max=True, max_delay=50
+    )
+    assert delay == 49
