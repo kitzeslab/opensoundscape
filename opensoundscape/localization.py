@@ -7,9 +7,7 @@ from scipy.signal import correlate, correlation_lags
 import opensoundscape.signal_processing as sp
 import warnings
 
-# make a class that we will use to contain a model object, list of files and thresholds
-# this will be called Localizer
-# we will use this class for localizing sound sources from synchronized audio files
+
 class Localizer:
     """
     Localize sound sources from synchronized audio files.
