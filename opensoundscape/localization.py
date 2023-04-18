@@ -56,7 +56,7 @@ class Localizer:
             Saves filtered cross correlations as a pandas.DataFrame to self.filtered_cross_correlations.
         localize_events()
             Use the localization algorithm to localize the events from the set of tdoas after filtering.
-            Saves locations as a pandas.DataFrame to self.locations.
+            Saves locations as a pandas.DataFrame to self.localized_events.
     """
 
     def __init__(
@@ -94,7 +94,7 @@ class Localizer:
         self.detections = None
         self.cross_correlations = None
         self.filtered_cross_correlations = None
-        self.locations = None
+        self.localized_events = None
 
         # check that all files have coordinates in aru_coords
         audio_files_have_coordinates = True
@@ -134,6 +134,7 @@ class Localizer:
         self.cross_correlate()
         self.filter_cross_correlations()
         self.localize_events()
+        return self.localized_events
 
     def threshold_predictions(self):
         """
@@ -348,7 +349,7 @@ class Localizer:
             ]
         else:
             raise UserWarning("Algorithm not recognized")
-        self.locations = localized
+        self.localized_events = localized
         return localized
 
     def _get_cross_correlations(

@@ -6,39 +6,18 @@ import pandas as pd
 
 
 @pytest.fixture()
-def localizer_files():
-    return [f"tests/localizer_tests/aru_{i}.wav" for i in range(1, 6)]
-
-
-# @pytest.fixture()
-# def aru_1():
-#     return "tests/localizer_tests/aru_1.wav"
-
-# @pytest.fixture()
-# def aru_2():
-#     return "tests/localizer_tests/aru_2.wav"
-
-# @pytest.fixture()
-# def aru_3():
-#     return "tests/localizer_tests/aru_3.wav"
-
-# @pytest.fixture()
-# def aru_4():
-#     return "tests/localizer_tests/aru_4.wav"
-
-# @pytest.fixture()
-# def aru_5():
-#     return "tests/localizer_tests/aru_5.wav"
+def aru_files():
+    return [f"tests/audio/aru_{i}.wav" for i in range(1, 6)]
 
 
 @pytest.fixture()
-def aru_coords():
-    return "tests/localizer_tests/aru_coords.csv"
+def aru_coords_csv():
+    return "tests/csvs/aru_coords.csv"
 
 
 @pytest.fixture()
 def predictions():
-    return "tests/localizer_tests/preds.csv"
+    return "tests/csvs/localizer_preds.csv"
 
 
 def close(x, y, tol):
@@ -191,12 +170,14 @@ def test_gillette_localize_3d():
     assert np.allclose(estimated_pos[0:3], sound_source, atol=2)
 
 
-def test_localizer():
-    aru_coords = pd.read_csv(aru_files, index_col=0)
-    preds = pd.read_csv(predictions, index_col=0)
-    loca = Localizer(
-        files=aru_names,
-        predictions=preds_indexed,
+def test_localizer(aru_coords_csv, predictions, aru_files):
+    aru_coords = pd.read_csv(aru_coords_csv, index_col=0)
+    print(aru_coords)
+    preds = pd.read_csv(predictions, index_col=[0, 1, 2])
+    files = aru_files
+    loca = localization.Localizer(
+        files=files,
+        predictions=preds,
         aru_coords=aru_coords,
         sample_rate=32000,
         min_number_of_receivers=2,
@@ -206,6 +187,7 @@ def test_localizer():
     )
     loca.localize()
 
-
-assert close(np.mean(loca.locations["predicted_x"], 10))
-assert close(np.mean(loca.locations["predicted_y"], 15))
+    true_x = 10
+    true_y = 15
+    assert abs(np.median(loca.localized_events["predicted_x"]) - true_x) < 1
+    assert abs(np.median(loca.localized_events["predicted_y"] - true_y)) < 1
