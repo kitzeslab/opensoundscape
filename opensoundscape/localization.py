@@ -1,6 +1,517 @@
 """Tools for localizing audio events from synchronized recording arrays"""
 import warnings
 import numpy as np
+import pandas as pd
+from opensoundscape.audio import Audio
+from scipy.signal import correlate, correlation_lags
+import opensoundscape.signal_processing as sp
+
+
+class Localizer:
+    """
+    Localize sound sources from synchronized audio files.
+    Parameters
+    ----------
+    files : list
+        List of synchronized audio files
+    predictions : pandas.DataFrame
+        DataFrame of predictions. The multi-index must be [file, start_time, end_time]
+        each column is a class.
+    aru_coords : pandas.DataFrame
+        DataFrame with index filepath, and columns coordinates. Each audio file must have a corresponding coordinate.
+    sample_rate : int
+        Sample rate of the audio files
+    min_number_of_receivers : int
+        Minimum number of receivers that must detect an event for it to be localized
+    max_distance_between_receivers : float
+        Maximum plausible between any 2 receivers for detecting the same event. If the distance between receivers is greater than this value, detections will be treated as separate events.
+    localization_algorithm : str, optional
+        Localization algorithm to use. Default is "gillette"
+    thresholds : dict, optional
+        Dictionary of thresholds for each class. Default is None.
+    bandpass_ranges : dict, optional
+        Dictionary of form {"CLASS": [low_f, high_f]} for bandpass ranges for each class. Default is None.
+    max_delay : float, optional
+        The time delays of arrival between 2 receivers that maximized cross correlation will be found between -max_delay and +max_delay. Default is None.
+    cc_threshold : float, optional
+        Threshold for cross correlation. Default is 0.
+    cc_filter : str, optional
+        Filter to use for generalized cross correlation. See signalprocessing.gcc function for options. Default is "phat".
+    Methods
+    -------
+    localize()
+        Run the enitre localization algorithm on the audio files and predictions. This executes the below methods in order.
+        threshold_predictions()
+            Use a set of score thresholds to filter the predictions and ensure that only detections with a minimum number of receivers are returned.
+            Saves detections as a pandas.DataFrame to self.detections.
+        cross_correlate()
+            Cross correlate the audio files to get time delays of arrival. This is computationally expensive.
+            Saves cross correlations as a pandas.DataFrame to self.cross_correlations.
+        filter_cross_correlations()
+            Filter the cross correlations to remove scores below cc_threshold. This then also ensures at least min_number_of_receivers are present.
+            Saves filtered cross correlations as a pandas.DataFrame to self.filtered_cross_correlations.
+        localize_events()
+            Use the localization algorithm to localize the events from the set of tdoas after filtering.
+            Saves locations as a pandas.DataFrame to self.localized_events.
+    """
+
+    def __init__(
+        self,
+        files,
+        predictions,
+        aru_coords,
+        sample_rate,
+        min_number_of_receivers,
+        max_distance_between_receivers,
+        localization_algorithm="gillette",
+        thresholds=None,
+        bandpass_ranges=None,
+        max_delay=None,
+        cc_threshold=0,
+        cc_filter="phat",
+    ):
+        self.files = files
+        self.predictions = predictions
+        self.aru_coords = aru_coords
+        self.SAMPLE_RATE = sample_rate
+        self.min_number_of_receivers = min_number_of_receivers
+        self.max_distance_between_receivers = max_distance_between_receivers
+        self.localization_algorithm = localization_algorithm
+        self.thresholds = thresholds
+        self.bandpass_ranges = bandpass_ranges
+        self.max_delay = max_delay
+        self.cc_threshold = cc_threshold
+        self.cc_filter = cc_filter
+
+        # attributes for troubleshooting
+        self.files_missing_coordinates = []
+
+        # initialize the outputs of the localizer as None. These will be filled in as the localizer runs.
+        self.detections = None
+        self.cross_correlations = None
+        self.filtered_cross_correlations = None
+        self.localized_events = None
+
+        # check that all files have coordinates in aru_coords
+        audio_files_have_coordinates = True
+        for file in self.files:
+            if str(file) not in self.aru_coords.index:
+                audio_files_have_coordinates = False
+                self.files_missing_coordinates.append(file)
+        if not audio_files_have_coordinates:
+            raise UserWarning(
+                "WARNING: Not all audio files have corresponding coordinates. Check aru_coords contains a mapping for each file. \n Check the missing files with Localizer.files_missing_coordinates"
+            )
+        # check that bandpass_ranges have been set for all classes
+        if self.bandpass_ranges is not None:
+            if set(self.bandpass_ranges.keys()) != set(self.predictions.columns):
+                warnings.warn(
+                    "WARNING: Not all classes have corresponding bandpass ranges. Default behavior will be to not bandpass before cross-correlation for classes that do not have a corresponding bandpass range."
+                )
+
+        # check that thresholds have been set for all classes
+        # TODO: remove thresholding. Refactor so that the user passes in a predictions df that has already been filtered.
+        if self.thresholds is not None:
+            if set(self.thresholds.keys()) != set(self.predictions.columns):
+                warnings.warn(
+                    "WARNING: Not all classes have corresponding thresholds. Default behavior will be to drop classes that do not have a corresponding threshold."
+                )
+        print("Localizer initialized")
+
+    def localize(self):
+        """
+        Run the entire localization algorithm on the audio files and predictions. This executes the below methods in order.
+            threshold_predictions()
+            cross_correlate()
+            filter_cross_correlations()
+            localize_events()
+        """
+        self.threshold_predictions()
+        self.cross_correlate()
+        self.filter_cross_correlations()
+        self.localize_events()
+        return self.localized_events
+
+    def threshold_predictions(self):
+        """
+        Use a set of score thresholds to filter the predictions and ensure that only detections with a minimum number of receivers are returned.
+        Returns the detections as a pandas.DataFrame and writes it to self.detections.
+        The detections DataFrame has columns:
+            time : (start, end) tuple of the detection time in seconds
+            reference_file: the reference file for the detection
+            other_files: the other files against which cross correlation will be performed
+            species: the species of the detection
+        """
+        if self.predictions is None:
+            raise UserWarning(
+                "No predictions exist. Please initialize the Localizer with predictions"
+            )
+        all_sp_detections = []
+
+        # iterate over each species
+        for species in self.thresholds.keys():
+            df = self.predictions.loc[:, [species]]  # must be a dataframe
+            detections = Localizer._get_detections(
+                df, cnn_score_threshold=self.thresholds[species]
+            )
+            grouped_detections = Localizer._group_detections(
+                detections,
+                self.aru_coords,
+                self.min_number_of_receivers,
+                self.max_distance_between_receivers,
+            )
+            grouped_detections["species"] = species
+            all_sp_detections.append(grouped_detections)
+        detections_df = pd.concat(all_sp_detections)
+        self.detections = detections_df
+        return detections_df
+
+    def cross_correlate(self):
+        """
+        Cross correlate the audio files to get time delays of arrival for each time interval where a sound event was detected on at least min_number_of_receivers.
+        Returns a pandas.DataFrame and writes it to self.cross_correlations. Warning: this is computationally expensive.
+        The DataFrame has columns:
+            time : (start, end) tuple of the detection time in seconds
+            reference_file: the reference file for the detection
+            other_files: list of the other files against which cross correlation will be performed
+            species: the species of the detection
+            cross_correlations: list of the maximum cross-correlation score for each pair of files
+            time_delays: list of the time delays corresponding to the maximal cross-correlation for each pair of files
+        """
+        if self.bandpass_ranges is None:
+            warnings.warn(
+                "No bandpass range set. Default behavior will be to not bandpass the audio before cross-correlation."
+            )
+
+        if self.max_delay is None:
+            warnings.warn(
+                "No max delay set. Default behavior will be to allow for any delay between the audio files."
+            )
+        if self.detections is None:
+            print("No detections exist - running threshold_predictions")
+            self.threshold_predictions()
+        # get the cross-correlations
+        all_ccs = []
+        all_tds = []
+        for index, row in self.detections.iterrows():
+            species = row["species"]
+            if (
+                self.bandpass_ranges is None
+            ):  # do not bandpass if no bandpass_ranges set at all
+                bandpass_range = None
+            else:
+                try:
+                    bandpass_range = self.bandpass_ranges[species]
+                except KeyError:  # do not bandpass if no bandpass range is set for this species
+                    bandpass_range = None
+
+            cc, td = Localizer._get_cross_correlations(
+                reference_file=row["reference_file"],
+                other_files=row["other_files"],
+                start_time=row["time"][0],
+                end_time=row["time"][1],
+                bandpass_range=bandpass_range,
+                max_delay=self.max_delay,
+                SAMPLE_RATE=self.SAMPLE_RATE,
+                cc_filter=self.cc_filter,
+            )
+            all_ccs.append(cc)
+            all_tds.append(td)
+        self.cross_correlations = self.detections.copy()
+        self.cross_correlations["cross_correlations"] = all_ccs
+        self.cross_correlations["time_delays"] = all_tds
+        return self.cross_correlations
+
+    def filter_cross_correlations(self):
+        """
+        Filter the cross-correlations to only include those that are above a certain threshold. This step also drops any detections where less than min_number_of_receivers are above the threshold.
+        Returns a pandas.DataFrame and writes it to self.filtered_cross_correlations.
+        The DataFrame has columns:
+            time : (start, end) tuple of the detection time in seconds
+            reference_file: the reference file for the detection
+            other_files: list of the other files against which cross correlation will be performed
+            species: the species of the detection
+            cross_correlations: list of the maximum cross-correlation score for each pair of files
+            time_delays: list of the time delays corresponding to the maximal cross-correlation for each pair of files
+        """
+        if self.cross_correlations is None:
+            print("No cross correlations exist - running cross_correlate")
+            self.cross_correlate()
+        # filter the cross-correlations
+        above_threshold = [
+            cc > self.cc_threshold
+            for cc in self.cross_correlations["cross_correlations"]
+        ]
+
+        n_before = len(self.cross_correlations)  # number of rows before filtering
+
+        filtered_ccs = []
+        filtered_files = []
+        filtered_tdoas = []
+        for i in range(len(self.cross_correlations)):
+            mask = above_threshold[i]
+            cc = self.cross_correlations["cross_correlations"].iloc[i]
+            other_files = np.array(self.cross_correlations["other_files"].iloc[i])
+            tdoa = np.array(self.cross_correlations["time_delays"].iloc[i])
+
+            filtered_ccs.append(cc[mask])
+            filtered_files.append(other_files[mask])
+            filtered_tdoas.append(tdoa[mask])
+
+        filtered_cross_correlations = self.cross_correlations.copy()
+
+        filtered_cross_correlations["cross_correlations"] = filtered_ccs
+        filtered_cross_correlations["other_files"] = filtered_files
+        filtered_cross_correlations["time_delays"] = filtered_tdoas
+
+        # Filter by the cc scores. If less than min_number_of_receivers have cc_score above threshold, drop them.
+        ccs = [
+            np.array(scores)
+            for scores in filtered_cross_correlations["cross_correlations"]
+        ]
+        num_ccs_above_threshold = [sum(a > self.cc_threshold) for a in ccs]
+        mask = np.array(num_ccs_above_threshold) >= self.min_number_of_receivers - 1
+        filtered_cross_correlations = filtered_cross_correlations[mask]
+
+        n_after = len(filtered_cross_correlations)  # number of rows after filtering
+        print(f"{n_before - n_after} rows deleted")
+        self.filtered_cross_correlations = filtered_cross_correlations
+        return filtered_cross_correlations
+
+    def localize_events(self):
+        """
+        Localize the events using the localization algorithm specified in self.localization_algorithm. Returns a pandas.DataFrame with the results and writes it to self.localizations
+        The columns of the DataFrame are:
+            time : (start, end) tuple of the detection time in seconds
+            reference_file: the reference file for the detection
+            other_files: list of the other files against which cross correlation will be performed
+            species: the species of the detection
+            cross_correlations: list of the maximum cross-correlation score for each pair of files
+            time_delays: list of the time delays corresponding to the maximal cross-correlation for each pair of files
+            predicted_x: the predicted x coordinate of the event
+            predicted_y: the predicted y coordinate of the event
+            predicted_z: the predicted z coordinate of the event
+            tdoa_error: the residuals in the tdoas against what would be expected from the predicted location.
+        """
+        algorithm = self.localization_algorithm
+
+        if self.filtered_cross_correlations is None:
+            print(
+                "No filtered cross_correlations exist - running filter_cross_correlations"
+            )
+            self.filter_cross_correlations()
+        localized = self.filtered_cross_correlations.copy()
+        locations = []
+        if algorithm == "gillette":
+            # localize using gillette
+
+            for index, row in self.filtered_cross_correlations.iterrows():
+                reference = row["reference_file"]
+                others = row["other_files"]
+                reference_coords = self.aru_coords.loc[reference]
+                others_coords = [self.aru_coords.loc[i] for i in others]
+                all_coords = [reference_coords] + others_coords
+                # add 0 tdoa for reference receiver
+                delays = np.insert(row["time_delays"], 0, 0)
+
+                location, _, _ = gillette_localize(all_coords, delays)
+                locations.append(location)
+            localized["predicted_x"] = [locations[i][0] for i in range(len(locations))]
+            localized["predicted_y"] = [locations[i][1] for i in range(len(locations))]
+            localized["gillette_error"] = ["Error" for i in range(len(locations))]
+
+        elif algorithm == "soundfinder":
+
+            for index, row in self.filtered_cross_correlations.iterrows():
+                reference = row["reference_file"]
+                others = row["other_files"]
+                reference_coords = self.aru_coords.loc[reference]
+                others_coords = [self.aru_coords.loc[i] for i in others]
+                all_coords = [reference_coords] + others_coords
+                # add 0 tdoa for reference receiver
+                delays = np.insert(row["time_delays"], 0, 0)
+
+                location = soundfinder(all_coords, delays)
+                locations.append(location)
+            localized["predicted_x"] = [locations[i][0] for i in range(len(locations))]
+            localized["predicted_y"] = [locations[i][1] for i in range(len(locations))]
+            localized["pseudorange_error"] = [
+                locations[i][2] for i in range(len(locations))
+            ]
+        else:
+            raise UserWarning("Algorithm not recognized")
+        self.localized_events = localized
+        return localized
+
+    def _get_cross_correlations(
+        reference_file,
+        other_files,
+        start_time,
+        end_time,
+        bandpass_range,
+        max_delay,
+        SAMPLE_RATE,
+        cc_filter,
+    ):
+        """
+        Gets the maximal cross correlations and the time-delay (in s) corresponding to that cross correlation between
+        the reference_file and other_files. Setting max_delay ensures that only cross-correlations
+        +/- a certain time-delay are returned. i.e if a sound can be a maximum of +/-
+        ----
+        args:
+            reference_file: Path to reference file.
+            other_files: List of paths to the other files which will be cross-correlated against reference_file
+            start_time: start of time segment (in seconds) to be cross-correlated
+            end_time: end of time segment (in seconds) to be cross-correlated.
+            bandpass_range: [lower, higher] of bandpass range. If None, no bandpass filter is applied.
+            max_delay: the maximum time (in seconds) to return cross_correlations for. i.e. if the best cross correlation
+                        occurs for a time-delay greater than max_delay, the function will not return it, instead it will return
+                        the maximal cross correlation within +/- max_delay
+            SAMPLE_RATE: the sampling rate of the audio.
+            cc_filter: the filter to use for cross-correlation. see signalprocessing.gcc for options. Options currently are "phat" or "cc"
+        returns:
+            ccs: list of maximal cross-correlations for each pair of files.
+            time_differences: list of time differences (in seconds) that yield the maximal cross-correlation.
+        """
+        if bandpass_range is None:
+            # no bandpass filter
+            reference_audio = Audio.from_file(
+                reference_file, offset=start_time, duration=end_time - start_time
+            )
+            other_audio = [
+                Audio.from_file(i, offset=start_time, duration=end_time - start_time)
+                for i in other_files
+            ]
+        else:
+            lower = min(bandpass_range)
+            higher = max(bandpass_range)
+
+            reference_audio = Audio.from_file(
+                reference_file, offset=start_time, duration=end_time - start_time
+            ).bandpass(lower, higher, order=9)
+            other_audio = [
+                Audio.from_file(
+                    i, offset=start_time, duration=end_time - start_time
+                ).bandpass(lower, higher, order=9)
+                for i in other_files
+            ]
+        ccs = np.zeros(len(other_audio))
+        time_difference = np.zeros(len(other_audio))
+        for index, audio_object in enumerate(other_audio):
+            delay, cc = sp.tdoa(
+                audio_object.samples,
+                reference_audio.samples,
+                cc_filter=cc_filter,
+                sample_rate=SAMPLE_RATE,
+                return_max=True,
+                max_delay=max_delay,
+            )
+
+            time_difference[index] = delay
+            ccs[index] = cc
+
+        return ccs, time_difference
+
+    def _get_detections(predictions_df, cnn_score_threshold):
+        """
+        Takes the predictions_df of CNN scores *FOR A SINGLE SPECIES*, chooses only detections > cnn_score_threshold
+        and outputs a dictionary of times at which events were detected, and the ARU files they were detected in.
+        args:
+            predictions_array: a dataframe with multi-index of (file, start_time, end_time) with a column that is values for model predictions
+            *FOR A SINGLE SPECIES*
+            cnn_score_threshold: the minimum CNN score needed for a time-window to be considered a detection.
+        returns:
+            A dictionary of predictions, with key (start_time, end_time), and value list of files with detection triggered
+            e.g. {(0.0,2.0): [ARU_0.mp3. ARU_1.mp3]}
+        """
+        # get the detections from the predictions
+        # Threshold the scores to above cnn_score_threshold
+        booleans = (
+            predictions_df.loc[:, :, :] > cnn_score_threshold
+        )  # find rows above threshold
+        indices = (
+            booleans[booleans].dropna().index
+        )  # choose just those rows. dropna required to drop the others
+        recorders = indices.get_level_values(
+            0
+        )  # get the list of recorders out of the multi-index
+        indices = indices.droplevel(level=0)  # drop the recorders
+
+        dataframe = pd.DataFrame(
+            data=recorders, index=indices
+        )  # df with index (start_time, end_time)
+        dataframe = (
+            dataframe.sort_index()
+        )  # done to ensure speed-up and not get performancewarning
+        recorders_list = []
+        for idx in dataframe.index.unique():
+            recorders_in_time = dataframe.loc[idx].values
+            recorders_in_time = [
+                i[0] for i in recorders_in_time
+            ]  # to get recorder path string out of numpy array
+            recorders_list.append(recorders_in_time)
+        return dict(zip(dataframe.index.unique(), recorders_list))
+
+    def _group_detections(
+        detections, aru_coords, min_number_of_receivers, max_distance_between_receivers
+    ):
+        """
+        Takes the detections dictionary and groups detections that are within max_distance_between_receivers of each other.
+        args:
+            detections: a dictionary of detections, with key (start_time, end_time), and value list of files with detection triggered
+            aru_coords: a dictionary of aru coordinates, with key aru file path, and value (x,y) coordinates
+            max_distance_between_receivers: the maximum distance between recorders to consider a detection as a single event
+        returns:
+            A dictionary of grouped detections, with key (start_time, end_time), and value list of files with detection triggered
+            e.g. {(0.0,2.0): [ARU_0.mp3. ARU_1.mp3]}
+        """
+        from itertools import product
+
+        # Group recorders based on being within < max_distance_between_receivers.
+        # recorders_in_distance is dictionary in
+        # form {ARU_0.mp3: [ARU_1.mp3, ARU_2.mp3...] for all recorders within max_distance_between_receivers }
+        recorders_in_distance = dict()
+
+        aru_files = aru_coords.index
+        for aru in aru_files:  # loop over the aru files
+            pos_aru = np.array(aru_coords.loc[aru])  # position of receiver
+            other_arus = np.array(aru_coords)
+            distances = other_arus - pos_aru
+            euclid_distances = [np.linalg.norm(d) for d in distances]
+
+            mask = [
+                0 <= i <= max_distance_between_receivers for i in euclid_distances
+            ]  # boolean mask
+            recorders_in_distance[aru] = list(aru_files[mask])
+
+        times = []
+        reference_files = []
+        other_files = []
+
+        for time_segment in detections.keys():  # iterate through all the time-segments
+            for file in detections[
+                time_segment
+            ]:  # iterate through each file with a call detected in this time-segment
+                reference = file  # set this file to be reference
+                others = [
+                    f for f in detections[time_segment] if f != reference
+                ]  # All the other receivers
+                others_in_distance = [
+                    aru for aru in others if aru in recorders_in_distance[reference]
+                ]  # only the receivers that are close enough
+
+                if (
+                    len(others_in_distance) + 1 >= min_number_of_receivers
+                ):  # minimum number of receivers needed to localize.
+                    times.append(time_segment)
+                    reference_files.append(reference)
+                    other_files.append(others_in_distance)
+
+        grouped_detections = pd.DataFrame(
+            data=zip(times, reference_files, other_files),
+            columns=["time", "reference_file", "other_files"],
+        )
+        return grouped_detections
 
 
 def calc_speed_of_sound(temperature=20):
@@ -69,17 +580,33 @@ def travel_time(source, receiver, speed_of_sound):
     return distance / speed_of_sound
 
 
-from deprecated import deprecated
+def localize(receiver_positions, tdoas, speed_of_sound, algorithm):
+    """
+    Perform TDOA localization on a sound event.
+    Args:
+        receiver_positions: a list of [x,y,z] positions for each receiver
+            Positions should be in meters, e.g., the UTM coordinate system.
+        tdoas: a list of TDOA times (onset times) for each recorder
+            The times should be in seconds.
+        speed_of_sound: speed of sound in m/s
+        algorithm: the algorithm to use for localization
+            Options: 'soundfinder', 'gillette'
+    Returns:
+        The estimated source position in meters.
+        TDOA residuals in seconds.
+    """
+    if algorithm == "soundfinder":
+        return soundfinder(receiver_positions, tdoas)
+    elif algorithm == "gillette":
+        return gillette(receiver_positions, tdoas)
+    else:
+        raise ValueError(f"Unknown algorithm: {algorithm}")
 
 
-@deprecated(
-    version="0.6.2",
-    reason="This function is not fully implemented and will be replaced in version 0.8.0",
-)
-def localize(
+def soundfinder(
     receiver_positions,
     arrival_times,
-    temperature=20.0,  # celcius
+    speed_of_sound=331.3,
     invert_alg="gps",  # options: 'gps'
     center=True,  # True for original Sound Finder behavior
     pseudo=True,  # False for original Sound Finder
@@ -87,35 +614,27 @@ def localize(
 
     """
     Perform TDOA localization on a sound event
-
     Localize a sound event given relative arrival times at multiple receivers.
     This function implements a localization algorithm from the
     equations described in the class handout ("Global Positioning
     Systems"). Localization can be performed in a global coordinate
     system in meters (i.e., UTM), or relative to recorder positions
     in meters.
-
     Args:
         receiver_positions: a list of [x,y,z] positions for each receiver
           Positions should be in meters, e.g., the UTM coordinate system.
-
         arrival_times: a list of TDOA times (onset times) for each recorder
           The times should be in seconds.
-
-        temperature: ambient temperature in Celsius
-
+        speed of sound: speed of sound in m/s
         invert_alg: what inversion algorithm to use (only 'gps' is implemented)
-
         center: whether to center recorders before computing localization
           result. Computes localization relative to centered plot, then
           translates solution back to original recorder locations.
           (For behavior of original Sound Finder, use True)
-
         pseudo: whether to use the pseudorange error (True) or
           sum of squares discrepancy (False) to pick the solution to return
           (For behavior of original Sound Finder, use False. However,
           in initial tests, pseudorange error appears to perform better.)
-
     Returns:
         The solution (x,y,z,b) with the lower sum of squares discrepancy
         b is the error in the pseudorange (distance to mics), b=c*delta_t (delta_t is time error)
@@ -126,9 +645,6 @@ def localize(
 
     # The number of dimensions in which to perform localization
     dim = receiver_positions.shape[1]
-
-    # Calculate speed of sound
-    speed_of_sound = calc_speed_of_sound(temperature)
 
     ##### Shift coordinate system to center receivers around origin #####
     if center:
@@ -256,3 +772,100 @@ def localize(
             return u0
         else:
             return u1
+
+
+def gillette_localize(
+    receivers=list,
+    delays=list,
+    temp=20,
+    m=[0],
+    exact=True,
+    summary=False,
+    confint=False,
+    alpha=0.05,
+    td_error=False,
+    total_td_error=False,
+):
+    """
+    Calculate the estimated location of a sound's source using the
+    algorithm laid out in Gillette and Silverman (2008)
+    Args:
+        receivers: A numpy array of coordinates for microphones used to
+        record the sound. The number of microphones needed should
+        be two more than the dimensions being localized in. The
+        first row will be treated as a reference point for the
+        algorithm.
+        tdoa: A list of time delays. Each entry should be the time
+        delay for the corresponding item in the receivers list
+        (i.e. the first item is the delay for the first receiver).
+        The first item in this list should be 0, with all other
+        entries centered around that.
+        temp: ambient temperature in Celsius. Defaults to 20.
+        exact: computes an exact solution if True, computes estimates
+        with uncertainty if false. Defaults to True
+        summary: displays a summary of the estimates if True. Defaults
+        to false.
+        confint: outputs confidence intervals for the estimated
+        coordinates if true. Defaults to false.
+        alpha: Determines confidence level of the confidence intervals.
+        Defaults to 0.05.
+        m: the index of the reference mic. Defaults to 0.
+        td_error: Computes the expected time delay from the estimated
+        source location, centered around the reference mic, for each
+        microphone.
+        total_td_error: Computes the euclidean norm of the errors
+        provided by td_error.
+    Returns:
+        an array with the estimated coordinates and the estimated
+        distance from the reference mic. (One reference mic and two
+        additional mics, this is a 2 item array containing an estima
+        -ted x coordinate and a distance.)
+    """
+    import opensoundscape.localization as loc
+    import statsmodels.api as sm
+
+    C = loc.calc_speed_of_sound(temperature=20)
+    # Compile know receiver locations and distance delays into an output vector
+    out_knowns = []
+    in_knowns = np.zeros(((len(receivers) - len(m)) * len(m), 2 + len(m)))
+    toa = np.array(delays)
+    r = 0
+    out_knowns = []
+    for k in range(len(m)):
+        tdoa = (
+            toa - toa[m[k]]
+        )  # Use the speed of sound to convert time delays to "distance delays"
+        diffs = []
+        for delay in tdoa:
+            diffs.append(float(delay * loc.calc_speed_of_sound(20)))
+        for i in range(len(receivers)):
+            if i in m:
+                continue
+            else:
+                w = diffs[i] ** 2
+                for j in range(len(receivers[i])):
+                    w = w - receivers[i][j] ** 2 + receivers[m[k]][j] ** 2
+                w = w / 2
+                out_knowns.append(w)
+        for i in range(len(receivers)):
+            if i in m:
+                continue
+            else:
+                q = 0
+                for j in range(len(receivers[i])):
+                    z = receivers[m[k]][j] - receivers[i][j]
+                    in_knowns[r][q] = z
+                    q += 1
+                in_knowns[r][q + k] = diffs[i]
+                r += 1
+                continue
+
+        # Using least squares, compute the final estimated location of source
+    location = sm.OLS(out_knowns, in_knowns).fit()
+    return (
+        location.params,
+        location.summary(alpha=alpha),
+        location.conf_int(alpha=alpha),
+    )
+    if summary == True:
+        return location.summary()
