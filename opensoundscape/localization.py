@@ -49,16 +49,16 @@ class Localizer:
 
         threshold_predictions()
             Use a set of score thresholds to filter the predictions and ensure that only detections with a minimum number of receivers are returned.
-            Writes the detections as a pandas.DataFrame to self.detections.
+            Saves detections as a pandas.DataFrame to self.detections.
         cross_correlate()
             Cross correlate the audio files to get time delays of arrival. This is computationally expensive.
-            Writes the cross correlations as a pandas.DataFrame to self.cross_correlations.
+            Saves cross correlations as a pandas.DataFrame to self.cross_correlations.
         filter_cross_correlations()
             Filter the cross correlations to remove scores below cc_threshold. This then also ensures at least min_number_of_receivers are present.
-            Writes the filtered cross correlations as a pandas.DataFrame to self.filtered_cross_correlations.
+            Saves filtered cross correlations as a pandas.DataFrame to self.filtered_cross_correlations.
         localize_events()
             Use the localization algorithm to localize the events from the set of tdoas after filtering.
-            Writes the locations as a pandas.DataFrame to self.locations.
+            Saves locations as a pandas.DataFrame to self.locations.
     """
 
     def __init__(
@@ -201,8 +201,6 @@ class Localizer:
         all_ccs = []
         all_tds = []
         for index, row in self.detections.iterrows():
-            # TODO: remove PRINT DEBUG
-            print("index:", index, "row", row)
             species = row["species"]
             if (
                 self.bandpass_ranges is None
@@ -245,8 +243,6 @@ class Localizer:
             cross_correlations: list of the maximum cross-correlation score for each pair of files
             time_delays: list of the time delays corresponding to the maximal cross-correlation for each pair of files
         """
-        # filter the cross correlations
-        # return a pandas dataframe with the results
         if self.cross_correlations is None:
             print("No cross correlations exist - running cross_correlate")
             self.cross_correlate()
