@@ -567,8 +567,10 @@ def tdoa(
         cc_filter: see gcc()
         sample_rate: sample rate (Hz) of signals; both signals must have same sample rate
         return_max: if True, returns the maximum value of the generalized cross correlation
-        max_delay: maximum delay to consider in seconds
-
+        max_delay: maximum possible tdoa. Cross-correlations that correspond to time delays outside of this range are ignored.
+                    For example, if max_delay=0.5, the tdoa returned will be the delay between -0.5 and +0.5 seconds, that maximizes the cross-correlation.
+                    This is useful if you know the maximum possible delay between the two signals, and want to ignore any tdoas outside of that range.
+                    e.g. if receivers are 100m apart, and the speed of sound is 340m/s, then the maximum possible delay is 0.294 seconds.
     Returns:
         estimated delay from reference signal to signal, in seconds
         (note that default samping rate is 1.0 samples/second)
