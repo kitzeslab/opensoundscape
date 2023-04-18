@@ -2,6 +2,42 @@ import numpy as np
 from opensoundscape import localization
 
 
+@pytest.fixture()
+def localizer_files():
+    return [f"tests/localizer_tests/aru_{i}.wav" for i in range(1, 6)]
+
+
+# @pytest.fixture()
+# def aru_1():
+#     return "tests/localizer_tests/aru_1.wav"
+
+# @pytest.fixture()
+# def aru_2():
+#     return "tests/localizer_tests/aru_2.wav"
+
+# @pytest.fixture()
+# def aru_3():
+#     return "tests/localizer_tests/aru_3.wav"
+
+# @pytest.fixture()
+# def aru_4():
+#     return "tests/localizer_tests/aru_4.wav"
+
+# @pytest.fixture()
+# def aru_5():
+#     return "tests/localizer_tests/aru_5.wav"
+
+
+@pytest.fixture()
+def aru_coords():
+    return "tests/localizer_tests/aru_coords.csv"
+
+
+@pytest.fixture()
+def predictions():
+    return "tests/localizer_tests/preds.csv"
+
+
 def close(x, y, tol):
     return (x < y + tol) and (x > y - tol)
 
@@ -150,3 +186,23 @@ def test_gillette_localize_3d():
     estimated_pos, _, _ = localization.localize_gillette(receiver_positions, tdoas)
 
     assert np.allclose(estimated_pos[0:3], sound_source, atol=2)
+
+
+def test_localizer():
+    aru_coords = pd.read_csv(aru_files, index_col=0)
+    preds = pd.read_csv(predictions, index_col=0)
+    loca = Localizer(
+        files=aru_names,
+        predictions=preds_indexed,
+        aru_coords=aru_coords,
+        sample_rate=32000,
+        min_number_of_receivers=2,
+        max_distance_between_receivers=100,
+        thresholds={"test_species": 0},
+        localization_algorithm="soundfinder",
+    )
+    loca.localize()
+
+
+assert close(np.mean(loca.locations["predicted_x"], 10))
+assert close(np.mean(loca.locations["predicted_y"], 15))
