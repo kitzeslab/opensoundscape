@@ -1,5 +1,8 @@
 import numpy as np
 from opensoundscape import localization
+import pytest
+import numpy as np
+import pandas as pd
 
 
 @pytest.fixture()
