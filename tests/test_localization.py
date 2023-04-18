@@ -51,7 +51,7 @@ def test_localize_2d():
     invert_alg = ("gps",)  # options: 'lstsq', 'gps'
     center = (True,)  # True for original Sound Finder behavior
     pseudo = (True,)  # False for original Sound Finder
-    estimate = localization.soundfinder(
+    estimate = localization.soundfinder_localize(
         reciever_positions,
         arrival_times,
         invert_alg=invert_alg,  # options: 'lstsq', 'gps'
@@ -67,7 +67,7 @@ def test_soundfinder_3d():
     invert_alg = ("gps",)  # options: 'lstsq', 'gps'
     center = (True,)  # True for original Sound Finder behavior
     pseudo = (True,)  # False for original Sound Finder
-    estimate = localization.localize(
+    estimate = localization.soundfinder_localize(
         reciever_positions,
         arrival_times,
         invert_alg=invert_alg,  # options: 'lstsq', 'gps'
@@ -85,7 +85,7 @@ def test_soundfinder_lstsq():
     invert_alg = ("lstsq",)  # options: 'lstsq', 'gps'
     center = (True,)  # True for original Sound Finder behavior
     pseudo = (True,)  # False for original Sound Finder
-    estimate = localization.soundfinder(
+    estimate = localization.soundfinder_localize(
         reciever_positions,
         arrival_times,
         invert_alg=invert_alg,  # options: 'lstsq', 'gps'
@@ -103,7 +103,7 @@ def test_soundfinder_nocenter():
     invert_alg = ("lstsq",)  # options: 'lstsq', 'gps'
     center = (False,)  # True for original Sound Finder behavior
     pseudo = (True,)  # False for original Sound Finder
-    estimate = localization.soundfinder(
+    estimate = localization.soundfinder_localize(
         reciever_positions,
         arrival_times,
         invert_alg=invert_alg,  # options: 'lstsq', 'gps'
@@ -115,13 +115,21 @@ def test_soundfinder_nocenter():
     )
 
 
+def test_gillette_localize():
+    reciever_positions = [[100, 0], [100, 20], [120, 20], [120, 0]]
+    arrival_times = [1, 1, 1, 1]
+    estimate = localization.gillette_localize(reciever_positions, arrival_times)
+
+    assert np.linalg.norm(estimate - np.array([110, 10, 0])) < 0.1
+
+
 def test_soundfinder_nopseudo():
     reciever_positions = [[0, 0, 0], [0, 20, 1], [20, 20, -1], [20, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
     invert_alg = ("lstsq",)  # options: 'lstsq', 'gps'
     center = (True,)  # True for original Sound Finder behavior
     pseudo = (False,)  # False for original Sound Finder
-    estimate = localization.soundfinder(
+    estimate = localization.soundfinder_localize(
         reciever_positions,
         arrival_times,
         invert_alg=invert_alg,  # options: 'lstsq', 'gps'
@@ -152,5 +160,11 @@ def test_localizer(aru_coords_csv, predictions, aru_files):
 
     true_x = 10
     true_y = 15
-    assert abs(np.median(loca.localized_events["predicted_x"]) - true_x) < 1
-    assert abs(np.median(loca.localized_events["predicted_y"] - true_y)) < 1
+    assert (
+        abs(
+            np.mean(
+                [i[0] for i in loca.localized_events["predicted_location"]] - true_x
+            )
+        )
+        < 1
+    )

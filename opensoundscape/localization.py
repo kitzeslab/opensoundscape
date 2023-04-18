@@ -293,8 +293,6 @@ class Localizer:
             predicted_z: the predicted z coordinate of the event
             tdoa_error: the residuals in the tdoas against what would be expected from the predicted location.
         """
-        algorithm = self.localization_algorithm
-
         if self.filtered_cross_correlations is None:
             print(
                 "No filtered cross_correlations exist - running filter_cross_correlations"
@@ -302,44 +300,60 @@ class Localizer:
             self.filter_cross_correlations()
         localized = self.filtered_cross_correlations.copy()
         locations = []
-        if algorithm == "gillette":
-            # localize using gillette
 
-            for index, row in self.filtered_cross_correlations.iterrows():
-                reference = row["reference_file"]
-                others = row["other_files"]
-                reference_coords = self.aru_coords.loc[reference]
-                others_coords = [self.aru_coords.loc[i] for i in others]
-                all_coords = [reference_coords] + others_coords
-                # add 0 tdoa for reference receiver
-                delays = np.insert(row["time_delays"], 0, 0)
+        for index, row in self.filtered_cross_correlations.iterrows():
+            reference = row["reference_file"]
+            others = row["other_files"]
+            reference_coords = self.aru_coords.loc[reference]
+            others_coords = [self.aru_coords.loc[i] for i in others]
+            all_coords = [reference_coords] + others_coords
+            # add 0 tdoa for reference receiver
+            delays = np.insert(row["time_delays"], 0, 0)
 
-                location, _, _ = gillette_localize(all_coords, delays)
-                locations.append(location)
-            localized["predicted_x"] = [locations[i][0] for i in range(len(locations))]
-            localized["predicted_y"] = [locations[i][1] for i in range(len(locations))]
-            localized["gillette_error"] = ["Error" for i in range(len(locations))]
+            location = localize(
+                all_coords, delays, algorithm=self.localization_algorithm
+            )
+            locations.append(location)
+        localized["predicted_location"] = locations
 
-        elif algorithm == "soundfinder":
+        # if algorithm == "gillette":
+        #     # localize using gillette
 
-            for index, row in self.filtered_cross_correlations.iterrows():
-                reference = row["reference_file"]
-                others = row["other_files"]
-                reference_coords = self.aru_coords.loc[reference]
-                others_coords = [self.aru_coords.loc[i] for i in others]
-                all_coords = [reference_coords] + others_coords
-                # add 0 tdoa for reference receiver
-                delays = np.insert(row["time_delays"], 0, 0)
+        #     for index, row in self.filtered_cross_correlations.iterrows():
+        #         reference = row["reference_file"]
+        #         others = row["other_files"]
+        #         reference_coords = self.aru_coords.loc[reference]
+        #         others_coords = [self.aru_coords.loc[i] for i in others]
+        #         all_coords = [reference_coords] + others_coords
+        #         # add 0 tdoa for reference receiver
+        #         delays = np.insert(row["time_delays"], 0, 0)
 
-                location = soundfinder(all_coords, delays)
-                locations.append(location)
-            localized["predicted_x"] = [locations[i][0] for i in range(len(locations))]
-            localized["predicted_y"] = [locations[i][1] for i in range(len(locations))]
-            localized["pseudorange_error"] = [
-                locations[i][2] for i in range(len(locations))
-            ]
-        else:
-            raise UserWarning("Algorithm not recognized")
+        #         location = gillette_localize(all_coords, delays)
+        #         locations.append(location)
+        #     localized["predicted_x"] = [locations[i][0] for i in range(len(locations))]
+        #     localized["predicted_y"] = [locations[i][1] for i in range(len(locations))]
+        #     localized["gillette_error"] = ["Error" for i in range(len(locations))]
+
+        # elif algorithm == "soundfinder":
+
+        #     for index, row in self.filtered_cross_correlations.iterrows():
+        #         reference = row["reference_file"]
+        #         others = row["other_files"]
+        #         reference_coords = self.aru_coords.loc[reference]
+        #         others_coords = [self.aru_coords.loc[i] for i in others]
+        #         all_coords = [reference_coords] + others_coords
+        #         # add 0 tdoa for reference receiver
+        #         delays = np.insert(row["time_delays"], 0, 0)
+
+        #         location = soundfinder_localize(all_coords, delays)
+        #         locations.append(location)
+        #     localized["predicted_x"] = [locations[i][0] for i in range(len(locations))]
+        #     localized["predicted_y"] = [locations[i][1] for i in range(len(locations))]
+        #     localized["pseudorange_error"] = [
+        #         locations[i][2] for i in range(len(locations))
+        #     ]
+        # else:
+        #     raise UserWarning("Algorithm not recognized")
         self.localized_events = localized
         return localized
 
@@ -580,7 +594,7 @@ def travel_time(source, receiver, speed_of_sound):
     return distance / speed_of_sound
 
 
-def localize(receiver_positions, tdoas, speed_of_sound, algorithm):
+def localize(receiver_positions, tdoas, algorithm, speed_of_sound=343):
     """
     Perform TDOA localization on a sound event.
     Args:
@@ -593,27 +607,29 @@ def localize(receiver_positions, tdoas, speed_of_sound, algorithm):
             Options: 'soundfinder', 'gillette'
     Returns:
         The estimated source position in meters.
-        TDOA residuals in seconds.
     """
     if algorithm == "soundfinder":
-        return soundfinder(receiver_positions, tdoas)
+        estimate = soundfinder_localize(receiver_positions, tdoas, speed_of_sound)
     elif algorithm == "gillette":
-        return gillette(receiver_positions, tdoas)
+        estimate = gillette_localize(receiver_positions, tdoas, speed_of_sound)
     else:
-        raise ValueError(f"Unknown algorithm: {algorithm}")
+        raise ValueError(
+            f"Unknown algorithm: {algorithm}. Implemented for 'soundfinder' and 'gillette'"
+        )
+    return estimate
 
 
-def soundfinder(
+def soundfinder_localize(
     receiver_positions,
     arrival_times,
-    speed_of_sound=331.3,
+    speed_of_sound=343,
     invert_alg="gps",  # options: 'gps'
     center=True,  # True for original Sound Finder behavior
     pseudo=True,  # False for original Sound Finder
 ):
 
     """
-    Perform TDOA localization on a sound event
+    Use the soundfinder algorithm to perform TDOA localization on a sound event
     Localize a sound event given relative arrival times at multiple receivers.
     This function implements a localization algorithm from the
     equations described in the class handout ("Global Positioning
@@ -636,8 +652,7 @@ def soundfinder(
           (For behavior of original Sound Finder, use False. However,
           in initial tests, pseudorange error appears to perform better.)
     Returns:
-        The solution (x,y,z,b) with the lower sum of squares discrepancy
-        b is the error in the pseudorange (distance to mics), b=c*delta_t (delta_t is time error)
+        The solution (x,y,z) in meters.
     """
     # make sure our inputs follow consistent format
     receiver_positions = np.array(receiver_positions).astype("float64")
@@ -755,9 +770,9 @@ def soundfinder(
         # Return the solution with the lower error in pseudorange
         # (Error in pseudorange is the final value of the position/solution vector)
         if abs(u0[-1]) <= abs(u1[-1]):
-            return u0
+            return u0[0:-1]  # drop the final value, which is the error
         else:
-            return u1
+            return u1[0:-1]  # drop the final value, which is the error
 
     else:
         # This was the return method used in the original Sound Finder,
@@ -769,26 +784,16 @@ def soundfinder(
 
         # Return the solution with lower sum of squares discrepancy
         if s0 < s1:
-            return u0
+            return u0[0:-1]  # drop the final value, which is the error
         else:
-            return u1
+            return u1[0:-1]  # drop the final value, which is the error
 
 
 def gillette_localize(
-    receivers=list,
-    delays=list,
-    temp=20,
-    m=[0],
-    exact=True,
-    summary=False,
-    confint=False,
-    alpha=0.05,
-    td_error=False,
-    total_td_error=False,
+    receivers=list, delays=list, speed_of_sound=343, m=[0], exact=True, alpha=0.05
 ):
     """
-    Calculate the estimated location of a sound's source using the
-    algorithm laid out in Gillette and Silverman (2008)
+    Calculate the estimated location of a sound's source using the algorithm from Gillette & Silverman 2008 .
     Args:
         receivers: A numpy array of coordinates for microphones used to
         record the sound. The number of microphones needed should
@@ -800,31 +805,26 @@ def gillette_localize(
         (i.e. the first item is the delay for the first receiver).
         The first item in this list should be 0, with all other
         entries centered around that.
-        temp: ambient temperature in Celsius. Defaults to 20.
+        speed_of_sound: The speed of sound in m/s. Defaults to 343
         exact: computes an exact solution if True, computes estimates
         with uncertainty if false. Defaults to True
-        summary: displays a summary of the estimates if True. Defaults
-        to false.
-        confint: outputs confidence intervals for the estimated
         coordinates if true. Defaults to false.
         alpha: Determines confidence level of the confidence intervals.
         Defaults to 0.05.
         m: the index of the reference mic. Defaults to 0.
-        td_error: Computes the expected time delay from the estimated
         source location, centered around the reference mic, for each
         microphone.
-        total_td_error: Computes the euclidean norm of the errors
-        provided by td_error.
+
     Returns:
-        an array with the estimated coordinates and the estimated
-        distance from the reference mic. (One reference mic and two
-        additional mics, this is a 2 item array containing an estima
-        -ted x coordinate and a distance.)
+        An array of the estimated location of the sound's source.
+
+    Algorithm from:
+    M. D. Gillette and H. F. Silverman, "A Linear Closed-Form Algorithm for Source Localization From Time-Differences of Arrival," IEEE Signal Processing Letters
+
     """
     import opensoundscape.localization as loc
     import statsmodels.api as sm
 
-    C = loc.calc_speed_of_sound(temperature=20)
     # Compile know receiver locations and distance delays into an output vector
     out_knowns = []
     in_knowns = np.zeros(((len(receivers) - len(m)) * len(m), 2 + len(m)))
@@ -837,7 +837,7 @@ def gillette_localize(
         )  # Use the speed of sound to convert time delays to "distance delays"
         diffs = []
         for delay in tdoa:
-            diffs.append(float(delay * loc.calc_speed_of_sound(20)))
+            diffs.append(float(delay * speed_of_sound))
         for i in range(len(receivers)):
             if i in m:
                 continue
@@ -862,10 +862,4 @@ def gillette_localize(
 
         # Using least squares, compute the final estimated location of source
     location = sm.OLS(out_knowns, in_knowns).fit()
-    return (
-        location.params,
-        location.summary(alpha=alpha),
-        location.conf_int(alpha=alpha),
-    )
-    if summary == True:
-        return location.summary()
+    return location.params
