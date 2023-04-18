@@ -11,6 +11,56 @@ import warnings
 # this will be called Localizer
 # we will use this class for localizing sound sources from synchronized audio files
 class Localizer:
+    """
+    Localize sound sources from synchronized audio files.
+
+    Parameters
+    ----------
+    files : list
+        List of synchronized audio files
+    predictions : pandas.DataFrame
+        DataFrame of predictions. The multi-index must be [file, start_time, end_time]
+        each column is a class.
+    aru_coords : pandas.DataFrame
+        DataFrame with index filepath, and columns coordinates. Each audio file must have a corresponding coordinate.
+    sample_rate : int
+        Sample rate of the audio files
+    min_number_of_receivers : int
+        Minimum number of receivers that must detect an event for it to be localized
+    max_distance_between_receivers : float
+        Maximum plausible between any 2 receivers for detecting the same event. If the distance between receivers is greater than this value, detections will be treated as separate events.
+    localization_algorithm : str, optional
+        Localization algorithm to use. Default is "gillette"
+    thresholds : dict, optional
+        Dictionary of thresholds for each class. Default is None.
+    bandpass_ranges : dict, optional
+        Dictionary of form {"CLASS": [low_f, high_f]} for bandpass ranges for each class. Default is None.
+    max_delay : float, optional
+        The time delays of arrival between 2 receivers that maximized cross correlation will be found between -max_delay and +max_delay. Default is None.
+    cc_threshold : float, optional
+        Threshold for cross correlation. Default is 0.
+    cc_filter : str, optional
+        Filter to use for generalized cross correlation. See signalprocessing.gcc function for options. Default is "phat".
+
+    Methods
+    -------
+    localize()
+        Run the enitre localization algorithm on the audio files and predictions. This executes the below methods in order.
+
+        threshold_predictions()
+            Use a set of score thresholds to filter the predictions and ensure that only detections with a minimum number of receivers are returned.
+            Writes the detections as a pandas.DataFrame to self.detections.
+        cross_correlate()
+            Cross correlate the audio files to get time delays of arrival. This is computationally expensive.
+            Writes the cross correlations as a pandas.DataFrame to self.cross_correlations.
+        filter_cross_correlations()
+            Filter the cross correlations to remove scores below cc_threshold. This then also ensures at least min_number_of_receivers are present.
+            Writes the filtered cross correlations as a pandas.DataFrame to self.filtered_cross_correlations.
+        localize_events()
+            Use the localization algorithm to localize the events from the set of tdoas after filtering.
+            Writes the locations as a pandas.DataFrame to self.locations.
+    """
+
     def __init__(
         self,
         files,
@@ -26,13 +76,6 @@ class Localizer:
         cc_threshold=0,
         cc_filter="phat",
     ):
-        # Initialize the Localizer
-        # files is a list of synchronized audio files
-        # predictions is a pandas dataframe of predictions. The multi-index must be [file, start_time, end_time]
-        # each column is a class.
-        # aru_coords is a dataframe with index filepath, and columns coordinates}. Each file must have a corresponding coordinate.
-        # thresholds is a dictionary of thresholds for each class
-        # predictions is a pandas dataframe of predictions
         self.files = files
         self.predictions = predictions
         self.aru_coords = aru_coords
@@ -49,10 +92,11 @@ class Localizer:
         # attributes for troubleshooting
         self.files_missing_coordinates = []
 
-        # initialize the below intermediates as None. #TODO: work out how to do this correctly
+        # initialize the outputs of the localizer as None. These will be filled in as the localizer runs.
         self.detections = None
         self.cross_correlations = None
         self.filtered_cross_correlations = None
+        self.locations = None
 
         # check that all files have coordinates in aru_coords
         audio_files_have_coordinates = True
@@ -80,10 +124,30 @@ class Localizer:
                 )
         print("Localizer initialized")
 
+    def localize(self):
+        """
+        Run the entire localization algorithm on the audio files and predictions. This executes the below methods in order.
+            threshold_predictions()
+            cross_correlate()
+            filter_cross_correlations()
+            localize_events()
+        """
+        self.threshold_predictions()
+        self.cross_correlate()
+        self.filter_cross_correlations()
+        self.localize_events()
+
     def threshold_predictions(self):
-        # use a set of thresholds to filter the predictions
-        # and ensure that only detections with a minimum number of receivers are returned
-        # the results are in the form of a pandas dataframe
+        """
+        Use a set of score thresholds to filter the predictions and ensure that only detections with a minimum number of receivers are returned.
+        Returns the detections as a pandas.DataFrame and writes it to self.detections.
+
+        The detections DataFrame has columns:
+            time : (start, end) tuple of the detection time in seconds
+            reference_file: the reference file for the detection
+            other_files: the other files against which cross correlation will be performed
+            species: the species of the detection
+        """
         if self.predictions is None:
             raise UserWarning(
                 "No predictions exist. Please initialize the Localizer with predictions"
@@ -109,8 +173,18 @@ class Localizer:
         return detections_df
 
     def cross_correlate(self):
-        # cross correlate the predictions
-        # return a pandas dataframe with the results
+        """
+        Cross correlate the audio files to get time delays of arrival for each time interval where a sound event was detected on at least min_number_of_receivers.
+        Returns a pandas.DataFrame and writes it to self.cross_correlations. Warning: this is computationally expensive.
+
+        The DataFrame has columns:
+            time : (start, end) tuple of the detection time in seconds
+            reference_file: the reference file for the detection
+            other_files: list of the other files against which cross correlation will be performed
+            species: the species of the detection
+            cross_correlations: list of the maximum cross-correlation score for each pair of files
+            time_delays: list of the time delays corresponding to the maximal cross-correlation for each pair of files
+        """
         if self.bandpass_ranges is None:
             warnings.warn(
                 "No bandpass range set. Default behavior will be to not bandpass the audio before cross-correlation."
@@ -158,6 +232,19 @@ class Localizer:
         return self.cross_correlations
 
     def filter_cross_correlations(self):
+        """
+        Filter the cross-correlations to only include those that are above a certain threshold. This step also drops any detections where less than min_number_of_receivers are above the threshold.
+
+        Returns a pandas.DataFrame and writes it to self.filtered_cross_correlations.
+
+        The DataFrame has columns:
+            time : (start, end) tuple of the detection time in seconds
+            reference_file: the reference file for the detection
+            other_files: list of the other files against which cross correlation will be performed
+            species: the species of the detection
+            cross_correlations: list of the maximum cross-correlation score for each pair of files
+            time_delays: list of the time delays corresponding to the maximal cross-correlation for each pair of files
+        """
         # filter the cross correlations
         # return a pandas dataframe with the results
         if self.cross_correlations is None:
@@ -204,10 +291,22 @@ class Localizer:
         self.filtered_cross_correlations = filtered_cross_correlations
         return filtered_cross_correlations
 
-    def localize(self):
-        # localize the detections
-        # return a pandas dataframe with the results
-        # TODO: make work for 3d
+    def localize_events(self):
+        """
+        Localize the events using the localization algorithm specified in self.localization_algorithm. Returns a pandas.DataFrame with the results and writes it to self.localizations
+
+        The columns of the DataFrame are:
+            time : (start, end) tuple of the detection time in seconds
+            reference_file: the reference file for the detection
+            other_files: list of the other files against which cross correlation will be performed
+            species: the species of the detection
+            cross_correlations: list of the maximum cross-correlation score for each pair of files
+            time_delays: list of the time delays corresponding to the maximal cross-correlation for each pair of files
+            predicted_x: the predicted x coordinate of the event
+            predicted_y: the predicted y coordinate of the event
+            predicted_z: the predicted z coordinate of the event
+            tdoa_error: the residuals in the tdoas against what would be expected from the predicted location.
+        """
         algorithm = self.localization_algorithm
 
         if self.filtered_cross_correlations is None:
@@ -403,11 +502,6 @@ class Localizer:
             A dictionary of grouped detections, with key (start_time, end_time), and value list of files with detection triggered
             e.g. {(0.0,2.0): [ARU_0.mp3. ARU_1.mp3]}
         """
-        # group detections that are within max_distance_between_receivers of each other
-        # return a dictionary of grouped detections
-        # get the coordinates of the recorders
-        # get the distance between recorders
-        # if the distance is less than max_distance_between_receivers, group the detections
         from itertools import product
 
         # Group recorders based on being within < max_distance_between_receivers.
@@ -417,7 +511,7 @@ class Localizer:
 
         aru_files = aru_coords.index
         for aru in aru_files:  # loop over the aru files
-            pos_aru = np.array(aru_coords.loc[aru])
+            pos_aru = np.array(aru_coords.loc[aru])  # position of receiver
             other_arus = np.array(aru_coords)
             distances = other_arus - pos_aru
             euclid_distances = [np.linalg.norm(d) for d in distances]
@@ -438,14 +532,14 @@ class Localizer:
                 reference = file  # set this file to be reference
                 others = [
                     f for f in detections[time_segment] if f != reference
-                ]  # All the other ARUs
+                ]  # All the other receivers
                 others_in_distance = [
                     aru for aru in others if aru in recorders_in_distance[reference]
-                ]  # ARUs close enough
+                ]  # only the receivers that are close enough
 
                 if (
                     len(others_in_distance) + 1 >= min_number_of_receivers
-                ):  # minimum number of ARUs needed to localize.
+                ):  # minimum number of receivers needed to localize.
                     times.append(time_segment)
                     reference_files.append(reference)
                     other_files.append(others_in_distance)
