@@ -863,3 +863,42 @@ def gillette_localize(
         # Using least squares, compute the final estimated location of source
     location = sm.OLS(out_knowns, in_knowns).fit()
     return location.params
+
+
+def calc_tdoa_residuals(
+    reference_receiver, other_receivers, tdoas, position_estimate, speed_of_sound
+):
+    """
+    Calculate the residuals of the TDOA localization algorithm
+    Args:
+        reference_receiver: The coordinates (in m) of the reference receiver
+        other_receivers: The coordinates (in m) of the other receivers
+        tdoas: The time delays of arrival for the sound. each tdoa should correspond to the other receiver in the same index
+        position_estimate: The estimated position of the sound
+        speed_of_sound: The speed of sound in m/s
+    Returns:
+        an array of length len(other_receivers) containing the residuals of the TDOs.
+    """
+    # ensure all are numpy arrays
+    reference_receiver = np.array(reference_receiver)
+    other_receivers = np.array(other_receivers)
+    tdoas = np.array(tdoas)
+    position_estimate = np.array(position_estimate)
+
+    # Calculate the TDOA residuals
+    tdoa_residuals = []
+    arrival_at_reference = (
+        np.linalg.norm(reference_receiver - position_estimate) / speed_of_sound
+    )
+    arrival_at_others = np.array(
+        [
+            np.linalg.norm(i - position_estimate) / speed_of_sound
+            for i in other_receivers
+        ]
+    )
+
+    expected_tdoas = arrival_at_others - arrival_at_reference
+
+    residuals = expected_tdoas - tdoas
+
+    return residuals
