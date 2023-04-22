@@ -10,6 +10,64 @@ import opensoundscape.signal_processing as sp
 class Localizer:
     """
     Localize sound sources from synchronized audio files.
+
+    Algorithm
+    ----------
+    The user provides a table of class detections from each recorder with timestamps. The user
+    also provides a table listing the spatial location of the recorder for each unique audio
+    file in the table of detections. The audio recordings must be synchronized
+    such that timestamps from each recording correspond to the exact same real-world time.
+
+    Localization of sound events proceeds in three steps:
+
+    1. Grouping of detections into candidate events:
+
+        Simultaneous and spatially clustered detections of a class are selected as targets
+        for localization of a single real-world sound event.
+
+        For each detection of a species, the grouping algorithm treats the reciever with the detection
+        as a "reference receiver", then selects all detections of the species at the same time and
+        within `max_distance_between_receivers` of the reference reciever (the "surrounding detections").
+        This selected group of simulatneous, spatially-clustered detections of a class beomes one
+        "candidate event" for subsequent localization.
+
+        If the number of recorders in the candidate event is fewer than `min_number_of_receivers`, the
+        candidate event is discarded.
+
+        This step creates a highly redundant set of candidate events to localize, because each detection
+        is treated separately with its recorder as the 'reference recorder'. Thus, the localized events created by this algorithm may contain multiple instances representing
+        the same real-world sound event.
+
+
+    2. Estimate time delays with cross correlation:
+
+        For each candidate event, the time delay between the reference reciever's detection and the
+        surrounding recorders' detections is estimated through generalized cross correlation.
+
+        If the max value of the cross correlation is below `cc_threshold`, the corresponding time delay
+        is discarded and not used during localization. This provides a way of filtering out
+        undesired time delays that do not correspond to two recordings of the same sound event.
+
+        If the number of time delays in the candidate event is fewer than `min_number_of_receivers`
+        after filtering by cross correlation threshold, the candidate event is discarded.
+
+    3. Estiamte positions
+
+        The position of the event is estimated based on the positions and time delays of
+        each detection.
+
+        Position estimation from the positions and time delays at a set of receivers is performed
+        using one of two algorithms, described in `localization_algorithm` below.
+
+    4. Filter by residual error
+
+        The residual errors represent descrepencies between (a) time of arrival of
+        the event at a reciever and (b) distance from reciever to estimated position.
+
+        Estimated positions are discarded if the root mean squared residual error is
+        greater than `residual_rmse_threshold` #TODO implement?
+
+
     Parameters
     ----------
     files : list
@@ -18,25 +76,41 @@ class Localizer:
         DataFrame of predictions. The multi-index must be [file, start_time, end_time]
         each column is a class.
     aru_coords : pandas.DataFrame
-        DataFrame with index filepath, and columns coordinates. Each audio file must have a corresponding coordinate.
+        DataFrame with index filepath, and columns for x, y, (z) positions of recievers in meters.
+        Third coordinate is optional. Localization algorithms are in 2d if columns are (x,y) and
+        3d if columns are (x,y,z). Each audio file in `predictions` must have a corresponding
+        row in `aru_coords` specifiying the position of the reciever.
     sample_rate : int
         Sample rate of the audio files
     min_number_of_receivers : int
         Minimum number of receivers that must detect an event for it to be localized
-    max_distance_between_receivers : float
-        Maximum plausible between any 2 receivers for detecting the same event. If the distance between receivers is greater than this value, detections will be treated as separate events.
+    max_distance_between_receivers : float (meters)
+        Radius around a recorder in which to use other recorders for localizing an event
     localization_algorithm : str, optional
-        Localization algorithm to use. Default is "gillette"
+        algorithm to use for estimating the position of a sound event from the positions and
+        time delays of a set of detections. [Default: 'gillette']
+        Options:
+            - 'gillette': linear closed-form algorithm of Gillette and Silverman 2008 [1]
+            - 'soundfinder': source? citation? #TODO
     thresholds : dict, optional
         Dictionary of thresholds for each class. Default is None.
     bandpass_ranges : dict, optional
-        Dictionary of form {"CLASS": [low_f, high_f]} for bandpass ranges for each class. Default is None.
+        Dictionary of form {"class name": [low_f, high_f]} for audio bandpass filtering during
+        cross correlation. [Default: None] does not bandpass audio. Bandpassing audio to the
+        frequency range of the relevant sound is recommended for best cross correlation results.
     max_delay : float, optional
-        The time delays of arrival between 2 receivers that maximized cross correlation will be found between -max_delay and +max_delay. Default is None.
+        Maximum absolute value of time delay estimated during cross correlation of two signals
+        For instance, 0.2 means that cross correlation will be maximized in the range of
+        delays between -0.2 to 0.2 seconds.
+        Default: None does not restrict the range, finding delay that maximizes cross correlation
     cc_threshold : float, optional
-        Threshold for cross correlation. Default is 0.
+        Threshold for cross correlation: if the max value of the cross correlation is below
+        this value, the corresponding time delay is discarded and not used during localization.
+        Default of 0 does not discard any delays.
     cc_filter : str, optional
-        Filter to use for generalized cross correlation. See signalprocessing.gcc function for options. Default is "phat".
+        Filter to use for generalized cross correlation. See signalprocessing.gcc function for options.
+        Default is "phat".
+
     Methods
     -------
     localize()
@@ -53,6 +127,10 @@ class Localizer:
         localize_events()
             Use the localization algorithm to localize the events from the set of tdoas after filtering.
             Saves locations as a pandas.DataFrame to self.localized_events.
+
+
+    [1] M. D. Gillette and H. F. Silverman, "A Linear Closed-Form Algorithm for Source Localization From Time-Differences of Arrival," IEEE Signal Processing Letters
+
     """
 
     def __init__(
@@ -107,7 +185,7 @@ class Localizer:
             if set(self.bandpass_ranges.keys()) != set(self.predictions.columns):
                 warnings.warn(
                     "WARNING: Not all classes have corresponding bandpass ranges. Default behavior will be to not bandpass before cross-correlation for classes that do not have a corresponding bandpass range."
-                )
+                )  # TODO support one bandpass range for all classes
 
         # check that thresholds have been set for all classes
         # TODO: remove thresholding. Refactor so that the user passes in a predictions df that has already been filtered.
@@ -315,45 +393,6 @@ class Localizer:
             )
             locations.append(location)
         localized["predicted_location"] = locations
-
-        # if algorithm == "gillette":
-        #     # localize using gillette
-
-        #     for index, row in self.filtered_cross_correlations.iterrows():
-        #         reference = row["reference_file"]
-        #         others = row["other_files"]
-        #         reference_coords = self.aru_coords.loc[reference]
-        #         others_coords = [self.aru_coords.loc[i] for i in others]
-        #         all_coords = [reference_coords] + others_coords
-        #         # add 0 tdoa for reference receiver
-        #         delays = np.insert(row["time_delays"], 0, 0)
-
-        #         location = gillette_localize(all_coords, delays)
-        #         locations.append(location)
-        #     localized["predicted_x"] = [locations[i][0] for i in range(len(locations))]
-        #     localized["predicted_y"] = [locations[i][1] for i in range(len(locations))]
-        #     localized["gillette_error"] = ["Error" for i in range(len(locations))]
-
-        # elif algorithm == "soundfinder":
-
-        #     for index, row in self.filtered_cross_correlations.iterrows():
-        #         reference = row["reference_file"]
-        #         others = row["other_files"]
-        #         reference_coords = self.aru_coords.loc[reference]
-        #         others_coords = [self.aru_coords.loc[i] for i in others]
-        #         all_coords = [reference_coords] + others_coords
-        #         # add 0 tdoa for reference receiver
-        #         delays = np.insert(row["time_delays"], 0, 0)
-
-        #         location = soundfinder_localize(all_coords, delays)
-        #         locations.append(location)
-        #     localized["predicted_x"] = [locations[i][0] for i in range(len(locations))]
-        #     localized["predicted_y"] = [locations[i][1] for i in range(len(locations))]
-        #     localized["pseudorange_error"] = [
-        #         locations[i][2] for i in range(len(locations))
-        #     ]
-        # else:
-        #     raise UserWarning("Algorithm not recognized")
         self.localized_events = localized
         return localized
 
@@ -530,7 +569,7 @@ class Localizer:
 
 def calc_speed_of_sound(temperature=20):
     """
-    Calculate speed of sound in meters per second
+    Calculate speed of sound in air, in meters per second
 
     Calculate speed of sound for a given temperature
     in Celsius (Humidity has a negligible
@@ -538,10 +577,10 @@ def calc_speed_of_sound(temperature=20):
     is not implemented)
 
     Args:
-        temperature: ambient temperature in Celsius
+        temperature: ambient air temperature in Celsius
 
     Returns:
-        the speed of sound in meters per second
+        the speed of sound in air in meters per second
     """
     return 331.3 * np.sqrt(1 + float(temperature) / 273.15)
 
@@ -583,8 +622,8 @@ def travel_time(source, receiver, speed_of_sound):
     Calculate time required for sound to travel from a souce to a receiver
 
     Args:
-        source: cartesian position [x,y] or [x,y,z] of sound source
-        receiver: cartesian position [x,y] or [x,y,z] of sound receiver
+        source: cartesian position [x,y] or [x,y,z] of sound source, in meters
+        receiver: cartesian position [x,y] or [x,y,z] of sound receiver, in meters
         speed_of_sound: speed of sound in m/s
 
     Returns:
