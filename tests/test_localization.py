@@ -180,7 +180,7 @@ def test_localizer(aru_coords_csv, predictions, aru_files):
     files = aru_files
     loca = localization.Localizer(
         files=files,
-        predictions=preds,
+        detections=preds,
         aru_coords=aru_coords,
         sample_rate=32000,
         min_number_of_receivers=2,
