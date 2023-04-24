@@ -1115,6 +1115,8 @@ def estimate_delay(
     bandpass_order=9,
     cc_filter="phat",
     return_cc_max=False,
+    max_delay=None,
+    skip_ref_bandpass=False,
 ):
     """Use generalized cross correlation to estimate time delay between signals
 
@@ -1131,11 +1133,15 @@ def estimate_delay(
         cc_filter: generalized cross correlation type, see
             opensoundscape.signal_processing.gcc() [default: 'phat']
         return_cc_max: if True, returns cross correlation max value as second argument
-            (see opensoundscape.signal_processing.tdoa)
+            (see `opensoundscape.signal_processing.tdoa`)
+        max_delay: maximum time delay to consider, in seconds
+            (see `opensoundscape.signal_processing.tdoa`) [default: None] allows any delay
+        skip_ref_bandpass: [default: False] if True, skip the bandpass operation for the
+            reference_audio object, only apply it to `audio`
     Returns:
         estimated time delay (seconds) from reference_audio to audio
 
-        if return_cc_max is True, returns second value, the max of the cross correlation
+        if return_cc_max is True, also returns a second value, the max of the cross correlation
         of the two signals
 
     Note: resamples reference_audio if its sample rate does not match audio
@@ -1149,7 +1155,8 @@ def estimate_delay(
     if bandpass_range is not None:
         l, h = bandpass_range  # extract low and high frequencies
         audio = audio.bandpass(l, h, bandpass_order)
-        reference_audio = reference_audio.bandpass(l, h, bandpass_order)
+        if not skip_ref_bandpass:
+            reference_audio = reference_audio.bandpass(l, h, bandpass_order)
 
     # estimate time delay from reference_audio to audio using generalized cross correlation
     return tdoa(
@@ -1158,6 +1165,7 @@ def estimate_delay(
         cc_filter=cc_filter,
         sample_rate=sr,
         return_max=return_cc_max,
+        max_delay=max_delay,
     )
 
 
