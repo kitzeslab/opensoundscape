@@ -117,7 +117,7 @@ class Localizer:
         Run the enitre localization algorithm on the audio files and predictions. This executes the below methods in order.
         threshold_predictions()
             Use a set of score thresholds to filter the predictions and ensure that only detections with a minimum number of receivers are returned.
-            Saves detections as a pandas.DataFrame to self.detections.
+            Saves detections as a pandas.DataFrame to self.grouped_detections.
         cross_correlate()
             Cross correlate the audio files to get time delays of arrival. This is computationally expensive.
             Saves cross correlations as a pandas.DataFrame to self.cross_correlations.
@@ -165,7 +165,7 @@ class Localizer:
         self.files_missing_coordinates = []
 
         # initialize the outputs of the localizer as None. These will be filled in as the localizer runs.
-        self.detections = None
+        self.grouped_detections = None
         self.cross_correlations = None
         self.filtered_cross_correlations = None
         self.localized_events = None
@@ -213,7 +213,7 @@ class Localizer:
     def threshold_predictions(self):
         """
         Use a set of score thresholds to filter the predictions and ensure that only detections with a minimum number of receivers are returned.
-        Returns the detections as a pandas.DataFrame and writes it to self.detections.
+        Returns the detections as a pandas.DataFrame and writes it to self.grouped_detections.
         The detections DataFrame has columns:
             time : (start, end) tuple of the detection time in seconds
             reference_file: the reference file for the detection
@@ -241,7 +241,7 @@ class Localizer:
             grouped_detections["species"] = species
             all_sp_detections.append(grouped_detections)
         detections_df = pd.concat(all_sp_detections)
-        self.detections = detections_df
+        self.grouped_detections = detections_df
         return detections_df
 
     def cross_correlate(self):
@@ -265,13 +265,13 @@ class Localizer:
             warnings.warn(
                 "No max delay set. Default behavior will be to allow for any delay between the audio files."
             )
-        if self.detections is None:
+        if self.grouped_detections is None:
             print("No detections exist - running threshold_predictions")
             self.threshold_predictions()
         # get the cross-correlations
         all_ccs = []
         all_tds = []
-        for index, row in self.detections.iterrows():
+        for index, row in self.grouped_detections.iterrows():
             species = row["species"]
             if (
                 self.bandpass_ranges is None
@@ -295,7 +295,7 @@ class Localizer:
             )
             all_ccs.append(cc)
             all_tds.append(td)
-        self.cross_correlations = self.detections.copy()
+        self.cross_correlations = self.grouped_detections.copy()
         self.cross_correlations["cross_correlations"] = all_ccs
         self.cross_correlations["time_delays"] = all_tds
         return self.cross_correlations
