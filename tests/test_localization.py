@@ -115,13 +115,28 @@ def test_soundfinder_nocenter():
     )
 
 
-def test_gillette_localize():
+def test_gillette_localize_raises():
     reciever_positions = [[100, 0], [100, 20], [120, 20], [120, 0]]
     arrival_times = [1, 1, 1, 1]
 
     # check this raises a ValueError because none of the arrival times are zero
     with pytest.raises(ValueError):
         localization.gillette_localize(reciever_positions, arrival_times)
+
+
+def test_gillette_localize_2d():
+    np.random.seed(0)
+    receiver_positions = np.array([[0, 0], [0, 20], [20, 20], [20, 0], [10, 10]])
+    sound_source = np.random.rand(2) * 20
+    speed_of_sound = 343
+    time_of_flight = (
+        np.linalg.norm(receiver_positions - sound_source, axis=1) / speed_of_sound
+    )
+    tdoas = time_of_flight - np.min(time_of_flight)
+
+    estimated_pos = localization.gillette_localize(receiver_positions, tdoas)
+
+    assert np.allclose(estimated_pos, sound_source, rtol=0.1)
 
 
 def test_gillette_localize_3d():
