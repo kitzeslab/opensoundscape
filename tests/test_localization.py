@@ -118,9 +118,10 @@ def test_soundfinder_nocenter():
 def test_gillette_localize():
     reciever_positions = [[100, 0], [100, 20], [120, 20], [120, 0]]
     arrival_times = [1, 1, 1, 1]
-    estimate = localization.gillette_localize(reciever_positions, arrival_times)
 
-    assert np.linalg.norm(estimate - np.array([110, 10, 0])) < 0.1
+    # check this raises a ValueError because none of the arrival times are zero
+    with pytest.raises(ValueError):
+        localization.gillette_localize(reciever_positions, arrival_times)
 
 
 def test_gillette_localize_3d():

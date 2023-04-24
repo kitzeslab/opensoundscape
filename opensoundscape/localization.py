@@ -829,79 +829,63 @@ def soundfinder_localize(
 
 
 def gillette_localize(
-    receivers=list, delays=list, speed_of_sound=343, m=[0], exact=True, alpha=0.05
+    receiver_positions, arrival_times, reference_receiver=0, speed_of_sound=343
 ):
     """
-    Calculate the estimated location of a sound's source using the algorithm from Gillette & Silverman 2008 .
+    Uses the Gillette and Silverman (2008) localization algorithm to localize a sound event from a set of TDOAs.
     Args:
-        receivers: A numpy array of coordinates for microphones used to
-        record the sound. The number of microphones needed should
-        be two more than the dimensions being localized in. The
-        first row will be treated as a reference point for the
-        algorithm.
-        tdoa: A list of time delays. Each entry should be the time
-        delay for the corresponding item in the receivers list
-        (i.e. the first item is the delay for the first receiver).
-        The first item in this list should be 0, with all other
-        entries centered around that.
-        speed_of_sound: The speed of sound in m/s. Defaults to 343
-        exact: computes an exact solution if True, computes estimates
-        with uncertainty if false. Defaults to True
-        coordinates if true. Defaults to false.
-        alpha: Determines confidence level of the confidence intervals.
-        Defaults to 0.05.
-        m: the index of the reference mic. Defaults to 0.
-        source location, centered around the reference mic, for each
-        microphone.
-
+        receiver_positions: a list of [x,y] or [x,y,z] positions for each receiver
+            Positions should be in meters, e.g., the UTM coordinate system.
+        arrival_times: a list of TDOA times (arrival times) for each receiver
+            The times should be in seconds.
+        reference_receiver: the index of the reference receiver (the receiver against which all other arrival times are measured)
+            default is 0 (the first receiver)
+        speed_of_sound: speed of sound in m/s
     Returns:
-        An array of the estimated location of the sound's source.
-
-    Algorithm from:
-    M. D. Gillette and H. F. Silverman, "A Linear Closed-Form Algorithm for Source Localization From Time-Differences of Arrival," IEEE Signal Processing Letters
-
+        coords: a tuple of (x,y,z) coordinates of the sound source
     """
-    import opensoundscape.localization as loc
-    import statsmodels.api as sm
 
-    # Compile know receiver locations and distance delays into an output vector
-    out_knowns = []
-    in_knowns = np.zeros(((len(receivers) - len(m)) * len(m), 2 + len(m)))
-    toa = np.array(delays)
-    r = 0
-    out_knowns = []
-    for k in range(len(m)):
-        tdoa = (
-            toa - toa[m[k]]
-        )  # Use the speed of sound to convert time delays to "distance delays"
-        diffs = []
-        for delay in tdoa:
-            diffs.append(float(delay * speed_of_sound))
-        for i in range(len(receivers)):
-            if i in m:
-                continue
-            else:
-                w = diffs[i] ** 2
-                for j in range(len(receivers[i])):
-                    w = w - receivers[i][j] ** 2 + receivers[m[k]][j] ** 2
-                w = w / 2
-                out_knowns.append(w)
-        for i in range(len(receivers)):
-            if i in m:
-                continue
-            else:
-                q = 0
-                for j in range(len(receivers[i])):
-                    z = receivers[m[k]][j] - receivers[i][j]
-                    in_knowns[r][q] = z
-                    q += 1
-                in_knowns[r][q + k] = diffs[i]
-                r += 1
-                continue
+    # check that these delays are with reference to one receiver (the reference receiver). If not, raise an error
+    if np.min(arrival_times) != 0:
+        raise ValueError(
+            "Arrival times must be relative to a reference receiver. Therefore the minimum arrival time must be 0 (corresponding to arrival at the reference receiver) None of your TDOAs are zero. Please check your arrival_times."
+        )
 
-        # Using least squares, compute the final estimated location of source
-    location = sm.OLS(out_knowns, in_knowns).fit()
-    return location.params
+    # make sure our inputs follow consistent format
+    receiver_positions = np.array(receiver_positions).astype("float64")
+    arrival_times = np.array(arrival_times).astype("float64")
+
+    # The number of dimensions in which to perform localization
+    dim = receiver_positions.shape[1]
+
+    # find which is the reference receiver and reorder, so reference receiver is first
+    ref_receiver = np.argmin(arrival_times)
+    ordered_receivers = np.roll(receiver_positions, -ref_receiver, axis=0)
+    ordered_tdoas = np.roll(arrival_times, -ref_receiver, axis=0)
+
+    # Gillette silverman solves Ax = w, where x is the solution vector, A is a matrix, and w is a vector
+    # Matrix A according to Gillette and Silverman (2008)
+    A = np.zeros((len(ordered_tdoas) - 1, dim + 1))
+    for column in range(dim + 1):
+        if column < dim:
+            A[:, column] = ordered_receivers[0, column] - ordered_receivers[1:, column]
+        elif column == dim:
+            A[:, column] = ordered_tdoas[1:] * speed_of_sound
+
+    # Vector w according to Gillette and Silverman (2008)
+    # w = 1/2 (dm0^2 - xm^2 - ym^2 - zm^2 + x0^2 + y0^2 + z0^2)
+    X02 = np.sum(ordered_receivers[0] ** 2)  # x0^2 + y0^2 + z0^2
+    dmx = ordered_tdoas[1:] * speed_of_sound
+    XM2 = np.sum(ordered_receivers**2, axis=1)[1:]
+
+    vec_w = 0.5 * (dmx + X02 - XM2)
+
+    answer = np.linalg.lstsq(A, vec_w.T, rcond=None)
+    coords = answer[0][:dim]
+    # pseudorange = answer[0][dim]
+    # residuals = answer[1]
+
+    return coords
 
 
 def calc_tdoa_residuals(
