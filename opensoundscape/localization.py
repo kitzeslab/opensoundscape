@@ -1141,7 +1141,7 @@ def gillette_localize(receiver_positions, arrival_times, speed_of_sound=SPEED_OF
     print(arrival_times)
     if not np.isclose(np.min(np.abs(arrival_times)), 0):
         raise ValueError(
-            "Arrival times must be relative to a reference receiver. Therefore the minimum arrival"
+            "Arrival times must be relative to a reference receiver. Therefore one arrival"
             " time must be 0 (corresponding to arrival at the reference receiver) None of your "
             "TDOAs are zero. Please check your arrival_times."
         )
