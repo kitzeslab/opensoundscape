@@ -126,11 +126,14 @@ def test_gillette_localize_3d():
     time_of_flight = (
         np.linalg.norm(receiver_positions - sound_source, axis=1) / speed_of_sound
     )
-    tdoas = time_of_flight - np.min(time_of_flight)
 
-    estimated_pos = localization.gillette_localize(receiver_positions, tdoas)
+    # localize with each receiver as reference:
+    for ref_index in range(len(time_of_flight)):
+        tdoas = time_of_flight - time_of_flight[ref_index]
 
-    assert np.allclose(estimated_pos, sound_source, atol=2)
+        estimated_pos = localization.gillette_localize(receiver_positions, tdoas)
+
+        assert np.allclose(estimated_pos, sound_source, atol=2.5)
 
 
 def test_soundfinder_nopseudo():

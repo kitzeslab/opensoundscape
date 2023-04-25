@@ -989,11 +989,8 @@ def soundfinder_localize(
 
     ##### Shift coordinate system to center receivers around origin #####
     if center:
-        warnings.warn("centering")
         p_mean = np.mean(receiver_positions, 0)
         receiver_positions = np.array([p - p_mean for p in receiver_positions])
-    else:
-        warnings.warn("not centering")
 
     ##### Compute B, a, and e #####
     # Find the pseudorange, rho, for each recorder
@@ -1138,7 +1135,6 @@ def gillette_localize(receiver_positions, arrival_times, speed_of_sound=SPEED_OF
     # check that these delays are with reference to one receiver (the reference receiver).
     # We do this by checking that one of the arrival times is within float precision
     # of 0 (i.e. arrival at the reference)
-    print(arrival_times)
     if not np.isclose(np.min(np.abs(arrival_times)), 0):
         raise ValueError(
             "Arrival times must be relative to a reference receiver. Therefore one arrival"
@@ -1154,7 +1150,7 @@ def gillette_localize(receiver_positions, arrival_times, speed_of_sound=SPEED_OF
     dim = receiver_positions.shape[1]
 
     # find which is the reference receiver and reorder, so reference receiver is first
-    ref_receiver = np.argmin(arrival_times)
+    ref_receiver = np.argmin(abs(arrival_times))
     ordered_receivers = np.roll(receiver_positions, -ref_receiver, axis=0)
     ordered_tdoas = np.roll(arrival_times, -ref_receiver, axis=0)
 
