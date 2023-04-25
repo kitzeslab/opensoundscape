@@ -64,12 +64,12 @@ class SpatialEvent:
                 - calls estimate_delays() if needed
             calculate_distance_residuals:
                 compute residuals (descrepancies) between tdoa and estimated position
-            calculate_residual_rmse:
+            calculate_residual_rms:
                 compute the root mean square value of the tdoa distance residuals
 
         """
         self.receiver_files = receiver_files
-        self.receiver_positions = receiver_positions
+        self.receiver_positions = np.array(receiver_positions)
         self.start_time = start_time
         self.duration = duration
         self.class_name = class_name
@@ -81,6 +81,7 @@ class SpatialEvent:
         self.tdoas = None  # time delay at each receiver
         self.cc_maxs = None  # max of cross correlation for each time delay
         self.position_estimate = None  # cartesian position estimate in meters
+        self.residual_rms = None
 
         # could implement this later:
         # hidden attributes store estimates and error metrics
@@ -94,7 +95,7 @@ class SpatialEvent:
         self,
         algorithm="gillette",
         cc_threshold=None,
-        min_num_receivers=3,
+        min_n_receivers=3,
         speed_of_sound=SPEED_OF_SOUND,
     ):
         """
@@ -111,7 +112,7 @@ class SpatialEvent:
         Args:
             algorithm: 'gillette' or 'soundfinder', see localization.localize()
             cc_threshold: see SpatialEvent documentation
-            min_num_receivers: if number of receivers with cross correlation exceeding
+            min_n_receivers: if number of receivers with cross correlation exceeding
                 the threshold is fewer than this, raises InsufficientReceiversError
                 instead of estimating a spatial position
 
@@ -120,7 +121,7 @@ class SpatialEvent:
 
         Raises:
             InsufficientReceiversError if the number of receivers with cross correlation
-                maximums exceeding `cc_threshold` is less than `min_num_receivers`
+                maximums exceeding `cc_threshold` is less than `min_n_receivers`
 
         Effects:
             sets the value of self.position_estimate to the same value as the returned position
@@ -144,10 +145,10 @@ class SpatialEvent:
             positions = positions[self.cc_maxs > cc_threshold]
 
         # assert there are enough receivers remaining to localize the event
-        if len(tdoas) < min_num_receivers:
+        if len(tdoas) < min_n_receivers:
             raise InsufficientReceiversError(
                 f"Number of tdoas exceeding cc threshold ({len(tdoas)} was fewer "
-                f"than min_num_receivers ({min_num_receivers})"
+                f"than min_n_receivers ({min_n_receivers})"
             )
 
         # estimate location from receiver positions and relative time of arrival
@@ -159,12 +160,16 @@ class SpatialEvent:
             speed_of_sound=speed_of_sound,
         )
 
+        # calculate rms distance residual, descrepancy between tdoas and estimated position
+        self.residual_rms = self.calculate_residual_rms(speed_of_sound=speed_of_sound)
+
         return self.position_estimate
 
     def estimate_delays(self, bandpass_range=None, cc_filter="phat", max_delay=None):
         """estimate time delay of event relative to receiver_files[0] with gcc
 
-        Performs Generalized Cross Correlation of each file against the first
+        Performs Generalized Cross Correlation of each file against the first,
+            extracting the segment of audio of length self.duration at self.start_time
 
         Assumes audio files are synchronized such that they start at the same time
 
@@ -173,7 +178,9 @@ class SpatialEvent:
                 cross correlation; if None, defaults to self.bandpass_range
             cc_filter: filter for generalized cross correlation, see
                 opensoundscape.signal_processing.gcc()
-            max_delay: see opensoundscape.signal_processing.tdoa()
+            max_delay: only consider values in +/- this range (seconds) for possible delay
+                (see opensoundscape.signal_processing.tdoa())
+                - default None allows any delay time
 
         Returns:
             list of time delays, list of max cross correlation values
@@ -183,17 +190,8 @@ class SpatialEvent:
             to the first file (self.receiver_files[0])
 
         Effects:
-            sets self.tdoas and self.cc_maxs with the same values returned
+            sets self.tdoas and self.cc_maxs with the same values as those returned
         """
-
-        # user can provide audio bandpass range, otherwise use saved attribute
-        # bandpass range is a tuple of [low freq, high freq] in Hz
-        if bandpass_range is None:
-            bandpass_range = self.bandpass_range
-        # same for max_delay
-        if max_delay is None:
-            max_delay = self.max_delay
-
         start, dur = self.start_time, self.duration
         audio1 = Audio.from_file(self.receiver_files[0], offset=start, duration=dur)
 
@@ -219,10 +217,10 @@ class SpatialEvent:
             tdoas.append(tdoa)
             cc_maxs.append(cc_max)
 
-        self.tdoas = tdoas
-        self.cc_maxs = cc_maxs
+        self.tdoas = np.array(tdoas)
+        self.cc_maxs = np.array(cc_maxs)
 
-        return tdoas, cc_maxs
+        return self.tdoas, self.cc_maxs
 
     def calculate_distance_residuals(self, speed_of_sound=SPEED_OF_SOUND):
         """calculate distance residuals for each receiver from tdoa localization
@@ -291,161 +289,47 @@ class SynchronizedRecorderArray:
     """
     Class with utilities for localizing sound events from array of recorders
 
-    Algorithm
-    ----------
-    The user provides a table of class detections from each recorder with timestamps. The user
-    also provides a table listing the spatial location of the recorder for each unique audio
-    file in the table of detections. The audio recordings must be synchronized
-    such that timestamps from each recording correspond to the exact same real-world time.
-
-    Localization of sound events proceeds in three steps:
-
-    1. Grouping of detections into candidate events:
-
-        Simultaneous and spatially clustered detections of a class are selected as targets
-        for localization of a single real-world sound event.
-
-        For each detection of a species, the grouping algorithm treats the reciever with the detection
-        as a "reference receiver", then selects all detections of the species at the same time and
-        within `max_distance_between_receivers` of the reference reciever (the "surrounding detections").
-        This selected group of simulatneous, spatially-clustered detections of a class beomes one
-        "candidate event" for subsequent localization.
-
-        If the number of recorders in the candidate event is fewer than `min_number_of_receivers`, the
-        candidate event is discarded.
-
-        This step creates a highly redundant set of candidate events to localize, because each detection
-        is treated separately with its recorder as the 'reference recorder'. Thus, the localized events created by this algorithm may contain multiple instances representing
-        the same real-world sound event.
-
-
-    2. Estimate time delays with cross correlation:
-
-        For each candidate event, the time delay between the reference reciever's detection and the
-        surrounding recorders' detections is estimated through generalized cross correlation.
-
-        If the max value of the cross correlation is below `cc_threshold`, the corresponding time delay
-        is discarded and not used during localization. This provides a way of filtering out
-        undesired time delays that do not correspond to two recordings of the same sound event.
-
-        If the number of time delays in the candidate event is fewer than `min_number_of_receivers`
-        after filtering by cross correlation threshold, the candidate event is discarded.
-
-    3. Estiamte positions
-
-        The position of the event is estimated based on the positions and time delays of
-        each detection.
-
-        Position estimation from the positions and time delays at a set of receivers is performed
-        using one of two algorithms, described in `localization_algorithm` below.
-
-    4. Filter by residual error
-
-        The residual errors represent descrepencies between (a) time of arrival of
-        the event at a reciever and (b) distance from reciever to estimated position.
-
-        Estimated positions are discarded if the root mean squared residual error is
-        greater than `residual_rmse_threshold` #TODO implement?
-
-
-    Parameters
-    ----------
-    files : list
-        List of synchronized audio files
-    aru_coords : pandas.DataFrame
-        DataFrame with index filepath, and columns for x, y, (z) positions of recievers in meters.
-        Third coordinate is optional. Localization algorithms are in 2d if columns are (x,y) and
-        3d if columns are (x,y,z). Each audio file in `predictions` must have a corresponding
-        row in `aru_coords` specifiying the position of the reciever.
-    sample_rate : int
-        Sample rate of the audio files
-    min_number_of_receivers : int
-        Minimum number of receivers that must detect an event for it to be localized
-    max_distance_between_receivers : float (meters)
-        Radius around a recorder in which to use other recorders for localizing an event
-    localization_algorithm : str, optional
-        algorithm to use for estimating the position of a sound event from the positions and
-        time delays of a set of detections. [Default: 'gillette']
-        Options:
-            - 'gillette': linear closed-form algorithm of Gillette and Silverman 2008 [1]
-            - 'soundfinder': source? citation? #TODO
-    thresholds : dict, optional
-        Dictionary of thresholds for each class. Default is None.
-    bandpass_ranges : dict, optional
-        Dictionary of form {"class name": [low_f, high_f]} for audio bandpass filtering during
-        cross correlation. [Default: None] does not bandpass audio. Bandpassing audio to the
-        frequency range of the relevant sound is recommended for best cross correlation results.
-    max_delay : float, optional
-        Maximum absolute value of time delay estimated during cross correlation of two signals
-        For instance, 0.2 means that cross correlation will be maximized in the range of
-        delays between -0.2 to 0.2 seconds.
-        Default: None does not restrict the range, finding delay that maximizes cross correlation
-    cc_threshold : float, optional
-        Threshold for cross correlation: if the max value of the cross correlation is below
-        this value, the corresponding time delay is discarded and not used during localization.
-        Default of 0 does not discard any delays.
-    cc_filter : str, optional
-        Filter to use for generalized cross correlation. See signalprocessing.gcc function for options.
-        Default is "phat".
-    residual_threshold: discard localized events if the root mean squared residual exceeds this value
-        (distance in meters)
-
     Methods
     -------
-    localize()
-        Run the enitre localization algorithm on the audio files and predictions. This executes the below methods in order.
-        threshold_predictions()
-            Use a set of score thresholds to filter the predictions and ensure that only detections with a minimum number of receivers are returned.
-            Saves detections as a pandas.DataFrame to self.detections.
-        cross_correlate()
-            Cross correlate the audio files to get time delays of arrival. This is computationally expensive.
-            Saves cross correlations as a pandas.DataFrame to self.cross_correlations.
-        filter_cross_correlations()
-            Filter the cross correlations to remove scores below cc_threshold. This then also ensures at least min_number_of_receivers are present.
-            Saves filtered cross correlations as a pandas.DataFrame to self.filtered_cross_correlations.
-        localize_events()
-            Use the localization algorithm to localize the events from the set of tdoas after filtering.
-            Saves locations as a pandas.DataFrame to self.localized_events.
+    localize_detections()
+        Attempt to localize a sound event for each detection of each class.
+        First, creates candidate events with:
+        create_candidate_events()
+            Create SpatialEvent objects for all simultaneous, spatially clustered detections of a class
 
+        Then, attempts to localize each candidate event via time delay of arrival information:
+        For each candidate event:
+            - calculate relative time of arrival with generalized cross correlation (event.estimate_delays())
+            - if enough cross correlation values exceed a threshold, attempt to localize the event
+                using the time delays and spatial positions of each receiver with event.estimate_location()
+            - if the residual distance rms value is below a cutoff threshold, consider the event
+                to be successfully localized
 
-    [1] M. D. Gillette and H. F. Silverman, "A Linear Closed-Form Algorithm for Source Localization From Time-Differences of Arrival," IEEE Signal Processing Letters
-
+    [1] M. D. Gillette and H. F. Silverman, "A Linear Closed-Form Algorithm for Source Localization
+        From Time-Differences of Arrival," IEEE Signal Processing Letters
     """
 
     def __init__(
         self,
-        aru_coords,
+        file_coords,
     ):
-        self.aru_coords = aru_coords
-
-        # attributes for troubleshooting
-        self.files_missing_coordinates = []
-
-        # check that all files have coordinates in aru_coords
-        self.files = list(self.detections.reset_index()["file"].unique())
-        audio_files_have_coordinates = True
-        for file in self.files:
-            if str(file) not in self.aru_coords.index:
-                audio_files_have_coordinates = False
-                self.files_missing_coordinates.append(file)
-        if not audio_files_have_coordinates:
-            raise UserWarning(
-                "WARNING: Not all audio files have corresponding coordinates. Check aru_coords contains a mapping for each file. \n Check the missing files with Localizer.files_missing_coordinates"
-            )
-        # check that bandpass_ranges have been set for all classes
-        if self.bandpass_ranges is not None:
-            if set(self.bandpass_ranges.keys()) != set(self.predictions.columns):
-                warnings.warn(
-                    "WARNING: Not all classes have corresponding bandpass ranges. Default behavior will be to not bandpass before cross-correlation for classes that do not have a corresponding bandpass range."
-                )  # TODO support one bandpass range for all classes
-
-        print("SynchronizedRecorderArray initialized")
+        """
+        Args:
+            file_coords : pandas.DataFrame
+                DataFrame with index filepath, and columns for x, y, (z) positions of reciever that
+                recorded the audio file, in meters.
+                Third coordinate is optional. Localization algorithms are in 2d if columns are (x,y) and
+                3d if columns are (x,y,z). When running .localize_detections() or .create_candidate_events(),
+                Each audio file in `detections` must have a corresponding
+                row in `file_coords` specifiying the position of the reciever that recorded the file.
+        """
+        self.file_coords = file_coords
 
     def localize_detections(
         self,
         detections,
-        min_number_of_receivers=3,
-        max_distance_between_receivers=None,
+        max_receiver_dist,
+        min_n_receivers=3,
         localization_algorithm="gillette",
         cc_threshold=0,
         cc_filter="phat",
@@ -456,16 +340,125 @@ class SynchronizedRecorderArray:
         """
         Attempt to localize positions for all detections
 
+        Algorithm
+        ----------
+        The user provides a table of class detections from each recorder with timestamps.
+        The object's self.file_coords dataframe contains a table listing the spatial location of the
+        recorder for each unique audio file in the table of detections. The audio recordings must
+        be synchronized such that timestamps from each recording correspond to the exact same real-world time.
+
+        Localization of sound events proceeds in four steps:
+
+        1. Grouping of detections into candidate events (self.create_candidate_events()):
+
+            Simultaneous and spatially clustered detections of a class are selected as targets
+            for localization of a single real-world sound event.
+
+            For each detection of a species, the grouping algorithm treats the reciever with the detection
+            as a "reference receiver", then selects all detections of the species at the same time and
+            within `max_receiver_dist` of the reference reciever (the "surrounding detections").
+            This selected group of simulatneous, spatially-clustered detections of a class beomes one
+            "candidate event" for subsequent localization.
+
+            If the number of recorders in the candidate event is fewer than `min_n_receivers`, the
+            candidate event is discarded.
+
+            This step creates a highly redundant set of candidate events to localize, because each detection
+            is treated separately with its recorder as the 'reference recorder'. Thus, the localized
+            events created by this algorithm may contain multiple instances representing
+            the same real-world sound event.
+
+
+        2. Estimate time delays with cross correlation:
+
+            For each candidate event, the time delay between the reference reciever's detection and the
+            surrounding recorders' detections is estimated through generalized cross correlation.
+
+            If bandpass_ranges are provided, cross correlation is performed on audio that has been
+            bandpassed to class-specific low and high frequencies.
+
+            If the max value of the cross correlation is below `cc_threshold`, the corresponding time delay
+            is discarded and not used during localization. This provides a way of filtering out
+            undesired time delays that do not correspond to two recordings of the same sound event.
+
+            If the number of estimated time delays in the candidate event is fewer than `min_n_receivers`
+            after filtering by cross correlation threshold, the candidate event is discarded.
+
+        3. Estimate positions
+
+            The position of the event is estimated based on the positions and time delays of
+            each detection.
+
+            Position estimation from the positions and time delays at a set of receivers is performed
+            using one of two algorithms, described in `localization_algorithm` below.
+
+        4. Filter by spatial residual error
+
+            The residual errors represent descrepencies between (a) time of arrival of
+            the event at a reciever and (b) distance from reciever to estimated position.
+
+            Estimated positions are discarded if the root mean squared spatial residual is
+            greater than `residual_rms_threshold`
+
+
         Args:
             detections: a dictionary of detections, with multi-index (file,start_time,end_time), and
                 one column per class with 0/1 values for non-detection/detection
                 The times in the index imply the same real world time across all files: eg 0 seconds assumes
                 that the audio files all started at the same time, not on different dates/times
+            max_receiver_dist : float (meters)
+                Radius around a recorder in which to use other recorders for localizing an event.
+                Simultaneous detections at receivers within this distance (meters)
+                of a receiver with a detection will be used to attempt to localize the event.
+            min_n_receivers : int
+                Minimum number of receivers that must detect an event for it to be localized
+                [default: 3]
+            localization_algorithm : str, optional
+                algorithm to use for estimating the position of a sound event from the positions and
+                time delays of a set of detections. [Default: 'gillette']
+                Options:
+                    - 'gillette': linear closed-form algorithm of Gillette and Silverman 2008 [1]
+                    - 'soundfinder': source? citation? #TODO
+            cc_threshold : float, optional
+                Threshold for cross correlation: if the max value of the cross correlation is below
+                this value, the corresponding time delay is discarded and not used during localization.
+                Default of 0 does not discard any delays.
+            cc_filter : str, optional
+                Filter to use for generalized cross correlation. See signalprocessing.gcc function for options.
+                Default is "phat".
+            max_delay : float, optional
+                Maximum absolute value of time delay estimated during cross correlation of two signals
+                For instance, 0.2 means that cross correlation will be maximized in the range of
+                delays between -0.2 to 0.2 seconds.
+                Default: None does not restrict the range, finding delay that maximizes cross correlation
+            bandpass_ranges : dict, optional
+                Dictionary of form {"class name": [low_f, high_f]} for audio bandpass filtering during
+                cross correlation. [Default: None] does not bandpass audio. Bandpassing audio to the
+                frequency range of the relevant sound is recommended for best cross correlation results.
+            residual_threshold: discard localized events if the root mean squared residual exceeds this value
+                (distance in meters) [default: np.inf does not filter out any events by residual]
 
         Returns:
             2 lists: list of localized events, list of un-localized events
             events are of class SpatialEvent
         """
+
+        # check that all files have coordinates in file_coords
+        if len(self.check_files_missing_coordinates(detections)) > 0:
+            raise UserWarning(
+                "WARNING: Not all audio files have corresponding coordinates in self.file_coords."
+                "Check file_coords.index contains each file in detections.index. "
+                "Use self.check_files_missing_coordinates() for list of files. "
+            )
+        # check that bandpass_ranges have been set for all classes
+        if bandpass_ranges is not None:
+            if set(bandpass_ranges.keys()) != set(detections.columns):
+                warnings.warn(
+                    "WARNING: Not all classes have corresponding bandpass ranges. "
+                    "Default behavior will be to not bandpass before cross-correlation for "
+                    "classes that do not have a corresponding bandpass range."
+                )  # TODO support one bandpass range for all classes
+
         # initialize list to store events that successfully localize
         localized_events = []
         unlocalized_events = []
@@ -475,9 +468,8 @@ class SynchronizedRecorderArray:
         # to assist in localization via time delay of arrival
         candidate_events = self.create_candidate_events(
             detections,
-            self.aru_coords,
-            min_number_of_receivers,
-            max_distance_between_receivers,
+            min_n_receivers,
+            max_receiver_dist,
         )
 
         # attempt to localize each event
@@ -498,360 +490,165 @@ class SynchronizedRecorderArray:
 
             # estimate positions of sound event using time delays and receiver positions
             try:
-                event.estimate_position(
+                event.estimate_location(
                     algorithm=localization_algorithm,
                     cc_threshold=cc_threshold,
-                    min_num_receivers=self.min_number_of_receivers,
-                    speed_of_sound=SPEED_OF_SOUND,  # TODO make these into arguments of the function?
+                    min_n_receivers=min_n_receivers,
+                    speed_of_sound=SPEED_OF_SOUND,
                 )
             except InsufficientReceiversError:
                 # this occurs if not enough receivers had high enough cross correlation scores
-                # to continue with localization (<min_number_of_receivers)
+                # to continue with localization (<min_n_receivers)
                 unlocalized_events.append(event)
                 continue
 
+            # event.residual_rms is computed at the end of event.estimate_location
+            # and represents descrepency (in meters) between tdoas and estimated position
             # check if residuals are small enough that we consider this a good position estimate
             # TODO: use max instead of mean?
-            residual = event.calc_residual_rms()
-            if residual < residual_threshold:
+            if event.residual_rms < residual_threshold:
                 localized_events.append(event)
             else:
                 unlocalized_events.append(event)
 
+        # unlocalized events include those with too few receivers (after cc threshold)
+        # and those with too large of a spatial residual rms
         return localized_events, unlocalized_events
+
+    def check_files_missing_coordinates(self, detections):
+        files_missing_coordinates = []
+        files = list(detections.reset_index()["file"].unique())
+        for file in files:
+            if str(file) not in self.file_coords.index:
+                files_missing_coordinates.append(file)
+        return files_missing_coordinates
 
     def create_candidate_events(
         self,
         detections,
-        aru_coords,
-        min_number_of_receivers,
-        max_distance_between_receivers,
+        min_n_receivers,
+        max_receiver_dist,
     ):
         """
-        Takes the detections dictionary and groups detections that are within max_distance_between_receivers of each other.
+        Takes the detections dictionary and groups detections that are within `max_receiver_dist` of each other.
         args:
             detections: a dictionary of detections, with multi-index (file,start_time,end_time), and
                 one column per class with 0/1 values for non-detection/detection
                 The times in the index imply the same real world time across all files: eg 0 seconds assumes
                 that the audio files all started at the same time, not on different dates/times
-            aru_coords: a dictionary of aru coordinates, with key audio file path, and value (x,y) coordinates
-                in meters
-            max_distance_between_receivers: the maximum distance between recorders to consider a detection as a single event
+            min_n_receivers: if fewer nearby receivers have a simultaneous detection, do not create candidate event
+            `max_receiver_dist`: the maximum distance between recorders to consider a detection as a single event
         returns:
             a list of SpatialEvent objects to attempt to localize
         """
         # pre-generate a dictionary listing all close files for each audio file
         # dictionary will have a key for each audio file, and value listing all other receivers
-        # within max_distance_between_receivers of that receiver
+        # within max_receiver_dist of that receiver
         #
         # eg {ARU_0.mp3: [ARU_1.mp3, ARU_2.mp3...], ARU_1... }
-        nearby_files_dict = dict()
-
-        aru_files = aru_coords.keys()
-        for aru in aru_files:  # loop over the aru files
-            pos_aru = np.array(aru_coords.loc[aru])  # position of receiver
-            other_arus = np.array(aru_coords)
-            distances = other_arus - pos_aru
-            euclid_distances = [np.linalg.norm(d) for d in distances]
-
-            # boolean mask for whether recorder is close enough
-            mask = [d <= max_distance_between_receivers for d in euclid_distances]
-            nearby_files_dict[aru] = list(aru_files[mask])
-            # does it include itself?
+        nearby_files_dict = self.make_nearby_files_dict(max_receiver_dist)
 
         # generate SpatialEvents for each detection, if enough nearby
         # receivers also had a detection at the same time
         # each SpatialEvent object contains the time and class name of a
         # detected event, a set of receivers' audio files, and receiver positions
+        # and represents a single sound event that we will try to localize
+        #
+        # events will be redundant because each reciever with detection potentially
+        # results in its own event containing nearby detections
         candidate_events = []  # list of SpatialEvents to try to localize
 
-        # iterate through all classes in detections dataframe
+        # iterate through all classes in detections (0/1) dataframe
+        # with index (file,start_time,end_time), column for each class
         for cls_i in detections.columns:
 
             # select one column: contains 0/1 for each file and clip time period
-            # (index: (file,start_time,end_time), values: 0 or 1)
+            # (index: (file,start_time,end_time), values: 0 or 1) for a single class
             det_cls = detections[[cls_i]]
 
-            # filter to positive detections of this class
+            # filter detection dataframe to select detections of this class
             det_cls = det_cls[det_cls[cls_i] > 0]
 
             # iterate through each clip start time in the df of detections
-            # note: all clips with start_time 0 are assumed to start at the same real-world time!
-            # eg, not two recordings from different dates or times
+            # note: all clips with same start_time are assumed to start at the same real-world time!
+            # eg, should not be two recordings from different dates or times
             # TODO: maybe use datetime objects instead of just a time like 0 seconds?
             for time_i, dets_at_time_i in det_cls.groupby(level=1):
-                # select all detections that occurred at the same time
+                # list all files with detections of this class at the same time
                 files_w_dets = dets_at_time_i.reset_index()["file"].unique()
 
-                # for each file with detection, check how many nearby recorders have a detection
-                # at the same time
-                for ref_receiver_audio in files_w_dets:
+                # for each file with detection of this class at this time,
+                # check how many nearby recorders have a detection
+                # at the same time. If there are enough, make a SpatialEvent
+                # containing the spatial cluster of detections. The event
+                # will be added to the list of candidate_events to localize
+                for ref_file in files_w_dets:
                     # check how many other detections are close enough to be detections of
                     # the same sound event
                     # first, use pre-created dictionary of nearby receivers for each audio file
-                    close_receivers = nearby_files_dict[ref_receiver_audio]
+                    close_receivers = nearby_files_dict[ref_file]
                     # then, subset files with detections to those that are nearby
-                    close_receivers_w_dets = [
-                        f for f in files_w_dets if f in close_receivers
-                    ]
+                    close_det_files = [f for f in files_w_dets if f in close_receivers]
 
                     # if enough receivers, create a SpatialEvent using this set of receivers
-                    if len(close_receivers_w_dets) + 1 >= min_number_of_receivers:
-                        receiver_files = [ref_receiver_audio] + close_receivers_w_dets
-                        receiver_positions = [aru_coords[r] for r in receiver_files]
-                        clip_end = (
-                            dets_at_time_i.loc[ref_receiver_audio, time_i, :]
-                            .reset_index()["end_time"]
-                            .values[0]
-                        )  # hacky? how to get correct clip duration?
-                        duration = clip_end - time_i
+                    # +1 to count the reference receiver
+                    if len(close_det_files) + 1 >= min_n_receivers:
+                        receiver_files = [ref_file] + close_det_files
+                        receiver_positions = [
+                            self.file_coords.loc[r] for r in receiver_files
+                        ]
+                        # find the clip end time
+                        clip = dets_at_time_i.loc[ref_file, time_i, :]
+                        clip_end = clip.reset_index()["end_time"].values[0]
 
-                        # create a SpatialEvent
+                        # create a SpatialEvent for this cluster of simultaneous detections
                         candidate_events.append(
                             SpatialEvent(
                                 receiver_files=receiver_files,
                                 receiver_positions=receiver_positions,
                                 start_time=time_i,
-                                duration=duration,
+                                duration=clip_end - time_i,
                                 class_name=cls_i,
-                                bandpass_range=self.bandpass_ranges["class"],
-                                cc_threshold=self.cc_threshold,
-                                max_delay=self.max_delay,
-                                # TODO
                             )
                         )
 
         return candidate_events
 
-    # def cross_correlate(self):
-    #     """
-    #     Cross correlate the audio files to get time delays of arrival for each time interval where a sound event was detected on at least min_number_of_receivers.
-    #     Returns a pandas.DataFrame and writes it to self.cross_correlations. Warning: this is computationally expensive.
-    #     The DataFrame has columns:
-    #         time : (start, end) tuple of the detection time in seconds
-    #         reference_file: the reference file for the detection
-    #         other_files: list of the other files against which cross correlation will be performed
-    #         species: the species of the detection
-    #         cross_correlations: list of the maximum cross-correlation score for each pair of files
-    #         time_delays: list of the time delays corresponding to the maximal cross-correlation for each pair of files
-    #     """
-    #     if self.bandpass_ranges is None:
-    #         warnings.warn(
-    #             "No bandpass range set. Default behavior will be to not bandpass the audio before cross-correlation."
-    #         )
+    def make_nearby_files_dict(self, r_max):
+        """create dictinoary listing nearby files for each file
 
-    #     if self.max_delay is None:
-    #         warnings.warn(
-    #             "No max delay set. Default behavior will be to allow for any delay between the audio files."
-    #         )
-    #     if self.detections is None:
-    #         print("No detections exist - running threshold_predictions")
-    #         self.threshold_predictions()
+        pre-generate a dictionary listing all close files for each audio file
+        dictionary will have a key for each audio file, and value listing all other receivers
+        within r_max of that receiver
 
-    # def filter_cross_correlations(self):
-    #     """
-    #     Filter the cross-correlations to only include those that are above a certain threshold. This step also drops any detections where less than min_number_of_receivers are above the threshold.
-    #     Returns a pandas.DataFrame and writes it to self.filtered_cross_correlations.
-    #     The DataFrame has columns:
-    #         time : (start, end) tuple of the detection time in seconds
-    #         reference_file: the reference file for the detection
-    #         other_files: list of the other files against which cross correlation will be performed
-    #         species: the species of the detection
-    #         cross_correlations: list of the maximum cross-correlation score for each pair of files
-    #         time_delays: list of the time delays corresponding to the maximal cross-correlation for each pair of files
-    #     """
-    #     if self.cross_correlations is None:
-    #         print("No cross correlations exist - running cross_correlate")
-    #         self.cross_correlate()
-    #     # filter the cross-correlations
-    #     above_threshold = [
-    #         cc > self.cc_threshold
-    #         for cc in self.cross_correlations["cross_correlations"]
-    #     ]
+        eg {ARU_0.mp3: [ARU_1.mp3, ARU_2.mp3...], ARU_1... }
 
-    #     n_before = len(self.cross_correlations)  # number of rows before filtering
+        Note: could manually create this dictionary to only list _simulataneous_ nearby
+        files if the detection dataframe contains files from different times
 
-    #     filtered_ccs = []
-    #     filtered_files = []
-    #     filtered_tdoas = []
-    #     for i in range(len(self.cross_correlations)):
-    #         mask = above_threshold[i]
-    #         cc = self.cross_correlations["cross_correlations"].iloc[i]
-    #         other_files = np.array(self.cross_correlations["other_files"].iloc[i])
-    #         tdoa = np.array(self.cross_correlations["time_delays"].iloc[i])
+        The returned dictionary is used in create_candidate_events as a look-up table for
+            recordings nearby a detection in any given file
 
-    #         filtered_ccs.append(cc[mask])
-    #         filtered_files.append(other_files[mask])
-    #         filtered_tdoas.append(tdoa[mask])
+        Args:
+            r_max: maximum distance from each recorder in which to include other
+                recorders in the list of 'nearby recorders', in meters
 
-    #     filtered_cross_correlations = self.cross_correlations.copy()
+        Returns:
+            dictionary with keys for each file and values = list of nearby recordings
+        """
+        aru_files = self.file_coords.index.values
+        nearby_files_dict = dict()
+        for aru in aru_files:  # make an entry in the dictionary for each file
+            reference_receiver = self.file_coords.loc[aru]  # position of receiver
+            other_receivers = self.file_coords.drop([aru])
+            distances = np.array(other_receivers) - np.array(reference_receiver)
+            euclid_distances = [np.linalg.norm(d) for d in distances]
 
-    #     filtered_cross_correlations["cross_correlations"] = filtered_ccs
-    #     filtered_cross_correlations["other_files"] = filtered_files
-    #     filtered_cross_correlations["time_delays"] = filtered_tdoas
+            # boolean mask for whether recorder is close enough
+            mask = [r <= r_max for r in euclid_distances]
+            nearby_files_dict[aru] = list(other_receivers[mask].index)
 
-    #     # Filter by the cc scores. If less than min_number_of_receivers have cc_score above threshold, drop them.
-    #     ccs = [
-    #         np.array(scores)
-    #         for scores in filtered_cross_correlations["cross_correlations"]
-    #     ]
-    #     num_ccs_above_threshold = [sum(a > self.cc_threshold) for a in ccs]
-    #     mask = np.array(num_ccs_above_threshold) >= self.min_number_of_receivers - 1
-    #     filtered_cross_correlations = filtered_cross_correlations[mask]
-
-    #     n_after = len(filtered_cross_correlations)  # number of rows after filtering
-    #     print(f"{n_before - n_after} rows deleted")
-    #     self.filtered_cross_correlations = filtered_cross_correlations
-    #     return filtered_cross_correlations
-
-    # def localize_events(self):
-    #     """
-    #     Localize the events using the localization algorithm specified in self.localization_algorithm. Returns a pandas.DataFrame with the results and writes it to self.localizations
-    #     The columns of the DataFrame are:
-    #         time : (start, end) tuple of the detection time in seconds
-    #         reference_file: the reference file for the detection
-    #         other_files: list of the other files against which cross correlation will be performed
-    #         species: the species of the detection
-    #         cross_correlations: list of the maximum cross-correlation score for each pair of files
-    #         time_delays: list of the time delays corresponding to the maximal cross-correlation for each pair of files
-    #         predicted_x: the predicted x coordinate of the event
-    #         predicted_y: the predicted y coordinate of the event
-    #         predicted_z: the predicted z coordinate of the event
-    #         tdoa_error: the residuals in the tdoas against what would be expected from the predicted location.
-    #     """
-    #     if self.filtered_cross_correlations is None:
-    #         print(
-    #             "No filtered cross_correlations exist - running filter_cross_correlations"
-    #         )
-    #         self.filter_cross_correlations()
-    #     localized = self.filtered_cross_correlations.copy()
-    #     locations = []
-
-    #     for index, row in self.filtered_cross_correlations.iterrows():
-    #         reference = row["reference_file"]
-    #         others = row["other_files"]
-    #         reference_coords = self.aru_coords.loc[reference]
-    #         others_coords = [self.aru_coords.loc[i] for i in others]
-    #         all_coords = [reference_coords] + others_coords
-    #         # add 0 tdoa for reference receiver
-    #         delays = np.insert(row["time_delays"], 0, 0)
-
-    #         location = localize(
-    #             all_coords, delays, algorithm=self.localization_algorithm
-    #         )
-    #         locations.append(location)
-    #     localized["predicted_location"] = locations
-    #     self.localized_events = localized
-    #     return localized
-
-    # def _get_cross_correlations(
-    #     reference_file,
-    #     other_files,
-    #     start_time,
-    #     end_time,
-    #     bandpass_range,
-    #     max_delay,
-    #     SAMPLE_RATE,
-    #     cc_filter,
-    # ):
-    #     """
-    #     Gets the maximal cross correlations and the time-delay (in s) corresponding to that cross correlation between
-    #     the reference_file and other_files. Setting max_delay ensures that only cross-correlations
-    #     +/- a certain time-delay are returned. i.e if a sound can be a maximum of +/-
-    #     ----
-    #     args:
-    #         reference_file: Path to reference file.
-    #         other_files: List of paths to the other files which will be cross-correlated against reference_file
-    #         start_time: start of time segment (in seconds) to be cross-correlated
-    #         end_time: end of time segment (in seconds) to be cross-correlated.
-    #         bandpass_range: [lower, higher] of bandpass range. If None, no bandpass filter is applied.
-    #         max_delay: the maximum time (in seconds) to return cross_correlations for. i.e. if the best cross correlation
-    #                     occurs for a time-delay greater than max_delay, the function will not return it, instead it will return
-    #                     the maximal cross correlation within +/- max_delay
-    #         SAMPLE_RATE: the sampling rate of the audio.
-    #         cc_filter: the filter to use for cross-correlation. see signalprocessing.gcc for options. Options currently are "phat" or "cc"
-    #     returns:
-    #         ccs: list of maximal cross-correlations for each pair of files.
-    #         time_differences: list of time differences (in seconds) that yield the maximal cross-correlation.
-    #     """
-    #     if bandpass_range is None:
-    #         # no bandpass filter
-    #         reference_audio = Audio.from_file(
-    #             reference_file, offset=start_time, duration=end_time - start_time
-    #         )
-    #         other_audio = [
-    #             Audio.from_file(i, offset=start_time, duration=end_time - start_time)
-    #             for i in other_files
-    #         ]
-    #     else:
-    #         lower = min(bandpass_range)
-    #         higher = max(bandpass_range)
-
-    #         reference_audio = Audio.from_file(
-    #             reference_file, offset=start_time, duration=end_time - start_time
-    #         ).bandpass(lower, higher, order=9)
-    #         other_audio = [
-    #             Audio.from_file(
-    #                 i, offset=start_time, duration=end_time - start_time
-    #             ).bandpass(lower, higher, order=9)
-    #             for i in other_files
-    #         ]
-    #     ccs = np.zeros(len(other_audio))
-    #     time_difference = np.zeros(len(other_audio))
-    #     for index, audio_object in enumerate(other_audio):
-    #         delay, cc = sp.tdoa(
-    #             audio_object.samples,
-    #             reference_audio.samples,
-    #             cc_filter=cc_filter,
-    #             sample_rate=SAMPLE_RATE,
-    #             return_max=True,
-    #             max_delay=max_delay,
-    #         )
-
-    #         time_difference[index] = delay
-    #         ccs[index] = cc
-
-    #     return ccs, time_difference
-
-    # def _get_detections(predictions_df, cnn_score_threshold):
-    #     """
-    #     Takes the predictions_df of CNN scores *FOR A SINGLE SPECIES*, chooses only detections > cnn_score_threshold
-    #     and outputs a dictionary of times at which events were detected, and the ARU files they were detected in.
-    #     args:
-    #         predictions_array: a dataframe with multi-index of (file, start_time, end_time) with a column that is values for model predictions
-    #         *FOR A SINGLE SPECIES*
-    #         cnn_score_threshold: the minimum CNN score needed for a time-window to be considered a detection.
-    #     returns:
-    #         A dictionary of predictions, with key (start_time, end_time), and value list of files with detection triggered
-    #         e.g. {(0.0,2.0): [ARU_0.mp3. ARU_1.mp3]}
-    #     """
-    #     # get the detections from the predictions
-    #     # Threshold the scores to above cnn_score_threshold
-    #     booleans = (
-    #         predictions_df.loc[:, :, :] > cnn_score_threshold
-    #     )  # find rows above threshold
-    #     indices = (
-    #         booleans[booleans].dropna().index
-    #     )  # choose just those rows. dropna required to drop the others
-    #     recorders = indices.get_level_values(
-    #         0
-    #     )  # get the list of recorders out of the multi-index
-    #     indices = indices.droplevel(level=0)  # drop the recorders
-
-    #     dataframe = pd.DataFrame(
-    #         data=recorders, index=indices
-    #     )  # df with index (start_time, end_time)
-    #     dataframe = (
-    #         dataframe.sort_index()
-    #     )  # done to ensure speed-up and not get performancewarning
-    #     recorders_list = []
-    #     for idx in dataframe.index.unique():
-    #         recorders_in_time = dataframe.loc[idx].values
-    #         recorders_in_time = [
-    #             i[0] for i in recorders_in_time
-    #         ]  # to get recorder path string out of numpy array
-    #         recorders_list.append(recorders_in_time)
-    #     return dict(zip(dataframe.index.unique(), recorders_list))
+        return nearby_files_dict
 
 
 def calc_speed_of_sound(temperature=20):

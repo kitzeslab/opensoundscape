@@ -10,12 +10,12 @@ def aru_files():
 
 
 @pytest.fixture()
-def aru_coords_csv():
+def file_coords_csv():
     return "tests/csvs/aru_coords.csv"
 
 
 @pytest.fixture()
-def predictions():
+def predictions_csv():
     return "tests/csvs/localizer_preds.csv"
 
 
@@ -151,30 +151,23 @@ def test_soundfinder_nopseudo():
     )
 
 
-def test_localizer(aru_coords_csv, predictions, aru_files):
-    aru_coords = pd.read_csv(aru_coords_csv, index_col=0)
-    print(aru_coords)
-    preds = pd.read_csv(predictions, index_col=[0, 1, 2])
-    files = aru_files
-    loca = localization.Localizer(
-        files=files,
-        predictions=preds,
-        aru_coords=aru_coords,
-        sample_rate=32000,
-        min_number_of_receivers=2,
-        max_distance_between_receivers=100,
-        thresholds={"test_species": 0},
-        localization_algorithm="soundfinder",
+def test_localizer(file_coords_csv, predictions_csv):
+    file_coords = pd.read_csv(file_coords_csv, index_col=0)
+    preds = pd.read_csv(predictions_csv, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    localized_events, _ = array.localize_detections(
+        detections=preds,
+        min_n_receivers=4,
+        max_receiver_dist=100,
+        localization_algorithm="gillette",
     )
-    loca.localize()
-
+    # the audio files were generated according to the "true" event position:
     true_x = 10
     true_y = 15
-    assert (
-        abs(
-            np.mean(
-                [i[0] for i in loca.localized_events["predicted_location"]] - true_x
-            )
-        )
-        < 1
-    )
+    assert len(localized_events) == 5
+
+    for event in localized_events:
+        from math import isclose
+
+        assert isclose(event.position_estimate[0], true_x, abs_tol=2)
+        assert isclose(event.position_estimate[1], true_y, abs_tol=2)
