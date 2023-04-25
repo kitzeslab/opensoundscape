@@ -304,9 +304,6 @@ class SynchronizedRecorderArray:
                 using the time delays and spatial positions of each receiver with event.estimate_location()
             - if the residual distance rms value is below a cutoff threshold, consider the event
                 to be successfully localized
-
-    [1] M. D. Gillette and H. F. Silverman, "A Linear Closed-Form Algorithm for Source Localization
-        From Time-Differences of Arrival," IEEE Signal Processing Letters
     """
 
     def __init__(
@@ -418,7 +415,7 @@ class SynchronizedRecorderArray:
                 time delays of a set of detections. [Default: 'gillette']
                 Options:
                     - 'gillette': linear closed-form algorithm of Gillette and Silverman 2008 [1]
-                    - 'soundfinder': source? citation? #TODO
+                    - 'soundfinder': GPS position algorithm of Wilson et al. 2014 [2]
             cc_threshold : float, optional
                 Threshold for cross correlation: if the max value of the cross correlation is below
                 this value, the corresponding time delay is discarded and not used during localization.
@@ -441,6 +438,13 @@ class SynchronizedRecorderArray:
         Returns:
             2 lists: list of localized events, list of un-localized events
             events are of class SpatialEvent
+
+        [1] M. D. Gillette and H. F. Silverman, "A Linear Closed-Form Algorithm for Source Localization
+        From Time-Differences of Arrival," IEEE Signal Processing Letters
+
+        [2]  Wilson, David R., Matthew Battiston, John Brzustowski, and Daniel J. Mennill.
+        “Sound Finder: A New Software Approach for Localizing Animals Recorded with a Microphone Array.”
+        Bioacoustics 23, no. 2 (May 4, 2014): 99–112. https://doi.org/10.1080/09524622.2013.827588.
         """
 
         # check that all files have coordinates in file_coords
@@ -755,10 +759,12 @@ def soundfinder_localize(
     Use the soundfinder algorithm to perform TDOA localization on a sound event
     Localize a sound event given relative arrival times at multiple receivers.
     This function implements a localization algorithm from the
-    equations described in the class handout ("Global Positioning
-    Systems"). Localization can be performed in a global coordinate
+    equations described in [1]. Localization can be performed in a global coordinate
     system in meters (i.e., UTM), or relative to recorder positions
     in meters.
+
+    This implementation follows [2] with corresponding variable names.
+
     Args:
         receiver_positions: a list of [x,y,z] positions for each receiver
           Positions should be in meters, e.g., the UTM coordinate system.
@@ -776,13 +782,22 @@ def soundfinder_localize(
           in initial tests, pseudorange error appears to perform better.)
     Returns:
         The solution (x,y,z) in meters.
+
+    [1]  Wilson, David R., Matthew Battiston, John Brzustowski, and Daniel J. Mennill.
+    “Sound Finder: A New Software Approach for Localizing Animals Recorded with a Microphone Array.”
+    Bioacoustics 23, no. 2 (May 4, 2014): 99–112. https://doi.org/10.1080/09524622.2013.827588.
+
+    [2] Global Positioning Systems handout, 2002
+    http://web.archive.org/web/20110719232148/http://www.macalester.edu/~halverson/math36/GPS.pdf
     """
+
     # make sure our inputs follow consistent format
     receiver_positions = np.array(receiver_positions).astype("float64")
     arrival_times = np.array(arrival_times).astype("float64")
 
     # The number of dimensions in which to perform localization
     dim = receiver_positions.shape[1]
+    assert dim in [2, 3], "localization only works in 2 or 3 dimensions"
 
     ##### Shift coordinate system to center receivers around origin #####
     if center:
@@ -790,17 +805,19 @@ def soundfinder_localize(
         receiver_positions = np.array([p - p_mean for p in receiver_positions])
 
     ##### Compute B, a, and e #####
+    # these correspond to [2] and are defined directly after equation 6
+
     # Find the pseudorange, rho, for each recorder
     # pseudorange (minus a constant) ~= distances from source to each receiver
     rho = np.array([arrival_times * (-1 * speed_of_sound)]).T
 
-    # Concatenate the pseudorange column to form matrix B
+    # Concatenate the pseudorange column with x,y,z position to form matrix B
     B = np.concatenate((receiver_positions, rho), axis=1)
 
-    # Vector of ones
+    # e is a vector of ones
     e = np.ones(receiver_positions.shape[0])
 
-    # The vector of squared Lorentz norms
+    # a is a 1/2 times a vector of squared Lorentz norms
     a = 0.5 * np.apply_along_axis(lorentz_ip, axis=1, arr=B)
 
     # choose between two algorithms to invert the matrix
@@ -843,6 +860,7 @@ def soundfinder_localize(
             #     Bplus_a = np.linalg.lstsq(B, a, rcond=None)[0]
 
         else:  # inversion of the matrix succeeded
+            # B+ is inverse(B_transpose*B) * B_transpose
             # Compute B+ * a and B+ * e
             Bplus = np.matmul(inverted, B.T)
             Bplus_a = np.matmul(Bplus, a)
