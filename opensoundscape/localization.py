@@ -1138,7 +1138,8 @@ def gillette_localize(receiver_positions, arrival_times, speed_of_sound=SPEED_OF
     # check that these delays are with reference to one receiver (the reference receiver).
     # We do this by checking that one of the arrival times is within float precision
     # of 0 (i.e. arrival at the reference)
-    if not np.isclose(np.min(arrival_times), 0):
+    print(arrival_times)
+    if not np.isclose(np.min(np.abs(arrival_times)), 0):
         raise ValueError(
             "Arrival times must be relative to a reference receiver. Therefore the minimum arrival"
             " time must be 0 (corresponding to arrival at the reference receiver) None of your "
