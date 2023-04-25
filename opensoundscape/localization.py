@@ -222,27 +222,52 @@ class Localizer:
         """
         if self.detections is None:
             raise UserWarning(
-                "No detections exist. Please initialize the Localizer with detections"
+                "No detections exist. Please initialize the Localizer with a dataframe of detections"
             )
         all_sp_detections = []
 
+        detections = self.detections.copy()
+
         # iterate over each species
-        for species in self.thresholds.keys():
-            df = self.detections.loc[:, [species]]  # must be a dataframe
-            detections = Localizer._get_detections(
-                df, cnn_score_threshold=self.thresholds[species]
-            )
-            grouped_detections = Localizer._group_detections(
-                detections,
+        for species in detections.columns:
+            df = detections.loc[:, [species]]  # dataframe of just 1 sp
+            df = df[df[species]]  # just rows with a detection
+            # get the recorder corresponding to each row
+            recorders = df.index.get_level_values(0)
+            # get the time window corresponding to each row
+            time_windows = df.index.droplevel(0)
+
+            # make a temp_df of detections with index (start, end)
+            # and 1 column - recorder.
+            temp_df = pd.DataFrame(data=recorders, index=time_windows)
+            temp_df = temp_df.sort_index()  # done to avoid pandas performancewarning
+
+            # start making recorders list for each time-window
+            # this will be a list of lists. Where each list is the recorders with detections in that time-window
+            # e.g. [[file1, file2, file5], [file1, file2, file4, file5],....]
+            recorders_list = []
+            time_windows = temp_df.index.unique()  # All the time-windows
+            for tw in time_windows:  # loop through each possible time-window
+                recorders_with_detections = temp_df.loc[
+                    tw
+                ].values  # np arrays of all recorders with detections in that time-window
+                recorders_with_detections = [
+                    i[0] for i in recorders_with_detections
+                ]  # Hacky. Done to extract filepath strings from np arrays
+                recorders_list.append(recorders_with_detections)
+            detections_dict = dict(zip(time_windows, recorders_list))
+
+            grouped = Localizer._group_detections(
+                detections_dict,
                 self.aru_coords,
                 self.min_number_of_receivers,
                 self.max_distance_between_receivers,
             )
-            grouped_detections["species"] = species
-            all_sp_detections.append(grouped_detections)
-        detections_df = pd.concat(all_sp_detections)
-        self.grouped_detections = detections_df
-        return detections_df
+            grouped["species"] = species
+            all_sp_detections.append(grouped)
+        grouped_detections = pd.concat(all_sp_detections)
+        self.grouped_detections = grouped_detections
+        return grouped_detections
 
     def cross_correlate(self):
         """
@@ -465,53 +490,16 @@ class Localizer:
 
         return ccs, time_difference
 
-    def _get_detections(predictions_df, cnn_score_threshold):
-        """
-        Takes the predictions_df of CNN scores *FOR A SINGLE SPECIES*, chooses only detections > cnn_score_threshold
-        and outputs a dictionary of times at which events were detected, and the ARU files they were detected in.
-        args:
-            predictions_array: a dataframe with multi-index of (file, start_time, end_time) with a column that is values for model predictions
-            *FOR A SINGLE SPECIES*
-            cnn_score_threshold: the minimum CNN score needed for a time-window to be considered a detection.
-        returns:
-            A dictionary of predictions, with key (start_time, end_time), and value list of files with detection triggered
-            e.g. {(0.0,2.0): [ARU_0.mp3. ARU_1.mp3]}
-        """
-        # get the detections from the predictions
-        # Threshold the scores to above cnn_score_threshold
-        booleans = (
-            predictions_df.loc[:, :, :] > cnn_score_threshold
-        )  # find rows above threshold
-        indices = (
-            booleans[booleans].dropna().index
-        )  # choose just those rows. dropna required to drop the others
-        recorders = indices.get_level_values(
-            0
-        )  # get the list of recorders out of the multi-index
-        indices = indices.droplevel(level=0)  # drop the recorders
-
-        dataframe = pd.DataFrame(
-            data=recorders, index=indices
-        )  # df with index (start_time, end_time)
-        dataframe = (
-            dataframe.sort_index()
-        )  # done to ensure speed-up and not get performancewarning
-        recorders_list = []
-        for idx in dataframe.index.unique():
-            recorders_in_time = dataframe.loc[idx].values
-            recorders_in_time = [
-                i[0] for i in recorders_in_time
-            ]  # to get recorder path string out of numpy array
-            recorders_list.append(recorders_in_time)
-        return dict(zip(dataframe.index.unique(), recorders_list))
-
     def _group_detections(
-        detections, aru_coords, min_number_of_receivers, max_distance_between_receivers
+        detections_dict,
+        aru_coords,
+        min_number_of_receivers,
+        max_distance_between_receivers,
     ):
         """
         Takes the detections dictionary and groups detections that are within max_distance_between_receivers of each other.
         args:
-            detections: a dictionary of detections, with key (start_time, end_time), and value list of files with detection triggered
+            detections_dict: a dictionary of detections, with key (start_time, end_time), and value list of files with detection triggered
             aru_coords: a dictionary of aru coordinates, with key aru file path, and value (x,y) coordinates
             max_distance_between_receivers: the maximum distance between recorders to consider a detection as a single event
         returns:
@@ -541,13 +529,15 @@ class Localizer:
         reference_files = []
         other_files = []
 
-        for time_segment in detections.keys():  # iterate through all the time-segments
-            for file in detections[
+        for (
+            time_segment
+        ) in detections_dict.keys():  # iterate through all the time-segments
+            for file in detections_dict[
                 time_segment
             ]:  # iterate through each file with a call detected in this time-segment
                 reference = file  # set this file to be reference
                 others = [
-                    f for f in detections[time_segment] if f != reference
+                    f for f in detections_dict[time_segment] if f != reference
                 ]  # All the other receivers
                 others_in_distance = [
                     aru for aru in others if aru in recorders_in_distance[reference]
