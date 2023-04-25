@@ -828,9 +828,7 @@ def soundfinder_localize(
             return u1[0:-1]  # drop the final value, which is the error
 
 
-def gillette_localize(
-    receiver_positions, arrival_times, reference_receiver=0, speed_of_sound=343
-):
+def gillette_localize(receiver_positions, arrival_times, speed_of_sound=343):
     """
     Uses the Gillette and Silverman (2008) localization algorithm to localize a sound event from a set of TDOAs.
     Args:
@@ -838,15 +836,14 @@ def gillette_localize(
             Positions should be in meters, e.g., the UTM coordinate system.
         arrival_times: a list of TDOA times (arrival times) for each receiver
             The times should be in seconds.
-        reference_receiver: the index of the reference receiver (the receiver against which all other arrival times are measured)
-            default is 0 (the first receiver)
         speed_of_sound: speed of sound in m/s
     Returns:
         coords: a tuple of (x,y,z) coordinates of the sound source
     """
 
-    # check that these delays are with reference to one receiver (the reference receiver). If not, raise an error
-    if np.min(arrival_times) != 0:
+    # check that these delays are with reference to one receiver (the reference receiver).
+    # We do this by checking that one of the arrival times is within float precision of 0 (i.e. arrival at the reference)
+    if not np.isclose(np.min(arrival_times), 0):
         raise ValueError(
             "Arrival times must be relative to a reference receiver. Therefore the minimum arrival time must be 0 (corresponding to arrival at the reference receiver) None of your TDOAs are zero. Please check your arrival_times."
         )
