@@ -197,7 +197,7 @@ class SpatialEvent:
 
         # bandpass once now to avoid repeating operation for each receiver
         if bandpass_range is not None:
-            audio1 = audio1.bandpass(bandpass_range[0], bandpass_range[1])
+            audio1 = audio1.bandpass(bandpass_range[0], bandpass_range[1], order=9)
 
         # estimate time difference of arrival (tdoa) for each file relative to the first
         # skip the first because we don't need to cross correlate a file with itself
