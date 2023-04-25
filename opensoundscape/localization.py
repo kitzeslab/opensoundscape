@@ -906,12 +906,13 @@ def soundfinder_localize(
 
     # Select and return quadratic solution
     if pseudo:
-        # Return the solution with the lower error in pseudorange
-        # (Error in pseudorange is the final value of the position/solution vector)
+        # Return the solution with the lower estimate of b, error in pseudorange
+        # drop the estimate of b (error in pseudorange) from the return values,
+        # returning just the position vector
         if abs(u0[-1]) <= abs(u1[-1]):
-            return u0[0:-1]  # drop the final value, which is the error
+            return u0[0:-1]
         else:
-            return u1[0:-1]  # drop the final value, which is the error
+            return u1[0:-1]
 
     else:
         # use the sum of squares discrepancy to choose the solution
@@ -923,10 +924,12 @@ def soundfinder_localize(
         s1 = float(np.sum((np.matmul(B, u1) - np.add(a, lamb[1] * e)) ** 2))
 
         # Return the solution with lower sum of squares discrepancy
+        # drop the final value, which is the estimate of b, error in the pseudorange,
+        # returning just the position vector
         if s0 < s1:
-            return u0[0:-1]  # drop the final value, which is the error
+            return u0[0:-1]
         else:
-            return u1[0:-1]  # drop the final value, which is the error
+            return u1[0:-1]
 
 
 def gillette_localize(receiver_positions, arrival_times, speed_of_sound=SPEED_OF_SOUND):
@@ -996,7 +999,7 @@ def gillette_localize(receiver_positions, arrival_times, speed_of_sound=SPEED_OF
 
 def calculate_tdoa_residuals(
     receiver_positions, tdoas, position_estimate, speed_of_sound
-):  # TODO rewrite tests after refactoring
+):
     """
     Calculate the residual distances of the TDOA localization algorithm
 
