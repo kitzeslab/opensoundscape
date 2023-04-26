@@ -1,4 +1,4 @@
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 from . import annotations
 from . import audio
@@ -8,6 +8,7 @@ from . import utils
 from . import localization
 from . import metrics
 from . import ribbit
+from . import sample
 from . import signal_processing
 from . import spectrogram
 from . import taxa
