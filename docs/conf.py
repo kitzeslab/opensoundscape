@@ -101,6 +101,7 @@ autodoc_mock_imports = [
     "deprecated",
     "skimage",
     "wandb",
+    "pytorch_grad_cam",
 ]
 
 master_doc = "index"
