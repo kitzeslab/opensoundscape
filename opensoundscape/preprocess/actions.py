@@ -239,7 +239,7 @@ class SpectrogramToTensor(BaseAction):
     ):
         super(SpectrogramToTensor, self).__init__()
         self.params["colormap"] = colormap
-        self.params['invert'] = invert
+        self.params["invert"] = invert
 
     def go(self, sample):
         """converts sample.data from Spectrogram to Tensor"""
