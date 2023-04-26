@@ -225,9 +225,23 @@ def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
 
 
 class SpectrogramToTensor(BaseAction):
-    """Action to create Tesnsor of desired shape from Spectrogram"""
+    """Action to create Tesnsor of desired shape from Spectrogram
 
-    def go(self, sample, **kwargs):
+    calls .to_image on sample.data, which should be type Spectrogram
+
+    exposes `invert` argument in self.params
+    """
+
+    def __init__(
+        self,
+        colormap=None,
+        invert=False,
+    ):
+        super(SpectrogramToTensor, self).__init__()
+        self.params["colormap"] = colormap
+        self.params['invert'] = invert
+
+    def go(self, sample):
         """converts sample.data from Spectrogram to Tensor"""
         # sample.data must be Spectrogram object
         # sample should have attribute target_shape [h,w,channels]
@@ -235,6 +249,8 @@ class SpectrogramToTensor(BaseAction):
             shape=sample.target_shape[0:2],
             channels=sample.target_shape[2],
             return_type="torch",
+            colormap=self.params["colormap"],
+            invert=self.params["invert"],
         )
 
 
