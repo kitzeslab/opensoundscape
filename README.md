@@ -12,7 +12,7 @@ OpenSoundscape is currently in active development. If you find a bug, please sub
 
 #### Suggested Citation
 ```
-Lapp, Rhinehart, Freeland-Haynes, Khilnani, Syunkova, and Kitzes, 2023. "OpenSoundscape v0.8.0".
+Lapp, Rhinehart, Freeland-Haynes, Khilnani, Syunkova, and Kitzes, 2023. "OpenSoundscape v0.9.0".
 ```
 
 # Installation
