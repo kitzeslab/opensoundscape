@@ -61,6 +61,14 @@ class AudioSample(Sample):
             f"end_time={self.end_time}, labels={self.labels})"
         )
 
+    @property
+    def categorical_labels(self):
+        """list of indices with value==1 in self.labels"""
+        if self.labels is None:
+            return None
+        else:
+            return list(self.labels[self.labels == 1].index)
+
     @classmethod
     def from_series(cls, labels_series):
         """initialize AudioSample from a pandas Series (optionally containing labels)
