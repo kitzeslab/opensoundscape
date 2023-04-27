@@ -66,7 +66,7 @@ Safe Dataset
 
 Sample
 ^^^^^^
-.. automodule:: opensoundscape.ml.sample
+.. automodule:: opensoundscape.sample
   :members:
 
 Sampling
