@@ -41,6 +41,7 @@ from opensoundscape.metrics import (
 )
 from opensoundscape.sample import collate_samples
 from opensoundscape.utils import identity
+from opensoundscape.logging import wandb_table
 
 from opensoundscape.ml.cam import CAM
 import pytorch_grad_cam
@@ -566,19 +567,19 @@ class CNN(BaseModule):
             # log tables of preprocessed samples
             wandb_session.log(
                 {
-                    "Samples / training samples": opensoundscape.wandb.wandb_table(
+                    "Samples / training samples": wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=False
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
-                    "Samples / training samples no aug": opensoundscape.wandb.wandb_table(
+                    "Samples / training samples no aug": wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=True
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
-                    "Samples / validation samples": opensoundscape.wandb.wandb_table(
+                    "Samples / validation samples": wandb_table(
                         AudioFileDataset(
                             validation_df, self.preprocessor, bypass_augmentations=True
                         ),
@@ -1089,7 +1090,7 @@ class CNN(BaseModule):
             # Log a table of preprocessed samples to wandb
             wandb_session.log(
                 {
-                    "Samples / Preprocessed samples": opensoundscape.wandb.wandb_table(
+                    "Samples / Preprocessed samples": wandb_table(
                         dataloader.dataset.dataset,
                         self.wandb_logging["n_preview_samples"],
                     )
@@ -1163,13 +1164,14 @@ class CNN(BaseModule):
                 top_samples = score_df.nlargest(
                     n=self.wandb_logging["n_top_samples"], columns=[c]
                 )
+                # note: the "labels" of these samples are actually prediction scores
                 dataset = AudioFileDataset(
                     samples=top_samples,
                     preprocessor=self.preprocessor,
                     bypass_augmentations=True,
                 )
-                table = opensoundscape.wandb.wandb_table(
-                    dataset=dataset, classes_to_extract=[c]
+                table = wandb_table(
+                    dataset=dataset, classes_to_extract=[c], drop_labels=True
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
 

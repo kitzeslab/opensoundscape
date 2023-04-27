@@ -34,9 +34,9 @@ CNN Architectures
 .. automodule:: opensoundscape.ml.cnn_architectures
   :members:
 
-WandB (Weights and Biases)
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. automodule:: opensoundscape.wandb
+Logging with WandB (Weights and Biases)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: opensoundscape.logging
   :members:
 
 Data Selection

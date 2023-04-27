@@ -15,7 +15,7 @@ from . import taxa
 from . import ml
 from . import preprocess
 from . import resources
-from . import wandb
+from . import logging
 
 # expose some modules at the top level
 from .ml import cnn
