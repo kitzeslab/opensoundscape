@@ -1,0 +1,6 @@
+,x,y
+tests/audio/aru_1.wav,0,50
+tests/audio/aru_2.wav,50,0
+tests/audio/aru_3.wav,20,30
+tests/audio/aru_4.wav,30,20
+tests/audio/aru_5.wav,-10,-15

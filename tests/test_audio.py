@@ -122,6 +122,27 @@ def stereo_wav_str():
     return "tests/audio/stereo.wav"
 
 
+@pytest.fixture()
+def silent_wav_str():
+    return "tests/audio/silence_10s.mp3"
+
+
+@pytest.fixture()
+def convolved_wav_str(out_path, request):
+    path = Path(f"{out_path}/convolved.wav")
+
+    def fin():
+        path.unlink()
+
+    request.addfinalizer(fin)
+    return path
+
+
+@pytest.fixture()
+def veryshort_audio(veryshort_wav_str):
+    return Audio.from_file(veryshort_wav_str)
+
+
 def test_init_with_list():
     a = Audio([0] * 10, sample_rate=10)
     assert len(a.samples) == 10
@@ -356,11 +377,52 @@ def test_trim_past_end_of_clip(silence_10s_mp3_str):
 
 
 def test_resample_veryshort_wav(veryshort_wav_str):
+    """Note: default resample type changed from kaiser_Fast to soxr_hq
+
+    this change mirrors default change in librosa, and means we need to
+    require librosa>=0.10.0 or add soxr as a dependency. See issue:
+    https://github.com/kitzeslab/opensoundscape/issues/674
+
+    I've chosen to add librosa>=0.10.0 as a dependency.
+    """
     audio = Audio.from_file(veryshort_wav_str)
     dur = audio.duration
     resampled_audio = audio.resample(22050)
-    assert resampled_audio.duration == dur
+    assert np.isclose(resampled_audio.duration, dur, 1e-6)
     assert resampled_audio.samples.shape == (3133,)
+    assert resampled_audio.sample_rate == 22050
+
+
+def test_spawn(veryshort_wav_audio):
+    """spawn method creates copy of Audio object with any kwarg fields updated"""
+    a = veryshort_wav_audio
+    a2 = a._spawn()
+    assert np.all(a2.samples == a.samples)
+    assert a2.sample_rate == a.sample_rate
+
+    # provide an updated value for the new object
+    a3 = a._spawn(sample_rate=20)
+    assert a3.sample_rate == 20
+
+    with pytest.raises(AssertionError):
+        # should not be able to pass non __slot__ kwargs
+        a._spawn(b=1)
+
+
+def test_methods_retain_metadata(metadata_wav_str):
+    """resolved issue 679 by implementing ._spawn
+    This should avoid future issues with improperly calling
+    Audio.__init__ ie if the arguments to __init__ change
+    """
+    audio = Audio.from_file(metadata_wav_str)
+    a2 = audio.resample(22050)
+    assert audio.metadata == a2.metadata
+
+    a2 = audio.apply_gain(-2)
+    assert audio.metadata == a2.metadata
+
+    a2 = audio.normalize()
+    assert audio.metadata == a2.metadata
 
 
 def test_resample_mp3_nonstandard_sr(silence_10s_mp3_str):
@@ -625,3 +687,41 @@ def test_extend(veryshort_wav_audio):
     assert isclose(a.metadata["duration"], 1.0, abs_tol=1e-5)
     # samples should be zero
     assert isclose(0.0, np.max(a.samples[-100:]), abs_tol=1e-7)
+
+
+def test_bandpass_filter(veryshort_audio):
+    bandpassed = audio.bandpass_filter(
+        veryshort_audio.samples, 1000, 2000, veryshort_audio.sample_rate
+    )
+    assert len(bandpassed) == len(veryshort_audio.samples)
+
+
+def test_clipping_detector(veryshort_audio):
+    assert audio.clipping_detector(veryshort_audio.samples) > -1
+
+
+def test_estimate_delay(veryshort_audio):
+    # shift signal backward
+    sig = audio.concat(
+        [Audio.silence(0.1, veryshort_audio.sample_rate), veryshort_audio]
+    )
+
+    assert isclose(audio.estimate_delay(sig, veryshort_audio), 0.1, abs_tol=1e-6)
+
+
+def test_estimate_delay_with_bandpass(veryshort_audio):
+    # shift signal backward
+    sig = audio.concat(
+        [Audio.silence(0.1, veryshort_audio.sample_rate), veryshort_audio]
+    )
+    dly = audio.estimate_delay(
+        sig, veryshort_audio, bandpass_range=[1000, 3000], bandpass_order=5
+    )
+    assert isclose(dly, 0.1, abs_tol=1e-6)
+
+
+def test_estimate_delay_return_cc_max(veryshort_audio):
+    a = veryshort_audio
+    t, ccmax = audio.estimate_delay(a, a, return_cc_max=True, cc_filter="cc")
+    assert isclose(ccmax, sum(a.samples * a.samples), abs_tol=1e-5)
+    assert isclose(t, 0, abs_tol=1e-6)

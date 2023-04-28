@@ -22,17 +22,23 @@ import warnings
 from datetime import timedelta, datetime
 from pathlib import Path
 import json
+import io
+from urllib.request import urlopen
 
 import numpy as np
 from scipy.fftpack import fft as scipyfft
 from scipy.fft import fftfreq
 import librosa
 import soundfile
+import IPython.display
 
 import opensoundscape
-from opensoundscape.helpers import generate_clip_times_df, load_metadata
-from opensoundscape.audiomoth import parse_audiomoth_metadata
-from opensoundscape.audio_tools import bandpass_filter
+from opensoundscape.utils import generate_clip_times_df, load_metadata
+from opensoundscape.aru import parse_audiomoth_metadata
+from opensoundscape.signal_processing import tdoa
+from scipy.signal import butter, sosfiltfilt
+
+DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
 
 
 class OpsoLoadAudioInputError(Exception):
@@ -57,7 +63,7 @@ class Audio:
     Args:
         samples (np.array):     The audio samples
         sample_rate (integer):  The sampling rate for the audio samples
-        resample_type (str):    The resampling method to use [default: "kaiser_fast"]
+        resample_type (str):    The resampling method to use [default: "soxr_hq"]
 
     Returns:
         An initialized `Audio` object
@@ -66,7 +72,7 @@ class Audio:
     __slots__ = ("samples", "sample_rate", "resample_type", "metadata")
 
     def __init__(
-        self, samples, sample_rate, resample_type="kaiser_fast", metadata=None
+        self, samples, sample_rate, resample_type=DEFAULT_RESAMPLE_TYPE, metadata=None
     ):
         self.samples = samples
         self.sample_rate = sample_rate
@@ -97,6 +103,22 @@ class Audio:
 
         if samples_error:
             raise ValueError(f"Audio initialization failed with:\n{samples_error}")
+
+    def _spawn(self, **kwargs):
+        """return copy of object, replacing any desired fields from __slots__
+
+        pass any desired updates as kwargs
+        """
+        assert np.all([k in self.__slots__ for k in kwargs.keys()]), (
+            "only pass members of Audio.__slots__ to _spawn as kwargs! "
+            f"slots: {self.__slots__}"
+        )
+        # load the current values from each __slots__ key
+        slots = {key: self.__getattribute__(key) for key in self.__slots__}
+        # update any user-specified values
+        slots.update(kwargs)
+        # create new instance of the class
+        return self.__class__(**slots)
 
     @classmethod
     def silence(cls, duration, sample_rate):
@@ -169,7 +191,7 @@ class Audio:
         cls,
         path,
         sample_rate=None,
-        resample_type="kaiser_fast",
+        resample_type=DEFAULT_RESAMPLE_TYPE,
         dtype=np.float32,
         load_metadata=True,
         offset=None,
@@ -198,7 +220,7 @@ class Audio:
             path (str, Path): path to an audio file
             sample_rate (int, None): resample audio with value and resample_type,
                 if None use source sample_rate (default: None)
-            resample_type: method used to resample_type (default: kaiser_fast)
+            resample_type: method used to resample_type (default: "soxr_hq")
             dtype: data type of samples returned [Default: np.float32]
             load_metadata (bool): if True, attempts to load metadata from the audio
                 file. If an exception occurs, self.metadata will be `None`.
@@ -335,7 +357,9 @@ class Audio:
         return cls(samples, sr, resample_type=resample_type, metadata=metadata)
 
     @classmethod
-    def from_bytesio(cls, bytesio, sample_rate=None, resample_type="kaiser_fast"):
+    def from_bytesio(
+        cls, bytesio, sample_rate=None, resample_type=DEFAULT_RESAMPLE_TYPE
+    ):
         """Read from bytesio object
 
         Read an Audio object from a BytesIO object. This is primarily used for
@@ -344,7 +368,7 @@ class Audio:
         Args:
             bytesio: Contents of WAV file as BytesIO
             sample_rate: The final sampling rate of Audio object [default: None]
-            resample_type: The librosa method to do resampling [default: "kaiser_fast"]
+            resample_type: The librosa method to do resampling [default: "soxr_hq"]
 
         Returns:
             An initialized Audio object
@@ -362,8 +386,63 @@ class Audio:
 
         return cls(samples, sample_rate, resample_type=resample_type)
 
+    @classmethod
+    def from_url(cls, url, sample_rate=None, resample_type="kaiser_fast"):
+        """Read audio file from URL
+
+        Download audio from a URL and create an Audio object
+
+        Note: averages channels of multi-channel object to create mono object
+
+        Args:
+            url: Location to download the file from
+            sample_rate: The final sampling rate of Audio object [default: None]
+                - if None, retains original sample rate
+            resample_type: The librosa method to do resampling [default: "kaiser_fast"]
+
+        Returns:
+            Audio object
+        """
+        samples, original_sample_rate = soundfile.read(io.BytesIO(urlopen(url).read()))
+        samples = samples.mean(1)  # sum to mono
+        if sample_rate is not None and sample_rate != original_sample_rate:
+            samples = librosa.resample(
+                samples,
+                orig_sr=original_sample_rate,
+                target_sr=sample_rate,
+                res_type=resample_type,
+            )
+        else:
+            sample_rate = original_sample_rate
+
+        return cls(samples, sample_rate, resample_type=resample_type)
+
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
+
+    def _to_ipdisplay_audio(self, normalize=False, autoplay=False):
+        """create interactive IPython display audio object"""
+        return IPython.display.Audio(
+            data=self.samples,
+            rate=self.sample_rate,
+            normalize=normalize,
+            autoplay=autoplay,
+        )
+
+    def _repr_html_(self):
+        """create interactive audio widget
+
+        This method is used by Jupyter Notebook if the object is returned from a cell.
+        It uses the IPython.display.Audio class to create an interactive Audio widget.
+
+        """
+        return self._to_ipdisplay_audio()._repr_html_()
+
+    def show_widget(self, normalize=False, autoplay=False):
+        """create and display IPython.display.Audio widget; see that class for docs"""
+        IPython.display.display(
+            self._to_ipdisplay_audio(normalize=normalize, autoplay=autoplay)
+        )
 
     def resample(self, sample_rate, resample_type=None):
         """Resample Audio object
@@ -386,7 +465,11 @@ class Audio:
             res_type=resample_type,
         )
 
-        return Audio(samples_resampled, sample_rate, resample_type=resample_type)
+        return self._spawn(
+            samples=samples_resampled,
+            sample_rate=sample_rate,
+            resample_type=resample_type,
+        )
 
     def trim(self, start_time, end_time):
         """Trim Audio object in time
@@ -416,10 +499,8 @@ class Audio:
             if "duration" in metadata:
                 metadata["duration"] = len(samples_trimmed) / self.sample_rate
 
-        return Audio(
-            samples_trimmed,
-            self.sample_rate,
-            resample_type=self.resample_type,
+        return self._spawn(
+            samples=samples_trimmed,
             metadata=metadata,
         )
 
@@ -457,10 +538,8 @@ class Audio:
             if "duration" in metadata:
                 metadata["duration"] = len(samples_extended) / self.sample_rate
 
-        return Audio(
-            samples_extended,
-            self.sample_rate,
-            resample_type=self.resample_type,
+        return self._spawn(
+            samples=samples_extended,
             metadata=metadata,
         )
 
@@ -487,10 +566,8 @@ class Audio:
             if "duration" in metadata:
                 metadata["duration"] = len(samples_extended) / self.sample_rate
 
-        return Audio(
-            samples_extended,
-            self.sample_rate,
-            resample_type=self.resample_type,
+        return self._spawn(
+            samples=samples_extended,
             metadata=metadata,
         )
 
@@ -515,9 +592,7 @@ class Audio:
         filtered_samples = bandpass_filter(
             self.samples, low_f, high_f, self.sample_rate, order=order
         )
-        return Audio(
-            filtered_samples, self.sample_rate, resample_type=self.resample_type
-        )
+        return self._spawn(samples=filtered_samples)
 
     def spectrum(self):
         """Create frequency spectrum from an Audio object using fft
@@ -580,12 +655,7 @@ class Audio:
             # don't try to normalize 0-valued samples. Return original object
             abs_max = 1
 
-        return Audio(
-            self.samples / abs_max * peak_level,
-            self.sample_rate,
-            resample_type=self.resample_type,
-            metadata=self.metadata,
-        )
+        return self._spawn(samples=self.samples / abs_max * peak_level)
 
     def apply_gain(self, dB, clip_range=(-1, 1)):
         """apply dB (decibels) of gain to audio signal
@@ -605,12 +675,7 @@ class Audio:
         samples = self.samples * (10 ** (dB / 20))
         if clip_range is not None:
             samples = np.clip(samples, clip_range[0], clip_range[1])
-        return Audio(
-            samples,
-            self.sample_rate,
-            resample_type=self.resample_type,
-            metadata=self.metadata,
-        )
+        return self._spawn(samples=samples)
 
     def save(
         self,
@@ -820,7 +885,7 @@ class Audio:
 def load_channels_as_audio(
     path,
     sample_rate=None,
-    resample_type="kaiser_fast",
+    resample_type=DEFAULT_RESAMPLE_TYPE,
     dtype=np.float32,
     offset=0,
     duration=None,
@@ -911,10 +976,9 @@ def concat(audio_objects, sample_rate=None):
         sample_rate = audio_objects[0].sample_rate
 
     # concatenate sample arrays to form new Audio object
-    return Audio(
-        np.hstack([a.resample(sample_rate).samples for a in audio_objects]),
-        sample_rate,
-        resample_type=audio_objects[0].resample_type,
+    return audio_objects[0]._spawn(
+        samples=np.hstack([a.resample(sample_rate).samples for a in audio_objects]),
+        sample_rate=sample_rate,
     )
 
 
@@ -1041,7 +1105,68 @@ def mix(
     if clip_range is not None:
         mixdown = np.clip(mixdown, clip_range[0], clip_range[1])
 
-    return Audio(mixdown, sample_rate, resample_type=audio_objects[0].resample_type)
+    return audio_objects[0]._spawn(samples=mixdown, sample_rate=sample_rate)
+
+
+def estimate_delay(
+    audio,
+    reference_audio,
+    bandpass_range=None,
+    bandpass_order=9,
+    cc_filter="phat",
+    return_cc_max=False,
+    max_delay=None,
+    skip_ref_bandpass=False,
+):
+    """Use generalized cross correlation to estimate time delay between signals
+
+    optionally bandpass audio signals to a frequency range
+
+    For example, if audio is delayed by 1 second compared to reference_audio,
+    result is 1.0.
+
+    Args:
+        audio, reference_audio: audio objects
+        bandpass_range: if None, no bandpass filter is performed
+            otherwise [low_f,high_f]
+        bandpass_order: order of Butterworth bandpass filter
+        cc_filter: generalized cross correlation type, see
+            opensoundscape.signal_processing.gcc() [default: 'phat']
+        return_cc_max: if True, returns cross correlation max value as second argument
+            (see `opensoundscape.signal_processing.tdoa`)
+        max_delay: maximum time delay to consider, in seconds
+            (see `opensoundscape.signal_processing.tdoa`) [default: None] allows any delay
+        skip_ref_bandpass: [default: False] if True, skip the bandpass operation for the
+            reference_audio object, only apply it to `audio`
+    Returns:
+        estimated time delay (seconds) from reference_audio to audio
+
+        if return_cc_max is True, also returns a second value, the max of the cross correlation
+        of the two signals
+
+    Note: resamples reference_audio if its sample rate does not match audio
+    """
+    # sample rates must match
+    sr = audio.sample_rate
+    if reference_audio.sample_rate != sr:
+        reference_audio = reference_audio.resample(sr)
+
+    # apply audio-domain butterworth bandpass filter if desired
+    if bandpass_range is not None:
+        l, h = bandpass_range  # extract low and high frequencies
+        audio = audio.bandpass(l, h, bandpass_order)
+        if not skip_ref_bandpass:
+            reference_audio = reference_audio.bandpass(l, h, bandpass_order)
+
+    # estimate time delay from reference_audio to audio using generalized cross correlation
+    return tdoa(
+        audio.samples,
+        reference_audio.samples,
+        cc_filter=cc_filter,
+        sample_rate=sr,
+        return_max=return_cc_max,
+        max_delay=max_delay,
+    )
 
 
 def parse_opso_metadata(comment_string):
@@ -1200,3 +1325,53 @@ def _write_metadata(metadata, metadata_format, path):
         ]:
             if field in metadata and metadata[field] is not None:
                 s.__setattr__(field, metadata[field])
+
+
+def butter_bandpass(low_f, high_f, sample_rate, order=9):
+    """generate coefficients for bandpass_filter()
+
+    Args:
+        low_f: low frequency of butterworth bandpass filter
+        high_f: high frequency of butterworth bandpass filter
+        sample_rate: audio sample rate
+        order=9: order of butterworth filter
+
+    Returns:
+        set of coefficients used in sosfiltfilt()
+    """
+    nyq = 0.5 * sample_rate
+    low = low_f / nyq
+    high = high_f / nyq
+    sos = butter(order, [low, high], analog=False, btype="band", output="sos")
+    return sos
+
+
+def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
+    """perform a butterworth bandpass filter on a discrete time signal
+    using scipy.signal's butter and sosfiltfilt (phase-preserving filtering)
+
+    Args:
+        signal: discrete time signal (audio samples, list of float)
+        low_f: -3db point (?) for highpass filter (Hz)
+        high_f: -3db point (?) for highpass filter (Hz)
+        sample_rate: samples per second (Hz)
+        order: higher values -> steeper dropoff [default: 9]
+
+    Returns:
+        filtered time signal
+    """
+    sos = butter_bandpass(low_f, high_f, sample_rate, order=order)
+    return sosfiltfilt(sos, signal)
+
+
+def clipping_detector(samples, threshold=0.6):
+    """count the number of samples above a threshold value
+
+    Args:
+        samples: a time series of float values
+        threshold=0.6: minimum value of sample to count as clipping
+
+    Returns:
+        number of samples exceeding threshold
+    """
+    return len(list(filter(lambda x: x > threshold, samples)))

@@ -1,52 +1,42 @@
-Annotations
-^^^^^^^^^^^
-.. automodule:: opensoundscape.annotations
- :members:
-
-Audio
+ Audio
 ^^^^^
 .. automodule:: opensoundscape.audio
   :members:
 
 
-AudioMoth
-^^^^^^^^^
-.. automodule:: opensoundscape.audiomoth
- :members:
-
-Audio Tools
-^^^^^^^^^^^
- .. automodule:: opensoundscape.audio_tools
-    :members:
-
 Spectrogram
 ^^^^^^^^^^^
 .. automodule:: opensoundscape.spectrogram
  :members:
-
+ 
 CNN
 ^^^
-.. automodule:: opensoundscape.torch.models.cnn
+.. automodule:: opensoundscape.ml.cnn
   :members:
 
-torch.models.utils
-^^^^^^^^^^^^^^^^^^
-.. automodule:: opensoundscape.torch.models.utils
+Annotations
+^^^^^^^^^^^
+.. automodule:: opensoundscape.annotations
+ :members:
+
+ARU
+^^^
+.. automodule:: opensoundscape.aru
+ :members:
+ 
+Machine Learning utils
+^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: opensoundscape.ml.utils
   :members:
 
 CNN Architectures
 ^^^^^^^^^^^^^^^^^
-.. automodule:: opensoundscape.torch.architectures.cnn_architectures
+.. automodule:: opensoundscape.ml.cnn_architectures
   :members:
 
-torch.architectures.utils
-^^^^^^^^^^^^^^^^^^^^^^^^^
-.. automodule:: opensoundscape.torch.architectures.utils
-  :members:
-
-WandB (Weights and Biases)
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. automodule:: opensoundscape.wandb
+Logging with WandB (Weights and Biases)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: opensoundscape.logging
   :members:
 
 Data Selection
@@ -56,27 +46,32 @@ Data Selection
 
 Datasets
 ^^^^^^^^
-.. automodule:: opensoundscape.torch.datasets
+.. automodule:: opensoundscape.ml.datasets
   :members:
 
-GradCam
-^^^^^^^
-.. automodule:: opensoundscape.torch.grad_cam
+CAM (Class Activation Maps)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: opensoundscape.ml.cam
   :members:
 
 Loss
 ^^^^
-.. automodule:: opensoundscape.torch.loss
+.. automodule:: opensoundscape.ml.loss
   :members:
 
 Safe Dataset
 ^^^^^^^^^^^^
-.. automodule:: opensoundscape.torch.safe_dataset
+.. automodule:: opensoundscape.ml.safe_dataset
+  :members:
+
+Sample
+^^^^^^
+.. automodule:: opensoundscape.sample
   :members:
 
 Sampling
 ^^^^^^^^
-.. automodule:: opensoundscape.torch.sampling
+.. automodule:: opensoundscape.ml.sampling
   :members:
 
 Metrics
@@ -129,7 +124,7 @@ Localization
 .. automodule:: opensoundscape.localization
    :members:
 
-helpers
-^^^^^^^
-.. automodule:: opensoundscape.helpers
+utils
+^^^^^
+.. automodule:: opensoundscape.utils
    :members:

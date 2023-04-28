@@ -2,8 +2,8 @@ import pytest
 import pandas as pd
 import numpy as np
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
-from opensoundscape.torch.datasets import AudioFileDataset
-from opensoundscape.torch.safe_dataset import SafeDataset
+from opensoundscape.ml.datasets import AudioFileDataset
+from opensoundscape.ml.safe_dataset import SafeDataset
 
 
 @pytest.fixture()
@@ -28,7 +28,7 @@ def test_safe_dataset_handles_short_file(dataset):
     sample = dataset[0]
 
     # skips first sample when it fails and loads next
-    assert np.array_equal(sample["y"].numpy(), [1, 0])
+    assert np.array_equal(sample.labels.values, [1, 0])
 
     # stores failed samples in ._invalid_indices
     assert len(dataset._invalid_indices) == 1

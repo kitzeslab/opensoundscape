@@ -49,9 +49,9 @@ We recommend installing OpenSoundscape in a package manager. We find that the ea
 You can now manage packages with `conda`.
 
 ## Install OpenSoundscape in virtual environment
-- Create a Python (3.7, 3.8, or 3.9) conda environment for opensoundscape: `conda create --name opensoundscape pip python=3.9`
+- Create a Python (3.8, or 3.9) conda environment for opensoundscape: `conda create --name opensoundscape pip python=3.9`
 - Activate the environment: `conda activate opensoundscape`
-- Install opensoundscape using pip: `pip install opensoundscape==0.8.0`
+- Install opensoundscape using pip: `pip install opensoundscape==0.9.0`
 
 If you see an error that says "No matching distribution found...", your
 best bet is to use these commands to download then install the package:
@@ -64,7 +64,7 @@ pip install .
 
 If you run into this error and you are on a Windows 10 machine:
 ```
-(opensoundscape_environment) username@computername:~$ pip install opensoundscape==0.8.0
+(opensoundscape_environment) username@computername:~$ pip install opensoundscape==0.9.0
 WARNING: Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f7603c5da90>: Failed to establish a new connection: [Errno -2] Name or service not known')': /simple/opensoundscape/
 ```
 You may be able to solve it by going to System Settings, searching for “Proxy Settings,” and beneath “Automatic proxy setup,” turning “Automatically detect settings” OFF. Restart your terminal for changes to take effect. Then activate the environment and install OpenSoundscape using pip.

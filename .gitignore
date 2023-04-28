@@ -8,3 +8,4 @@ doc/_build/
 *.DS_Store
 docs/tutorials/woodcock_labeled_data
 .vscode
+docs/tutorials/wandb

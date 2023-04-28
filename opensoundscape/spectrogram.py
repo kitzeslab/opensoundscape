@@ -15,7 +15,7 @@ from matplotlib.cm import get_cmap
 import matplotlib.colors
 
 from opensoundscape.audio import Audio
-from opensoundscape.helpers import min_max_scale, linear_scale
+from opensoundscape.utils import min_max_scale, linear_scale
 
 
 class Spectrogram:
@@ -743,7 +743,7 @@ class MelSpectrogram(Spectrogram):
         n_fft = int(linear_spec.spectrogram.shape[0] - 1) * 2
         # Construct mel filter bank
         filter_bank = librosa.filters.mel(
-            audio.sample_rate, n_fft, n_mels=n_mels, norm=norm, htk=htk
+            sr=audio.sample_rate, n_fft=n_fft, n_mels=n_mels, norm=norm, htk=htk
         )
         # normalize filter bank: rows should sum to 1 #TODO: is this correct?
         fb_constant = np.sum(filter_bank, 1).mean()

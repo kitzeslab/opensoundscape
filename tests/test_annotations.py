@@ -5,7 +5,7 @@ from opensoundscape.annotations import BoxedAnnotations
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from opensoundscape.helpers import generate_clip_times_df
+from opensoundscape.utils import generate_clip_times_df, GetDurationError
 
 
 @pytest.fixture()
@@ -20,7 +20,7 @@ def raven_file_empty():
 
 @pytest.fixture()
 def saved_raven_file(request):
-    path = Path("tests/raven_annots/saved_raven_file.txt")
+    path = Path("tests/raven_annots/audio_file.selections.txt")
 
     # remove this after tests are complete
     def fin():
@@ -31,9 +31,15 @@ def saved_raven_file(request):
 
 
 @pytest.fixture()
+def silence_10s_mp3_str():
+    return "tests/audio/silence_10s.mp3"
+
+
+@pytest.fixture()
 def boxed_annotations():
     df = pd.DataFrame(
         data={
+            "file": ["audio_file.wav"] * 3,
             "start_time": [0, 3, 4],
             "end_time": [1, 5, 5],
             "low_f": [0, 500, 1000],
@@ -41,30 +47,57 @@ def boxed_annotations():
             "annotation": ["a", "b", None],
         }
     )
-    return BoxedAnnotations(df, audio_file=None)
+    return BoxedAnnotations(df)
+
+
+@pytest.fixture()
+def boxed_annotations_zero_len():
+    df = pd.DataFrame(
+        data={
+            "file": ["audio_file.wav"] * 3,
+            "start_time": [0, 3, 4],
+            "end_time": [0, 3, 4],
+            "low_f": [0, 500, 1000],
+            "high_f": [100, 1200, 1500],
+            "annotation": ["a", "b", None],
+        }
+    )
+    return BoxedAnnotations(df)
 
 
 def test_load_raven_annotations(raven_file):
-    a = BoxedAnnotations.from_raven_file(raven_file, annotation_column="Species")
-    assert len(a.df) == 10
-    assert set(a.df["annotation"]) == {"WOTH", "EATO", "LOWA", np.nan}
+    ba = BoxedAnnotations.from_raven_files([raven_file])
+    assert len(ba.df) == 10
+    assert set(ba.df["annotation"]) == {"WOTH", "EATO", "LOWA", np.nan}
+
+    def isnan(x):
+        return x != x
+
+    assert isnan(ba.df["file"].values[0])
+
+
+def test_load_raven_annotations_w_audio(raven_file):
+    ba = BoxedAnnotations.from_raven_files([raven_file], ["audio_path"])
+    assert set(ba.df["annotation"]) == {"WOTH", "EATO", "LOWA", np.nan}
+    assert ba.df["file"].values[0] == "audio_path"
 
 
 def test_load_raven_no_annotation_column(raven_file):
-    a = BoxedAnnotations.from_raven_file(raven_file, annotation_column=None)
+    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column_idx=None)
     # we should now have a dataframe with a column "Species"
     assert len(a.df) == 10
     assert set(a.df["Species"]) == {"WOTH", "EATO", "LOWA", np.nan}
 
 
 def test_load_raven_annotations_empty(raven_file_empty):
-    a = BoxedAnnotations.from_raven_file(raven_file_empty, annotation_column="Species")
+    a = BoxedAnnotations.from_raven_files([raven_file_empty])
     assert len(a.df) == 0
 
 
-def test_to_raven_file(boxed_annotations, saved_raven_file):
+def test_to_raven_files(boxed_annotations, saved_raven_file):
+    """note: assumes raven file will be named audio_file.annotations.txt"""
     assert not saved_raven_file.exists()
-    boxed_annotations.to_raven_file(saved_raven_file)
+    boxed_annotations.to_raven_files(saved_raven_file.parent)
     assert saved_raven_file.exists()
 
 
@@ -73,7 +106,7 @@ def test_subset(boxed_annotations):
 
 
 def test_subset_to_nan(raven_file):
-    a = BoxedAnnotations.from_raven_file(raven_file, annotation_column="Species")
+    a = BoxedAnnotations.from_raven_files([raven_file])
     assert len(a.subset([np.nan]).df) == 1
 
 
@@ -125,6 +158,8 @@ def test_global_one_hot_labels(boxed_annotations):
 
 def test_one_hot_labels_like(boxed_annotations):
     clip_df = generate_clip_times_df(5, clip_duration=1.0, clip_overlap=0)
+    clip_df["file"] = "audio_file.wav"
+    clip_df = clip_df.set_index(["file", "start_time", "end_time"])
     labels = boxed_annotations.one_hot_labels_like(
         clip_df, class_subset=["a"], min_label_overlap=0.25
     )
@@ -133,6 +168,8 @@ def test_one_hot_labels_like(boxed_annotations):
 
 def test_one_hot_labels_like_overlap(boxed_annotations):
     clip_df = generate_clip_times_df(3, clip_duration=1.0, clip_overlap=0.5)
+    clip_df["file"] = "audio_file.wav"
+    clip_df = clip_df.set_index(["file", "start_time", "end_time"])
     labels = boxed_annotations.one_hot_labels_like(
         clip_df, class_subset=["a"], min_label_overlap=0.25
     )
@@ -148,6 +185,33 @@ def test_one_hot_clip_labels(boxed_annotations):
         min_label_overlap=0.25,
     )
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
+
+
+def test_one_hot_clip_labels_get_duration(boxed_annotations, silence_10s_mp3_str):
+    """should get duration of audio files if full_duration is None"""
+    boxed_annotations.df["file"] = [silence_10s_mp3_str] * len(boxed_annotations.df)
+    labels = boxed_annotations.one_hot_clip_labels(
+        full_duration=None,
+        clip_duration=2.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=0.25,
+    )
+    assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
+
+
+def test_one_hot_clip_labels_exception(boxed_annotations):
+    """raises GetDurationError because file length cannot be determined
+    and full_duration is None
+    """
+    with pytest.raises(GetDurationError):
+        labels = boxed_annotations.one_hot_clip_labels(
+            full_duration=None,
+            clip_duration=2.0,
+            clip_overlap=0,
+            class_subset=["a"],
+            min_label_overlap=0.25,
+        )
 
 
 def test_one_hot_clip_labels_overlap(boxed_annotations):
@@ -271,7 +335,7 @@ def test_one_hot_to_categorical_and_back():
 
 # test robustness of raven methods for empty annotation file
 def test_raven_annotation_methods_empty(raven_file_empty):
-    a = BoxedAnnotations.from_raven_file(raven_file_empty, annotation_column="Species")
+    a = BoxedAnnotations.from_raven_files([raven_file_empty])
 
     a.trim(0, 5)
     a.bandpass(0, 11025)
@@ -282,6 +346,8 @@ def test_raven_annotation_methods_empty(raven_file_empty):
         full_duration=10,
         clip_duration=2,
     )
+    clip_df["file"] = "a"
+    clip_df = clip_df.set_index(["file", "start_time", "end_time"])
 
     # class_subset = None: keep all
     labels_df = a.one_hot_labels_like(
@@ -290,7 +356,7 @@ def test_raven_annotation_methods_empty(raven_file_empty):
         min_label_overlap=0.25,
     )
 
-    assert (labels_df.reset_index() == clip_df).all().all()
+    assert (labels_df.reset_index() == clip_df.reset_index()).all().all()
 
     # classes = subset
     labels_df = a.one_hot_labels_like(
@@ -301,3 +367,19 @@ def test_raven_annotation_methods_empty(raven_file_empty):
 
     assert len(labels_df) == len(clip_df)
     assert (labels_df.columns == ["Species1", "Species2"]).all()
+
+
+def test_methods_on_zero_length_annotations(boxed_annotations_zero_len):
+    # time range is inclusive on left bound; includes 0
+    trimmed = boxed_annotations_zero_len.trim(0, 1)
+    assert len(trimmed.df == 1)
+
+    # time range is exclusive on right bound, excludes 3
+    trimmed = boxed_annotations_zero_len.trim(2, 3)
+    assert len(trimmed.df) == 0
+
+    bandpassed = boxed_annotations_zero_len.bandpass(0, 1000)
+    assert len(bandpassed.df == 1)
+
+    filtered = boxed_annotations_zero_len.subset(["a"])
+    assert len(filtered.df == 1)
