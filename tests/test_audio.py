@@ -160,7 +160,8 @@ def test_load_channels_as_audio(stereo_wav_str):
     assert len(s) == 2
     assert type(s[0]) == Audio
 
-    assert s[0].metadata["channel"] == "1 of 2"
+    assert s[0].
+    ["channel"] == "1 of 2"
     assert s[0].metadata["channels"] == 1
 
 
@@ -260,6 +261,15 @@ def test_retain_metadata_soundfile(metadata_wav_str, new_metadata_wav_str):
     # file size may differ slightly, other fields should be the same
     assert new_a.metadata == a.metadata
 
+def test_save_with_empty_metadata_field(metadata_wav_str, new_metadata_wav_str):
+    a = Audio.from_file(metadata_wav_str)
+    a.metadata = {'date'='','artist'='me'
+    
+    # should write new file with ' ' as date rather than raising an error
+    a.save(new_metadata_wav_str, metadata_format="soundfile")
+    new_a = Audio.from_file(new_metadata_wav_str)
+    assert new_a.metadata['date']==' '
+    assert new_a.metadata['artist']=='me'
 
 def test_save_load_opso_metadata(metadata_wav_str, new_metadata_wav_str):
     # add more tests if more versions are added
