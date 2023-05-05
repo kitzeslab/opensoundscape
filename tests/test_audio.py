@@ -262,7 +262,7 @@ def test_retain_metadata_soundfile(metadata_wav_str, new_metadata_wav_str):
 
 def test_save_with_empty_metadata_field(metadata_wav_str, new_metadata_wav_str):
     a = Audio.from_file(metadata_wav_str)
-    a.metadata = {'date'='','artist'='me'
+    a.metadata = {'date'='','artist'='me'}
     
     # should write new file with ' ' as date rather than raising an error
     a.save(new_metadata_wav_str, metadata_format="soundfile")
