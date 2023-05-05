@@ -160,8 +160,7 @@ def test_load_channels_as_audio(stereo_wav_str):
     assert len(s) == 2
     assert type(s[0]) == Audio
 
-    assert s[0].
-    ["channel"] == "1 of 2"
+    assert s[0].metadata["channel"] == "1 of 2"
     assert s[0].metadata["channels"] == 1
 
 
