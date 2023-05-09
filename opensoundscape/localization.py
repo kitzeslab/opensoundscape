@@ -62,10 +62,6 @@ class SpatialEvent:
             estimate_location:
                 perform tdoa based position estimation
                 - calls estimate_delays() if needed
-            calculate_distance_residuals:
-                compute residuals (descrepancies) between tdoa and estimated position
-            calculate_residual_rms:
-                compute the root mean square value of the tdoa distance residuals
 
         """
         self.receiver_files = receiver_files
@@ -126,6 +122,7 @@ class SpatialEvent:
         Effects:
             sets the value of self.position_estimate to the same value as the returned position
         """
+        # if cc_threshold is None, use the value stored in the object
         if cc_threshold is None:
             cc_threshold = self.cc_threshold
 
@@ -140,9 +137,15 @@ class SpatialEvent:
         # delay truly represents two recordings of the same sound event)
         tdoas = self.tdoas
         positions = self.receiver_positions
+        receiver_files = np.array(
+            self.receiver_files
+        )  # needs to be boolean mask to access by boolean mask
         if cc_threshold is not None:
             tdoas = tdoas[self.cc_maxs > cc_threshold]
             positions = positions[self.cc_maxs > cc_threshold]
+            receiver_files = receiver_files[
+                self.cc_maxs > cc_threshold
+            ]  # fails is receiver_files is not a np.array
 
         # assert there are enough receivers remaining to localize the event
         if len(tdoas) < min_n_receivers:
@@ -151,8 +154,10 @@ class SpatialEvent:
                 f"than min_n_receivers ({min_n_receivers})"
             )
 
-        # estimate location from receiver positions and relative time of arrival
-        # TODO: enable returning error estimates
+        # Store which receivers were used for localization. The position is estimated only from these.
+        self.receivers_used = receiver_files
+
+        # Estimate location from receiver positions and relative Times of Arrival
         self.position_estimate = localize(
             receiver_positions=positions,
             tdoas=tdoas,
@@ -160,8 +165,20 @@ class SpatialEvent:
             speed_of_sound=speed_of_sound,
         )
 
-        # calculate rms distance residual, descrepancy between tdoas and estimated position
-        self.residual_rms = self.calculate_residual_rms(speed_of_sound=speed_of_sound)
+        # Store the distance residuals (only for the receivers used) as an attribute
+        self.distance_residuals = calculate_tdoa_residuals(
+            receiver_positions=positions,
+            tdoas=tdoas,
+            position_estimate=self.position_estimate,
+            speed_of_sound=speed_of_sound,
+        )
+
+        # Calculate root mean square of distance residuals and store as attribute
+        self.residual_rms = np.sqrt(np.mean(self.distance_residuals**2))
+
+        self.cc_threshold = (
+            cc_threshold  # update to ensure that the value most recently used is stored
+        )
 
         return self.position_estimate
 
@@ -202,7 +219,7 @@ class SpatialEvent:
         # estimate time difference of arrival (tdoa) for each file relative to the first
         # skip the first because we don't need to cross correlate a file with itself
         tdoas = [0]  # first file's delay to itself is zero
-        cc_maxs = [1]
+        cc_maxs = [1]  # set first file's cc_max to 1
         for file in self.receiver_files[1:]:
             audio2 = Audio.from_file(file, offset=start, duration=dur)
             tdoa, cc_max = audio.estimate_delay(
@@ -221,68 +238,6 @@ class SpatialEvent:
         self.cc_maxs = np.array(cc_maxs)
 
         return self.tdoas, self.cc_maxs
-
-    def calculate_distance_residuals(self, speed_of_sound=SPEED_OF_SOUND):
-        """calculate distance residuals for each receiver from tdoa localization
-
-        The residual represents the discrepancy between (difference in distance
-        of each reciever to estimated position) and (observed tdoa), and has
-        units of meters.
-
-        Args:
-            speed_of_sound: speed of sound in m/s
-
-        Returns:
-            array of residuals (units are meters), one for each receiver
-
-        Effects:
-            stores the returned residuals as self.distance_residuals
-        """
-        if self.tdoas is None or self.position_estimate is None:
-            warnings.warn(
-                "missing self.tdoas or self.position_estimate, "
-                "returning None for distance_residuals"
-            )
-            return None
-
-        # store the calcualted tdoas as an attribute
-        self.distance_residuals = calculate_tdoa_residuals(
-            receiver_positions=self.receiver_positions,
-            tdoas=self.tdoas,
-            position_estimate=self.position_estimate,
-            speed_of_sound=speed_of_sound,
-        )
-
-        # return the same residuals
-        # TODO I think this is bad programming because the array could be modified
-        # same issue with other methods of this class
-        return self.distance_residuals
-
-    def calculate_residual_rms(self, speed_of_sound=SPEED_OF_SOUND):
-        """calculate the root mean square distance residual from tdoa localization
-
-        Args:
-            speed_of_sound: speed of sound in meters per second
-
-        Returns:
-            root mean square value of residuals, in meters
-            - returns None if self.tdoas or self.position_estimate
-                are None
-
-        See also: `SpatialEvent.calculate_distance_residuals()`
-        """
-        if self.tdoas is None or self.position_estimate is None:
-            warnings.warn(
-                "missing `self.tdoas` or `self.position_estimate`, "
-                "returning None for residual rms"
-            )
-            return None
-
-        # calculate the residual distance for each reciever
-        # this represents the discrepancy between (difference in distance
-        # of each reciever to estimated position) and (observed tdoa)
-        residuals = self.calculate_distance_residuals(speed_of_sound)
-        return np.sqrt(np.mean(residuals**2))
 
 
 class SynchronizedRecorderArray:
@@ -484,7 +439,7 @@ class SynchronizedRecorderArray:
             else:
                 bandpass_range = None
 
-            # perform gcc to estiamte relative time of arrival at each receiver
+            # perform gcc to estimate relative time of arrival at each receiver
             # relative to the first in the list (reference receiver)
             event.estimate_delays(
                 bandpass_range=bandpass_range,
@@ -507,7 +462,7 @@ class SynchronizedRecorderArray:
                 continue
 
             # event.residual_rms is computed at the end of event.estimate_location
-            # and represents descrepency (in meters) between tdoas and estimated position
+            # and represents discrepency (in meters) between tdoas and estimated position
             # check if residuals are small enough that we consider this a good position estimate
             # TODO: use max instead of mean?
             if event.residual_rms < residual_threshold:
