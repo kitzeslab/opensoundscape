@@ -151,7 +151,7 @@ def test_soundfinder_nopseudo():
     )
 
 
-def test_localizer(file_coords_csv, predictions_csv):
+def test_localization_pipeline(file_coords_csv, predictions_csv):
     file_coords = pd.read_csv(file_coords_csv, index_col=0)
     preds = pd.read_csv(predictions_csv, index_col=[0, 1, 2])
     array = localization.SynchronizedRecorderArray(file_coords=file_coords)
@@ -171,3 +171,39 @@ def test_localizer(file_coords_csv, predictions_csv):
 
         assert isclose(event.position_estimate[0], true_x, abs_tol=2)
         assert isclose(event.position_estimate[1], true_y, abs_tol=2)
+
+
+def test_InsufficientReceiversError(file_coords_csv, predictions_csv):
+    file_coords = pd.read_csv(file_coords_csv, index_col=0)
+    preds = pd.read_csv(predictions_csv, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    localized_events, unlocalized_events = array.localize_detections(
+        detections=preds,
+        min_n_receivers=4,
+        cc_threshold=100,  # too high. Spatial events will all be unlocalized.
+        max_receiver_dist=100,
+        localization_algorithm="gillette",
+    )
+    assert len(localized_events) == 0
+    assert len(unlocalized_events) > 1
+    with pytest.raises(localization.InsufficientReceiversError):
+        unlocalized_events[0].estimate_location(min_n_receivers=8)
+
+
+def test_SynchronizedRecorderArray_SpatialEvents_not_generated(
+    file_coords_csv, predictions_csv
+):
+    # Tests that the SynchronizedRecorderArray will not return any SpatialEvents if
+    # min_n_receivers is set too high.
+    file_coords = pd.read_csv(file_coords_csv, index_col=0)
+    preds = pd.read_csv(predictions_csv, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    localized_events, unlocalized_events = array.localize_detections(
+        detections=preds,
+        min_n_receivers=10,  # too high. No SpatialEvents will be outputted.
+        cc_threshold=0,
+        max_receiver_dist=100,
+        localization_algorithm="gillette",
+    )
+    assert len(localized_events) == 0
+    assert len(unlocalized_events) == 0

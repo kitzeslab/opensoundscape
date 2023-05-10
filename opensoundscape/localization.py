@@ -22,7 +22,7 @@ class SpatialEvent:
     """
     Class that estimates the position of a single sound event
 
-    Uses reciever positions and time-of-arrival of sounds to estimate
+    Uses receiver positions and time-of-arrival of sounds to estimate
     soud source position
     """
 
@@ -139,7 +139,7 @@ class SpatialEvent:
         positions = self.receiver_positions
         receiver_files = np.array(
             self.receiver_files
-        )  # needs to be boolean mask to access by boolean mask
+        )  # needs to be np array to access using a boolean mask
         if cc_threshold is not None:
             tdoas = tdoas[self.cc_maxs > cc_threshold]
             positions = positions[self.cc_maxs > cc_threshold]
