@@ -239,7 +239,34 @@ def test_gcc():
         assert lags[np.argmax(gccs)] == delay
 
 
-def test_all_tdoa_filter_types_find_correct_delay():
+def test_all_tdoa_filter_types_find_correct_delay_no_noise():
+    delay = 20  # samples of delay (positive: second signal arrives before first)
+    start = 500  # start of signal
+    end = 510  # end of signal
+
+    a = np.zeros(1000)
+    a[start:end] = 3  # impulse
+    reference_signal = np.zeros(1000)
+    reference_signal[start - delay : end - delay] = 3
+
+    # add max_delay samples to start and end of reference signal
+    max_delay = 50
+    reference_signal = np.concatenate(
+        (np.zeros(max_delay), reference_signal, np.zeros(max_delay))
+    )
+
+    for method in ["phat", "roth", "scot", "ht", "cc", "cc_norm"]:
+        estimated_sample_delay = sp.tdoa(
+            a,
+            reference_signal,
+            max_delay=max_delay,
+            cc_filter=method,
+            sample_rate=1,
+        )
+        assert estimated_sample_delay == delay
+
+
+def test_all_tdoa_filter_types_find_correct_delay_with_noise():
     delay = 20  # samples of delay (positive: second signal arrives before first)
     start = 500  # start of signal
     end = 510  # end of signal
@@ -247,15 +274,37 @@ def test_all_tdoa_filter_types_find_correct_delay():
     a = np.zeros(1000)
     a[start:end] = 3  # impulse
     a += np.random.rand(1000)  # add noise
-    b = np.zeros(1000)
-    b[start - delay : end - delay] = 3
-    b += np.random.rand(1000)
+    reference_signal = np.zeros(1000)
+    reference_signal[start - delay : end - delay] = 3
+    reference_signal += np.random.rand(1000)  # add noise
 
-    for method in ["phat", "roth", "scot", "ht", "cc"]:
-        assert sp.tdoa(a, b, cc_filter=method, sample_rate=1) == delay
+    # add max_delay samples to start and end of reference signal
+    max_delay = 50
+    reference_signal = np.concatenate(
+        (np.zeros(max_delay), reference_signal, np.zeros(max_delay))
+    )
 
-        # with sample rate !=1
-        assert sp.tdoa(a, b, cc_filter=method, sample_rate=22050) == delay / 22050
+    for method in ["phat", "roth", "scot", "ht", "cc", "cc_norm"]:
+        estimated_sample_delay = sp.tdoa(
+            a,
+            reference_signal,
+            max_delay=max_delay,
+            cc_filter=method,
+            sample_rate=1,
+        )
+        assert isclose(
+            estimated_sample_delay, delay, abs_tol=1
+        )  # allow 1 sample error due to float precision
+
+        # # with sample rate !=1
+        estimated_delay = sp.tdoa(
+            a,
+            reference_signal,
+            max_delay=max_delay / 22050,
+            cc_filter=method,
+            sample_rate=22050,
+        )
+        assert isclose(estimated_delay, delay / 22050, abs_tol=1e-5)
 
 
 def test_cc_scipy_equivalence():
@@ -287,17 +336,26 @@ def test_tdoa_return_max():
 
     a = np.zeros(1000)
     a[start:end] = 3  # impulse
-    b = np.zeros(1000)
-    b[start - delay : end - delay] = 3
+    reference_signal = np.zeros(1000)
+    reference_signal[start - delay : end - delay] = 3
+
+    # add max_delay samples to start and end of reference signal
+    max_delay = 50
+    reference_signal = np.concatenate(
+        (np.zeros(max_delay), reference_signal, np.zeros(max_delay))
+    )
 
     # filter methods will change the output values of cc, but plain cc gives expected value
-    delay, cc_max = sp.tdoa(a, b, cc_filter="cc", sample_rate=1, return_max=True)
+    delay, cc_max = sp.tdoa(
+        a, reference_signal, max_delay, cc_filter="cc", sample_rate=1, return_max=True
+    )
     assert isclose(cc_max, 3 * 3 * (end - start), abs_tol=1e-4)
 
 
 def test_tdoa_max_delay_true_delay_higher():
     # test if max_delay works in limiting the search space
     # by setting the true delay to be higher than max_delay
+    max_delay = 19  # samples
     delay = 100  # samples of delay (positive: second signal arrives before first)
     start = 500  # start of signal
     end = 510  # end of signal
@@ -308,10 +366,11 @@ def test_tdoa_max_delay_true_delay_higher():
     b = np.zeros(1000)
     b[start - delay : end - delay] = 3
     b += np.random.rand(1000)
+    b = np.concatenate((np.zeros(max_delay), b, np.zeros(max_delay)))
     delay, cc_max = sp.tdoa(
-        a, b, cc_filter="cc", sample_rate=1, return_max=True, max_delay=50
+        a, b, cc_filter="cc", sample_rate=1, return_max=True, max_delay=max_delay
     )
-    assert abs(delay) <= 50
+    assert abs(delay) <= max_delay
 
 
 def test_tdoa_max_delay_true_delay_within():
@@ -324,10 +383,23 @@ def test_tdoa_max_delay_true_delay_within():
     a = np.zeros(1000)
     a[start:end] = 3  # impulse
     a += np.random.rand(1000)  # add noise
-    b = np.zeros(1000)
-    b[start - delay : end - delay] = 3
-    b += np.random.rand(1000)
+
+    reference_signal = np.zeros(1000)
+    reference_signal[start - delay : end - delay] = 3
+    reference_signal += np.random.rand(1000)
+
+    # add max_delay samples to start and end of reference signal
+    max_delay = 50
+    reference_signal = np.concatenate(
+        (np.zeros(max_delay), reference_signal, np.zeros(max_delay))
+    )
+
     delay, cc_max = sp.tdoa(
-        a, b, cc_filter="cc", sample_rate=1, return_max=True, max_delay=50
+        a,
+        reference_signal,
+        cc_filter="cc",
+        sample_rate=1,
+        return_max=True,
+        max_delay=max_delay,
     )
     assert delay == 49
