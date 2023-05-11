@@ -609,7 +609,7 @@ def tdoa(
 
     # convert lag to time delay
     tdoa = (lag / sample_rate) - max_delay
-    max_cc = max(ccs)
+    max_cc = np.max(cc)
 
     # generate the relative offsets for each index position of `cc`
     lags = correlation_lags(len(signal), len(reference_signal))

@@ -22,26 +22,27 @@ class SpatialEvent:
     """
     Class that estimates the position of a single sound event
 
-    Uses reciever positions and time-of-arrival of sounds to estimate
-    soud source position
+    Uses receiver positions and time-of-arrival of sounds to estimate
+    sound source position
     """
 
     def __init__(
         self,
         receiver_files,
         receiver_positions,
+        max_delay,
         start_time=0,
         duration=None,
         class_name=None,
         bandpass_range=None,
         cc_threshold=None,
-        max_delay=None,
     ):
         """initialize SpatialEvent
 
         Args:
             receiver_files: list of audio files, one for each reciever
             receiver_positions: list of [x,y] or [x,y,z] cartesian position of each receiver in meters
+            max_delay: maximum time delay (in seconds) to consider for time-delay-of-arrival estimate
             start_time: start position of detection relative to start of audio file, for cross correlation
             duration: duration of audio segment to use for cross-correlation
             class_name=None: (str) name of detection's class
@@ -52,8 +53,7 @@ class SpatialEvent:
             cc_threshold: float, default=None. During localization from time delays, discard time delays and
                 associated positions if max cross correlation value was lower than this threshold.
                 default: None uses all delays and positions regardless of max cc value
-            max_delay: maximum time delay (in seconds) to consider for cross correlation
-                (see `opensoundscape.signal_processing.tdoa`)
+
 
         Methods:
             estimate_delays:
@@ -200,7 +200,7 @@ class SpatialEvent:
         )
 
         # check length of audio1 samples is what we expect
-        expected_length = int(audio1.sampling_rate * (dur + 2 * max_delay))
+        expected_length = int(audio1.sample_rate * (dur + 2 * max_delay))
         if len(audio1.samples) < expected_length:
             raise ValueError(
                 "The reference audio length is shorter than expected - check if you are estimating a delay that could extend beyond the start or end of the audio file."
@@ -217,12 +217,12 @@ class SpatialEvent:
         for file in self.receiver_files[1:]:
             audio2 = Audio.from_file(file, offset=start, duration=dur)
             tdoa, cc_max = audio.estimate_delay(
-                audio=audio2,
+                primary_audio=audio2,
                 reference_audio=audio1,
+                max_delay=max_delay,
                 bandpass_range=bandpass_range,
                 cc_filter=cc_filter,
                 return_cc_max=True,
-                max_delay=max_delay,
                 skip_ref_bandpass=True,
             )
             tdoas.append(tdoa)
@@ -337,11 +337,11 @@ class SynchronizedRecorderArray:
         self,
         detections,
         max_receiver_dist,
+        max_delay=None,
         min_n_receivers=3,
         localization_algorithm="gillette",
         cc_threshold=0,
         cc_filter="phat",
-        max_delay=None,
         bandpass_ranges=None,
         residual_threshold=np.inf,
     ):
@@ -418,6 +418,11 @@ class SynchronizedRecorderArray:
                 Radius around a recorder in which to use other recorders for localizing an event.
                 Simultaneous detections at receivers within this distance (meters)
                 of a receiver with a detection will be used to attempt to localize the event.
+            max_delay : float, optional
+                Maximum absolute value of time delay estimated during cross correlation of two signals
+                For instance, 0.2 means that the maximal cross-correlation in the range of
+                delays between -0.2 to 0.2 seconds will be used to estimate the time delay.
+                if None (default), the max delay is set to max_receiver_dist / SPEED_OF_SOUND
             min_n_receivers : int
                 Minimum number of receivers that must detect an event for it to be localized
                 [default: 3]
@@ -434,11 +439,6 @@ class SynchronizedRecorderArray:
             cc_filter : str, optional
                 Filter to use for generalized cross correlation. See signalprocessing.gcc function for options.
                 Default is "phat".
-            max_delay : float, optional
-                Maximum absolute value of time delay estimated during cross correlation of two signals
-                For instance, 0.2 means that cross correlation will be maximized in the range of
-                delays between -0.2 to 0.2 seconds.
-                Default: None does not restrict the range, finding delay that maximizes cross correlation
             bandpass_ranges : dict, optional
                 Dictionary of form {"class name": [low_f, high_f]} for audio bandpass filtering during
                 cross correlation. [Default: None] does not bandpass audio. Bandpassing audio to the
@@ -457,6 +457,9 @@ class SynchronizedRecorderArray:
         “Sound Finder: A New Software Approach for Localizing Animals Recorded with a Microphone Array.”
         Bioacoustics 23, no. 2 (May 4, 2014): 99–112. https://doi.org/10.1080/09524622.2013.827588.
         """
+        # set max_delay if not provided
+        if max_delay is None:
+            max_delay = max_receiver_dist / SPEED_OF_SOUND
 
         # check that all files have coordinates in file_coords
         if len(self.check_files_missing_coordinates(detections)) > 0:
@@ -543,6 +546,7 @@ class SynchronizedRecorderArray:
         detections,
         min_n_receivers,
         max_receiver_dist,
+        max_delay=None,
     ):
         """
         Takes the detections dictionary and groups detections that are within `max_receiver_dist` of each other.
@@ -552,10 +556,14 @@ class SynchronizedRecorderArray:
                 The times in the index imply the same real world time across all files: eg 0 seconds assumes
                 that the audio files all started at the same time, not on different dates/times
             min_n_receivers: if fewer nearby receivers have a simultaneous detection, do not create candidate event
-            `max_receiver_dist`: the maximum distance between recorders to consider a detection as a single event
+            max_receiver_dist: the maximum distance between recorders to consider a detection as a single event
+            max_delay: the maximum delay (in seconds) to consider between receivers for a single event
+                if None, defaults to max_receiver_dist / SPEED_OF_SOUND
         returns:
             a list of SpatialEvent objects to attempt to localize
         """
+        if max_delay is None:
+            max_delay = max_receiver_dist / SPEED_OF_SOUND
         # pre-generate a dictionary listing all close files for each audio file
         # dictionary will have a key for each audio file, and value listing all other receivers
         # within max_receiver_dist of that receiver
@@ -621,6 +629,7 @@ class SynchronizedRecorderArray:
                             SpatialEvent(
                                 receiver_files=receiver_files,
                                 receiver_positions=receiver_positions,
+                                max_delay=max_delay,
                                 start_time=time_i,
                                 duration=clip_end - time_i,
                                 class_name=cls_i,
