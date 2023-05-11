@@ -549,12 +549,12 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
 def tdoa(
     signal,
     reference_signal,
+    max_delay,
     cc_filter="phat",
     sample_rate=1,
     return_max=False,
-    max_delay=None,
 ):
-    """estimate time difference of arrival between two signals
+    """Estimate time difference of arrival between two signals
 
     estimates time delay by finding the maximum of the generalized cross correlation (gcc)
     of two signals. The two signals are discrete-time series with the same sample rate.
@@ -563,11 +563,15 @@ def tdoa(
     if it arrives 0.5 seconds _before_ the reference signal, returns -0.5.
 
     Args:
-        signal, reference_signal: np.arrays or lists containing each signal
+        signal: Audio object containing the signal of interest
+        reference_signal: np.array or list containing the reference signal. The reference signal must start max_delay seconds before the signal of interest,
+            i.e. if the signal is 10 seconds long, and max_delay=0.5
+            then reference signal must be 11 seconds long. Starting 0.5 seconds before the signal, and ending 0.5 seconds after the signal.
+        max_delay: maximum possible tdoa (seconds) between the two signals. The tdoa returned will be between -max_delay and +max_delay.
         cc_filter: see gcc()
         sample_rate: sample rate (Hz) of signals; both signals must have same sample rate
         return_max: if True, returns the maximum value of the generalized cross correlation
-        max_delay: maximum possible tdoa. Cross-correlations that correspond to time delays outside of this range are ignored.
+
             For example, if max_delay=0.5, the tdoa returned will be the delay between -0.5 and +0.5 seconds, that maximizes the cross-correlation.
             This is useful if you know the maximum possible delay between the two signals, and want to ignore any tdoas outside of that range.
             e.g. if receivers are 100m apart, and the speed of sound is 340m/s, then the maximum possible delay is 0.294 seconds.
@@ -580,29 +584,38 @@ def tdoa(
 
     See also: gcc() if you want the raw output of generalized cross correlation
     """
+    # check that reference signal is as long as signal + 2*max_delay
+    expected_ref_length = len(signal) + int(2 * max_delay * sample_rate)
+    if (
+        len(reference_signal) - expected_ref_length > 1
+    ):  # allow for at most 1 sample error
+        raise ValueError(
+            "reference_signal is too long. Make sure it starts at max_delay before the signal of interest, and ends max_delay seconds after the signal."
+        )
+    elif len(reference_signal) - expected_ref_length < -1:
+        raise ValueError(
+            "reference_signal is too short. Make sure it starts at max_delay before the signal of interest, and ends max_delay seconds after the signal."
+        )
+
     # compute the generalized cross correlation between the signals
     cc = gcc(signal, reference_signal, cc_filter=cc_filter)
+
+    # filter to only the 'valid' part of the cross correlation, where the signals overlap fully
+    cc = cc[len(signal) - 1 : -len(signal) + 1]
+
+    # find max cc value
+    # if max is at 0 it indicates the signal arrives max_delay earlier than in the reference signal
+    lag = np.argmax(cc)
+
+    # convert lag to time delay
+    tdoa = (lag / sample_rate) - max_delay
+    max_cc = max(ccs)
 
     # generate the relative offsets for each index position of `cc`
     lags = correlation_lags(len(signal), len(reference_signal))
 
-    if max_delay:
-        max_lag = int(
-            max_delay * sample_rate
-        )  # convert max_delay to max_lag in samples
-        # slice cc and lags, so we only look at cross_correlations that are between -max_lag and +max_lag
-        boolean_mask = [lag < max_lag and lag > -max_lag for lag in lags]
-        cc = cc[boolean_mask]
-        lags = lags[boolean_mask]
-
-    # find the time delay using the index of the maximum cc value
-    # the maximum of the cc value represents GCC's estimate of the delay
-    # between the two signals, ie how much to shift one signal against the other
-    # to maximize their product
-    tdoa = lags[np.argmax(cc)] / sample_rate
-
     if return_max:
-        return tdoa, max(cc)
+        return tdoa, np.max(cc)
 
     else:
         return tdoa

@@ -165,7 +165,7 @@ class SpatialEvent:
 
         return self.position_estimate
 
-    def estimate_delays(self, bandpass_range=None, cc_filter="phat", max_delay=None):
+    def estimate_delays(self, max_delay, bandpass_range=None, cc_filter="phat"):
         """estimate time delay of event relative to receiver_files[0] with gcc
 
         Performs Generalized Cross Correlation of each file against the first,
@@ -174,13 +174,12 @@ class SpatialEvent:
         Assumes audio files are synchronized such that they start at the same time
 
         Args:
+            max_delay: only delays in +/- this range (seconds) will be considered for possible delay
+                (see opensoundscape.signal_processing.tdoa())
             bandpass_range: bandpass audio to [low, high] frequencies in Hz before
                 cross correlation; if None, defaults to self.bandpass_range
             cc_filter: filter for generalized cross correlation, see
                 opensoundscape.signal_processing.gcc()
-            max_delay: only consider values in +/- this range (seconds) for possible delay
-                (see opensoundscape.signal_processing.tdoa())
-                - default None allows any delay time
 
         Returns:
             list of time delays, list of max cross correlation values
@@ -193,7 +192,19 @@ class SpatialEvent:
             sets self.tdoas and self.cc_maxs with the same values as those returned
         """
         start, dur = self.start_time, self.duration
-        audio1 = Audio.from_file(self.receiver_files[0], offset=start, duration=dur)
+
+        audio1 = Audio.from_file(
+            self.receiver_files[0],
+            offset=start - max_delay,
+            duration=dur + 2 * max_delay,
+        )
+
+        # check length of audio1 samples is what we expect
+        expected_length = int(audio1.sampling_rate * (dur + 2 * max_delay))
+        if len(audio1.samples) < expected_length:
+            raise ValueError(
+                "The reference audio length is shorter than expected - check if you are estimating a delay that could extend beyond the start or end of the audio file."
+            )
 
         # bandpass once now to avoid repeating operation for each receiver
         if bandpass_range is not None:
