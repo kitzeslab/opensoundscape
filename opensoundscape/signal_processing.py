@@ -478,10 +478,11 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
         y: 1d numpy array of audio samples
         cc_filter: which filter to use in the gcc.
             'phat' - Phase transform. Default.
-            'roth' -
+            'roth' - Roth correlation (1971)
             'scot' - Smoothed Coherence Transform,
             'ht' - Hannan and Thomson
             'cc' - normal cross correlation with no filter
+            'cc_norm' - normal cross correlation normalized by the length and amplitude of the signal
         epsilon: small value used to ensure denominator when applying a filter is non-zero.
 
     Returns:
@@ -505,7 +506,7 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
     # optimize fft speed
     n_fast = next_fast_len(n, real=True)
 
-    # Take the reall Fast Fourier Transform of the signals
+    # Take the real Fast Fourier Transform of the signals
     X = torch.fft.rfft(x, n=n_fast)
     Y = torch.fft.rfft(y, n=n_fast)
 
@@ -530,11 +531,12 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
         gamma_xy = Gxy / (torch.sqrt(Gxx * Gyy) + epsilon)
         coherence = torch.abs(gamma_xy) ** 2
         phi = coherence / (torch.abs(Gxy) * (1 - coherence) + epsilon)
-    elif cc_filter == "cc":
+    elif cc_filter == "cc" or cc_filter == "cc_norm":
         phi = 1.0
+
     else:
         raise ValueError(
-            "Unsupported cc_filter. Must be one of: 'ht', 'phat', 'roth','scot'"
+            "Unsupported cc_filter. Must be one of: 'phat', 'roth', 'ht', 'scot', 'cc', 'cc_norm'"
         )
     # Inverse FFT to get the GCC
     cc = torch.fft.irfft(Gxy * phi, n_fast)
@@ -542,6 +544,13 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
     # reorder the cross-correlation coefficients, trimming out padded regions
     # order of outputs matches torch.correlate and scipy.signal.correlate
     cc = torch.concatenate((cc[-y.shape[0] + 1 :], cc[: x.shape[0]]))
+
+    # normalize the cross-correlation coefficients if using cc_norm
+    # this normalizes both by length and amplitude
+    if cc_filter == "cc_norm":
+        cc = cc / (
+            torch.linalg.vector_norm(x) * torch.linalg.vector_norm(y)
+        )  # implicitly assumes mean of x and y are 0
 
     return cc.numpy()
 
