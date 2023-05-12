@@ -701,27 +701,64 @@ def test_clipping_detector(veryshort_audio):
 
 
 def test_estimate_delay(veryshort_audio):
-    # shift signal backward
-    sig = audio.concat(
-        [Audio.silence(0.1, veryshort_audio.sample_rate), veryshort_audio]
+    start_t = 0.03
+    end_t = 0.1
+    signal = veryshort_audio.trim(start_time=start_t, end_time=end_t)
+    delay = 0.02
+    max_delay = 0.025
+    ref_sig = audio.concat(
+        [
+            Audio.silence(max_delay, veryshort_audio.sample_rate),
+            veryshort_audio.trim(start_time=start_t + delay, end_time=end_t + delay),
+            Audio.silence(max_delay, veryshort_audio.sample_rate),
+        ]
     )
 
-    assert isclose(audio.estimate_delay(sig, veryshort_audio), 0.1, abs_tol=1e-6)
+    assert isclose(
+        audio.estimate_delay(signal, ref_sig, max_delay=max_delay),
+        delay,
+        abs_tol=1e-4,
+    )
 
 
 def test_estimate_delay_with_bandpass(veryshort_audio):
-    # shift signal backward
-    sig = audio.concat(
-        [Audio.silence(0.1, veryshort_audio.sample_rate), veryshort_audio]
+    start_t = 0.03
+    end_t = 0.1
+    signal = veryshort_audio.trim(start_time=start_t, end_time=end_t)
+    delay = 0.01
+    max_delay = 0.025
+    ref_sig = audio.concat(
+        [
+            Audio.silence(max_delay, veryshort_audio.sample_rate),
+            veryshort_audio.trim(start_time=start_t + delay, end_time=end_t + delay),
+            Audio.silence(max_delay, veryshort_audio.sample_rate),
+        ]
     )
+
     dly = audio.estimate_delay(
-        sig, veryshort_audio, bandpass_range=[1000, 3000], bandpass_order=5
+        signal,
+        ref_sig,
+        max_delay=max_delay,
+        bandpass_range=[100, 10000],
+        bandpass_order=5,
     )
-    assert isclose(dly, 0.1, abs_tol=1e-6)
+    assert isclose(dly, delay, abs_tol=1e-4)
 
 
 def test_estimate_delay_return_cc_max(veryshort_audio):
-    a = veryshort_audio
-    t, ccmax = audio.estimate_delay(a, a, return_cc_max=True, cc_filter="cc")
-    assert isclose(ccmax, sum(a.samples * a.samples), abs_tol=1e-5)
-    assert isclose(t, 0, abs_tol=1e-6)
+    max_delay = 0.2
+    ref_sig = audio.concat(
+        [
+            Audio.silence(max_delay, veryshort_audio.sample_rate),
+            veryshort_audio,
+            Audio.silence(max_delay, veryshort_audio.sample_rate),
+        ]
+    )
+    delay, ccmax = audio.estimate_delay(
+        veryshort_audio, ref_sig, max_delay=0.2, cc_filter="cc", return_cc_max=True
+    )
+
+    assert isclose(
+        ccmax, sum(veryshort_audio.samples * veryshort_audio.samples), abs_tol=1e-5
+    )
+    assert isclose(delay, 0, abs_tol=1e-6)
