@@ -460,7 +460,7 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
     return np.array(starts) / sample_rate, np.array(lengths) / sample_rate
 
 
-def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
+def gcc(x, y, cc_filter="phat", epsilon=0.001):
     """
     Generalized cross correlation of two signals
 
