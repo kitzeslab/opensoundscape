@@ -324,7 +324,7 @@ class Audio:
                 raise AudioOutOfBoundsError(error_msg)
             elif out_of_bounds_mode == "warn":
                 warnings.warn(error_msg)
-        elif duration is not None and len(samples) < duration * sr:
+        elif duration is not None and len(samples) < np.floor(duration * sr):
             if offset < 0:
                 error_msg = "requested time period begins before start of recording"
             else:
