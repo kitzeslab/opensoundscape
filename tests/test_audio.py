@@ -143,6 +143,16 @@ def veryshort_audio(veryshort_wav_str):
     return Audio.from_file(veryshort_wav_str)
 
 
+@pytest.fixture()
+def LOCA_array_3_str():
+    return "tests/audio/LOCA_2021_09_24_652_3.wav"
+
+
+@pytest.fixture()
+def LOCA_array_6_str():
+    return "tests/audio/LOCA_2021_09_24_652_6.wav"
+
+
 def test_init_with_list():
     a = Audio([0] * 10, sample_rate=10)
     assert len(a.samples) == 10
@@ -719,6 +729,25 @@ def test_estimate_delay(veryshort_audio):
         delay,
         abs_tol=1e-4,
     )
+
+
+def test_estimate_delay_real_audio(LOCA_array_3_str, LOCA_array_6_str):
+    max_delay = 0.15
+    start_time = 0.2
+    duration = 0.3
+    audio_3_reference = Audio.from_file(
+        LOCA_array_3_str,
+        offset=start_time - max_delay,
+        duration=duration + 2 * max_delay,
+    )
+    audio_6 = Audio.from_file(
+        LOCA_array_6_str,
+        offset=start_time,
+        duration=duration,
+    )
+    delay = audio.estimate_delay(audio_6, audio_3_reference, max_delay=max_delay)
+    assert abs(delay) < max_delay
+    assert np.isclose(delay, 0.03, atol=1e-1)
 
 
 def test_estimate_delay_with_bandpass(veryshort_audio):

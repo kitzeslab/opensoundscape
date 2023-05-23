@@ -19,6 +19,16 @@ def predictions_csv():
     return "tests/csvs/localizer_preds.csv"
 
 
+@pytest.fixture()
+def LOCA_2021_aru_coords():
+    return "tests/csvs/LOCA_2021_aru_coords.csv"
+
+
+@pytest.fixture()
+def LOCA_2021_detections():
+    return "tests/csvs/LOCA_2021_detections.csv"
+
+
 def close(x, y, tol):
     return (x < y + tol) and (x > y - tol)
 
@@ -171,6 +181,27 @@ def test_localization_pipeline(file_coords_csv, predictions_csv):
 
         assert isclose(event.position_estimate[0], true_x, abs_tol=2)
         assert isclose(event.position_estimate[1], true_y, abs_tol=2)
+
+
+def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detections):
+    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    localized_events, _ = array.localize_detections(
+        detections=detections,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        localization_algorithm="gillette",
+        bandpass_ranges={"zeep": (7000, 10000)},
+    )
+
+    true_TDOAS = np.array(
+        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
+    )  # with reference receiver LOCA_2021_3...
+
+    for event in localized_events:
+        if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
+            assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
 
 
 def test_InsufficientReceiversError(file_coords_csv, predictions_csv):
