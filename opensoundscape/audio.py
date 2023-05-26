@@ -613,7 +613,7 @@ class Audio:
         fft = scipy.fft.fft(self.samples)
 
         # create the frequencies corresponding to fft bins
-        freq = scipy.fft.ftffreq(N, d=1 / self.sample_rate)
+        freq = scipy.fft.fftfreq(N, d=1 / self.sample_rate)
 
         # remove negative frequencies and scale magnitude by 2.0/N:
         fft = 2.0 / N * fft[0 : int(N / 2)]

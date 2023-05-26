@@ -98,7 +98,7 @@ def cwt_peaks(
     )
 
     # locate peaks
-    peak_idx, _ = scipy.signalfind_peaks(x, height=peak_threshold, distance=min_d)
+    peak_idx, _ = scipy.signal.find_peaks(x, height=peak_threshold, distance=min_d)
     peak_times = [t[i] for i in peak_idx]
     peak_levels = [x[i] for i in peak_idx]
 
