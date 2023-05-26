@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 import pytest
-from opensoundscape import annotations
-from opensoundscape.annotations import BoxedAnnotations
 from pathlib import Path
 import pandas as pd
 import numpy as np
+
+from opensoundscape import annotations
+from opensoundscape.annotations import BoxedAnnotations
 from opensoundscape.utils import generate_clip_times_df, GetDurationError
 
 

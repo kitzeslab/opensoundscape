@@ -1,11 +1,10 @@
 """Signal processing tools for feature extraction and more"""
 import numpy as np
 import pandas as pd
-from scipy.signal import hilbert, find_peaks, correlation_lags
-from scipy.fft import next_fast_len
+import scipy
 import pywt
 import matplotlib.pyplot as plt
-from pywt import central_frequency
+import pywt
 import torch
 
 from opensoundscape.utils import inrange
@@ -28,7 +27,7 @@ def frequency2scale(frequency, wavelet, sample_rate):
     freuquency_hz = pywt.scale2frequency(w,scale)*sr.
     """
     # get center frequency of this wavelet
-    center_freq = central_frequency(wavelet)
+    center_freq = pywt.central_frequency(wavelet)
 
     # calculate scale
     return center_freq * sample_rate / frequency
@@ -83,7 +82,7 @@ def cwt_peaks(
     # normalize, square, hilbert envelope, normalize
     x = x / np.max(x)
     x = x**2
-    x = abs(hilbert(x))
+    x = abs(scipy.signalhilbert(x))
     x = x / np.max(x)
 
     # calcualte time vector for each point in cwt signal
@@ -99,7 +98,7 @@ def cwt_peaks(
     )
 
     # locate peaks
-    peak_idx, _ = find_peaks(x, height=peak_threshold, distance=min_d)
+    peak_idx, _ = scipy.signalfind_peaks(x, height=peak_threshold, distance=min_d)
     peak_times = [t[i] for i in peak_idx]
     peak_levels = [x[i] for i in peak_idx]
 
@@ -502,7 +501,7 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
         n += 1
     # by choosing an optimal length rather than the shortest possible, we can
     # optimize fft speed
-    n_fast = next_fast_len(n, real=True)
+    n_fast = scipy.fft.next_fast_len(n, real=True)
 
     # Take the reall Fast Fourier Transform of the signals
     X = torch.fft.rfft(x, n=n_fast)
@@ -583,7 +582,7 @@ def tdoa(
     cc = gcc(signal, reference_signal, cc_filter=cc_filter)
 
     # generate the relative offsets for each index position of `cc`
-    lags = correlation_lags(len(signal), len(reference_signal))
+    lags = scipy.signal.correlation_lags(len(signal), len(reference_signal))
 
     if max_delay:
         max_lag = int(

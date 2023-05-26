@@ -1,3 +1,13 @@
+import pandas as pd
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
+import shutil
+
+import warnings
+
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.loss import ResampleLoss
@@ -11,15 +21,6 @@ from opensoundscape.sample import AudioSample
 from opensoundscape.ml.cam import CAM
 
 from opensoundscape.utils import make_clip_df
-import pandas as pd
-from pathlib import Path
-
-import numpy as np
-import pandas as pd
-import pytest
-import shutil
-
-import warnings
 
 
 @pytest.fixture()

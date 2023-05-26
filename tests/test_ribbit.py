@@ -5,7 +5,7 @@ from opensoundscape import ribbit
 import pytest
 import numpy as np
 import pandas as pd
-from math import isclose
+import math
 
 
 @pytest.fixture()
@@ -64,7 +64,7 @@ def test_ribbit(gpt_path):
     )
 
     assert len(df) == 3
-    assert isclose(max(df["score"]), 0.0392323, abs_tol=1e-4)
+    assert math.isclose(max(df["score"]), 0.0392323, abs_tol=1e-4)
 
 
 def test_ribbit_short_audio(veryshort_wav_str):
@@ -104,7 +104,7 @@ def test_ribbit_high_spec_overlap(gpt_path):
         plot=False,
     )
     assert len(df) == 3
-    assert isclose(max(df["start_time"]), 10.0, abs_tol=1e-4)
+    assert math.isclose(max(df["start_time"]), 10.0, abs_tol=1e-4)
 
 
 def test_ribbit_with_clip_overlap(gpt_path):
@@ -126,4 +126,4 @@ def test_ribbit_with_clip_overlap(gpt_path):
     )
 
     assert len(df) == 5
-    assert isclose(max(df["score"]), 0.039380, abs_tol=1e-4)
+    assert math.isclose(max(df["score"]), 0.039380, abs_tol=1e-4)

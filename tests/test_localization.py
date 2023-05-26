@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
-from opensoundscape import localization
 import pytest
+import math
+
+from opensoundscape import localization
 
 
 @pytest.fixture()
@@ -167,7 +169,5 @@ def test_localizer(file_coords_csv, predictions_csv):
     assert len(localized_events) == 5
 
     for event in localized_events:
-        from math import isclose
-
-        assert isclose(event.position_estimate[0], true_x, abs_tol=2)
-        assert isclose(event.position_estimate[1], true_y, abs_tol=2)
+        assert math.isclose(event.position_estimate[0], true_x, abs_tol=2)
+        assert math.isclose(event.position_estimate[1], true_y, abs_tol=2)

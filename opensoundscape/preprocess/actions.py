@@ -11,7 +11,7 @@ for details on how to use and create your own actions.
 import random
 import warnings
 import numpy as np
-from torchvision import transforms
+import torchvision
 import torch
 import pandas as pd
 
@@ -322,9 +322,9 @@ def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue
     Returns:
         modified tensor
     """
-    transform = transforms.Compose(
+    transform = torchvision.transforms.Compose(
         [
-            transforms.ColorJitter(
+            torchvision.transforms.ColorJitter(
                 brightness=brightness, contrast=contrast, saturation=saturation, hue=hue
             )
         ]
@@ -355,8 +355,12 @@ def torch_random_affine(tensor, degrees=0, translate=(0.3, 0.1), fill=0):
     channels = tensor.shape[-3]
     fill = [fill] * channels
 
-    transform = transforms.Compose(
-        [transforms.RandomAffine(degrees=degrees, translate=translate, fill=fill)]
+    transform = torchvision.transforms.Compose(
+        [
+            torchvision.transforms.RandomAffine(
+                degrees=degrees, translate=translate, fill=fill
+            )
+        ]
     )
     return transform(tensor)
 
@@ -376,7 +380,7 @@ def image_to_tensor(img, greyscale=False):
     else:
         img = img.convert("RGB")
 
-    transform = transforms.Compose([transforms.ToTensor()])
+    transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
     return transform(img)
 
 
@@ -398,7 +402,9 @@ def scale_tensor(tensor, input_mean=0.5, input_std=0.5):
     Returns:
         modified tensor
     """
-    transform = transforms.Compose([transforms.Normalize(input_mean, input_std)])
+    transform = torchvision.transforms.Compose(
+        [torchvision.transforms.Normalize(input_mean, input_std)]
+    )
     return transform(tensor)
 
 

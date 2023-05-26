@@ -2,11 +2,11 @@ import pytest
 from pathlib import Path
 import io
 import numpy as np
-from random import uniform
-from math import isclose
+import random
+import math
 import numpy.testing as npt
 import pytz
-from datetime import datetime, timedelta
+import datetime
 
 from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
 from opensoundscape import audio
@@ -171,11 +171,11 @@ def test_load_channels_as_audio_from_mono(veryshort_wav_str):
 
 
 def test_duration(veryshort_wav_audio):
-    assert isclose(veryshort_wav_audio.duration, 0.14208616780045352, abs_tol=1e-7)
+    assert math.isclose(veryshort_wav_audio.duration, 0.14208616780045352, abs_tol=1e-7)
 
 
 def test_normalize(veryshort_wav_audio):
-    assert isclose(
+    assert math.isclose(
         max(abs(veryshort_wav_audio.normalize(peak_level=0.5).samples)),
         0.5,
         abs_tol=1e-4,
@@ -184,18 +184,18 @@ def test_normalize(veryshort_wav_audio):
 
 def test_apply_gain():
     a = Audio([1, -1, 0], sample_rate=10).apply_gain(dB=-20)
-    assert isclose(a.samples.max(), 0.1, abs_tol=1e-6)
-    assert isclose(a.samples.min(), -0.1, abs_tol=1e-6)
+    assert math.isclose(a.samples.max(), 0.1, abs_tol=1e-6)
+    assert math.isclose(a.samples.min(), -0.1, abs_tol=1e-6)
 
 
 def test_gain_clips():
     a = Audio([0.5, -0.5, 0], sample_rate=10).apply_gain(dB=10)
-    assert isclose(a.samples.max(), 1, abs_tol=1e-6)
-    assert isclose(a.samples.min(), -1, abs_tol=1e-6)
+    assert math.isclose(a.samples.max(), 1, abs_tol=1e-6)
+    assert math.isclose(a.samples.min(), -1, abs_tol=1e-6)
 
 
 def test_normalize_by_db(veryshort_wav_audio):
-    assert isclose(
+    assert math.isclose(
         max(abs(veryshort_wav_audio.normalize(peak_dBFS=0).samples)), 1, abs_tol=1e-4
     )
 
@@ -213,7 +213,7 @@ def test_load_incorrect_timestamp(onemin_wav_str):
 
 def test_load_timestamp_notanaudiomothrecording(veryshort_wav_str):
     with pytest.raises(AssertionError):  # file doesn't have audiomoth metadata
-        local_timestamp = datetime(2018, 4, 5, 9, 32, 0)
+        local_timestamp = datetime.datetime(2018, 4, 5, 9, 32, 0)
         local_timezone = pytz.timezone("US/Eastern")
         timestamp = local_timezone.localize(local_timestamp)
         s = Audio.from_file(veryshort_wav_str, start_timestamp=timestamp)
@@ -221,7 +221,7 @@ def test_load_timestamp_notanaudiomothrecording(veryshort_wav_str):
 
 def test_load_timestamp_after_end_of_recording(metadata_wav_str):
     with pytest.raises(AudioOutOfBoundsError):
-        local_timestamp = datetime(2021, 4, 4, 0, 0, 0)  # 1 year after recording
+        local_timestamp = datetime.datetime(2021, 4, 4, 0, 0, 0)  # 1 year after recording
         local_timezone = pytz.timezone("US/Eastern")
         timestamp = local_timezone.localize(local_timestamp)
         s = Audio.from_file(
@@ -231,7 +231,7 @@ def test_load_timestamp_after_end_of_recording(metadata_wav_str):
 
 def test_load_timestamp_before_recording(metadata_wav_str):
     with pytest.raises(AudioOutOfBoundsError):
-        local_timestamp = datetime(2018, 4, 4, 0, 0, 0)  # 1 year before recording
+        local_timestamp = datetime.datetime(2018, 4, 4, 0, 0, 0)  # 1 year before recording
         local_timezone = pytz.timezone("UTC")
         timestamp = local_timezone.localize(local_timestamp)
         s = Audio.from_file(
@@ -242,7 +242,7 @@ def test_load_timestamp_before_recording(metadata_wav_str):
 def test_load_timestamp_before_warnmode(metadata_wav_str):
     with pytest.warns(UserWarning):
         correct_ts = Audio.from_file(metadata_wav_str).metadata["recording_start_time"]
-        local_timestamp = datetime(2018, 4, 4, 0, 0, 0)  # 1 year before recording
+        local_timestamp = datetime.datetime(2018, 4, 4, 0, 0, 0)  # 1 year before recording
         local_timezone = pytz.timezone("UTC")
         timestamp = local_timezone.localize(local_timestamp)
         s = Audio.from_file(
@@ -351,19 +351,23 @@ def test_load_metadata(veryshort_wav_str):
 
 
 def test_calculate_rms(veryshort_wav_audio):
-    assert isclose(veryshort_wav_audio.rms, 0.0871002, abs_tol=1e-7)
+    assert math.isclose(veryshort_wav_audio.rms, 0.0871002, abs_tol=1e-7)
 
 
 def test_calculate_dBFS(veryshort_wav_audio):
-    assert isclose(veryshort_wav_audio.dBFS, -18.189316963185377, abs_tol=1e-5)
+    assert math.isclose(veryshort_wav_audio.dBFS, -18.189316963185377, abs_tol=1e-5)
 
 
 def test_property_trim_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     duration = audio.duration
     for _ in range(100):
-        [first, second] = sorted([uniform(0, duration), uniform(0, duration)])
-        assert isclose(audio.trim(first, second).duration, second - first, abs_tol=1e-4)
+        [first, second] = sorted(
+            [random.uniform(0, duration), random.uniform(0, duration)]
+        )
+        assert math.isclose(
+            audio.trim(first, second).duration, second - first, abs_tol=1e-4
+        )
 
 
 def test_trim_updates_metadata(metadata_wav_str):
@@ -371,20 +375,20 @@ def test_trim_updates_metadata(metadata_wav_str):
     a2 = a.trim(1, 2)
     assert a2.metadata["recording_start_time"] == a.metadata[
         "recording_start_time"
-    ] + timedelta(seconds=1)
+    ] + datetime.timedelta(seconds=1)
     assert a2.metadata["duration"] == 1
 
 
 def test_trim_from_negative_time(silence_10s_mp3_str):
     """correct behavior is to trim from time zero"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(-1, 5)
-    assert isclose(audio.duration, 5, abs_tol=1e-5)
+    assert math.isclose(audio.duration, 5, abs_tol=1e-5)
 
 
 def test_trim_past_end_of_clip(silence_10s_mp3_str):
     """correct behavior is to trim to the end of the clip"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(9, 11)
-    assert isclose(audio.duration, 1, abs_tol=1e-5)
+    assert math.isclose(audio.duration, 1, abs_tol=1e-5)
 
 
 def test_resample_veryshort_wav(veryshort_wav_str):
@@ -455,8 +459,8 @@ def test_extend_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     duration = audio.duration
     for _ in range(100):
-        extend_length = uniform(duration, duration * 10)
-        assert isclose(
+        extend_length = random.uniform(duration, duration * 10)
+        assert math.isclose(
             audio.extend(extend_length).duration, extend_length, abs_tol=1e-4
         )
 
@@ -650,29 +654,31 @@ def test_concat(veryshort_wav_audio):
 
 def test_mix(veryshort_wav_audio):
     m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], gain=0)
-    assert isclose(max(veryshort_wav_audio.samples) * 2, max(m.samples), abs_tol=1e-6)
+    assert math.isclose(
+        max(veryshort_wav_audio.samples) * 2, max(m.samples), abs_tol=1e-6
+    )
 
 
 def test_mix_duration(veryshort_wav_audio):
     m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], duration=1)
-    assert isclose(m.duration, 1, abs_tol=1e-6)
+    assert math.isclose(m.duration, 1, abs_tol=1e-6)
 
 
 def test_mix_duration_extends(veryshort_wav_audio):
     m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], duration=1)
-    assert isclose(m.duration, 1, abs_tol=1e-3)
+    assert math.isclose(m.duration, 1, abs_tol=1e-3)
 
 
 def test_mix_duration_truncates(veryshort_wav_audio):
     a = Audio.silence(10, veryshort_wav_audio.sample_rate)
     m = audio.mix([a, veryshort_wav_audio], duration=1)
-    assert isclose(m.duration, 1, abs_tol=1e-3)
+    assert math.isclose(m.duration, 1, abs_tol=1e-3)
 
 
 def test_mix_offsets(veryshort_wav_audio):
     m = audio.mix([veryshort_wav_audio, veryshort_wav_audio], offsets=[0, 1])
     # expected behavior: length will be offset + audio length
-    assert isclose(m.duration, 1 + veryshort_wav_audio.duration, abs_tol=1e-3)
+    assert math.isclose(m.duration, 1 + veryshort_wav_audio.duration, abs_tol=1e-3)
 
 
 def test_mix_clip(veryshort_wav_audio):
@@ -684,20 +690,20 @@ def test_mix_clip(veryshort_wav_audio):
 def test_loop(veryshort_wav_audio):
     veryshort_wav_audio.metadata = {"duration": veryshort_wav_audio.duration}
     a2 = veryshort_wav_audio.loop(n=2)
-    assert isclose(a2.duration, veryshort_wav_audio.duration * 2, abs_tol=1e-5)
-    assert isclose(a2.duration, a2.metadata["duration"])
+    assert math.isclose(a2.duration, veryshort_wav_audio.duration * 2, abs_tol=1e-5)
+    assert math.isclose(a2.duration, a2.metadata["duration"])
 
     a3 = veryshort_wav_audio.loop(length=1)
-    assert isclose(a3.duration, 1.0, abs_tol=1e-5)
-    assert isclose(a3.metadata["duration"], 1.0, abs_tol=1e-5)
+    assert math.isclose(a3.duration, 1.0, abs_tol=1e-5)
+    assert math.isclose(a3.metadata["duration"], 1.0, abs_tol=1e-5)
 
 
 def test_extend(veryshort_wav_audio):
     a = veryshort_wav_audio.extend(length=1)
-    assert isclose(a.duration, 1.0, abs_tol=1e-5)
-    assert isclose(a.metadata["duration"], 1.0, abs_tol=1e-5)
+    assert math.isclose(a.duration, 1.0, abs_tol=1e-5)
+    assert math.isclose(a.metadata["duration"], 1.0, abs_tol=1e-5)
     # samples should be zero
-    assert isclose(0.0, np.max(a.samples[-100:]), abs_tol=1e-7)
+    assert math.isclose(0.0, np.max(a.samples[-100:]), abs_tol=1e-7)
 
 
 def test_bandpass_filter(veryshort_audio):
@@ -717,7 +723,7 @@ def test_estimate_delay(veryshort_audio):
         [Audio.silence(0.1, veryshort_audio.sample_rate), veryshort_audio]
     )
 
-    assert isclose(audio.estimate_delay(sig, veryshort_audio), 0.1, abs_tol=1e-6)
+    assert math.isclose(audio.estimate_delay(sig, veryshort_audio), 0.1, abs_tol=1e-6)
 
 
 def test_estimate_delay_with_bandpass(veryshort_audio):
@@ -728,11 +734,11 @@ def test_estimate_delay_with_bandpass(veryshort_audio):
     dly = audio.estimate_delay(
         sig, veryshort_audio, bandpass_range=[1000, 3000], bandpass_order=5
     )
-    assert isclose(dly, 0.1, abs_tol=1e-6)
+    assert math.isclose(dly, 0.1, abs_tol=1e-6)
 
 
 def test_estimate_delay_return_cc_max(veryshort_audio):
     a = veryshort_audio
     t, ccmax = audio.estimate_delay(a, a, return_cc_max=True, cc_filter="cc")
-    assert isclose(ccmax, sum(a.samples * a.samples), abs_tol=1e-5)
-    assert isclose(t, 0, abs_tol=1e-6)
+    assert math.isclose(ccmax, sum(a.samples * a.samples), abs_tol=1e-5)
+    assert math.isclose(t, 0, abs_tol=1e-6)

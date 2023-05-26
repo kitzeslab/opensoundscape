@@ -31,15 +31,12 @@ opensoundscape.torch.models.cnn.
 """
 import warnings
 
-from torchvision import models
-from torch import nn
 import torch
-from torchvision.models.inception import BasicConv2d
+import torchvision
 
 ARCH_DICT = dict()
 
 # inspiration from zhmiao/BirdMultiLabel
-import torch.nn as nn
 
 
 def register_arch(func):
@@ -82,7 +79,7 @@ def resnet18(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet18(weights=weights)
+    architecture_ft = torchvision.models.resnet18(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -119,7 +116,7 @@ def resnet34(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet34(weights=weights)
+    architecture_ft = torchvision.models.resnet34(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -156,7 +153,7 @@ def resnet50(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet50(weights=weights)
+    architecture_ft = torchvision.models.resnet50(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -193,7 +190,7 @@ def resnet101(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet101(weights=weights)
+    architecture_ft = torchvision.models.resnet101(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -230,7 +227,7 @@ def resnet152(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.resnet152(weights=weights)
+    architecture_ft = torchvision.models.resnet152(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -271,7 +268,7 @@ def alexnet(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.alexnet(weights=weights)
+    architecture_ft = torchvision.models.alexnet(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -311,7 +308,7 @@ def vgg11_bn(
             Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
 
     """
-    architecture_ft = models.vgg11_bn(weights=weights)
+    architecture_ft = torchvision.models.vgg11_bn(weights=weights)
 
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
@@ -353,7 +350,7 @@ def squeezenet1_0(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.squeezenet1_0(weights=weights)
+    architecture_ft = torchvision.models.squeezenet1_0(weights=weights)
 
     # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
@@ -404,7 +401,7 @@ def densenet121(
             specify channels in input sample, eg [channels h,w] sample shape
 
     """
-    architecture_ft = models.densenet121(weights=weights)
+    architecture_ft = torchvision.models.densenet121(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
@@ -448,15 +445,15 @@ def inception_v3(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = models.inception_v3(weights=weights)
+    architecture_ft = torchvision.models.inception_v3(weights=weights)
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
     # Handle the auxilary net
     num_ftrs = architecture_ft.AuxLogits.fc.in_features
-    architecture_ft.AuxLogits.fc = nn.Linear(num_ftrs, num_classes)
+    architecture_ft.AuxLogits.fc = torch.nn.Linear(num_ftrs, num_classes)
     # Handle the primary net
     num_ftrs = architecture_ft.fc.in_features
-    architecture_ft.fc = nn.Linear(num_ftrs, num_classes)
+    architecture_ft.fc = torch.nn.Linear(num_ftrs, num_classes)
     if num_channels != 3:
         warnings.warn(
             "Retaining weights while reshaping Inception "
@@ -464,7 +461,7 @@ def inception_v3(
             "have random weights."
         )
 
-        architecture_ft.Conv2d_1a_3x3 = BasicConv2d(
+        architecture_ft.Conv2d_1a_3x3 = torchvision.models.inception.BasicConv2d(
             num_channels, 32, kernel_size=3, stride=2
         )
 
@@ -742,4 +739,4 @@ def change_fc_output_size(
             number of output nodes for the new fc
     """
     num_ftrs = fc.in_features
-    return nn.Linear(num_ftrs, num_classes)
+    return torch.nn.Linear(num_ftrs, num_classes)
