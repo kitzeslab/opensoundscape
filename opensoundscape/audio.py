@@ -610,7 +610,7 @@ class Audio:
 
         # Compute the fft (fast fourier transform) of the selected clip
         N = len(self.samples)
-        fft = scipy.fftpack.fft(self.samples)
+        fft = scipy.fft.fft(self.samples)
 
         # create the frequencies corresponding to fft bins
         freq = scipy.fft.ftffreq(N, d=1 / self.sample_rate)

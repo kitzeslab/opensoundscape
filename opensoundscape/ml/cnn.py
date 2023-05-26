@@ -908,7 +908,7 @@ class CNN(BaseModule):
         # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
         if (
             type(samples) == pd.DataFrame
-            and type(samples.index) == pd.core.indexes.multiMultiIndex
+            and type(samples.index) == pd.core.indexes.multi.MultiIndex
         ):  # c1
             prediction_dataset = AudioFileDataset(
                 samples=samples, preprocessor=self.preprocessor

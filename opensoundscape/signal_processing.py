@@ -82,7 +82,7 @@ def cwt_peaks(
     # normalize, square, hilbert envelope, normalize
     x = x / np.max(x)
     x = x**2
-    x = abs(scipy.signalhilbert(x))
+    x = abs(scipy.signal.hilbert(x))
     x = x / np.max(x)
 
     # calcualte time vector for each point in cwt signal
