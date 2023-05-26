@@ -19,15 +19,15 @@ audio_object = audio_object.resample(22050)
 
 """
 import warnings
-from datetime import timedelta, datetime
+import datetime
 from pathlib import Path
 import json
 import io
-from urllib.request import urlopen
+import urllib
 
 import numpy as np
-from scipy.fftpack import fft as scipyfft
-from scipy.fft import fftfreq
+import scipy
+
 import librosa
 import soundfile
 import IPython.display
@@ -36,7 +36,6 @@ import opensoundscape
 from opensoundscape.utils import generate_clip_times_df, load_metadata
 from opensoundscape.aru import parse_audiomoth_metadata
 from opensoundscape.signal_processing import tdoa
-from scipy.signal import butter, sosfiltfilt
 
 DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
 
@@ -277,12 +276,13 @@ class Audio:
                 offset is None
             ), "You must not specify both `start_timestamp` and `offset`"
             assert (
-                type(start_timestamp) == datetime and start_timestamp.tzinfo is not None
+                type(start_timestamp) == datetime.datetime
+                and start_timestamp.tzinfo is not None
             ), "start_timestamp must be a localized datetime object"
             assert (
                 metadata is not None
                 and "recording_start_time" in metadata
-                and type(metadata["recording_start_time"]) == datetime
+                and type(metadata["recording_start_time"]) == datetime.datetime
             ), (
                 "metadata did not contain start time timestamp in key `recording_start_time`. "
                 "This key is automatically created when parsing AudioMoth metadata."
@@ -352,7 +352,7 @@ class Audio:
 
             # if the offset > 0, we need to update the timestamp
             if "recording_start_time" in metadata and offset > 0:
-                metadata["recording_start_time"] += timedelta(seconds=offset)
+                metadata["recording_start_time"] += datetime.timedelta(seconds=offset)
 
         return cls(samples, sr, resample_type=resample_type, metadata=metadata)
 
@@ -403,7 +403,9 @@ class Audio:
         Returns:
             Audio object
         """
-        samples, original_sample_rate = soundfile.read(io.BytesIO(urlopen(url).read()))
+        samples, original_sample_rate = soundfile.read(
+            io.BytesIO(urllib.request.urlopen(url).read())
+        )
         samples = samples.mean(1)  # sum to mono
         if sample_rate is not None and sample_rate != original_sample_rate:
             samples = librosa.resample(
@@ -494,7 +496,9 @@ class Audio:
         else:
             metadata = self.metadata.copy()
             if "recording_start_time" in metadata:
-                metadata["recording_start_time"] += timedelta(seconds=start_time)
+                metadata["recording_start_time"] += datetime.timedelta(
+                    seconds=start_time
+                )
 
             if "duration" in metadata:
                 metadata["duration"] = len(samples_trimmed) / self.sample_rate
@@ -606,10 +610,10 @@ class Audio:
 
         # Compute the fft (fast fourier transform) of the selected clip
         N = len(self.samples)
-        fft = scipyfft(self.samples)
+        fft = scipy.fft.fft(self.samples)
 
         # create the frequencies corresponding to fft bins
-        freq = fftfreq(N, d=1 / self.sample_rate)
+        freq = scipy.fft.fftfreq(N, d=1 / self.sample_rate)
 
         # remove negative frequencies and scale magnitude by 2.0/N:
         fft = 2.0 / N * fft[0 : int(N / 2)]
@@ -1196,7 +1200,7 @@ def parse_opso_metadata(comment_string):
     if metadata_version == "v0.1":
         # parse and re-format according to opso_metadata_v0.1 formatting
         if "recording_start_time" in metadata:
-            metadata["recording_start_time"] = datetime.fromisoformat(
+            metadata["recording_start_time"] = datetime.datetime.fromisoformat(
                 metadata["recording_start_time"]
             )
     # elif: # implement parsing of future metadata versions here
@@ -1352,7 +1356,9 @@ def butter_bandpass(low_f, high_f, sample_rate, order=9):
     nyq = 0.5 * sample_rate
     low = low_f / nyq
     high = high_f / nyq
-    sos = butter(order, [low, high], analog=False, btype="band", output="sos")
+    sos = scipy.signal.butter(
+        order, [low, high], analog=False, btype="band", output="sos"
+    )
     return sos
 
 
@@ -1371,7 +1377,7 @@ def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
         filtered time signal
     """
     sos = butter_bandpass(low_f, high_f, sample_rate, order=order)
-    return sosfiltfilt(sos, signal)
+    return scipy.signal.sosfiltfilt(sos, signal)
 
 
 def clipping_detector(samples, threshold=0.6):

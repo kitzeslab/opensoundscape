@@ -5,7 +5,7 @@ This module provides functionality to search audio for periodically fluctuating 
 import os
 import warnings
 
-from scipy import signal
+import scipy
 import numpy as np
 
 from opensoundscape.utils import generate_clip_times_df
@@ -35,7 +35,9 @@ def calculate_pulse_score(
         raise ValueError("amplitude does not have length > 0")
 
     # calculate amplitude modulation spectral density
-    frequencies, psd = signal.welch(amplitude, fs=amplitude_sample_rate, nfft=nfft)
+    frequencies, psd = scipy.signal.welch(
+        amplitude, fs=amplitude_sample_rate, nfft=nfft
+    )
 
     # look for the highest peak of power spectral density within pulse_rate_range
     min_rate = pulse_rate_range[0]

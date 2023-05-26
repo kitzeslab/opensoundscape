@@ -1,7 +1,6 @@
 """Utilities for opensoundscape"""
 
-from datetime import datetime
-
+import datetime
 import numpy as np
 import pandas as pd
 import pytz
@@ -96,7 +95,7 @@ def hex_to_time(s):
         datetime.datetime object representing the date and time in UTC
     """
     sec = int(s, 16)
-    timestamp = datetime.utcfromtimestamp(sec).replace(tzinfo=pytz.utc)
+    timestamp = datetime.datetime.utcfromtimestamp(sec).replace(tzinfo=pytz.utc)
     return timestamp
 
 

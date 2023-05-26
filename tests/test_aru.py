@@ -1,9 +1,9 @@
 """test for opensoundscape.aru module"""
-from datetime import datetime
+import datetime
 import pytz
 import pytest
+import math
 from opensoundscape import aru
-from math import isclose
 
 
 @pytest.fixture()
@@ -18,14 +18,14 @@ def silence_10s_mp3_str():
 
 def test_audiomoth_start_time():
     filename = "20191219_123300.WAV"
-    dt = datetime.strptime("20191219 12:33:00", "%Y%m%d %H:%M:%S")
+    dt = datetime.datetime.strptime("20191219 12:33:00", "%Y%m%d %H:%M:%S")
     dt = pytz.utc.localize(dt)
     assert aru.audiomoth_start_time(filename, filename_timezone="UTC") == dt
 
 
 def test_audiomoth_start_time_hex_format():
     filename = "5DFB6DFC.WAV"
-    dt = datetime.strptime("20191219 12:33:00", "%Y%m%d %H:%M:%S")
+    dt = datetime.datetime.strptime("20191219 12:33:00", "%Y%m%d %H:%M:%S")
     dt = pytz.utc.localize(dt)
     assert aru.audiomoth_start_time(filename, filename_timezone="UTC") == dt
 
@@ -36,7 +36,7 @@ def test_audiomoth_start_time_other_timezone():
     - should read the file name assuming it was written based on US/Eastern
     """
     filename = "20191219_073300.WAV"  # written in EST rather than UTC
-    dt = datetime.strptime("20191219 12:33:00", "%Y%m%d %H:%M:%S")
+    dt = datetime.datetime.strptime("20191219 12:33:00", "%Y%m%d %H:%M:%S")
     dt = pytz.utc.localize(dt)
     dt_read = aru.audiomoth_start_time(
         filename, filename_timezone="US/Eastern", to_utc=False
@@ -79,7 +79,7 @@ def test_parse_audiomoth_metadata():
     assert new_metadata["gain_setting"] == 2
     assert new_metadata["battery_state"] == 4.7
     assert new_metadata["recording_start_time"] == pytz.utc.localize(
-        datetime(2020, 4, 4, 10, 25)
+        datetime.datetime(2020, 4, 4, 10, 25)
     )
 
 
@@ -108,7 +108,7 @@ def test_parse_audiomoth_metadata_with_timezone():
     }
     new_metadata = aru.parse_audiomoth_metadata(metadata)
     assert new_metadata["recording_start_time"] == pytz.utc.localize(
-        datetime(2020, 12, 15, 00, 22, 55)
+        datetime.datetime(2020, 12, 15, 00, 22, 55)
     )
 
 
@@ -138,7 +138,7 @@ def test_parse_audiomoth_metadata_with_low_battery():
     new_metadata = aru.parse_audiomoth_metadata(metadata)
     assert new_metadata["gain_setting"] == "medium"
     assert new_metadata["recording_start_time"] == pytz.utc.localize(
-        datetime(2021, 5, 15, 10, 00, 00)
+        datetime.datetime(2021, 5, 15, 10, 00, 00)
     )
 
 
@@ -177,4 +177,4 @@ def test_parse_audiomoth_metadata_v16_to_v181():
     }
     new_metadata = aru.parse_audiomoth_metadata(metadata)
     assert new_metadata["gain_setting"] == "medium"
-    assert isclose(new_metadata["battery_state"], 4.5, abs_tol=1e-5)
+    assert math.isclose(new_metadata["battery_state"], 4.5, abs_tol=1e-5)

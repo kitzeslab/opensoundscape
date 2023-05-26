@@ -4,7 +4,7 @@ includes BoxedAnnotations class and utilities to combine or "diff" annotations,
 etc.
 """
 from pathlib import Path
-from itertools import chain
+import itertools
 import pandas as pd
 import numpy as np
 import warnings
@@ -701,7 +701,7 @@ def categorical_to_one_hot(labels, class_subset=None):
         class_subset: list of classes corresponding to columns in the array
     """
     if class_subset is None:
-        class_subset = list(set(chain(*labels)))
+        class_subset = list(set(itertools.chain(*labels)))
 
     one_hot = np.zeros([len(labels), len(class_subset)]).astype(int)
     for i, sample_labels in enumerate(labels):

@@ -1,8 +1,10 @@
-from opensoundscape import utils
-from numpy import nan
 import numpy as np
 import pytest
 import pandas as pd
+import pytz
+import datetime
+
+from opensoundscape import utils
 
 
 @pytest.fixture()
@@ -16,7 +18,7 @@ def metadata_wav_str():
 
 
 def test_isnan():
-    assert not utils.isNan(0) and utils.isNan(nan)
+    assert not utils.isNan(0) and utils.isNan(np.nan)
 
 
 def test_sigmoid():
@@ -42,20 +44,16 @@ def test_rescale_features():
 
 
 def test_hex_to_time():
-    from datetime import datetime
-    import pytz
 
     t = utils.hex_to_time("5F16A04E")
-    assert t == datetime(2020, 7, 21, 7, 59, 10, tzinfo=pytz.utc)
+    assert t == datetime.datetime(2020, 7, 21, 7, 59, 10, tzinfo=pytz.utc)
 
 
 def test_hex_to_time_convert_est():
-    from datetime import datetime
-    import pytz
 
     t = utils.hex_to_time("5F16A04E")
     t = t.astimezone(pytz.timezone("US/Eastern"))
-    f = pytz.timezone("US/Eastern").localize(datetime(2020, 7, 21, 3, 59, 10))
+    f = pytz.timezone("US/Eastern").localize(datetime.datetime(2020, 7, 21, 3, 59, 10))
     assert t == f
 
 

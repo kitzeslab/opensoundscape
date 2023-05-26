@@ -4,14 +4,14 @@
 import warnings
 import os
 
-from scipy import signal
+import scipy
 import numpy as np
 import librosa.filters
-from skimage.transform import resize as skresize
+import skimage
 from PIL import Image
 import torch
+import matplotlib
 from matplotlib import pyplot as plt
-from matplotlib.cm import get_cmap
 import matplotlib.colors
 
 from opensoundscape.audio import Audio
@@ -197,7 +197,7 @@ class Spectrogram:
             overlap_samples = int(window_samples * overlap_fraction)
         # else: use the provided overlap_samples argument
 
-        frequencies, times, spectrogram = signal.spectrogram(
+        frequencies, times, spectrogram = scipy.signal.spectrogram(
             x=audio.samples,
             fs=audio.sample_rate,
             window=window_type,
@@ -612,14 +612,14 @@ class Spectrogram:
 
         # apply colormaps
         if colormap is not None:  # apply a colormap to get RGB channels
-            cm = get_cmap(colormap)
+            cm = matplotlib.cm.get_cmap(colormap)
             array = cm(array)
 
         # resize and change channel dims
         if shape is None:
             shape = np.shape(array)
         out_shape = [shape[0], shape[1], channels]
-        array = skresize(array, out_shape)
+        array = skimage.transform.resize(array, out_shape)
 
         if return_type == "pil":  # expected shape of input is [h,w,c]
             # use correct type for img, and scale from 0-1 to 0-255

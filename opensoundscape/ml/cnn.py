@@ -11,12 +11,9 @@ import yaml
 
 import numpy as np
 import pandas as pd
-from pandas.core.indexes.multi import MultiIndex
 
 import torch
-import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
@@ -112,8 +109,8 @@ class CNN(BaseModule):
 
         # to use a custom DataLoader or Sampler, change these attributes
         # to the custom class (init must take same arguments)
-        self.train_dataloader_cls = DataLoader
-        self.inference_dataloader_cls = DataLoader
+        self.train_dataloader_cls = torch.utils.data.DataLoader
+        self.inference_dataloader_cls = torch.utils.data.DataLoader
 
         ### architecture ###
         # can be a pytorch CNN such as Resnet18 or a custom object
@@ -168,7 +165,7 @@ class CNN(BaseModule):
         ### training parameters ###
         # optimizer
         self.opt_net = None  # don't set directly. initialized during training
-        self.optimizer_cls = optim.SGD  # or torch.optim.Adam, etc
+        self.optimizer_cls = torch.optim.SGD  # or torch.optim.Adam, etc
 
         # instead of putting "params" key here, we only add it during
         # _init_optimizer, just before initializing the optimizers
@@ -295,7 +292,7 @@ class CNN(BaseModule):
             self.opt_net = self._init_optimizer()
 
         # Set up learning rate cooling schedule
-        self.scheduler = optim.lr_scheduler.StepLR(
+        self.scheduler = torch.optim.lr_scheduler.StepLR(
             self.opt_net,
             step_size=self.lr_update_interval,
             gamma=self.lr_cooling_factor,
@@ -909,7 +906,10 @@ class CNN(BaseModule):
         # (c1) user provided multi-index df with file,start_time,end_time of clips
         # (c2) user provided file list and wants clips to be split out automatically
         # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
-        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
+        if (
+            type(samples) == pd.DataFrame
+            and type(samples.index) == pd.core.indexes.multi.MultiIndex
+        ):  # c1
             prediction_dataset = AudioFileDataset(
                 samples=samples, preprocessor=self.preprocessor
             )
