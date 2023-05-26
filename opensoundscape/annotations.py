@@ -43,7 +43,7 @@ class BoxedAnnotations:
                 - "start_time": left bound, sec since beginning of audio
                 - "end_time": right bound, sec since beginning of audio
                 optional columns:
-                - "file": name or path of corresponding audio file
+                - "audio_file": name or path of corresponding audio file
                 - "low_f": lower frequency bound (values can be None/nan)
                 - "high_f": upper frequency bound (values can be None/nan)
             Note: other columns will be retained in the .df
@@ -53,7 +53,8 @@ class BoxedAnnotations:
 
         """
         standard_cols = [
-            "file",
+            "audio_file",
+            "raven_file",
             "annotation",
             "start_time",
             "end_time",
@@ -80,7 +81,7 @@ class BoxedAnnotations:
     @classmethod
     def from_raven_files(
         cls,
-        raven_paths,
+        raven_files,
         audio_files=None,
         annotation_column_idx=7,
         keep_extra_columns=True,
@@ -88,9 +89,9 @@ class BoxedAnnotations:
         """load annotations from Raven .txt files
 
         Args:
-            raven_paths: list of raven .txt file paths (as str or pathlib.Path)
+            raven_files: list of raven .txt file paths (as str or pathlib.Path)
             audio_files: (list) optionally specify audio files corresponding to each
-                raven file (length should match raven_paths)
+                raven file (length should match raven_files)
             annotation_column_idx: (int) position of column containing annotations
                 - [default: 7] will be correct if the first user-created column
                 in Raven contains annotations
@@ -109,8 +110,8 @@ class BoxedAnnotations:
             (the .df attribute is a dataframe containing each annotation)
         """
         all_file_dfs = []
-        for i, raven_path in enumerate(raven_paths):
-            df = pd.read_csv(raven_path, delimiter="\t")
+        for i, raven_file in enumerate(raven_files):
+            df = pd.read_csv(raven_file, delimiter="\t")
             if annotation_column_idx is not None:
                 df = df.rename(
                     columns={
@@ -132,6 +133,9 @@ class BoxedAnnotations:
                 }
             )
 
+            # add column containing the raven file path
+            df["raven_file"] = raven_file
+
             # remove undesired columns
             standard_columns = ["start_time", "end_time", "low_f", "high_f"]
             if annotation_column_idx is not None:
@@ -149,13 +153,16 @@ class BoxedAnnotations:
 
             # add audio file column
             if audio_files is not None:
-                df["file"] = audio_files[i]
+                df["audio_file"] = audio_files[i]
             else:
-                df["file"] = np.nan
+                df["audio_file"] = np.nan
 
             all_file_dfs.append(df)
 
-        return cls(df=pd.concat(all_file_dfs).reset_index())
+        # we drop the original index from the Raven annotations when we combine tables
+        all_annotations = pd.concat(all_file_dfs).reset_index(drop=True)
+
+        return cls(df=all_annotations)
 
     def to_raven_files(self, save_dir):  # TODO implement to_csv
         """save annotations to a Raven-compatible tab-separated text files
@@ -189,7 +196,7 @@ class BoxedAnnotations:
 
         # we will create one selection table for each file
         # this list may contain NaN, which we handle below
-        unique_files = df["file"].unique()
+        unique_files = df["audio_file"].unique()
 
         # If file names are no unique, raise an Exception
         # otherwise, multiple selection table files with the same name would be
@@ -204,10 +211,10 @@ class BoxedAnnotations:
         for file in unique_files:
             # for NaN values of file, call the output file "unspecified.selections.txt"
             if not file == file:
-                file_df = df[df["file"].isnull()]
+                file_df = df[df["audio_file"].isnull()]
                 fname = "unspecified_audio.selections.txt"
             else:
-                file_df = df[df["file"] == file]
+                file_df = df[df["audio_file"] == file]
                 fname = f"{Path(file).stem}.selections.txt"
             file_df.to_csv(f"{save_dir}/{fname}", sep="\t", index=False)
 
@@ -432,9 +439,9 @@ class BoxedAnnotations:
 
         for (file, start, end) in clip_df.index:
             if not file == file:  # file is NaN, get corresponding rows
-                file_df = df[df["file"].isnull()]
+                file_df = df[df["audio_file"].isnull()]
             else:  # subset annotations to this file
-                file_df = df[df.file == file]
+                file_df = df[df["audio_file"] == file]
 
             # warn user if no annotations correspond to this file
             if warn_no_annotations and len(file_df) == 0:
@@ -510,7 +517,7 @@ class BoxedAnnotations:
 
         # generate list of start and end times for each clip
         # if user passes None for full_duration, try to get the duration from each audio file
-        files = self.df["file"].unique()
+        files = self.df["audio_file"].unique()
         if full_duration is None:
             try:
                 clip_df = make_clip_df(
