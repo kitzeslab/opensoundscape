@@ -1,12 +1,11 @@
 """Signal processing tools for feature extraction and more"""
 import numpy as np
 import pandas as pd
-from scipy import signal
+from scipy.signal import hilbert, find_peaks, correlation_lags
+from scipy.fft import next_fast_len
 import pywt
 import matplotlib.pyplot as plt
 from pywt import central_frequency
-from scipy.signal import correlation_lags, correlate as scipy_correlate
-from scipy.fft import next_fast_len
 import torch
 
 from opensoundscape.utils import inrange
@@ -84,7 +83,7 @@ def cwt_peaks(
     # normalize, square, hilbert envelope, normalize
     x = x / np.max(x)
     x = x**2
-    x = abs(signal.hilbert(x))
+    x = abs(hilbert(x))
     x = x / np.max(x)
 
     # calcualte time vector for each point in cwt signal
@@ -100,7 +99,7 @@ def cwt_peaks(
     )
 
     # locate peaks
-    peak_idx, _ = signal.find_peaks(x, height=peak_threshold, distance=min_d)
+    peak_idx, _ = find_peaks(x, height=peak_threshold, distance=min_d)
     peak_times = [t[i] for i in peak_idx]
     peak_levels = [x[i] for i in peak_idx]
 

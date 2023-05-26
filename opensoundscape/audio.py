@@ -26,8 +26,10 @@ import io
 from urllib.request import urlopen
 
 import numpy as np
-from scipy.fftpack import fft as scipyfft
-from scipy.fft import fftfreq
+from scipy.fftpack import fft as scipy_fft
+from scipy.fft import fftfreq as scipy_fftffreq
+from scipy.signal import butter, sosfiltfilt
+
 import librosa
 import soundfile
 import IPython.display
@@ -36,7 +38,6 @@ import opensoundscape
 from opensoundscape.utils import generate_clip_times_df, load_metadata
 from opensoundscape.aru import parse_audiomoth_metadata
 from opensoundscape.signal_processing import tdoa
-from scipy.signal import butter, sosfiltfilt
 
 DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
 
@@ -606,10 +607,10 @@ class Audio:
 
         # Compute the fft (fast fourier transform) of the selected clip
         N = len(self.samples)
-        fft = scipyfft(self.samples)
+        fft = scipy_fft(self.samples)
 
         # create the frequencies corresponding to fft bins
-        freq = fftfreq(N, d=1 / self.sample_rate)
+        freq = scipy_fftffreq(N, d=1 / self.sample_rate)
 
         # remove negative frequencies and scale magnitude by 2.0/N:
         fft = 2.0 / N * fft[0 : int(N / 2)]

@@ -4,7 +4,7 @@
 import warnings
 import os
 
-from scipy import signal
+from scipy.signal import spectrogram as scipy_spectrogram
 import numpy as np
 import librosa.filters
 from skimage.transform import resize as skresize
@@ -197,7 +197,7 @@ class Spectrogram:
             overlap_samples = int(window_samples * overlap_fraction)
         # else: use the provided overlap_samples argument
 
-        frequencies, times, spectrogram = signal.spectrogram(
+        frequencies, times, spectrogram = scipy_spectrogram(
             x=audio.samples,
             fs=audio.sample_rate,
             window=window_type,
