@@ -40,8 +40,7 @@ For full API documentation and tutorials on how to use OpenSoundscape to work wi
 
 Using Audio and Spectrogram classes
 ```python
-from opensoundscape.audio import Audio
-from opensoundscape.spectrogram import Spectrogram
+from opensoundscape import Audio, Spectrogram
 
 #load an audio file and trim out a 5 second clip
 my_audio = Audio.from_file("/path/to/audio.wav")
