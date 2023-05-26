@@ -806,7 +806,7 @@ class CNN(BaseModule):
                     CNN.from_torch_dict on the saved file will cause an error. To fix this,
                     you can use .save() instead of .save_torch_model, or change 
                     `self.architecture_name` to one of the architecture name strings listed by 
-                    opensoundscape.torch.architectures.cnn_architectures.list_architectures()
+                    opensoundscape.ml.cnn_architectures.list_architectures()
                     if this architecture is supported."""
             )
 
@@ -1702,7 +1702,7 @@ def load_outdated_model(
     `Predict with pre-trained CNN` tutorial for details.
 
     For models created with the same version of OpenSoundscape as the one
-    you are using, simply use opensoundscape.torch.models.cnn.load_model().
+    you are using, simply use opensoundscape.ml.cnn.load_model().
 
     Note: for future use of the loaded model, you can simply call
     `model.save(path)` after creating it, then reload it with
