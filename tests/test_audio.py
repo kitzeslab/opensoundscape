@@ -221,7 +221,9 @@ def test_load_timestamp_notanaudiomothrecording(veryshort_wav_str):
 
 def test_load_timestamp_after_end_of_recording(metadata_wav_str):
     with pytest.raises(AudioOutOfBoundsError):
-        local_timestamp = datetime.datetime(2021, 4, 4, 0, 0, 0)  # 1 year after recording
+        local_timestamp = datetime.datetime(
+            2021, 4, 4, 0, 0, 0
+        )  # 1 year after recording
         local_timezone = pytz.timezone("US/Eastern")
         timestamp = local_timezone.localize(local_timestamp)
         s = Audio.from_file(
@@ -231,7 +233,9 @@ def test_load_timestamp_after_end_of_recording(metadata_wav_str):
 
 def test_load_timestamp_before_recording(metadata_wav_str):
     with pytest.raises(AudioOutOfBoundsError):
-        local_timestamp = datetime.datetime(2018, 4, 4, 0, 0, 0)  # 1 year before recording
+        local_timestamp = datetime.datetime(
+            2018, 4, 4, 0, 0, 0
+        )  # 1 year before recording
         local_timezone = pytz.timezone("UTC")
         timestamp = local_timezone.localize(local_timestamp)
         s = Audio.from_file(
@@ -242,7 +246,9 @@ def test_load_timestamp_before_recording(metadata_wav_str):
 def test_load_timestamp_before_warnmode(metadata_wav_str):
     with pytest.warns(UserWarning):
         correct_ts = Audio.from_file(metadata_wav_str).metadata["recording_start_time"]
-        local_timestamp = datetime.datetime(2018, 4, 4, 0, 0, 0)  # 1 year before recording
+        local_timestamp = datetime.datetime(
+            2018, 4, 4, 0, 0, 0
+        )  # 1 year before recording
         local_timezone = pytz.timezone("UTC")
         timestamp = local_timezone.localize(local_timestamp)
         s = Audio.from_file(
