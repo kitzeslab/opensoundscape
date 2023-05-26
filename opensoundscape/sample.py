@@ -118,7 +118,13 @@ class AudioSample(Sample):
     @property
     def end_time(self):
         "calculate sample end time as start_time + duration"
-        return self.start_time + self.duration
+        if self.duration is None:
+            return None
+        else:
+            if self.start_time is None:
+                return self.duration
+            else:
+                return self.start_time + self.duration
 
 
 def collate_samples(samples):
