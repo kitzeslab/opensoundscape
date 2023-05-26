@@ -309,7 +309,7 @@ def test_categorical_to_one_hot():
         cat_labels, class_subset=["a", "b", "c", "d"]
     )
     assert set(classes) == {"a", "b", "c", "d"}
-    assert np.array_equal(one_hot, [[1, 1, 0, 0], [1, 0, 1, 0]])
+    assert one_hot.tolist() == [[1, 1, 0, 0], [1, 0, 1, 0]]
 
     # without passing classes list:
     one_hot, classes = annotations.categorical_to_one_hot(cat_labels)
@@ -320,7 +320,7 @@ def test_one_hot_to_categorical():
     classes = ["a", "b", "c"]
     one_hot = [[0, 0, 1], [1, 1, 1]]
     cat_labels = annotations.one_hot_to_categorical(one_hot, classes)
-    cat_labels == [["c"], ["a", "b", "c"]]
+    assert list(cat_labels) == [["c"], ["a", "b", "c"]]
 
 
 def test_one_hot_to_categorical_and_back():
