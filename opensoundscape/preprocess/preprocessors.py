@@ -65,7 +65,8 @@ class BasePreprocessor:
 
         if after_key is None and before_key is None:
             # put this action at the end of the index
-            self.pipeline = self.pipeline.append(pd.Series({action_index: action}))
+            new_item = pd.Series({action_index: action})
+            self.pipeline = pd.concat([self.pipeline, new_item])
         elif before_key is not None:
             self._insert_action_before(before_key, action_index, action)
         elif after_key is not None:
@@ -193,15 +194,17 @@ class BasePreprocessor:
         """insert an item before a spcific index in a series"""
         i = list(self.pipeline.index).index(idx)
         part1 = self.pipeline[0:i]
+        new_item = pd.Series([value], index=[name])
         part2 = self.pipeline[i:]
-        self.pipeline = part1.append(pd.Series([value], index=[name])).append(part2)
+        self.pipeline = pd.concat([part1, new_item, part2])
 
     def _insert_action_after(self, idx, name, value):
         """insert an item after a spcific index in a series"""
         i = list(self.pipeline.index).index(idx)
         part1 = self.pipeline[0 : i + 1]
+        new_item = pd.Series([value], index=[name])
         part2 = self.pipeline[i + 1 :]
-        self.pipeline = part1.append(pd.Series([value], index=[name])).append(part2)
+        self.pipeline = pd.concat([part1, new_item, part2])
 
 
 class SpectrogramPreprocessor(BasePreprocessor):
