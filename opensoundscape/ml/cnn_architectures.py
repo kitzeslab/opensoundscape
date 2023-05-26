@@ -17,7 +17,7 @@ model has 10 output classes, write
 `my_arch=resnet18(10)`
 
 Then you can initialize a model object from
-`opensoundscape.torch.models.cnn` with your architecture:
+`opensoundscape.ml.cnn` with your architecture:
 
 `model=CNN(my_arch,classes,sample_duration)`
 
@@ -27,7 +27,7 @@ or override an existing model's architecture:
 
 Note: the InceptionV3 architecture must be used differently than other
 architectures - the easiest way is to simply use the InceptionV3 class in
-opensoundscape.torch.models.cnn.
+opensoundscape.ml.cnn.
 """
 import warnings
 
@@ -433,7 +433,7 @@ def inception_v3(
     Input: 229x229
 
     WARNING: expects (299,299) sized images and has auxiliary output. See
-    InceptionV3 class in `opensoundscape.torch.models.cnn` for use.
+    InceptionV3 class in `opensoundscape.ml.cnn` for use.
 
     Args:
         num_classes:
