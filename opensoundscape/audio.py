@@ -1292,10 +1292,10 @@ def _metadata_from_file_handler(path):
 
 def _write_metadata(metadata, metadata_format, path):
     """write metadata using one of the supported formats
-    
+
     metadata fields containing empty strings `''` will be replaced by a string
-    containing a single space `' '` as a workaround to 
-    https://github.com/bastibe/python-soundfile/issues/386. 
+    containing a single space `' '` as a workaround to
+    https://github.com/bastibe/python-soundfile/issues/386.
 
     Args:
         metadata: dictionary of metadata
@@ -1332,8 +1332,8 @@ def _write_metadata(metadata, metadata_format, path):
                 # replace empty strings with a single space, because
                 # empty string as value causes error (see
                 # https://github.com/bastibe/python-soundfile/issues/386)
-                if len(value)<1:
-                    value=' '
+                if len(value) < 1:
+                    value = " "
                 s.__setattr__(field, value)
 
 
