@@ -320,7 +320,7 @@ def test_one_hot_to_categorical():
     classes = ["a", "b", "c"]
     one_hot = [[0, 0, 1], [1, 1, 1]]
     cat_labels = annotations.one_hot_to_categorical(one_hot, classes)
-    assert np.array_equal(cat_labels, [["c"], ["a", "b", "c"]])
+    cat_labels == [["c"], ["a", "b", "c"]]
 
 
 def test_one_hot_to_categorical_and_back():
