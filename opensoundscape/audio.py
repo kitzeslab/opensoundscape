@@ -1293,6 +1293,10 @@ def _metadata_from_file_handler(path):
 def _write_metadata(metadata, metadata_format, path):
     """write metadata using one of the supported formats
 
+    metadata fields containing empty strings `''` will be replaced by a string
+    containing a single space `' '` as a workaround to
+    https://github.com/bastibe/python-soundfile/issues/386.
+
     Args:
         metadata: dictionary of metadata
         metadata_format: one of 'opso','opso_metadata_v0.1','soundfile'
@@ -1324,7 +1328,13 @@ def _write_metadata(metadata, metadata_format, path):
             "genre",
         ]:
             if field in metadata and metadata[field] is not None:
-                s.__setattr__(field, metadata[field])
+                value = str(metadata[field])
+                # replace empty strings with a single space, because
+                # empty string as value causes error (see
+                # https://github.com/bastibe/python-soundfile/issues/386)
+                if len(value) < 1:
+                    value = " "
+                s.__setattr__(field, value)
 
 
 def butter_bandpass(low_f, high_f, sample_rate, order=9):
