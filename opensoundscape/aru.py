@@ -92,6 +92,9 @@ def parse_audiomoth_metadata(metadata):
         metadata["gain_setting"] = comment.split(" gain")[0].split(" ")[-1]
 
     metadata["battery_state"] = _parse_audiomoth_battery_info(comment)
+    # if artist field doesn't exist for some reason, set it to None (to avoid KeyError)
+    if "artist" not in list(metadata.keys()):
+        metadata["artist"] = None
     metadata["device_id"] = metadata["artist"]
     if "temperature" in comment:
         metadata["temperature_C"] = float(
