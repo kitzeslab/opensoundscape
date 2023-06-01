@@ -83,7 +83,8 @@ class BoxedAnnotations:
         cls,
         raven_files,
         audio_files=None,
-        annotation_column_idx=7,
+        annotation_column_idx=8,
+        annotation_column_name=None,
         keep_extra_columns=True,
     ):
         """load annotations from Raven .txt files
@@ -93,11 +94,15 @@ class BoxedAnnotations:
             audio_files: (list) optionally specify audio files corresponding to each
                 raven file (length should match raven_files)
             annotation_column_idx: (int) position of column containing annotations
-                - [default: 7] will be correct if the first user-created column
-                in Raven contains annotations
+                - [default: 8] will be correct if the first user-created column
+                in Raven contains annotations. First column is 1, second is 2 etc.
                 - pass `None` to load the raven file without explicitly
                 assigning a column as the annotation column. The resulting
                 object's `.df` will have an `annotation` column with nan values!
+            annotation_column_name: (str) name of the column containing annotations
+                - default: None will use annotation-column_idx to find the annotation column
+                - if not None, this value overrides annotation_column_idx, and the column with
+                this name will be used as the annotations.
             keep_extra_columns: keep or discard extra Raven file columns
                 (always keeps start_time, end_time, low_f, high_f, annotation
                 audio_file). [default: True]
@@ -112,14 +117,29 @@ class BoxedAnnotations:
         all_file_dfs = []
         for i, raven_file in enumerate(raven_files):
             df = pd.read_csv(raven_file, delimiter="\t")
-            if annotation_column_idx is not None:
+            if annotation_column_name is not None:
+                # annotation_column_name argument takes precedence over
+                # annotation_column_idx. If it is passed, we use it and ignore
+                # annotation_column_idx!
+                if annotation_column_name in list(df.columns):
+                    df = df.rename(
+                        columns={
+                            annotation_column_name: "annotation",
+                        }
+                    )
+                else:
+                    # to be flexible, we'll give nan values if the column is missing
+                    df["annotation"] = np.nan
+
+            elif annotation_column_idx is not None:
+                # use the column number to specify which column contains annotations
+                # first column is 1, second is 2, etc (default: 8th column)
                 df = df.rename(
                     columns={
-                        df.columns[annotation_column_idx]: "annotation",
+                        df.columns[annotation_column_idx - 1]: "annotation",
                     }
                 )
-            else:
-                # user laoded table without specifying annotation column
+            else:  # None was passed to annotatino_column_idx
                 # we'll create an empty `annotation` column
                 df["annotation"] = np.nan
 
@@ -140,7 +160,6 @@ class BoxedAnnotations:
             standard_columns = ["start_time", "end_time", "low_f", "high_f"]
             if annotation_column_idx is not None:
                 standard_columns.append("annotation")
-
             if hasattr(keep_extra_columns, "__iter__"):
                 # keep the desired columns
                 # if values in keep_extra_columns are missing, fill with nan

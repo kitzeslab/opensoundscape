@@ -89,6 +89,24 @@ def test_load_raven_no_annotation_column(raven_file):
     assert set(a.df["Species"]) == {"WOTH", "EATO", "LOWA", np.nan}
 
 
+def test_load_raven_annotation_column_name(raven_file):
+    # specify the name of the annotation column
+    a = BoxedAnnotations.from_raven_files(
+        [raven_file], annotation_column_name="Species"
+    )
+    assert a.df["annotation"].values[0] == "WOTH"
+
+    # use a different column
+    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column_name="View")
+    assert a.df["annotation"].values[0] == "Spectrogram 1"
+
+    # use a column that doesn't exist: annotations should be nan
+    a = BoxedAnnotations.from_raven_files(
+        [raven_file], annotation_column_name="notacolumn"
+    )
+    assert a.df["annotation"].values[0] != a.df["annotation"].values[0]
+
+
 def test_load_raven_annotations_empty(raven_file_empty):
     a = BoxedAnnotations.from_raven_files([raven_file_empty])
     assert len(a.df) == 0
