@@ -99,6 +99,7 @@ class BoxedAnnotations:
                 - pass `None` to load the raven file without explicitly
                 assigning a column as the annotation column. The resulting
                 object's `.df` will have an `annotation` column with nan values!
+                NOTE: If `annotatino_column_name` is passed, this argument is ignored.
             annotation_column_name: (str) name of the column containing annotations
                 - default: None will use annotation-column_idx to find the annotation column
                 - if not None, this value overrides annotation_column_idx, and the column with
