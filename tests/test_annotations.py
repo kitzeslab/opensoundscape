@@ -39,7 +39,7 @@ def silence_10s_mp3_str():
 def boxed_annotations():
     df = pd.DataFrame(
         data={
-            "file": ["audio_file.wav"] * 3,
+            "audio_file": ["audio_file.wav"] * 3,
             "start_time": [0, 3, 4],
             "end_time": [1, 5, 5],
             "low_f": [0, 500, 1000],
@@ -54,7 +54,7 @@ def boxed_annotations():
 def boxed_annotations_zero_len():
     df = pd.DataFrame(
         data={
-            "file": ["audio_file.wav"] * 3,
+            "audio_file": ["audio_file.wav"] * 3,
             "start_time": [0, 3, 4],
             "end_time": [0, 3, 4],
             "low_f": [0, 500, 1000],
@@ -73,13 +73,13 @@ def test_load_raven_annotations(raven_file):
     def isnan(x):
         return x != x
 
-    assert isnan(ba.df["file"].values[0])
+    assert isnan(ba.df["audio_file"].values[0])
 
 
 def test_load_raven_annotations_w_audio(raven_file):
     ba = BoxedAnnotations.from_raven_files([raven_file], ["audio_path"])
     assert set(ba.df["annotation"]) == {"WOTH", "EATO", "LOWA", np.nan}
-    assert ba.df["file"].values[0] == "audio_path"
+    assert ba.df["audio_file"].values[0] == "audio_path"
 
 
 def test_load_raven_no_annotation_column(raven_file):
@@ -158,8 +158,8 @@ def test_global_one_hot_labels(boxed_annotations):
 
 def test_one_hot_labels_like(boxed_annotations):
     clip_df = generate_clip_times_df(5, clip_duration=1.0, clip_overlap=0)
-    clip_df["file"] = "audio_file.wav"
-    clip_df = clip_df.set_index(["file", "start_time", "end_time"])
+    clip_df["audio_file"] = "audio_file.wav"
+    clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
     labels = boxed_annotations.one_hot_labels_like(
         clip_df, class_subset=["a"], min_label_overlap=0.25
     )
@@ -168,8 +168,8 @@ def test_one_hot_labels_like(boxed_annotations):
 
 def test_one_hot_labels_like_overlap(boxed_annotations):
     clip_df = generate_clip_times_df(3, clip_duration=1.0, clip_overlap=0.5)
-    clip_df["file"] = "audio_file.wav"
-    clip_df = clip_df.set_index(["file", "start_time", "end_time"])
+    clip_df["audio_file"] = "audio_file.wav"
+    clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
     labels = boxed_annotations.one_hot_labels_like(
         clip_df, class_subset=["a"], min_label_overlap=0.25
     )
@@ -189,7 +189,9 @@ def test_one_hot_clip_labels(boxed_annotations):
 
 def test_one_hot_clip_labels_get_duration(boxed_annotations, silence_10s_mp3_str):
     """should get duration of audio files if full_duration is None"""
-    boxed_annotations.df["file"] = [silence_10s_mp3_str] * len(boxed_annotations.df)
+    boxed_annotations.df["audio_file"] = [silence_10s_mp3_str] * len(
+        boxed_annotations.df
+    )
     labels = boxed_annotations.one_hot_clip_labels(
         full_duration=None,
         clip_duration=2.0,
@@ -346,8 +348,8 @@ def test_raven_annotation_methods_empty(raven_file_empty):
         full_duration=10,
         clip_duration=2,
     )
-    clip_df["file"] = "a"
-    clip_df = clip_df.set_index(["file", "start_time", "end_time"])
+    clip_df["audio_file"] = "a"
+    clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
 
     # class_subset = None: keep all
     labels_df = a.one_hot_labels_like(
