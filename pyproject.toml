@@ -20,7 +20,6 @@ include = ["opensoundscape/**/*.py"]
 python = ">=3.8"
 docopt = ">=0.6.2"
 librosa = ">=0.10.0"
-ray = ">=0.8.5"
 torch = ">=2.0.0"
 torchvision = ">=0.15.1"
 ipykernel = ">=5.2.0"
