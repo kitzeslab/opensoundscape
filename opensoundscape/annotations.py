@@ -143,10 +143,14 @@ class BoxedAnnotations:
 
             if hasattr(keep_extra_columns, "__iter__"):
                 # keep the desired columns
-                df = df[standard_columns + list(keep_extra_columns)]
+                # if values in keep_extra_columns are missing, fill with nan
+                df = df.reindex(
+                    columns=standard_columns + list(keep_extra_columns),
+                    fill_value=np.nan,
+                )
             elif not keep_extra_columns:
                 # only keep required columns
-                df = df[standard_columns]
+                df = df.reindex(columns=standard_columns)
             else:
                 # keep all columns
                 pass
@@ -160,6 +164,8 @@ class BoxedAnnotations:
             all_file_dfs.append(df)
 
         # we drop the original index from the Raven annotations when we combine tables
+        # if the dataframes have different columns, we fill missing columns with nan values
+        # and keep all unique columns
         all_annotations = pd.concat(all_file_dfs).reset_index(drop=True)
 
         return cls(df=all_annotations)

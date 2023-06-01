@@ -94,6 +94,30 @@ def test_load_raven_annotations_empty(raven_file_empty):
     assert len(a.df) == 0
 
 
+def test_load_raven_annotations_different_columns(raven_file, raven_file_empty):
+    # keep all extra columns
+    ba = BoxedAnnotations.from_raven_files(
+        [raven_file, raven_file_empty], keep_extra_columns=True
+    )
+    assert "distance" in list(ba.df.columns)
+    assert "type" in list(ba.df.columns)
+
+    # keep one extra column
+    ba = BoxedAnnotations.from_raven_files(
+        [raven_file, raven_file_empty], keep_extra_columns=["distance"]
+    )
+    assert "distance" in list(ba.df.columns)
+    assert not "type" in list(ba.df.columns)
+    # this would fail before #737 was resolved
+
+    # keep no extra column
+    ba = BoxedAnnotations.from_raven_files(
+        [raven_file, raven_file_empty], keep_extra_columns=False
+    )
+    assert not "distance" in list(ba.df.columns)
+    assert not "type" in list(ba.df.columns)
+
+
 def test_to_raven_files(boxed_annotations, saved_raven_file):
     """note: assumes raven file will be named audio_file.annotations.txt"""
     assert not saved_raven_file.exists()
