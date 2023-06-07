@@ -42,7 +42,7 @@ class SpatialEvent:
         Args:
             receiver_files: list of audio files, one for each reciever
             receiver_positions: list of [x,y] or [x,y,z] cartesian position of each receiver in meters
-            max_delay: maximum time delay (in seconds) to consider for time-delay-of-arrival estimate
+            max_delay: maximum time delay (in seconds) to consider for time-delay-of-arrival estimate. Cannot be longer than the 1/2 the duration.
             start_time: start position of detection relative to start of audio file, for cross correlation
             duration: duration of audio segment to use for cross-correlation
             class_name=None: (str) name of detection's class
@@ -73,6 +73,11 @@ class SpatialEvent:
         self.cc_threshold = cc_threshold
         self.max_delay = max_delay
 
+        # check that max_delay is not longer than the duration of the audio and raise a value error if it is
+        if self.max_delay >= self.duration:
+            raise ValueError(
+                f"max_delay ({self.max_delay}) is longer than duration ({self.duration}) of audio clips."
+            )
         # initialize attributes to store values calculated by methods
         self.tdoas = None  # time delay at each receiver
         self.cc_maxs = None  # max of cross correlation for each time delay
@@ -216,13 +221,6 @@ class SpatialEvent:
             duration=dur + 2 * max_delay,
         )
 
-        # check length of audio1 samples is what we expect
-        expected_length = int(audio1.sample_rate * (dur + 2 * max_delay))
-        if len(audio1.samples) < expected_length:
-            raise ValueError(
-                "The reference audio length is shorter than expected - check if you are estimating a delay that could extend beyond the start or end of the audio file."
-            )
-
         # bandpass once now to avoid repeating operation for each receiver
         if bandpass_range is not None:
             audio1 = audio1.bandpass(bandpass_range[0], bandpass_range[1], order=9)
@@ -232,7 +230,9 @@ class SpatialEvent:
         tdoas = [0]  # first file's delay to itself is zero
         cc_maxs = [1]  # set first file's cc_max to 1
         for file in self.receiver_files[1:]:
-            audio2 = Audio.from_file(file, offset=start, duration=dur)
+            audio2 = Audio.from_file(
+                file, offset=start - max_delay, duration=dur + 2 * max_delay
+            )
             tdoa, cc_max = audio.estimate_delay(
                 primary_audio=audio2,
                 reference_audio=audio1,

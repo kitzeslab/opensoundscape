@@ -1119,10 +1119,9 @@ def estimate_delay(
     skip_ref_bandpass=False,
 ):
     """
-    Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal.
-    The reference audio must start at the start time of the primary_audio - max_delay, and must end at the end time of the primary_audio + max_delay.
+    Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal. The audio objects must be time-synchronized
 
-    optionally bandpass audio signals to a frequency range
+    Pptionally bandpass audio signals to a frequency range
 
     For example, if audio is delayed by 1 second compared to reference_audio,
     result is 1.0.
@@ -1130,9 +1129,7 @@ def estimate_delay(
     Args:
         primary_audio: audio object containing the signal of interest
         reference_audio: audio object containing the reference signal.
-            The reference audio signal must start at the start time of the primary_audio - max_delay.
-            The reference audio must end at the end time of the primary_audio + max_delay.
-        max_delay: maximum time delay to consider, in seconds
+        max_delay: maximum time delay to consider, in seconds. Must be less than the duration of the primary audio.
             (see `opensoundscape.signal_processing.tdoa`)
         bandpass_range: if None, no bandpass filter is performed
             otherwise [low_f,high_f]
@@ -1155,15 +1152,6 @@ def estimate_delay(
     sr = primary_audio.sample_rate
     if reference_audio.sample_rate != sr:
         reference_audio = reference_audio.resample(sr)
-
-    # check if reference audio is close to the expected length
-    # reference audio should start -max_delay before primary_audio and end +max_delay after
-    expected_length = primary_audio.duration + 2 * max_delay
-    if abs(reference_audio.duration - expected_length) > 2 / sr:  # 2 sample tolerance
-        raise ValueError(
-            f"reference_audio is of length: ({reference_audio.duration}) "
-            f"Expected length is primary_audio duration + 2*max_delay ({expected_length})"
-        )
 
     # apply audio-domain butterworth bandpass filter if desired
     if bandpass_range is not None:

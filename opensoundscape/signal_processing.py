@@ -568,15 +568,17 @@ def tdoa(
     estimates time delay by finding the maximum of the generalized cross correlation (gcc)
     of two signals. The two signals are discrete-time series with the same sample rate.
 
+    Only the central portion of the signal, from max_delay after the start and max_delay before the end, is used for the calculation.
+    All of the reference signal is used.
+
     For example, if the signal arrives 2.5 seconds _after_ the reference signal, returns 2.5;
     if it arrives 0.5 seconds _before_ the reference signal, returns -0.5.
 
     Args:
-        signal: Audio object containing the signal of interest
-        reference_signal: np.array or list containing the reference signal. The reference signal must start max_delay seconds before the signal of interest,
-            i.e. if the signal is 10 seconds long, and max_delay=0.5
-            then reference signal must be 11 seconds long. Starting 0.5 seconds before the signal, and ending 0.5 seconds after the signal.
-        max_delay: maximum possible tdoa (seconds) between the two signals. The tdoa returned will be between -max_delay and +max_delay.
+        signal: np.array or list object containing the signal of interest
+        reference_signal: np.array or list containing the reference signal. Both audio recordings must be time-synchronized.
+        max_delay: maximum possible tdoa (seconds) between the two signals. Cannot be longer than 1/2 the duration of the signal.
+        The tdoa returned will be between -max_delay and +max_delay.
         cc_filter: see gcc()
         sample_rate: sample rate (Hz) of signals; both signals must have same sample rate
         return_max: if True, returns the maximum value of the generalized cross correlation
@@ -593,18 +595,23 @@ def tdoa(
 
     See also: gcc() if you want the raw output of generalized cross correlation
     """
-    # check that reference signal is as long as signal + 2*max_delay
-    expected_ref_length = len(signal) + int(2 * max_delay * sample_rate)
+    # check that the two signals are the same length
+
     if (
-        len(reference_signal) - expected_ref_length > 1
-    ):  # allow for at most 1 sample error
+        len(reference_signal) - len(signal) > 1
+    ):  # allow 1 sample difference for rounding errors
+        raise ValueError("reference_signal and signal must be the same length.")
+
+    # check that the maximum delay is not longer than 1/2 the audio signal
+    audio_len = len(signal) / sample_rate
+    if max_delay >= audio_len / 2:
         raise ValueError(
-            "reference_signal is too long. Make sure it starts at max_delay before the signal of interest, and ends max_delay seconds after the signal."
+            f"max_delay cannot be longer than 1/2 the signal. max_delay is {max_delay} seconds, signal is {audio_len} seconds long."
         )
-    elif len(reference_signal) - expected_ref_length < -1:
-        raise ValueError(
-            "reference_signal is too short. Make sure it starts at max_delay before the signal of interest, and ends max_delay seconds after the signal."
-        )
+    # trim the primary signal to just the central part
+    start = int(max_delay * sample_rate)
+    end = int(len(reference_signal) - max_delay * sample_rate)
+    signal = signal[start:end]
 
     # compute the generalized cross correlation between the signals
     cc = gcc(signal, reference_signal, cc_filter=cc_filter)
