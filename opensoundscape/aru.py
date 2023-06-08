@@ -136,7 +136,8 @@ def _parse_audiomoth_comment_dt(comment):
         localized datetime object in timezone specified by original metadata
     """
     # extract relevant portion of comment
-    dt_str = comment.split("Recorded at ")[1].split(" by ")[0]
+    # datetime content ends after `)`
+    dt_str = comment.split("Recorded at ")[1].split(")")[0] + ")"
 
     # handle formats like "UTC-5" or "UTC+0130"
     if "UTC-" in dt_str or "UTC+" in dt_str:
