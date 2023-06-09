@@ -785,7 +785,7 @@ def test_estimate_delay_with_bandpass(veryshort_audio):
         bandpass_range=[100, 10000],
         bandpass_order=5,
     )
-    assert isclose(dly, delay, abs_tol=1e-4)
+    assert math.isclose(dly, delay, abs_tol=1e-4)
 
 
 def test_estimate_delay_return_cc_max(veryshort_audio):
@@ -805,4 +805,4 @@ def test_estimate_delay_return_cc_max(veryshort_audio):
     assert math.isclose(
         ccmax, sum(section_used.samples * section_used.samples), abs_tol=1e-5
     )
-    assert isclose(delay, 0, abs_tol=1e-6)
+    assert math.isclose(delay, 0, abs_tol=1e-6)

@@ -285,7 +285,7 @@ def test_all_tdoa_filter_types_find_correct_delay_with_noise():
             cc_filter=method,
             sample_rate=1,
         )
-        assert isclose(
+        assert math.isclose(
             estimated_sample_delay, delay, abs_tol=1
         )  # allow 1 sample error due to float precision
 
@@ -297,7 +297,7 @@ def test_all_tdoa_filter_types_find_correct_delay_with_noise():
             cc_filter=method,
             sample_rate=22050,
         )
-        assert isclose(
+        assert math.isclose(
             estimated_delay, delay / 22050, abs_tol=5e-5
         )  # allow 1 sample error due to float precision
 
@@ -308,7 +308,6 @@ def test_cc_scipy_equivalence():
     import scipy.signal as sig
 
     for delay in range(-20, 20):
-
         start = 500  # start of signal
         end = 510  # end of signal
 
@@ -341,7 +340,7 @@ def test_tdoa_return_max():
     delay, cc_max = sp.tdoa(
         a, reference_signal, max_delay, cc_filter="cc", sample_rate=1, return_max=True
     )
-    assert isclose(cc_max, 3 * 3 * (end - start), abs_tol=1e-4)
+    assert math.isclose(cc_max, 3 * 3 * (end - start), abs_tol=1e-4)
 
 
 def test_tdoa_max_delay_true_delay_higher():
