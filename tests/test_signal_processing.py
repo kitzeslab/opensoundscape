@@ -239,12 +239,12 @@ def test_gcc():
 
 
 def test_all_tdoa_filter_types_find_correct_delay_no_noise():
-    delay = 20  # samples of delay (positive: second signal arrives before first)
+    delay = 20  # samples of delay (positive: signal arrives 20 samples later in signal than in reference)
     start = 500  # start of signal
     end = 510  # end of signal
 
-    a = np.zeros(1000)
-    a[start:end] = 3  # impulse
+    signal = np.zeros(1000)
+    signal[start:end] = 3  # impulse
     reference_signal = np.zeros(1000)
     reference_signal[start - delay : end - delay] = 3
 
@@ -253,7 +253,7 @@ def test_all_tdoa_filter_types_find_correct_delay_no_noise():
 
     for method in ["phat", "roth", "scot", "ht", "cc", "cc_norm"]:
         estimated_sample_delay = sp.tdoa(
-            a,
+            signal,
             reference_signal,
             max_delay=max_delay,
             cc_filter=method,

@@ -785,7 +785,6 @@ class Audio:
         for idx, (start, end) in enumerate(
             zip(clip_df["start_time"], clip_df["end_time"])
         ):
-
             # Trim the clip to desired range
             audio_clip = self.trim(start, end)
 
@@ -1125,7 +1124,7 @@ def estimate_delay(
     """
     Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal. The audio objects must be time-synchronized
 
-    Pptionally bandpass audio signals to a frequency range
+    Optionally bandpass audio signals to a frequency range
 
     For example, if audio is delayed by 1 second compared to reference_audio,
     result is 1.0.

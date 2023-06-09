@@ -105,7 +105,6 @@ def cwt_peaks(
     ## plotting ##
 
     if plot:
-
         # plot cwt signal and detected peaks
         plt.plot(t, x)
         plt.scatter(peak_times, peak_levels, c="red")
@@ -227,7 +226,6 @@ def find_accel_sequences(
             # invalid point
 
             if building_sequence:
-
                 # check: should we break the sequence or continue?
                 if i - last_used_index > max_skip or not inrange(dt, dt_range):
                     # one of the two continuation criterea was broken.
@@ -624,9 +622,6 @@ def tdoa(
     # convert lag to time delay
     tdoa = (lag / sample_rate) - max_delay
     max_cc = np.max(cc)
-
-    # generate the relative offsets for each index position of `cc`
-    lags = scipy.signal.correlation_lags(len(signal), len(reference_signal))
 
     if return_max:
         return tdoa, np.max(cc)
