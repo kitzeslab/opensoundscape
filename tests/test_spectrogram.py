@@ -3,7 +3,9 @@ from opensoundscape.audio import Audio
 from opensoundscape.spectrogram import Spectrogram, MelSpectrogram
 import pytest
 import numpy as np
-from math import isclose
+import math
+import torch
+from PIL.Image import Image
 
 
 @pytest.fixture()
@@ -37,10 +39,10 @@ def test_spectrogram_shape_of_veryshort(veryshort_wav_str):
     assert spec.spectrogram.shape == (257, 21)
     assert spec.frequencies.shape == (257,)
     assert spec.times.shape == (21,)
-    assert isclose(spec.window_length, 0.02321995465, abs_tol=1e-4)
-    assert isclose(spec.window_step, 0.005804988662, abs_tol=1e-4)
-    assert isclose(spec.duration, audio.duration, abs_tol=1e-2)
-    assert isclose(spec.window_start_times[0], 0, abs_tol=1e-4)
+    assert math.isclose(spec.window_length, 0.02321995465, abs_tol=1e-4)
+    assert math.isclose(spec.window_step, 0.005804988662, abs_tol=1e-4)
+    assert math.isclose(spec.duration, audio.duration, abs_tol=1e-2)
+    assert math.isclose(spec.window_start_times[0], 0, abs_tol=1e-4)
 
 
 def test_spectrogram_shape_of_windowlengths_overlapfraction(veryshort_wav_str):
@@ -182,7 +184,6 @@ def test_net_amplitude_spectrogram():
 
 
 def test_to_image():
-    from PIL.Image import Image
 
     print(
         type(
@@ -206,7 +207,6 @@ def test_to_image():
 
 
 def test_to_image_with_bandpass():
-    from PIL.Image import Image
 
     print(
         type(
@@ -251,8 +251,6 @@ def test_melspectrogram_to_image_numchannels(veryshort_wav_str):
 
 
 def test_melspectrogram_to_image_alltypes(veryshort_wav_str):
-    from PIL.Image import Image
-    from torch import Tensor
 
     audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
     mel_spec = MelSpectrogram.from_audio(audio)
@@ -261,7 +259,7 @@ def test_melspectrogram_to_image_alltypes(veryshort_wav_str):
     img = mel_spec.to_image(shape=(10, 20), return_type="np")
     assert isinstance(img, np.ndarray)
     img = mel_spec.to_image(shape=(10, 20), return_type="torch")
-    assert isinstance(img, Tensor)
+    assert isinstance(img, torch.Tensor)
 
 
 def test_melspectrogram_to_image_with_invert(veryshort_wav_str):

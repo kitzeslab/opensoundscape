@@ -17,7 +17,7 @@ Lapp, Rhinehart, Freeland-Haynes, Khilnani, Syunkova, and Kitzes, 2023. "OpenSou
 
 # Installation
 
-OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.8, and 3.9. For Apple Silicon (M1 chip) users, Python 3.9 is recommended and may be required to avoid dependency issues.
+OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.8, 3.9, 3.10, and 3.11. For Apple Silicon (M1 chip) users, Python >=3.9 is recommended and may be required to avoid dependency issues.
 
 Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.9.0`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
 
@@ -40,8 +40,7 @@ For full API documentation and tutorials on how to use OpenSoundscape to work wi
 
 Using Audio and Spectrogram classes
 ```python
-from opensoundscape.audio import Audio
-from opensoundscape.spectrogram import Spectrogram
+from opensoundscape import Audio, Spectrogram
 
 #load an audio file and trim out a 5 second clip
 my_audio = Audio.from_file("/path/to/audio.wav")

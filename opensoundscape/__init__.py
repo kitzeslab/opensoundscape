@@ -29,3 +29,4 @@ from .ml.datasets import AudioFileDataset, AudioSplittingDataset
 from .preprocess.actions import Action
 from .preprocess.preprocessors import SpectrogramPreprocessor
 from .sample import AudioSample
+from .annotations import BoxedAnnotations

@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
-from opensoundscape import localization
 import pytest
+import math
+
+from opensoundscape import localization
 
 
 @pytest.fixture()
@@ -177,10 +179,65 @@ def test_localization_pipeline(file_coords_csv, predictions_csv):
     assert len(localized_events) == 5
 
     for event in localized_events:
-        from math import isclose
+        assert math.isclose(event.position_estimate[0], true_x, abs_tol=2)
+        assert math.isclose(event.position_estimate[1], true_y, abs_tol=2)
 
-        assert isclose(event.position_estimate[0], true_x, abs_tol=2)
-        assert isclose(event.position_estimate[1], true_y, abs_tol=2)
+
+def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detections):
+    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    localized_events, _ = array.localize_detections(
+        detections=detections,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        localization_algorithm="gillette",
+        bandpass_ranges={"zeep": (7000, 10000)},
+    )
+
+    true_TDOAS = np.array(
+        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
+    )  # with reference receiver LOCA_2021_3...
+
+    for event in localized_events:
+        if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
+            assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
+
+
+def test_InsufficientReceiversError(file_coords_csv, predictions_csv):
+    file_coords = pd.read_csv(file_coords_csv, index_col=0)
+    preds = pd.read_csv(predictions_csv, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    localized_events, unlocalized_events = array.localize_detections(
+        detections=preds,
+        min_n_receivers=4,
+        cc_threshold=100,  # too high. Spatial events will all be unlocalized.
+        max_receiver_dist=100,
+        localization_algorithm="gillette",
+    )
+    assert len(localized_events) == 0
+    assert len(unlocalized_events) > 1
+    with pytest.raises(localization.InsufficientReceiversError):
+        unlocalized_events[0].estimate_location(min_n_receivers=8)
+
+
+def test_SynchronizedRecorderArray_SpatialEvents_not_generated(
+    file_coords_csv, predictions_csv
+):
+    # Tests that the SynchronizedRecorderArray will not return any SpatialEvents if
+    # min_n_receivers is set too high.
+    file_coords = pd.read_csv(file_coords_csv, index_col=0)
+    preds = pd.read_csv(predictions_csv, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    localized_events, unlocalized_events = array.localize_detections(
+        detections=preds,
+        min_n_receivers=10,  # too high. No SpatialEvents will be outputted.
+        cc_threshold=0,
+        max_receiver_dist=100,
+        localization_algorithm="gillette",
+    )
+    assert len(localized_events) == 0
+    assert len(unlocalized_events) == 0
 
 
 def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detections):

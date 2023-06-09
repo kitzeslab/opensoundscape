@@ -1,11 +1,8 @@
 """Tools for localizing audio events from synchronized recording arrays"""
 import warnings
 import numpy as np
-import pandas as pd
-from opensoundscape.audio import Audio
-from scipy.signal import correlate, correlation_lags
 
-import opensoundscape.signal_processing as sp
+from opensoundscape.audio import Audio
 from opensoundscape import audio
 
 # define defaults for physical constants

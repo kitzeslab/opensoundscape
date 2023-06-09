@@ -3,8 +3,7 @@ from opensoundscape.audio import Audio
 import pytest
 import numpy as np
 from opensoundscape import signal_processing as sp
-from numpy.testing import assert_allclose
-from math import isclose
+import math
 
 
 @pytest.fixture()
@@ -321,7 +320,7 @@ def test_cc_scipy_equivalence():
         b += np.random.rand(1000)
         gccs = sp.gcc(a, b, cc_filter="cc")  # use plain cross-correlation
         # should be exactly the same as scipy.signal.correlate
-        assert_allclose(gccs, sig.correlate(a, b, mode="full"), 1e-6, 1)
+        np.testing.assert_allclose(gccs, sig.correlate(a, b, mode="full"), 1e-6, 1)
 
 
 def test_tdoa_return_max():

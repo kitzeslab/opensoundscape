@@ -1,12 +1,11 @@
 """classes for strategically sampling within a DataLoader"""
 import random
 import numpy as np
-from torch.utils.data.sampler import Sampler
 import torch
 import torch.utils.data
 
 
-class ImbalancedDatasetSampler(Sampler):
+class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
     """Samples elements randomly from a given list of indices for imbalanced dataset
     Args:
         indices (list, optional): a list of indices
@@ -110,7 +109,7 @@ def class_aware_sample_generator(cls_iter, data_iter_list, n, num_samples_cls=1)
         j += 1
 
 
-class ClassAwareSampler(Sampler):
+class ClassAwareSampler(torch.utils.data.sampler.Sampler):
     """In each batch of samples, pick a limited number of classes to include and
     give even representation to each class"""
 
