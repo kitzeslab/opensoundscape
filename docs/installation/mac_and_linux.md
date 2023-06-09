@@ -1,6 +1,6 @@
 # Mac and Linux
 
-OpenSoundscape can be installed on Mac and Linux machines with Python 3.8, or 3.9 using the pip command `pip install opensoundscape==0.9.0`. We recommend installing OpenSoundscape in a virtual environment to prevent dependency conflicts.
+OpenSoundscape can be installed on Mac and Linux machines with Python >=3.8 using the pip command `pip install opensoundscape==0.9.0`. We recommend installing OpenSoundscape in a virtual environment to prevent dependency conflicts.
 
 Below are instructions for installation with two package managers:
 * `conda`: Python and package management through Anaconda, a package manager popular among scientific programmers
@@ -13,17 +13,17 @@ Feel free to use another virtual environment manager (e.g. `virtualenvwrapper`) 
 * Install Anaconda if you don't already have it.
    * Download the installer [here](https://www.anaconda.com/products/individual), or
    * follow the [installation instructions](https://docs.anaconda.com/anaconda/install/) for your operating system.
-* Create a Python (3.8, or 3.9) conda environment for opensoundscape: `conda create --name opensoundscape pip python=3.9`
+* Create a Python (>=3.8) conda environment for opensoundscape: `conda create --name opensoundscape pip python=3.10` (you can leave out the requirement of python 3.10, just make sure you have at least python 3.8)
 * Activate the environment: `conda activate opensoundscape`
 * Install opensoundscape using pip: `pip install opensoundscape==0.9.0`
 * Deactivate the environment when you're done using it: `conda deactivate`
 
 ## Installation via `venv`
 
-Download Python 3.8 or 3.9 from [this website](https://www.python.org/downloads/).
+Download Python (>=3.8) from [this website](https://www.python.org/downloads/).
 
 Run the following commands in your bash terminal:
-* Check that you have installed Python 3.8 or 3.9.\_: `python3 --version`
+* Check that you have installed Python >=3.8.\_: `python3 --version`
 * Change directories to where you wish to store the environment: `cd [path for environments folder]`
     * Tip:  You can use this folder to store virtual environments for other projects as well, so put it somewhere that makes sense for you, e.g. in your home directory.
 * Make a directory for virtual environments and `cd` into it: `mkdir .venv && cd .venv`
