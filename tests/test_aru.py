@@ -112,6 +112,25 @@ def test_parse_audiomoth_metadata_with_timezone():
     )
 
 
+def test_parse_audiomoth_metadata_with_deployment_name():
+    """sometimes comment string includes `during deployment ###`"""
+    metadata = {
+        "artist": "AudioMoth 243B1F075C7B4301",
+        "comment": "Recorded at 10:00:00 15/05/2021 (UTC) during deployment 41C351E84E9996C2 at medium gain setting while battery state was 4.7V and temperature was 3.7C.",
+        "samplerate": 32000,
+        "format": "WAV",
+        "frames": 230400000,
+        "sections": 1,
+        "subtype": "PCM_16",
+        "channels": 1,
+        "duration": 7200.0,
+    }
+    new_metadata = aru.parse_audiomoth_metadata(metadata)
+    assert new_metadata["recording_start_time"] == pytz.utc.localize(
+        datetime.datetime(2021, 5, 15, 10, 00, 00)
+    )
+
+
 def test_parse_audiomoth_metadata_with_low_battery():
     metadata = {
         "filesize": 115200360,
