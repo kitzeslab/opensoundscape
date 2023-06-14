@@ -267,8 +267,10 @@ def test_all_tdoa_filter_types_find_correct_delay_with_noise():
     start = 500  # start of signal
     end = 510  # end of signal
 
+    np.random.seed(0)  # is robust to nearly all (but not all) random seeds
     a = np.zeros(1000)
     a[start:end] = 3  # impulse
+
     a += np.random.rand(1000)  # add noise
     reference_signal = np.zeros(1000)
     reference_signal[start - delay : end - delay] = 3
