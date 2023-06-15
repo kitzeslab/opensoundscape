@@ -114,11 +114,6 @@ Signal Processing
 .. automodule:: opensoundscape.signal_processing
  :members:
 
-Taxa
-^^^^
-.. automodule:: opensoundscape.taxa
-  :members:
-
 Localization
 ^^^^^^^^^^^^
 .. automodule:: opensoundscape.localization
