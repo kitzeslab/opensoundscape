@@ -251,8 +251,8 @@ class SpatialEvent:
                     return_cc_max=True,
                     skip_ref_bandpass=True,
                 )
-            tdoas.append(tdoa)
-            cc_maxs.append(cc_max)
+                tdoas.append(tdoa)
+                cc_maxs.append(cc_max)
 
         self.tdoas = np.array(tdoas)
         self.cc_maxs = np.array(cc_maxs)
