@@ -269,11 +269,13 @@ class SpatialEvent:
                 if index not in bad_receivers_index
             ]
 
-            self.receiver_locations = [
-                location
-                for index, location in enumerate(self.receiver_locations)
-                if index not in bad_receivers_index
-            ]
+            self.receiver_locations = np.array(
+                [
+                    location
+                    for index, location in enumerate(self.receiver_locations)
+                    if index not in bad_receivers_index
+                ]
+            )
         return self.tdoas, self.cc_maxs
 
 
