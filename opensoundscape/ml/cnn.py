@@ -84,7 +84,6 @@ class CNN(BaseModule):
         preprocessor_class=SpectrogramPreprocessor,
         sample_shape=(224, 224, 3),
     ):
-
         super(CNN, self).__init__()
 
         self.name = "CNN"
@@ -536,7 +535,6 @@ class CNN(BaseModule):
 
         # Initialize Weights and Biases (wandb) logging ###
         if wandb_session is not None:
-
             # update the run config with information about the model
             wandb_session.config.update(self._generate_wandb_config())
 
@@ -938,9 +936,6 @@ class CNN(BaseModule):
             warnings.warn(
                 "prediction_dataset has zero samples. No predictions will be generated."
             )
-            prediction_dataset = AudioFileDataset(
-                samples=[], preprocessor=self.preprocessor
-            )
 
         # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
         # but will provide a different sample! Later we go back and replace scores
@@ -1074,7 +1069,6 @@ class CNN(BaseModule):
 
         # Initialize Weights and Biases (wandb) logging
         if wandb_session is not None:
-
             # update the run config with information about the model
             wandb_session.config.update(self._generate_wandb_config())
 
@@ -1345,7 +1339,6 @@ class CNN(BaseModule):
             # update the AudioSample objects to include the activation maps
             # and create guided backprop maps, one at a time
             for i, sample in enumerate(samples):
-
                 if cam is None:
                     activation_maps = None
                 else:
