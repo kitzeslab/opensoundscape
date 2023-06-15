@@ -52,11 +52,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
         ## Input Validation ##
 
         # validate type of samples: list, np array, or df
-        assert type(samples) in (
-            list,
-            np.ndarray,
-            pd.DataFrame,
-        ), (
+        assert type(samples) in (list, np.ndarray, pd.DataFrame,), (
             f"samples must be type list/np.ndarray of file paths, "
             f"or pd.DataFrame with index containing path (or multi-index of "
             f"path, start_time, end_time). Got {type(samples)}."
