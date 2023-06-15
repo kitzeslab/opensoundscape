@@ -11,10 +11,8 @@ from . import ribbit
 from . import sample
 from . import signal_processing
 from . import spectrogram
-from . import taxa
 from . import ml
 from . import preprocess
-from . import resources
 from . import logging
 
 # expose some modules at the top level
