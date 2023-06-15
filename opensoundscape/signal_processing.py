@@ -494,6 +494,11 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
     x = torch.Tensor(x)
     y = torch.Tensor(y)
 
+    if cc_filter == "cc_norm":
+        # zero - center the signals
+        x = x - torch.mean(x)
+        y = y - torch.mean(y)
+
     # pad the fft shape for "full" cross correlation of both signals
     n = x.shape[0] + y.shape[0] - 1
     if n % 2 != 0:
