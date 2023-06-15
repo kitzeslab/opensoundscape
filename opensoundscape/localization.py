@@ -229,9 +229,9 @@ class SpatialEvent:
 
         # catch the receivers that have an issue and should be discarded
         # e.g. their file starts or end during the time-window, so estimate_delays is not possible
-        bad_receivers = []
+        bad_receivers_index = []
 
-        for file in self.receiver_files[1:]:
+        for index, file in enumerate(self.receiver_files[1:]):
             audio2 = Audio.from_file(
                 file, offset=start - max_delay, duration=dur + 2 * max_delay
             )
@@ -240,7 +240,7 @@ class SpatialEvent:
             if (
                 abs(len(audio2.samples) - len(audio1.samples)) > 1
             ):  # allow for 1 sample difference
-                bad_receivers.append(file)
+                bad_receivers_index.append(index + 1)
             else:
                 tdoa, cc_max = audio.estimate_delay(
                     primary_audio=audio2,
@@ -258,14 +258,22 @@ class SpatialEvent:
         self.cc_maxs = np.array(cc_maxs)
 
         # delete the bad receivers from this SpatialEvent
-        if len(bad_receivers) > 0:
+        if len(bad_receivers_index) > 0:
             print(
                 f"Warning: {len(bad_receivers)} receivers were discarded because their audio files were not the same length as the primary receiver."
             )
+            # drop the bad receivers from the list of files and locations
             self.receiver_files = [
-                file for file in self.receiver_files if file not in bad_receivers
+                file
+                for index, file in enumerate(self.receiver_files)
+                if index not in bad_receivers_index
             ]
 
+            self.receiver_locations = [
+                location
+                for index, location in enumerate(self.receiver_locations)
+                if index not in bad_receivers_index
+            ]
         return self.tdoas, self.cc_maxs
 
 
