@@ -419,10 +419,13 @@ class SynchronizedRecorderArray:
                 frequency range of the relevant sound is recommended for best cross correlation results.
             residual_threshold: discard localized events if the root mean squared residual exceeds this value
                 (distance in meters) [default: np.inf does not filter out any events by residual]
+            return_unlocalized: bool, optional. If True, returns the unlocalized events as well.
+                Two lists [localized_events, unlocalized events] will be returned.
 
         Returns:
-            2 lists: list of localized events, list of un-localized events
-            events are of class SpatialEvent
+            A list of localized events, each of which is a SpatialEvent object.
+            If return_unlocalized is True, returns:
+                        2 lists: list of localized events, list of un-localized events
 
         [1] M. D. Gillette and H. F. Silverman, "A Linear Closed-Form Algorithm for Source Localization
         From Time-Differences of Arrival," IEEE Signal Processing Letters
@@ -505,7 +508,10 @@ class SynchronizedRecorderArray:
 
         # unlocalized events include those with too few receivers (after cc threshold)
         # and those with too large of a spatial residual rms
-        return localized_events, unlocalized_events
+        if return_unlocalized:
+            return localized_events, unlocalized_events
+        else:
+            return localized_events
 
     def check_files_missing_coordinates(self, detections):
         files_missing_coordinates = []
