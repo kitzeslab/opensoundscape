@@ -226,24 +226,45 @@ class SpatialEvent:
         # skip the first because we don't need to cross correlate a file with itself
         tdoas = [0]  # first file's delay to itself is zero
         cc_maxs = [1]  # set first file's cc_max to 1
+
+        # catch the receivers that have an issue and should be discarded
+        # e.g. their file starts or end during the time-window, so estimate_delays is not possible
+        bad_receivers = []
+
         for file in self.receiver_files[1:]:
             audio2 = Audio.from_file(
                 file, offset=start - max_delay, duration=dur + 2 * max_delay
             )
-            tdoa, cc_max = audio.estimate_delay(
-                primary_audio=audio2,
-                reference_audio=audio1,
-                max_delay=max_delay,
-                bandpass_range=bandpass_range,
-                cc_filter=cc_filter,
-                return_cc_max=True,
-                skip_ref_bandpass=True,
-            )
+
+            # catch edge cases where the audio lengths do not match.
+            if (
+                abs(len(audio2.samples) - len(audio1.samples)) > 1
+            ):  # allow for 1 sample difference
+                bad_receivers.append(file)
+            else:
+                tdoa, cc_max = audio.estimate_delay(
+                    primary_audio=audio2,
+                    reference_audio=audio1,
+                    max_delay=max_delay,
+                    bandpass_range=bandpass_range,
+                    cc_filter=cc_filter,
+                    return_cc_max=True,
+                    skip_ref_bandpass=True,
+                )
             tdoas.append(tdoa)
             cc_maxs.append(cc_max)
 
         self.tdoas = np.array(tdoas)
         self.cc_maxs = np.array(cc_maxs)
+
+        # delete the bad receivers from this SpatialEvent
+        if len(bad_receivers) > 0:
+            print(
+                f"Warning: {len(bad_receivers)} receivers were discarded because their audio files were not the same length as the primary receiver."
+            )
+            self.receiver_files = [
+                file for file in self.receiver_files if file not in bad_receivers
+            ]
 
         return self.tdoas, self.cc_maxs
 
@@ -296,6 +317,7 @@ class SynchronizedRecorderArray:
         cc_filter="phat",
         bandpass_ranges=None,
         residual_threshold=np.inf,
+        return_unlocalized=False,
     ):
         """
         Attempt to localize locations for all detections
