@@ -263,3 +263,28 @@ def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detect
     for event in localized_events:
         if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
             assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
+
+
+def test_localization_pipeline_real_audio_edge_case(
+    LOCA_2021_aru_coords, LOCA_2021_detections
+):
+    # this test ensures that the localization pipeline does not fail when one of the files
+    # in the detections dataframe is actually too shorter
+    # i.e. the file is shorter than the minimum length needed for cross correlation
+    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    localized_events, _ = array.localize_detections(
+        detections=detections,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        localization_algorithm="gillette",
+        bandpass_ranges={"zeep": (7000, 10000)},
+        return_unlocalized=True,
+    )
+
+    bad_file = "tests/audio/veryshort.wav"
+    # check that the bad file has been dropped from the event
+    for event in localized_events:
+        assert bad_file not in event.receiver_files
+        assert len(event.receiver_files) == 6
