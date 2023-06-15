@@ -260,7 +260,7 @@ class SpatialEvent:
         # delete the bad receivers from this SpatialEvent
         if len(bad_receivers_index) > 0:
             print(
-                f"Warning: {len(bad_receivers)} receivers were discarded because their audio files were not the same length as the primary receiver."
+                f"Warning: {len(bad_receivers_index)} receivers were discarded because their audio files were not the same length as the primary receiver."
             )
             # drop the bad receivers from the list of files and locations
             self.receiver_files = [
