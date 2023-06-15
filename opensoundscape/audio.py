@@ -31,10 +31,10 @@ import scipy
 import librosa
 import soundfile
 import IPython.display
+from aru_metadata_parser.parse import parse_audiomoth_metadata
 
 import opensoundscape
 from opensoundscape.utils import generate_clip_times_df, load_metadata
-from opensoundscape.aru import parse_audiomoth_metadata
 from opensoundscape.signal_processing import tdoa
 
 DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
@@ -785,7 +785,6 @@ class Audio:
         for idx, (start, end) in enumerate(
             zip(clip_df["start_time"], clip_df["end_time"])
         ):
-
             # Trim the clip to desired range
             audio_clip = self.trim(start, end)
 
