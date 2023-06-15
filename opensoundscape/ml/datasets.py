@@ -49,11 +49,14 @@ class AudioFileDataset(torch.utils.data.Dataset):
     """
 
     def __init__(self, samples, preprocessor, bypass_augmentations=False):
-
         ## Input Validation ##
 
         # validate type of samples: list, np array, or df
-        assert type(samples) in (list, np.ndarray, pd.DataFrame,), (
+        assert type(samples) in (
+            list,
+            np.ndarray,
+            pd.DataFrame,
+        ), (
             f"samples must be type list/np.ndarray of file paths, "
             f"or pd.DataFrame with index containing path (or multi-index of "
             f"path, start_time, end_time). Got {type(samples)}."
@@ -98,7 +101,6 @@ class AudioFileDataset(torch.utils.data.Dataset):
         return self.label_df.shape[0]
 
     def __getitem__(self, idx, break_on_key=None, break_on_type=None):
-
         sample = AudioSample.from_series(self.label_df.iloc[idx])
 
         # preprocessor.forward will raise PreprocessingError if something fails

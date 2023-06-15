@@ -1,11 +1,12 @@
 """Utilities for opensoundscape"""
 
 import datetime
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytz
 import soundfile
-
 import librosa
 
 
@@ -321,10 +322,9 @@ def make_clip_df(
         )
         file_list = files
 
-    assert len(files) > 0, "files list has length zero!"
-
     clip_dfs = []
     invalid_samples = set()
+    idx_cols = ["file", "start_time", "end_time"]
     for f in file_list:
         try:
             t = librosa.get_duration(path=f)
@@ -352,7 +352,15 @@ def make_clip_df(
 
         clip_dfs.append(clips)
 
-    clip_df = pd.concat(clip_dfs).set_index(["file", "start_time", "end_time"])
+    if len(clip_dfs) > 0:
+        clip_df = pd.concat(clip_dfs).set_index(idx_cols)
+    else:
+        # warnings.warn(
+        #     f"No clips were created from file_list of length {len(file_list)}"
+        # )
+        # create an empty dataframe with the expected index and columns
+        label_cols = [] if label_df is None else label_df.columns
+        clip_df = pd.DataFrame(columns=idx_cols + label_cols).set_index(idx_cols)
 
     if return_invalid_samples:
         return clip_df, invalid_samples

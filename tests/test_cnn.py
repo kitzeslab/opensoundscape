@@ -141,6 +141,17 @@ def test_predict_on_list_of_files(test_df):
     assert len(scores) == 2
 
 
+def test_predict_on_empty_list():
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    scores = model.predict([])
+    expected = ["file", "start_time", "end_time", 0, 1]
+    assert list(scores.reset_index().columns) == expected
+
+    scores = model.predict([], split_files_into_clips=False)
+    expected = ["index", 0, 1]
+    assert list(scores.reset_index().columns) == expected
+
+
 def test_predict_all_arch_4ch(test_df):
     for arch_name in cnn_architectures.ARCH_DICT.keys():
         try:
