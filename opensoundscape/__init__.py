@@ -2,7 +2,6 @@ __version__ = "0.9.0"
 
 from . import annotations
 from . import audio
-from . import aru
 from . import data_selection
 from . import utils
 from . import localization

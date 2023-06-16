@@ -43,20 +43,6 @@ def test_rescale_features():
     assert x[0][0] == 1
 
 
-def test_hex_to_time():
-
-    t = utils.hex_to_time("5F16A04E")
-    assert t == datetime.datetime(2020, 7, 21, 7, 59, 10, tzinfo=pytz.utc)
-
-
-def test_hex_to_time_convert_est():
-
-    t = utils.hex_to_time("5F16A04E")
-    t = t.astimezone(pytz.timezone("US/Eastern"))
-    f = pytz.timezone("US/Eastern").localize(datetime.datetime(2020, 7, 21, 3, 59, 10))
-    assert t == f
-
-
 def test_min_max_scale():
     scaled = utils.min_max_scale([-5, 10.2], (0, 1))
     assert round(min(scaled)) == 0 and round(max(scaled)) == 1

@@ -19,10 +19,6 @@ Annotations
 .. automodule:: opensoundscape.annotations
  :members:
 
-ARU
-^^^
-.. automodule:: opensoundscape.aru
- :members:
  
 Machine Learning utils
 ^^^^^^^^^^^^^^^^^^^^^^
