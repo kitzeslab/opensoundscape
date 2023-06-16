@@ -102,6 +102,7 @@ autodoc_mock_imports = [
     "skimage",
     "wandb",
     "pytorch_grad_cam",
+    "aru_metadata_parser",
 ]
 
 master_doc = "index"
