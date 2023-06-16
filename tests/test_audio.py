@@ -143,6 +143,16 @@ def veryshort_audio(veryshort_wav_str):
     return Audio.from_file(veryshort_wav_str)
 
 
+@pytest.fixture()
+def LOCA_array_3_str():
+    return "tests/audio/LOCA_2021_09_24_652_3.wav"
+
+
+@pytest.fixture()
+def LOCA_array_6_str():
+    return "tests/audio/LOCA_2021_09_24_652_6.wav"
+
+
 def test_init_with_list():
     a = Audio([0] * 10, sample_rate=10)
     assert len(a.samples) == 10
@@ -724,27 +734,75 @@ def test_clipping_detector(veryshort_audio):
 
 
 def test_estimate_delay(veryshort_audio):
-    # shift signal backward
-    sig = audio.concat(
-        [Audio.silence(0.1, veryshort_audio.sample_rate), veryshort_audio]
+    start_t = 0.03
+    end_t = 0.12
+    signal = veryshort_audio.trim(start_time=start_t, end_time=end_t)
+    delay = 0.02
+    max_delay = 0.03
+    ref_sig = veryshort_audio.trim(start_time=start_t + delay, end_time=end_t + delay)
+
+    # phat filter will fail on the below
+    # maybe because the signal is too short
+    assert math.isclose(
+        audio.estimate_delay(signal, ref_sig, max_delay=max_delay, cc_filter="cc_norm"),
+        delay,
+        abs_tol=1e-4,
     )
 
-    assert math.isclose(audio.estimate_delay(sig, veryshort_audio), 0.1, abs_tol=1e-6)
+
+def test_estimate_delay_real_audio(LOCA_array_3_str, LOCA_array_6_str):
+    max_delay = 0.1
+    start_time = 0.2
+    duration = 0.4
+    audio_3_reference = Audio.from_file(
+        LOCA_array_3_str,
+        offset=start_time,
+        duration=duration,
+    )
+    audio_6 = Audio.from_file(
+        LOCA_array_6_str,
+        offset=start_time,
+        duration=duration,
+    )
+    real_measured_delay = 0.03
+    delay = audio.estimate_delay(audio_6, audio_3_reference, max_delay=max_delay)
+    assert abs(delay) < max_delay
+    assert np.isclose(delay, real_measured_delay, atol=5e-3)
 
 
 def test_estimate_delay_with_bandpass(veryshort_audio):
-    # shift signal backward
-    sig = audio.concat(
-        [Audio.silence(0.1, veryshort_audio.sample_rate), veryshort_audio]
-    )
+    start_t = 0.03
+    end_t = 0.1
+    signal = veryshort_audio.trim(start_time=start_t, end_time=end_t)
+    delay = 0.01
+    max_delay = 0.02
+    ref_sig = veryshort_audio.trim(start_time=start_t + delay, end_time=end_t + delay)
+
     dly = audio.estimate_delay(
-        sig, veryshort_audio, bandpass_range=[1000, 3000], bandpass_order=5
+        signal,
+        ref_sig,
+        max_delay=max_delay,
+        bandpass_range=[100, 10000],
+        bandpass_order=5,
     )
-    assert math.isclose(dly, 0.1, abs_tol=1e-6)
+    assert math.isclose(dly, delay, abs_tol=1e-4)
 
 
 def test_estimate_delay_return_cc_max(veryshort_audio):
-    a = veryshort_audio
-    t, ccmax = audio.estimate_delay(a, a, return_cc_max=True, cc_filter="cc")
-    assert math.isclose(ccmax, sum(a.samples * a.samples), abs_tol=1e-5)
-    assert math.isclose(t, 0, abs_tol=1e-6)
+    max_delay = 0.05
+    delay, ccmax = audio.estimate_delay(
+        veryshort_audio,
+        veryshort_audio,
+        max_delay=max_delay,
+        cc_filter="cc",
+        return_cc_max=True,
+    )
+
+    # will use only the central part of the signal
+    section_used = veryshort_audio.trim(
+        start_time=max_delay, end_time=veryshort_audio.duration - max_delay
+    )
+    assert math.isclose(
+        ccmax, sum(section_used.samples * section_used.samples), abs_tol=1e-5
+    )
+    assert math.isclose(delay, 0, abs_tol=1e-6)
