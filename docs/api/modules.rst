@@ -1,4 +1,4 @@
- Audio
+Audio
 ^^^^^
 .. automodule:: opensoundscape.audio
   :members:
@@ -7,7 +7,7 @@
 Spectrogram
 ^^^^^^^^^^^
 .. automodule:: opensoundscape.spectrogram
- :members:
+  :members:
  
 CNN
 ^^^
