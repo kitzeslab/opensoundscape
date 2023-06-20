@@ -195,7 +195,7 @@ def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
         if audio.duration + tol <= sample.target_duration:
             # input audio is not as long as desired length
             if extend:  # extend clip sith silence
-                audio = audio.extend(sample.target_duration)
+                audio = audio.extend_to(sample.target_duration)
             else:
                 raise ValueError(
                     f"the length of the original file ({audio.duration} "
@@ -487,7 +487,6 @@ class Overlay(Action):
     """
 
     def __init__(self, is_augmentation=True, **kwargs):
-
         super(Overlay, self).__init__(
             overlay,
             is_augmentation=is_augmentation,
@@ -617,9 +616,7 @@ def overlay(
     overlays_performed = 0
 
     while overlay_prob > np.random.uniform() and overlays_performed < max_overlay_num:
-
         try:
-
             # lets pick a sample based on rules
             if overlay_class is None:
                 # choose any file from the overlay_df

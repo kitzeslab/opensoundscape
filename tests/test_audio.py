@@ -471,14 +471,49 @@ def test_resample_classmethod_vs_instancemethod(silence_10s_mp3_str):
     npt.assert_array_almost_equal(a1.samples, a2.samples, decimal=5)
 
 
-def test_extend_length_is_correct(silence_10s_mp3_str):
+def test_extend_to_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     duration = audio.duration
     for _ in range(100):
         extend_length = random.uniform(duration, duration * 10)
         assert math.isclose(
-            audio.extend(extend_length).duration, extend_length, abs_tol=1e-4
+            audio.extend_to(extend_length).duration, extend_length, abs_tol=1e-4
         )
+
+
+def test_extend_to_correct_metadata(silence_10s_mp3_str):
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    a2 = audio.extend_to(12)
+    # duration in metadata should be updated:
+    assert math.isclose(a2.metadata["duration"], 12)
+    # other metadata should be retained:
+    assert a2.metadata["subtype"] == audio.metadata["subtype"]
+
+
+def test_extend_to_shorter_duration(silence_10s_mp3_str):
+    # extending 10s to 6s should simply trim the audio
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    a2 = audio.extend_to(6)
+    assert math.isclose(a2.duration, 6)
+    # duration in metadata should be updated:
+    assert math.isclose(a2.metadata["duration"], 6)
+    # other metadata should be retained:
+    assert a2.metadata["subtype"] == audio.metadata["subtype"]
+
+
+def test_extend_by(silence_10s_mp3_str):
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    a2 = audio.extend_by(1)
+    assert math.isclose(a2.duration, 11)
+
+    # duration in metadata should be updated:
+    assert math.isclose(a2.metadata["duration"], 11)
+    # other metadata should be retained:
+    assert a2.metadata["subtype"] == audio.metadata["subtype"]
+
+    # doesn't allow negative extend_by(duration)
+    with pytest.raises(AssertionError):
+        a2.extend_by(-1)
 
 
 def test_bandpass(silence_10s_mp3_str):
@@ -714,11 +749,11 @@ def test_loop(veryshort_wav_audio):
     assert math.isclose(a3.metadata["duration"], 1.0, abs_tol=1e-5)
 
 
-def test_extend(veryshort_wav_audio):
-    a = veryshort_wav_audio.extend(length=1)
+def test_extend_to_with_short(veryshort_wav_audio):
+    a = veryshort_wav_audio.extend_to(duration=1)
     assert math.isclose(a.duration, 1.0, abs_tol=1e-5)
     assert math.isclose(a.metadata["duration"], 1.0, abs_tol=1e-5)
-    # samples should be zero
+    # added samples should be zero
     assert math.isclose(0.0, np.max(a.samples[-100:]), abs_tol=1e-7)
 
 
