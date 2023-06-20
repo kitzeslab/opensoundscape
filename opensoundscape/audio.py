@@ -548,20 +548,31 @@ class Audio:
             metadata=metadata,
         )
 
-    def extend(self, length):
-        """Extend audio file by adding silence to the end
+    def extend_to(self, duration):
+        """Extend audio file to desired duration by adding silence to the end
+
+        If duration is less than the Audio's .duration, the Audio object is trimmed.
+        Otherwise, silence is added to the end of the Audio object to achieve the desired
+        duration.
 
         Args:
-            length: the final duration in seconds of the extended audio object
+            duration: the final duration in seconds of the audio object
 
         Returns:
             a new Audio object of the desired duration
         """
 
-        total_samples_needed = round(length * self.sample_rate)
-        samples_extended = np.pad(
-            self.samples, pad_width=(0, total_samples_needed - len(self.samples))
-        )
+        target_n_samples = round(duration * self.sample_rate)
+        current_n_samples = len(self.samples)
+
+        if target_n_samples > current_n_samples:
+            # add 0's to the end of the sample array
+            new_samples = np.pad(
+                self.samples, pad_width=(0, target_n_samples - current_n_samples)
+            )
+        elif target_n_samples < current_n_samples:
+            # trim to desired samples (similar to self.trim())
+            new_samples = self.samples[0:target_n_samples]
 
         # update metadata to reflect new duration
         if self.metadata is None:
@@ -569,12 +580,37 @@ class Audio:
         else:
             metadata = self.metadata.copy()
             if "duration" in metadata:
-                metadata["duration"] = len(samples_extended) / self.sample_rate
+                metadata["duration"] = len(new_samples) / self.sample_rate
 
         return self._spawn(
-            samples=samples_extended,
+            samples=new_samples,
             metadata=metadata,
         )
+
+    def extend_by(self, duration):
+        """Extend audio file by adding `duration` seconds of silence to the end
+
+        Args:
+            duration: the final duration in seconds of the audio object
+
+        Returns:
+            a new Audio object with silence added to the end
+        """
+        assert duration >= 0, f"`duration` to extend by must be >=0, got {duration}"
+
+        # create desired duration of silent audio and concatenate to the end
+        silence = Audio.silence(duration=duration, sample_rate=self.sample_rate)
+        new_audio = concat([self, silence])
+
+        # add metadata and update to reflect new duration
+        if self.metadata is None:
+            new_audio.metadata = None
+        else:
+            new_audio.metadata = self.metadata.copy()
+            if "duration" in new_audio.metadata:
+                new_audio.metadata["duration"] = new_audio.duration
+
+        return new_audio
 
     def bandpass(self, low_f, high_f, order):
         """Bandpass audio signal with a butterworth filter
@@ -791,7 +827,7 @@ class Audio:
 
             # Extend the final clip if necessary
             if end > duration and final_clip == "extend":
-                audio_clip = audio_clip.extend(clip_duration)
+                audio_clip = audio_clip.extend_to(clip_duration)
 
             # Add clip to list of clips
             clips[idx] = audio_clip
@@ -1098,7 +1134,7 @@ def mix(
 
         # pad or truncate to correct length
         if audio.duration < duration:
-            audio = audio.extend(duration)
+            audio = audio.extend_to(duration)
         elif audio.duration > duration:
             audio = audio.trim(0, duration)
 
