@@ -33,6 +33,18 @@ def saved_raven_file(request):
 
 
 @pytest.fixture()
+def saved_csv(request):
+    path = "tests/csvs/labels.csv"
+
+    def fin():
+        Path(path).unlink()
+
+    request.addfinalizer(fin)
+
+    return path
+
+
+@pytest.fixture()
 def silence_10s_mp3_str():
     return "tests/audio/silence_10s.mp3"
 
@@ -571,3 +583,20 @@ def test_df_to_crowsetta_sequence(boxed_annotations):
     sequence = annotations._df_to_crowsetta_sequence(boxed_annotations.df)
     assert type(sequence) == crowsetta.Sequence
     assert len(sequence.onsets_s) == 3
+
+
+def test_df_to_crowsetta_sequence(boxed_annotations):
+    sequence = annotations._df_to_crowsetta_sequence(boxed_annotations.df)
+    assert type(sequence) == crowsetta.Sequence
+    assert len(sequence.onsets_s) == 3
+
+
+def test_to_from_csv(boxed_annotations, saved_csv):
+    # to csv
+    boxed_annotations.to_csv(saved_csv)
+    # from csv
+    loaded = BoxedAnnotations.from_csv(saved_csv)
+    assert type(loaded) == BoxedAnnotations
+
+    # check for equality
+    assert boxed_annotations.df.equals(loaded.df)

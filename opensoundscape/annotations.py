@@ -38,6 +38,8 @@ class BoxedAnnotations:
 
         For loading annotations from Raven txt files, use `from_raven_files`
 
+        see also: .from_crowsetta() for integration with the crowsetta package
+
         Args:
             df: DataFrame of frequency-time labels. Columns must include:
                 - "annotation": string or numeric labels (can be None/nan)
@@ -321,7 +323,31 @@ class BoxedAnnotations:
 
         return cls.concat(boxed_anns)
 
-    def to_raven_files(self, save_dir):  # TODO implement to_csv
+    @classmethod
+    def from_csv(cls, path):
+        """load csv from path and creates BoxedAnnotations object
+        Args:
+            path: file path of csv.
+                see __init__() docstring for required column names
+
+        Returns:
+            BoxedAnnotations object
+        """
+        df = pd.read_csv(path)
+        return cls(df)
+
+    def to_csv(self, path):
+        """save annotation table as csv-formatted text file
+
+        Args:
+            path: file path to save to
+
+        Effects:
+            creates a text file containing comma-delimited contents of self.df
+        """
+        self.df.to_csv(path, index=False)
+
+    def to_raven_files(self, save_dir):
         """save annotations to a Raven-compatible tab-separated text files
 
         Creates one file per unique audio file in 'file' column of self.df
