@@ -749,11 +749,11 @@ def test_loop(veryshort_wav_audio):
     assert math.isclose(a3.metadata["duration"], 1.0, abs_tol=1e-5)
 
 
-def test_extend(veryshort_wav_audio):
-    a = veryshort_wav_audio.extend(length=1)
+def test_extend_to_with_short(veryshort_wav_audio):
+    a = veryshort_wav_audio.extend_to(length=1)
     assert math.isclose(a.duration, 1.0, abs_tol=1e-5)
     assert math.isclose(a.metadata["duration"], 1.0, abs_tol=1e-5)
-    # samples should be zero
+    # added samples should be zero
     assert math.isclose(0.0, np.max(a.samples[-100:]), abs_tol=1e-7)
 
 
