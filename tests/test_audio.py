@@ -750,7 +750,7 @@ def test_loop(veryshort_wav_audio):
 
 
 def test_extend_to_with_short(veryshort_wav_audio):
-    a = veryshort_wav_audio.extend_to(length=1)
+    a = veryshort_wav_audio.extend_to(duration=1)
     assert math.isclose(a.duration, 1.0, abs_tol=1e-5)
     assert math.isclose(a.metadata["duration"], 1.0, abs_tol=1e-5)
     # added samples should be zero
