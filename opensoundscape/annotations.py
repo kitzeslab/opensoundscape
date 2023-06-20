@@ -31,7 +31,7 @@ class BoxedAnnotations:
     trim() [limit time range] and bandpass() [limit frequency range]
     """
 
-    def __init__(self, df):
+    def __init__(self, df=None):
         """
         create object directly from DataFrame of frequency-time annotations
 
@@ -46,6 +46,8 @@ class BoxedAnnotations:
                 - "audio_file": name or path of corresponding audio file
                 - "low_f": lower frequency bound (values can be None/nan)
                 - "high_f": upper frequency bound (values can be None/nan)
+                if df is None, creates object with no annotations
+
             Note: other columns will be retained in the .df
 
         Returns:
@@ -61,12 +63,18 @@ class BoxedAnnotations:
             "low_f",
             "high_f",
         ]
-        required_cols = ["annotation", "start_time", "end_time"]
-        for col in required_cols:
-            assert col in df.columns, (
-                f"df columns must include all of these: {str(required_cols)}\n"
-                f"columns in df: {list(df.columns)}"
-            )
+
+        # if no df is passed, create empty dataframe
+        if df is None:
+            df = pd.DataFrame(columns=standard_cols)
+        else:  # check that required columns are present in `df`
+            required_cols = ["annotation", "start_time", "end_time"]
+            for col in required_cols:
+                assert col in df.columns, (
+                    f"df columns must include all of these: {str(required_cols)}\n"
+                    f"columns in df: {list(df.columns)}"
+                )
+
         # re-order columns
         # keep any extras from input df and add any missing standard columns
         ordered_cols = standard_cols + list(set(df.columns) - set(standard_cols))

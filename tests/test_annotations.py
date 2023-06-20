@@ -66,6 +66,20 @@ def boxed_annotations_zero_len():
     return BoxedAnnotations(df)
 
 
+def test_init_boxed_annotations_with_no_df():
+    ba = BoxedAnnotations()  # init without passing df
+    assert len(ba.df) == 0
+    assert list(ba.df.columns) == [
+        "audio_file",
+        "annotation_file",
+        "annotation",
+        "start_time",
+        "end_time",
+        "low_f",
+        "high_f",
+    ]
+
+
 def test_load_raven_annotations(raven_file):
     ba = BoxedAnnotations.from_raven_files([raven_file])
     assert len(ba.df) == 10
