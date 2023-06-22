@@ -197,6 +197,3 @@ def test_modify_parameter_with_series_magic(tensor):
     action.params.input_mean = 1  # set with . syntax
     assert action.params["input_mean"] == 1
     action.go(tensor)
-
-
-# others tested implicitly through preprocessor and cnn tests
