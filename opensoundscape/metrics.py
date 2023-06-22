@@ -1,18 +1,10 @@
 #!/usr/bin/env python
-from sklearn.metrics import (
-    jaccard_score,
-    hamming_loss,
-    precision_recall_fscore_support,
-    confusion_matrix,
-    average_precision_score,
-    roc_auc_score,
-)
+import sklearn.metrics as M
 import pandas as pd
 
 # from scipy.sparse import csr_matrix
 import numpy as np
 import torch
-from torch.nn.functional import one_hot
 
 
 def predict_single_target_labels(scores):
@@ -55,7 +47,7 @@ def predict_single_target_labels(scores):
             f"or pandas.DataFrame. Got {type(scores)}."
         )
 
-    preds = one_hot(scores.argmax(1), len(scores[0]))
+    preds = torch.nn.functional.one_hot(scores.argmax(1), len(scores[0]))
 
     if return_type == "pandas":
         return pd.DataFrame(preds.numpy(), index=df.index, columns=df.columns)
@@ -159,7 +151,7 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     preds = predict_multi_target_labels(scores=scores, threshold=threshold)
 
     # Store per-class precision, recall, and f1
-    class_pre, class_rec, class_f1, _ = precision_recall_fscore_support(
+    class_pre, class_rec, class_f1, _ = M.precision_recall_fscore_support(
         targets, preds, average=None, zero_division=0
     )
 
@@ -180,19 +172,21 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     metrics_dict["f1"] = class_f1.mean()
 
     try:
-        metrics_dict["jaccard"] = jaccard_score(targets, preds, average="macro")
+        metrics_dict["jaccard"] = M.jaccard_score(targets, preds, average="macro")
     except ValueError:
         metrics_dict["jaccard"] = np.nan
     try:
-        metrics_dict["hamming_loss"] = hamming_loss(targets, preds)
+        metrics_dict["hamming_loss"] = M.hamming_loss(targets, preds)
     except ValueError:
         metrics_dict["hamming_loss"] = np.nan
     try:
-        metrics_dict["map"] = average_precision_score(targets, scores, average="macro")
+        metrics_dict["map"] = M.average_precision_score(
+            targets, scores, average="macro"
+        )
     except ValueError:
         metrics_dict["map"] = np.nan
     try:
-        metrics_dict["au_roc"] = roc_auc_score(targets, scores, average="macro")
+        metrics_dict["au_roc"] = M.roc_auc_score(targets, scores, average="macro")
     except ValueError:
         metrics_dict["au_roc"] = np.nan
 
@@ -227,20 +221,20 @@ def single_target_metrics(targets, scores):
     # Confusion matrix requires numbered-class not one-hot labels
     t = np.argmax(targets, 1)
     p = np.argmax(preds, 1)
-    metrics_dict["confusion_matrix"] = confusion_matrix(t, p)
+    metrics_dict["confusion_matrix"] = M.confusion_matrix(t, p)
 
     # precision, recall, and f1
-    pre, rec, f1, _ = precision_recall_fscore_support(
+    pre, rec, f1, _ = M.precision_recall_fscore_support(
         targets, preds, average=None, zero_division=0
     )
     metrics_dict.update({"precision": pre[1], "recall": rec[1], "f1": f1[1]})
 
     try:
-        metrics_dict["jaccard"] = jaccard_score(targets, preds, average="macro")
+        metrics_dict["jaccard"] = M.jaccard_score(targets, preds, average="macro")
     except ValueError:
         metrics_dict["jaccard"] = np.nan
     try:
-        metrics_dict["hamming_loss"] = hamming_loss(targets, preds)
+        metrics_dict["hamming_loss"] = M.hamming_loss(targets, preds)
     except ValueError:
         metrics_dict["hamming_loss"] = np.nan
 

@@ -1,6 +1,6 @@
 from opensoundscape import sample
 import pandas as pd
-from math import isclose
+import math
 import torch
 
 
@@ -23,7 +23,7 @@ def test_audio_sample_categorical_labels():
 def test_audio_sample_end_time():
     series = pd.Series(name=("path", 2, 5), index=["a", "b"], data=[0, 1])
     s = sample.AudioSample("path", start_time=3, duration=2)
-    assert isclose(s.end_time, 5, abs_tol=1e-8)
+    assert math.isclose(s.end_time, 5, abs_tol=1e-8)
 
 
 def test_collate_samples():

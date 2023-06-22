@@ -1,12 +1,10 @@
 """Signal processing tools for feature extraction and more"""
 import numpy as np
 import pandas as pd
-from scipy import signal
+import scipy
 import pywt
 import matplotlib.pyplot as plt
-from pywt import central_frequency
-from scipy.signal import correlation_lags, correlate as scipy_correlate
-from scipy.fft import next_fast_len
+import pywt
 import torch
 
 from opensoundscape.utils import inrange
@@ -29,7 +27,7 @@ def frequency2scale(frequency, wavelet, sample_rate):
     freuquency_hz = pywt.scale2frequency(w,scale)*sr.
     """
     # get center frequency of this wavelet
-    center_freq = central_frequency(wavelet)
+    center_freq = pywt.central_frequency(wavelet)
 
     # calculate scale
     return center_freq * sample_rate / frequency
@@ -84,7 +82,7 @@ def cwt_peaks(
     # normalize, square, hilbert envelope, normalize
     x = x / np.max(x)
     x = x**2
-    x = abs(signal.hilbert(x))
+    x = abs(scipy.signal.hilbert(x))
     x = x / np.max(x)
 
     # calcualte time vector for each point in cwt signal
@@ -100,14 +98,13 @@ def cwt_peaks(
     )
 
     # locate peaks
-    peak_idx, _ = signal.find_peaks(x, height=peak_threshold, distance=min_d)
+    peak_idx, _ = scipy.signal.find_peaks(x, height=peak_threshold, distance=min_d)
     peak_times = [t[i] for i in peak_idx]
     peak_levels = [x[i] for i in peak_idx]
 
     ## plotting ##
 
     if plot:
-
         # plot cwt signal and detected peaks
         plt.plot(t, x)
         plt.scatter(peak_times, peak_levels, c="red")
@@ -229,7 +226,6 @@ def find_accel_sequences(
             # invalid point
 
             if building_sequence:
-
                 # check: should we break the sequence or continue?
                 if i - last_used_index > max_skip or not inrange(dt, dt_range):
                     # one of the two continuation criterea was broken.
@@ -460,7 +456,7 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
     return np.array(starts) / sample_rate, np.array(lengths) / sample_rate
 
 
-def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
+def gcc(x, y, cc_filter="phat", epsilon=0.001):
     """
     Generalized cross correlation of two signals
 
@@ -478,10 +474,11 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
         y: 1d numpy array of audio samples
         cc_filter: which filter to use in the gcc.
             'phat' - Phase transform. Default.
-            'roth' -
+            'roth' - Roth correlation (1971)
             'scot' - Smoothed Coherence Transform,
             'ht' - Hannan and Thomson
             'cc' - normal cross correlation with no filter
+            'cc_norm' - normal cross correlation normalized by the length and amplitude of the signal
         epsilon: small value used to ensure denominator when applying a filter is non-zero.
 
     Returns:
@@ -497,15 +494,20 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
     x = torch.Tensor(x)
     y = torch.Tensor(y)
 
+    if cc_filter == "cc_norm":
+        # zero - center the signals
+        x = x - torch.mean(x)
+        y = y - torch.mean(y)
+
     # pad the fft shape for "full" cross correlation of both signals
     n = x.shape[0] + y.shape[0] - 1
     if n % 2 != 0:
         n += 1
     # by choosing an optimal length rather than the shortest possible, we can
     # optimize fft speed
-    n_fast = next_fast_len(n, real=True)
+    n_fast = scipy.fft.next_fast_len(n, real=True)
 
-    # Take the reall Fast Fourier Transform of the signals
+    # Take the real Fast Fourier Transform of the signals
     X = torch.fft.rfft(x, n=n_fast)
     Y = torch.fft.rfft(y, n=n_fast)
 
@@ -530,11 +532,12 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
         gamma_xy = Gxy / (torch.sqrt(Gxx * Gyy) + epsilon)
         coherence = torch.abs(gamma_xy) ** 2
         phi = coherence / (torch.abs(Gxy) * (1 - coherence) + epsilon)
-    elif cc_filter == "cc":
+    elif cc_filter == "cc" or cc_filter == "cc_norm":
         phi = 1.0
+
     else:
         raise ValueError(
-            "Unsupported cc_filter. Must be one of: 'ht', 'phat', 'roth','scot'"
+            "Unsupported cc_filter. Must be one of: 'phat', 'roth', 'ht', 'scot', 'cc', 'cc_norm'"
         )
     # Inverse FFT to get the GCC
     cc = torch.fft.irfft(Gxy * phi, n_fast)
@@ -543,31 +546,44 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001, radius=None):
     # order of outputs matches torch.correlate and scipy.signal.correlate
     cc = torch.concatenate((cc[-y.shape[0] + 1 :], cc[: x.shape[0]]))
 
+    # normalize the cross-correlation coefficients if using cc_norm
+    # this normalizes both by length and amplitude
+    if cc_filter == "cc_norm":
+        cc = cc / (
+            torch.linalg.vector_norm(x) * torch.linalg.vector_norm(y)
+        )  # implicitly assumes mean of x and y are 0
+
     return cc.numpy()
 
 
 def tdoa(
     signal,
     reference_signal,
+    max_delay,
     cc_filter="phat",
     sample_rate=1,
     return_max=False,
-    max_delay=None,
 ):
-    """estimate time difference of arrival between two signals
+    """Estimate time difference of arrival between two signals
 
     estimates time delay by finding the maximum of the generalized cross correlation (gcc)
     of two signals. The two signals are discrete-time series with the same sample rate.
+
+    Only the central portion of the signal, from max_delay after the start and max_delay before the end, is used for the calculation.
+    All of the reference signal is used.
 
     For example, if the signal arrives 2.5 seconds _after_ the reference signal, returns 2.5;
     if it arrives 0.5 seconds _before_ the reference signal, returns -0.5.
 
     Args:
-        signal, reference_signal: np.arrays or lists containing each signal
+        signal: np.array or list object containing the signal of interest
+        reference_signal: np.array or list containing the reference signal. Both audio recordings must be time-synchronized.
+        max_delay: maximum possible tdoa (seconds) between the two signals. Cannot be longer than 1/2 the duration of the signal.
+        The tdoa returned will be between -max_delay and +max_delay.
         cc_filter: see gcc()
         sample_rate: sample rate (Hz) of signals; both signals must have same sample rate
         return_max: if True, returns the maximum value of the generalized cross correlation
-        max_delay: maximum possible tdoa. Cross-correlations that correspond to time delays outside of this range are ignored.
+
             For example, if max_delay=0.5, the tdoa returned will be the delay between -0.5 and +0.5 seconds, that maximizes the cross-correlation.
             This is useful if you know the maximum possible delay between the two signals, and want to ignore any tdoas outside of that range.
             e.g. if receivers are 100m apart, and the speed of sound is 340m/s, then the maximum possible delay is 0.294 seconds.
@@ -580,29 +596,40 @@ def tdoa(
 
     See also: gcc() if you want the raw output of generalized cross correlation
     """
+    # check that the two signals are the same length
+
+    if (
+        len(reference_signal) - len(signal) > 1
+    ):  # allow 1 sample difference for rounding errors
+        raise ValueError("reference_signal and signal must be the same length.")
+
+    # check that the maximum delay is not longer than 1/2 the audio signal
+    audio_len = len(signal) / sample_rate
+    if max_delay >= audio_len / 2:
+        raise ValueError(
+            f"max_delay cannot be longer than 1/2 the signal. max_delay is {max_delay} seconds, signal is {audio_len} seconds long."
+        )
+    # trim the primary signal to just the central part
+    start = int(max_delay * sample_rate)
+    end = int(len(reference_signal) - max_delay * sample_rate)
+    signal = signal[start:end]
+
     # compute the generalized cross correlation between the signals
     cc = gcc(signal, reference_signal, cc_filter=cc_filter)
 
-    # generate the relative offsets for each index position of `cc`
-    lags = correlation_lags(len(signal), len(reference_signal))
+    # filter to only the 'valid' part of the cross correlation, where the signals overlap fully
+    cc = cc[len(signal) - 1 : -len(signal) + 1]
 
-    if max_delay:
-        max_lag = int(
-            max_delay * sample_rate
-        )  # convert max_delay to max_lag in samples
-        # slice cc and lags, so we only look at cross_correlations that are between -max_lag and +max_lag
-        boolean_mask = [lag < max_lag and lag > -max_lag for lag in lags]
-        cc = cc[boolean_mask]
-        lags = lags[boolean_mask]
+    # find max cc value
+    # if max is at 0 it indicates the signal arrives max_delay earlier than in the reference signal
+    lag = np.argmax(cc)
 
-    # find the time delay using the index of the maximum cc value
-    # the maximum of the cc value represents GCC's estimate of the delay
-    # between the two signals, ie how much to shift one signal against the other
-    # to maximize their product
-    tdoa = lags[np.argmax(cc)] / sample_rate
+    # convert lag to time delay
+    tdoa = (lag / sample_rate) - max_delay
+    max_cc = np.max(cc)
 
     if return_max:
-        return tdoa, max(cc)
+        return tdoa, np.max(cc)
 
     else:
         return tdoa

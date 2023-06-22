@@ -1,4 +1,4 @@
- Audio
+Audio
 ^^^^^
 .. automodule:: opensoundscape.audio
   :members:
@@ -7,7 +7,7 @@
 Spectrogram
 ^^^^^^^^^^^
 .. automodule:: opensoundscape.spectrogram
- :members:
+  :members:
  
 CNN
 ^^^
@@ -19,10 +19,6 @@ Annotations
 .. automodule:: opensoundscape.annotations
  :members:
 
-ARU
-^^^
-.. automodule:: opensoundscape.aru
- :members:
  
 Machine Learning utils
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -113,11 +109,6 @@ Signal Processing
 ^^^^^^^^^^^^^^^^^
 .. automodule:: opensoundscape.signal_processing
  :members:
-
-Taxa
-^^^^
-.. automodule:: opensoundscape.taxa
-  :members:
 
 Localization
 ^^^^^^^^^^^^

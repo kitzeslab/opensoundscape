@@ -19,24 +19,24 @@ audio_object = audio_object.resample(22050)
 
 """
 import warnings
-from datetime import timedelta, datetime
+import datetime
 from pathlib import Path
 import json
 import io
-from urllib.request import urlopen
+import urllib
 
 import numpy as np
-from scipy.fftpack import fft as scipyfft
-from scipy.fft import fftfreq
+import scipy
+
 import librosa
 import soundfile
 import IPython.display
+from aru_metadata_parser.parse import parse_audiomoth_metadata
+from aru_metadata_parser.utils import load_metadata
 
 import opensoundscape
-from opensoundscape.utils import generate_clip_times_df, load_metadata
-from opensoundscape.aru import parse_audiomoth_metadata
+from opensoundscape.utils import generate_clip_times_df
 from opensoundscape.signal_processing import tdoa
-from scipy.signal import butter, sosfiltfilt
 
 DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
 
@@ -277,12 +277,13 @@ class Audio:
                 offset is None
             ), "You must not specify both `start_timestamp` and `offset`"
             assert (
-                type(start_timestamp) == datetime and start_timestamp.tzinfo is not None
+                type(start_timestamp) == datetime.datetime
+                and start_timestamp.tzinfo is not None
             ), "start_timestamp must be a localized datetime object"
             assert (
                 metadata is not None
                 and "recording_start_time" in metadata
-                and type(metadata["recording_start_time"]) == datetime
+                and type(metadata["recording_start_time"]) == datetime.datetime
             ), (
                 "metadata did not contain start time timestamp in key `recording_start_time`. "
                 "This key is automatically created when parsing AudioMoth metadata."
@@ -324,7 +325,7 @@ class Audio:
                 raise AudioOutOfBoundsError(error_msg)
             elif out_of_bounds_mode == "warn":
                 warnings.warn(error_msg)
-        elif duration is not None and len(samples) < duration * sr:
+        elif duration is not None and len(samples) < np.floor(duration * sr):
             if offset < 0:
                 error_msg = "requested time period begins before start of recording"
             else:
@@ -352,7 +353,7 @@ class Audio:
 
             # if the offset > 0, we need to update the timestamp
             if "recording_start_time" in metadata and offset > 0:
-                metadata["recording_start_time"] += timedelta(seconds=offset)
+                metadata["recording_start_time"] += datetime.timedelta(seconds=offset)
 
         return cls(samples, sr, resample_type=resample_type, metadata=metadata)
 
@@ -403,7 +404,9 @@ class Audio:
         Returns:
             Audio object
         """
-        samples, original_sample_rate = soundfile.read(io.BytesIO(urlopen(url).read()))
+        samples, original_sample_rate = soundfile.read(
+            io.BytesIO(urllib.request.urlopen(url).read())
+        )
         samples = samples.mean(1)  # sum to mono
         if sample_rate is not None and sample_rate != original_sample_rate:
             samples = librosa.resample(
@@ -494,7 +497,9 @@ class Audio:
         else:
             metadata = self.metadata.copy()
             if "recording_start_time" in metadata:
-                metadata["recording_start_time"] += timedelta(seconds=start_time)
+                metadata["recording_start_time"] += datetime.timedelta(
+                    seconds=start_time
+                )
 
             if "duration" in metadata:
                 metadata["duration"] = len(samples_trimmed) / self.sample_rate
@@ -543,20 +548,31 @@ class Audio:
             metadata=metadata,
         )
 
-    def extend(self, length):
-        """Extend audio file by adding silence to the end
+    def extend_to(self, duration):
+        """Extend audio file to desired duration by adding silence to the end
+
+        If duration is less than the Audio's .duration, the Audio object is trimmed.
+        Otherwise, silence is added to the end of the Audio object to achieve the desired
+        duration.
 
         Args:
-            length: the final duration in seconds of the extended audio object
+            duration: the final duration in seconds of the audio object
 
         Returns:
             a new Audio object of the desired duration
         """
 
-        total_samples_needed = round(length * self.sample_rate)
-        samples_extended = np.pad(
-            self.samples, pad_width=(0, total_samples_needed - len(self.samples))
-        )
+        target_n_samples = round(duration * self.sample_rate)
+        current_n_samples = len(self.samples)
+
+        if target_n_samples > current_n_samples:
+            # add 0's to the end of the sample array
+            new_samples = np.pad(
+                self.samples, pad_width=(0, target_n_samples - current_n_samples)
+            )
+        elif target_n_samples < current_n_samples:
+            # trim to desired samples (similar to self.trim())
+            new_samples = self.samples[0:target_n_samples]
 
         # update metadata to reflect new duration
         if self.metadata is None:
@@ -564,12 +580,37 @@ class Audio:
         else:
             metadata = self.metadata.copy()
             if "duration" in metadata:
-                metadata["duration"] = len(samples_extended) / self.sample_rate
+                metadata["duration"] = len(new_samples) / self.sample_rate
 
         return self._spawn(
-            samples=samples_extended,
+            samples=new_samples,
             metadata=metadata,
         )
+
+    def extend_by(self, duration):
+        """Extend audio file by adding `duration` seconds of silence to the end
+
+        Args:
+            duration: the final duration in seconds of the audio object
+
+        Returns:
+            a new Audio object with silence added to the end
+        """
+        assert duration >= 0, f"`duration` to extend by must be >=0, got {duration}"
+
+        # create desired duration of silent audio and concatenate to the end
+        silence = Audio.silence(duration=duration, sample_rate=self.sample_rate)
+        new_audio = concat([self, silence])
+
+        # add metadata and update to reflect new duration
+        if self.metadata is None:
+            new_audio.metadata = None
+        else:
+            new_audio.metadata = self.metadata.copy()
+            if "duration" in new_audio.metadata:
+                new_audio.metadata["duration"] = new_audio.duration
+
+        return new_audio
 
     def bandpass(self, low_f, high_f, order):
         """Bandpass audio signal with a butterworth filter
@@ -606,10 +647,10 @@ class Audio:
 
         # Compute the fft (fast fourier transform) of the selected clip
         N = len(self.samples)
-        fft = scipyfft(self.samples)
+        fft = scipy.fft.fft(self.samples)
 
         # create the frequencies corresponding to fft bins
-        freq = fftfreq(N, d=1 / self.sample_rate)
+        freq = scipy.fft.fftfreq(N, d=1 / self.sample_rate)
 
         # remove negative frequencies and scale magnitude by 2.0/N:
         fft = 2.0 / N * fft[0 : int(N / 2)]
@@ -781,13 +822,12 @@ class Audio:
         for idx, (start, end) in enumerate(
             zip(clip_df["start_time"], clip_df["end_time"])
         ):
-
             # Trim the clip to desired range
             audio_clip = self.trim(start, end)
 
             # Extend the final clip if necessary
             if end > duration and final_clip == "extend":
-                audio_clip = audio_clip.extend(clip_duration)
+                audio_clip = audio_clip.extend_to(clip_duration)
 
             # Add clip to list of clips
             clips[idx] = audio_clip
@@ -1094,7 +1134,7 @@ def mix(
 
         # pad or truncate to correct length
         if audio.duration < duration:
-            audio = audio.extend(duration)
+            audio = audio.extend_to(duration)
         elif audio.duration > duration:
             audio = audio.trim(0, duration)
 
@@ -1109,24 +1149,28 @@ def mix(
 
 
 def estimate_delay(
-    audio,
+    primary_audio,
     reference_audio,
+    max_delay,
     bandpass_range=None,
     bandpass_order=9,
     cc_filter="phat",
     return_cc_max=False,
-    max_delay=None,
     skip_ref_bandpass=False,
 ):
-    """Use generalized cross correlation to estimate time delay between signals
+    """
+    Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal. The audio objects must be time-synchronized
 
-    optionally bandpass audio signals to a frequency range
+    Optionally bandpass audio signals to a frequency range
 
     For example, if audio is delayed by 1 second compared to reference_audio,
     result is 1.0.
 
     Args:
-        audio, reference_audio: audio objects
+        primary_audio: audio object containing the signal of interest
+        reference_audio: audio object containing the reference signal.
+        max_delay: maximum time delay to consider, in seconds. Must be less than the duration of the primary audio.
+            (see `opensoundscape.signal_processing.tdoa`)
         bandpass_range: if None, no bandpass filter is performed
             otherwise [low_f,high_f]
         bandpass_order: order of Butterworth bandpass filter
@@ -1134,8 +1178,6 @@ def estimate_delay(
             opensoundscape.signal_processing.gcc() [default: 'phat']
         return_cc_max: if True, returns cross correlation max value as second argument
             (see `opensoundscape.signal_processing.tdoa`)
-        max_delay: maximum time delay to consider, in seconds
-            (see `opensoundscape.signal_processing.tdoa`) [default: None] allows any delay
         skip_ref_bandpass: [default: False] if True, skip the bandpass operation for the
             reference_audio object, only apply it to `audio`
     Returns:
@@ -1147,25 +1189,25 @@ def estimate_delay(
     Note: resamples reference_audio if its sample rate does not match audio
     """
     # sample rates must match
-    sr = audio.sample_rate
+    sr = primary_audio.sample_rate
     if reference_audio.sample_rate != sr:
         reference_audio = reference_audio.resample(sr)
 
     # apply audio-domain butterworth bandpass filter if desired
     if bandpass_range is not None:
         l, h = bandpass_range  # extract low and high frequencies
-        audio = audio.bandpass(l, h, bandpass_order)
+        primary_audio = primary_audio.bandpass(l, h, bandpass_order)
         if not skip_ref_bandpass:
             reference_audio = reference_audio.bandpass(l, h, bandpass_order)
 
     # estimate time delay from reference_audio to audio using generalized cross correlation
     return tdoa(
-        audio.samples,
+        primary_audio.samples,
         reference_audio.samples,
+        max_delay=max_delay,
         cc_filter=cc_filter,
         sample_rate=sr,
         return_max=return_cc_max,
-        max_delay=max_delay,
     )
 
 
@@ -1196,7 +1238,7 @@ def parse_opso_metadata(comment_string):
     if metadata_version == "v0.1":
         # parse and re-format according to opso_metadata_v0.1 formatting
         if "recording_start_time" in metadata:
-            metadata["recording_start_time"] = datetime.fromisoformat(
+            metadata["recording_start_time"] = datetime.datetime.fromisoformat(
                 metadata["recording_start_time"]
             )
     # elif: # implement parsing of future metadata versions here
@@ -1293,6 +1335,10 @@ def _metadata_from_file_handler(path):
 def _write_metadata(metadata, metadata_format, path):
     """write metadata using one of the supported formats
 
+    metadata fields containing empty strings `''` will be replaced by a string
+    containing a single space `' '` as a workaround to
+    https://github.com/bastibe/python-soundfile/issues/386.
+
     Args:
         metadata: dictionary of metadata
         metadata_format: one of 'opso','opso_metadata_v0.1','soundfile'
@@ -1324,7 +1370,13 @@ def _write_metadata(metadata, metadata_format, path):
             "genre",
         ]:
             if field in metadata and metadata[field] is not None:
-                s.__setattr__(field, metadata[field])
+                value = str(metadata[field])
+                # replace empty strings with a single space, because
+                # empty string as value causes error (see
+                # https://github.com/bastibe/python-soundfile/issues/386)
+                if len(value) < 1:
+                    value = " "
+                s.__setattr__(field, value)
 
 
 def butter_bandpass(low_f, high_f, sample_rate, order=9):
@@ -1342,7 +1394,9 @@ def butter_bandpass(low_f, high_f, sample_rate, order=9):
     nyq = 0.5 * sample_rate
     low = low_f / nyq
     high = high_f / nyq
-    sos = butter(order, [low, high], analog=False, btype="band", output="sos")
+    sos = scipy.signal.butter(
+        order, [low, high], analog=False, btype="band", output="sos"
+    )
     return sos
 
 
@@ -1361,7 +1415,7 @@ def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
         filtered time signal
     """
     sos = butter_bandpass(low_f, high_f, sample_rate, order=order)
-    return sosfiltfilt(sos, signal)
+    return scipy.signal.sosfiltfilt(sos, signal)
 
 
 def clipping_detector(samples, threshold=0.6):

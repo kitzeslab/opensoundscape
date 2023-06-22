@@ -11,12 +11,9 @@ import yaml
 
 import numpy as np
 import pandas as pd
-from pandas.core.indexes.multi import MultiIndex
 
 import torch
-import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
@@ -87,7 +84,6 @@ class CNN(BaseModule):
         preprocessor_class=SpectrogramPreprocessor,
         sample_shape=(224, 224, 3),
     ):
-
         super(CNN, self).__init__()
 
         self.name = "CNN"
@@ -112,8 +108,8 @@ class CNN(BaseModule):
 
         # to use a custom DataLoader or Sampler, change these attributes
         # to the custom class (init must take same arguments)
-        self.train_dataloader_cls = DataLoader
-        self.inference_dataloader_cls = DataLoader
+        self.train_dataloader_cls = torch.utils.data.DataLoader
+        self.inference_dataloader_cls = torch.utils.data.DataLoader
 
         ### architecture ###
         # can be a pytorch CNN such as Resnet18 or a custom object
@@ -168,7 +164,7 @@ class CNN(BaseModule):
         ### training parameters ###
         # optimizer
         self.opt_net = None  # don't set directly. initialized during training
-        self.optimizer_cls = optim.SGD  # or torch.optim.Adam, etc
+        self.optimizer_cls = torch.optim.SGD  # or torch.optim.Adam, etc
 
         # instead of putting "params" key here, we only add it during
         # _init_optimizer, just before initializing the optimizers
@@ -295,7 +291,7 @@ class CNN(BaseModule):
             self.opt_net = self._init_optimizer()
 
         # Set up learning rate cooling schedule
-        self.scheduler = optim.lr_scheduler.StepLR(
+        self.scheduler = torch.optim.lr_scheduler.StepLR(
             self.opt_net,
             step_size=self.lr_update_interval,
             gamma=self.lr_cooling_factor,
@@ -539,7 +535,6 @@ class CNN(BaseModule):
 
         # Initialize Weights and Biases (wandb) logging ###
         if wandb_session is not None:
-
             # update the run config with information about the model
             wandb_session.config.update(self._generate_wandb_config())
 
@@ -809,7 +804,7 @@ class CNN(BaseModule):
                     CNN.from_torch_dict on the saved file will cause an error. To fix this,
                     you can use .save() instead of .save_torch_model, or change 
                     `self.architecture_name` to one of the architecture name strings listed by 
-                    opensoundscape.torch.architectures.cnn_architectures.list_architectures()
+                    opensoundscape.ml.cnn_architectures.list_architectures()
                     if this architecture is supported."""
             )
 
@@ -909,7 +904,10 @@ class CNN(BaseModule):
         # (c1) user provided multi-index df with file,start_time,end_time of clips
         # (c2) user provided file list and wants clips to be split out automatically
         # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
-        if type(samples) == pd.DataFrame and type(samples.index) == MultiIndex:  # c1
+        if (
+            type(samples) == pd.DataFrame
+            and type(samples.index) == pd.core.indexes.multi.MultiIndex
+        ):  # c1
             prediction_dataset = AudioFileDataset(
                 samples=samples, preprocessor=self.preprocessor
             )
@@ -937,9 +935,6 @@ class CNN(BaseModule):
         if len(prediction_dataset) < 1:
             warnings.warn(
                 "prediction_dataset has zero samples. No predictions will be generated."
-            )
-            prediction_dataset = AudioFileDataset(
-                samples=[], preprocessor=self.preprocessor
             )
 
         # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
@@ -1074,7 +1069,6 @@ class CNN(BaseModule):
 
         # Initialize Weights and Biases (wandb) logging
         if wandb_session is not None:
-
             # update the run config with information about the model
             wandb_session.config.update(self._generate_wandb_config())
 
@@ -1345,7 +1339,6 @@ class CNN(BaseModule):
             # update the AudioSample objects to include the activation maps
             # and create guided backprop maps, one at a time
             for i, sample in enumerate(samples):
-
                 if cam is None:
                     activation_maps = None
                 else:
@@ -1702,7 +1695,7 @@ def load_outdated_model(
     `Predict with pre-trained CNN` tutorial for details.
 
     For models created with the same version of OpenSoundscape as the one
-    you are using, simply use opensoundscape.torch.models.cnn.load_model().
+    you are using, simply use opensoundscape.ml.cnn.load_model().
 
     Note: for future use of the loaded model, you can simply call
     `model.save(path)` after creating it, then reload it with

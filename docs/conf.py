@@ -26,7 +26,7 @@ copyright = "2022 Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilna
 author = "Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilnani, Alexandra Syunkova, Justin Kitzes"
 
 # The full version, including alpha/beta/rc tags
-release = "0.9.0"
+release = "0.9.1"
 
 
 # -- General configuration ---------------------------------------------------
@@ -102,6 +102,7 @@ autodoc_mock_imports = [
     "skimage",
     "wandb",
     "pytorch_grad_cam",
+    "aru_metadata_parser",
 ]
 
 master_doc = "index"

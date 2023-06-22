@@ -1,3 +1,13 @@
+import pandas as pd
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
+import shutil
+
+import warnings
+
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.loss import ResampleLoss
@@ -11,15 +21,6 @@ from opensoundscape.sample import AudioSample
 from opensoundscape.ml.cam import CAM
 
 from opensoundscape.utils import make_clip_df
-import pandas as pd
-from pathlib import Path
-
-import numpy as np
-import pandas as pd
-import pytest
-import shutil
-
-import warnings
 
 
 @pytest.fixture()
@@ -138,6 +139,17 @@ def test_predict_on_list_of_files(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     scores = model.predict(test_df.index.values)
     assert len(scores) == 2
+
+
+def test_predict_on_empty_list():
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    scores = model.predict([])
+    expected = ["file", "start_time", "end_time", 0, 1]
+    assert list(scores.reset_index().columns) == expected
+
+    scores = model.predict([], split_files_into_clips=False)
+    expected = ["index", 0, 1]
+    assert list(scores.reset_index().columns) == expected
 
 
 def test_predict_all_arch_4ch(test_df):

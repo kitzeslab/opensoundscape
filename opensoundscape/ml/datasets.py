@@ -49,7 +49,6 @@ class AudioFileDataset(torch.utils.data.Dataset):
     """
 
     def __init__(self, samples, preprocessor, bypass_augmentations=False):
-
         ## Input Validation ##
 
         # validate type of samples: list, np array, or df
@@ -98,7 +97,6 @@ class AudioFileDataset(torch.utils.data.Dataset):
         return self.label_df.shape[0]
 
     def __getitem__(self, idx, break_on_key=None, break_on_type=None):
-
         sample = AudioSample.from_series(self.label_df.iloc[idx])
 
         # preprocessor.forward will raise PreprocessingError if something fails

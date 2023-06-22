@@ -3,16 +3,13 @@ import warnings
 import pandas as pd
 import numpy as np
 import torch
-from torch import nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torch.nn.functional import softmax
 
 
 from opensoundscape.ml.sampling import ClassAwareSampler
 
 
-class BaseModule(nn.Module):
+class BaseModule(torch.nn.Module):
     """
     Base class for a pytorch model pipeline class.
 
@@ -70,7 +67,7 @@ def cas_dataloader(dataset, batch_size, num_workers):
     # create the class aware sampler object and DataLoader
     sampler = ClassAwareSampler(digit_labels, num_samples_cls=2)
 
-    loader = DataLoader(
+    loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=False,  # don't shuffle bc CAS does its own sampling
@@ -127,19 +124,19 @@ def apply_activation_layer(x, activation_layer=None):
         pass
     elif activation_layer == "softmax":
         # "softmax" activation: preds across all classes sum to 1
-        x = softmax(x, dim=1)
+        x = F.softmax(x, dim=1)
     elif activation_layer == "sigmoid":
         # map [-inf,inf] to [0,1]
         x = torch.sigmoid(x)
     elif activation_layer == "softmax_and_logit":
         # softmax, then remap scores from [0,1] to [-inf,inf]
         try:
-            x = torch.logit(softmax(x, dim=1))
+            x = torch.logit(F.softmax(x, dim=1))
         except NotImplementedError:
             # use cpu because mps aten::logit is not implemented yet
             warnings.warn("falling back to CPU for logit operation")
             original_device = x.device
-            x = torch.logit(softmax(x, dim=1).cpu()).to(original_device)
+            x = torch.logit(F.softmax(x, dim=1).cpu()).to(original_device)
 
     else:
         raise ValueError(f"invalid option for activation_layer: {activation_layer}")

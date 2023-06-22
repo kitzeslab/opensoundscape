@@ -12,14 +12,14 @@ OpenSoundscape is currently in active development. If you find a bug, please sub
 
 #### Suggested Citation
 ```
-Lapp, Rhinehart, Freeland-Haynes, Khilnani, Syunkova, and Kitzes, 2023. "OpenSoundscape v0.9.0".
+Lapp, Rhinehart, Freeland-Haynes, Khilnani, Syunkova, and Kitzes, 2023. "OpenSoundscape v0.9.1".
 ```
 
 # Installation
 
-OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.8, and 3.9. For Apple Silicon (M1 chip) users, Python 3.9 is recommended and may be required to avoid dependency issues.
+OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.8, 3.9, 3.10, and 3.11. For Apple Silicon (M1 chip) users, Python >=3.9 is recommended and may be required to avoid dependency issues.
 
-Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.9.0`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
+Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.9.1`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
 
 For more detailed instructions on how to install OpenSoundscape and use it in Jupyter, see the [documentation](http://opensoundscape.org).
 
@@ -31,6 +31,7 @@ OpenSoundscape includes functions to:
 * run pre-trained CNNs to detect vocalizations
 * detect periodic vocalizations with RIBBIT
 * load and manipulate Raven annotations
+* estimate the location of sound sources from synchronized recordings
 
 OpenSoundscape can also be used with our library of publicly available trained machine learning models for the detection of 500 common North American bird species.
 
@@ -40,8 +41,7 @@ For full API documentation and tutorials on how to use OpenSoundscape to work wi
 
 Using Audio and Spectrogram classes
 ```python
-from opensoundscape.audio import Audio
-from opensoundscape.spectrogram import Spectrogram
+from opensoundscape import Audio, Spectrogram
 
 #load an audio file and trim out a 5 second clip
 my_audio = Audio.from_file("/path/to/audio.wav")
@@ -78,7 +78,38 @@ scores = model.predict(files)
 #containing inference scores for each class and each audio window
 ```
 
-Training a CNN with labeled audio data
+Training a CNN using audio files and Raven annotations 
+
+
+```python
+from sklearn.model_selection import train_test_split
+from opensoundscape import BoxedAnnotations, CNN
+
+# assume we have a list of raven annotation files and corresponding audio files
+# load the annotations into OpenSoundscape
+all_annotations = BoxedAnnotations.from_raven_files(raven_file_paths,audio_file_paths)
+
+# pick classes to train the model on. These should occur in the annotated data
+class_list = ['IBWO','BLJA']
+
+# create labels for fixed-duration (2 second) clips 
+labels = all_annotations.one_hot_clip_labels(
+  cip_duration=2,
+  clip_overlap=0,
+  min_label_overlap=0.25,
+  class_subset=class_list
+)
+
+# split the labels into training and validation sets
+train_df, validation_df = train_test_split(labels, test_size=0.3)
+
+# create a CNN and train on the labeled data
+model = CNN(architecture='resnet18', sample_duration=2, classes=class_list)
+model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
+```
+
+Training a CNN with labeled audio data (one label per audio file):
+
 ```python
 from opensoundscape import CNN
 from sklearn.model_selection import train_test_split
@@ -87,12 +118,8 @@ from sklearn.model_selection import train_test_split
 df = pd.read_csv('my_labels.csv') #index: paths; columns: classes
 train_df, validation_df = train_test_split(df,test_size=0.2)
 
-#create a CNN and train on 2-second spectrograms for 2 epochs
-model = CNN('resnet18',classes=df.columns,sample_duration=2.0)
-model.train(
-  train_df,
-  validation_df,
-  epochs=2
-)
+#create a CNN and train on 2-second spectrograms for 20 epochs
+model = CNN('resnet18', classes=df.columns, sample_duration=2.0)
+model.train(train_df, validation_df, epochs=20)
 #the best model is automatically saved to a file `./best.model`
 ```

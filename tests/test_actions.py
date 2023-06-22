@@ -1,5 +1,5 @@
 import pytest
-from math import isclose
+import math
 import copy
 from pathlib import Path
 import numpy as np
@@ -84,14 +84,14 @@ def test_audio_clip_loader_resample(sample):
 def test_audio_clip_loader_clip(sample_clip):
     action = actions.AudioClipLoader()
     action.go(sample_clip)
-    assert isclose(sample_clip.data.duration, 2, abs_tol=1e-4)
+    assert math.isclose(sample_clip.data.duration, 2, abs_tol=1e-4)
 
 
 def test_action_trim(sample_audio):
     action = actions.AudioTrim()
     sample_audio.target_duration = 1.0
     action.go(sample_audio)
-    assert isclose(sample_audio.data.duration, 1.0, abs_tol=1e-4)
+    assert math.isclose(sample_audio.data.duration, 1.0, abs_tol=1e-4)
 
 
 def test_action_random_trim(sample_audio):
@@ -101,7 +101,7 @@ def test_action_random_trim(sample_audio):
     sample_audio.target_duration = sample2.target_duration = 0.01
     action.go(sample_audio)
     action.go(sample2)
-    assert isclose(sample_audio.data.duration, 0.01, abs_tol=1e-4)
+    assert math.isclose(sample_audio.data.duration, 0.01, abs_tol=1e-4)
     # random trim should result in 2 different samples
     assert not np.array_equal(sample_audio.data.samples, sample2.data.samples)
 
@@ -111,7 +111,7 @@ def test_audio_trimmer_default(sample_audio):
     action = actions.AudioTrim()
     sample_audio.target_duration = None
     action.go(sample_audio)
-    assert isclose(sample_audio.data.duration, 0.142086167800, abs_tol=1e-4)
+    assert math.isclose(sample_audio.data.duration, 0.142086167800, abs_tol=1e-4)
 
 
 def test_audio_trimmer_raises_error_on_short_clip(sample_audio):
@@ -125,7 +125,7 @@ def test_audio_trimmer_extend_short_clip(sample_audio):
     action = actions.AudioTrim()
     sample_audio.target_duration = 1
     action.go(sample_audio)  # extend=True is default
-    assert isclose(sample_audio.data.duration, 1.0, abs_tol=1e-4)
+    assert math.isclose(sample_audio.data.duration, 1.0, abs_tol=1e-4)
 
 
 def test_audio_random_gain(sample_audio):
@@ -133,7 +133,7 @@ def test_audio_random_gain(sample_audio):
     original_max = max(sample_audio.data.samples)
     action = actions.Action(actions.audio_random_gain, dB_range=[-20, -20])
     action.go(sample_audio)
-    assert isclose(max(sample_audio.data.samples) * 10, original_max, abs_tol=1e-6)
+    assert math.isclose(max(sample_audio.data.samples) * 10, original_max, abs_tol=1e-6)
 
 
 def test_audio_add_noise(sample_audio):
@@ -197,6 +197,3 @@ def test_modify_parameter_with_series_magic(tensor):
     action.params.input_mean = 1  # set with . syntax
     assert action.params["input_mean"] == 1
     action.go(tensor)
-
-
-# others tested implicitly through preprocessor and cnn tests

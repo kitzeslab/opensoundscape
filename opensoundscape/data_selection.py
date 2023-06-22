@@ -1,5 +1,5 @@
 """tools for subsetting and resampling collections"""
-from itertools import repeat
+import itertools
 import pandas as pd
 
 
@@ -59,7 +59,7 @@ def resample(
 
         # if upsampling, repeat all of the samples as many times as necessary
         if num_replicates > 0:
-            repeat_df = pd.concat(repeat(sub_df, num_replicates))
+            repeat_df = pd.concat(itertools.repeat(sub_df, num_replicates))
             class_dfs[idx] = pd.concat([repeat_df, random_df])
         else:
             class_dfs[idx] = random_df
@@ -100,7 +100,7 @@ def upsample(input_df, label_column="Labels", with_replace=False, random_state=N
             n=remainder, replace=with_replace, random_state=random_state
         )
 
-        repeat_df = pd.concat(repeat(sub_df, num_replicates))
+        repeat_df = pd.concat(itertools.repeat(sub_df, num_replicates))
 
         dfs[idx] = pd.concat([repeat_df, random_df])
 

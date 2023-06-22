@@ -1,8 +1,7 @@
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 
 from . import annotations
 from . import audio
-from . import aru
 from . import data_selection
 from . import utils
 from . import localization
@@ -11,10 +10,8 @@ from . import ribbit
 from . import sample
 from . import signal_processing
 from . import spectrogram
-from . import taxa
 from . import ml
 from . import preprocess
-from . import resources
 from . import logging
 
 # expose some modules at the top level
@@ -29,3 +26,4 @@ from .ml.datasets import AudioFileDataset, AudioSplittingDataset
 from .preprocess.actions import Action
 from .preprocess.preprocessors import SpectrogramPreprocessor
 from .sample import AudioSample
+from .annotations import BoxedAnnotations

@@ -1,6 +1,6 @@
 file,start_time,end_time,test_species
-tests/audio/aru_1.wav,0,3,1
-tests/audio/aru_2.wav,0,3,1
-tests/audio/aru_3.wav,0,3,1
-tests/audio/aru_4.wav,0,3,1
-tests/audio/aru_5.wav,0,3,1
+tests/audio/aru_1.wav,1,2,1
+tests/audio/aru_2.wav,1,2,1
+tests/audio/aru_3.wav,1,2,1
+tests/audio/aru_4.wav,1,2,1
+tests/audio/aru_5.wav,1,2,1
