@@ -17,7 +17,7 @@ packages = [{include = "opensoundscape"}]
 include = ["opensoundscape/**/*.py"]
 
 [tool.poetry.dependencies]
-python = ">=3.8"
+python = ">=3.9"
 docopt = ">=0.6.2"
 librosa = ">=0.10.0"
 torch = ">=2.0.0, !=2.0.1"
