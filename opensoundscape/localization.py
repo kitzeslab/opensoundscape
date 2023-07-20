@@ -113,7 +113,9 @@ class SpatialEvent:
         # perform generalized cross correlation to estimate time delays
         # (unless values are already stored in attributes)
         if self.tdoas is None or self.cc_maxs is None:
-            self.estimate_delays()
+            self.estimate_delays(
+                max_delay=self.max_delay, bandpass_range=self.bandpass_range
+            )
 
         # filter by cross correlation threshold, removing time delays + locations
         # if cross correlation did not exceed a minimum value
