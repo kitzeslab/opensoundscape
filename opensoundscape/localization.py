@@ -9,12 +9,6 @@ from opensoundscape import audio
 SPEED_OF_SOUND = 343  # default value in meters per second
 
 
-class InsufficientReceiversError(Exception):
-    """raised when there are not enough receivers to localize an event"""
-
-    pass
-
-
 class SpatialEvent:
     """
     Class that estimates the location of a single sound event
@@ -81,14 +75,6 @@ class SpatialEvent:
         self.location_estimate = None  # cartesian location estimate in meters
         self.residual_rms = None
 
-        # could implement this later:
-        # hidden attributes store estimates and error metrics
-        # from gillette and soundfinder localization algorithms
-        # self._gillette_location_estimate = None
-        # self._gillette_error = None
-        # self._soundfinder_location_estimate = None
-        # self._soundfinder_pseudorange_error = None
-
     def estimate_location(
         self,
         algorithm="gillette",
@@ -111,15 +97,11 @@ class SpatialEvent:
             algorithm: 'gillette' or 'soundfinder', see localization.localize()
             cc_threshold: see SpatialEvent documentation
             min_n_receivers: if number of receivers with cross correlation exceeding
-                the threshold is fewer than this, raises InsufficientReceiversError
+                the threshold is fewer than this, estimates location None
                 instead of estimating a spatial location
 
         Returns:
             location estimate as cartesian coordinates (x,y) or (x,y,z) (units: meters)
-
-        Raises:
-            InsufficientReceiversError if the number of receivers with cross correlation
-                maximums exceeding `cc_threshold` is less than `min_n_receivers`
 
         Effects:
             sets the value of self.location_estimate to the same value as the returned location
@@ -151,10 +133,10 @@ class SpatialEvent:
 
         # assert there are enough receivers remaining to localize the event
         if len(tdoas) < min_n_receivers:
-            raise InsufficientReceiversError(
-                f"Number of tdoas exceeding cc threshold ({len(tdoas)} was fewer "
-                f"than min_n_receivers ({min_n_receivers})"
-            )
+            self.location_estimate = None
+            self.receivers_used = None
+            self.distance_residuals = None
+            self.residual_rms = None
 
         # Store which receivers were used for localization. The location is estimated only from these.
         self.receivers_used = receiver_files
@@ -492,29 +474,20 @@ class SynchronizedRecorderArray:
                 cc_filter=cc_filter,
                 max_delay=max_delay,
             )
-
             # estimate locations of sound event using time delays and receiver locations
-            try:
-                event.estimate_location(
-                    algorithm=localization_algorithm,
-                    cc_threshold=cc_threshold,
-                    min_n_receivers=min_n_receivers,
-                    speed_of_sound=SPEED_OF_SOUND,
-                )
-            except InsufficientReceiversError:
-                # this occurs if not enough receivers had high enough cross correlation scores
-                # to continue with localization (<min_n_receivers)
+            event.estimate_location(
+                algorithm=localization_algorithm,
+                cc_threshold=cc_threshold,
+                min_n_receivers=min_n_receivers,
+                speed_of_sound=SPEED_OF_SOUND,
+            )
+            if (
+                event.location_estimate is None
+                or event.residual_rms > residual_threshold
+            ):
                 unlocalized_events.append(event)
-                continue
-
-            # event.residual_rms is computed at the end of event.estimate_location
-            # and represents discrepency (in meters) between tdoas and estimated location
-            # check if residuals are small enough that we consider this a good location estimate
-            # TODO: use max instead of mean?
-            if event.residual_rms < residual_threshold:
-                localized_events.append(event)
             else:
-                unlocalized_events.append(event)
+                localized_events.append(event)
 
         # unlocalized events include those with too few receivers (after cc threshold)
         # and those with too large of a spatial residual rms
