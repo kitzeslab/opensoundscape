@@ -137,6 +137,7 @@ class SpatialEvent:
             self.receivers_used = None
             self.distance_residuals = None
             self.residual_rms = None
+            return None
 
         # Store which receivers were used for localization. The location is estimated only from these.
         self.receivers_used = receiver_files
