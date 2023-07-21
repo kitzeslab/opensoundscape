@@ -113,11 +113,11 @@ class SpatialEvent:
             sets the value of self.location_estimate to the same value as the returned location
         """
         # if cc_threshold is None, use the value stored in the object
-        if cc_threshold is "default":
+        if cc_threshold == "default":
             cc_threshold = self.cc_threshold
 
         # if a bandpass_range is not passed, use the value stored in the object
-        if bandpass_range is "default":
+        if bandpass_range == "default":
             bandpass_range = self.bandpass_range
 
         max_delay = self.max_delay
