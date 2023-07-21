@@ -132,18 +132,25 @@ class SpatialEvent:
 
         # If the user has provided a new cc_threshold or bandpass_range
         # perform cross correlation again to estimate time delays
-        elif self.cc_threshold != cc_threshold or self.bandpass_range != bandpass_range:
+        elif (
+            self.cc_threshold != cc_threshold
+            or self.bandpass_range != bandpass_range
+            or self.cc_filter != cc_filter
+        ):
             self._estimate_delays(
                 cc_filter=cc_filter,
                 max_delay=max_delay,
                 bandpass_range=bandpass_range,
             )
+            # set these attributes to the new values
+            self.cc_threshold = cc_threshold
+            self.bandpass_range = bandpass_range
+            self.cc_filter = cc_filter
 
         location_estimate = self._localize_after_cross_correlation(
             algorithm, cc_threshold, min_n_receivers, speed_of_sound
         )
         # Sets the attributes self.location_estimate, self.receivers_used_for_localization, self.distance_residuals, self.residual_rms
-
         return location_estimate
 
     def _estimate_delays(self, cc_filter, max_delay, bandpass_range):
@@ -199,7 +206,6 @@ class SpatialEvent:
             audio2 = Audio.from_file(
                 file, offset=start - max_delay, duration=dur + 2 * max_delay
             )
-
             # catch edge cases where the audio lengths do not match.
             if (
                 abs(len(audio2.samples) - len(audio1.samples)) > 1
@@ -514,6 +520,7 @@ class SynchronizedRecorderArray:
             event.estimate_location(
                 algorithm=localization_algorithm,
                 cc_threshold=cc_threshold,
+                cc_filter=cc_filter,
                 min_n_receivers=min_n_receivers,
                 speed_of_sound=SPEED_OF_SOUND,
             )

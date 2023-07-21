@@ -193,6 +193,7 @@ def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detect
         min_n_receivers=4,
         max_receiver_dist=30,
         localization_algorithm="gillette",
+        cc_filter="phat",
         bandpass_ranges={"zeep": (7000, 10000)},
     )
 
@@ -239,28 +240,6 @@ def test_SynchronizedRecorderArray_SpatialEvents_not_generated(
     )
     assert len(localized_events) == 0
     assert len(unlocalized_events) == 0
-
-
-def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detections):
-    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
-    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
-    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
-    localized_events, _ = array.localize_detections(
-        detections=detections,
-        min_n_receivers=4,
-        max_receiver_dist=30,
-        localization_algorithm="gillette",
-        bandpass_ranges={"zeep": (7000, 10000)},
-        return_unlocalized=True,
-    )
-
-    true_TDOAS = np.array(
-        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
-    )  # with reference receiver LOCA_2021_3...
-
-    for event in localized_events:
-        if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
-            assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
 
 
 def test_localization_pipeline_real_audio_edge_case(
