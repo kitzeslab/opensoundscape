@@ -27,8 +27,10 @@ class SpatialEvent:
         class_name=None,
         bandpass_range=None,
         cc_threshold=None,
+        cc_filter=None,
     ):
-        """initialize SpatialEvent
+        """
+        Initialize SpatialEvent
 
         Args:
             receiver_files: list of audio files, one for each reciever
@@ -36,24 +38,18 @@ class SpatialEvent:
             max_delay: maximum time delay (in seconds) to consider for time-delay-of-arrival estimate. Cannot be longer than the 1/2 the duration.
             start_time: start location] of detection relative to start of audio file, for cross correlation
             duration: duration of audio segment to use for cross-correlation
-            class_name=None: (str) name of detection's class
-            tdoas=None: optionally specify relative time difference of arrival of event at each receiver, in
-                seconds. If not None, should be list of same length as receiver_files and receiver_locations
+            class_name: (str) name of detection's class. Default: None
             bandpass_range: [low,high] frequency for audio bandpass before cross-correlation
-                default [None]: does not perform audio bandpass before cross-correlation
-            cc_threshold: float, default=None. During localization from time delays, discard time delays and
+                default [None]: does not bandpass audio before cross-correlation
+            cc_threshold: float. During localization from time delays, discard time delays and
                 associated locations if max cross correlation value was lower than this threshold.
-                default: None uses all delays and locations regardless of max cc value
-
+                default: None. Uses all delays and locations regardless of max cc value
 
         Methods:
-            estimate_delays:
-                use generalized cross correlation to find time delays of arrival
-                of the event at each receiver
             estimate_location:
-                perform tdoa based location estimation
-                - calls estimate_delays() if needed
-
+                - Estimates the tdoas using cross_correlation if not already estimated.
+                - Estimates the location of the event using the tdoas and receiver locations.
+                - Returns the location estimate as a tuple of cartesian coordinates (x,y) or (x,y,z)
         """
         self.receiver_files = receiver_files
         self.receiver_locations = np.array(receiver_locations)
@@ -62,30 +58,38 @@ class SpatialEvent:
         self.class_name = class_name
         self.bandpass_range = bandpass_range
         self.cc_threshold = cc_threshold
+        self.cc_filter = cc_filter
         self.max_delay = max_delay
 
-        # check that max_delay is not longer than the duration of the audio and raise a value error if it is
+        # Verify that max_delay is not longer than the duration of the audio and raise a value error if it is
         if self.max_delay >= self.duration:
             raise ValueError(
                 f"max_delay ({self.max_delay}) is longer than duration ({self.duration}) of audio clips."
             )
-        # initialize attributes to store values calculated by methods
+
+        # Initialize attributes. These will be set by the methods estimate_delays() and estimate_location()
         self.tdoas = None  # time delay at each receiver
         self.cc_maxs = None  # max of cross correlation for each time delay
         self.location_estimate = None  # cartesian location estimate in meters
+        self.distance_residuals = None  # distance residuals in meters
+        self.receivers_used_for_localization = (
+            None  # list of receivers used for localization
+        )
         self.residual_rms = None
 
     def estimate_location(
         self,
         algorithm="gillette",
-        cc_threshold=None,
+        cc_filter="phat",
         min_n_receivers=3,
+        cc_threshold="default",
+        bandpass_range="default",
         speed_of_sound=SPEED_OF_SOUND,
     ):
         """
-        estimate spatial location of this event
+        Estimate spatial location of this event
 
-        uses self.tdoas and self.receiver_locations to estimate event location
+        Uses self.tdoas and self.receiver_locations to estimate event location
 
         Note: if self.tdoas or self.receiver_locations is None, first calls
         self.estimate_delays() to estimate these values
@@ -95,81 +99,54 @@ class SpatialEvent:
 
         Args:
             algorithm: 'gillette' or 'soundfinder', see localization.localize()
-            cc_threshold: see SpatialEvent documentation
+            cc_threshold: see SpatialEvent documentation. If None, uses self.cc_threshold value
+            cc_filter: filter for generalized cross correlation, see
+                opensoundscape.signal_processing.gcc()
             min_n_receivers: if number of receivers with cross correlation exceeding
                 the threshold is fewer than this, estimates location None
                 instead of estimating a spatial location
 
         Returns:
-            location estimate as cartesian coordinates (x,y) or (x,y,z) (units: meters)
+            Location estimate as cartesian coordinates (x,y) or (x,y,z) (units: meters)
 
         Effects:
             sets the value of self.location_estimate to the same value as the returned location
         """
         # if cc_threshold is None, use the value stored in the object
-        if cc_threshold is None:
+        if cc_threshold is "default":
             cc_threshold = self.cc_threshold
 
-        # perform generalized cross correlation to estimate time delays
-        # (unless values are already stored in attributes)
+        # if a bandpass_range is not passed, use the value stored in the object
+        if bandpass_range is "default":
+            bandpass_range = self.bandpass_range
+
+        max_delay = self.max_delay
+
+        # If no values are already stored, perform generalized cross correlation to estimate time delays
         if self.tdoas is None or self.cc_maxs is None:
-            self.estimate_delays(
-                max_delay=self.max_delay, bandpass_range=self.bandpass_range
+            self._estimate_delays(
+                cc_filter=cc_filter,
+                max_delay=max_delay,
+                bandpass_range=bandpass_range,
+            )  # Sets the attributes self.cc_maxs and self.tdoas
+
+        # If the user has provided a new cc_threshold or bandpass_range
+        # perform cross correlation again to estimate time delays
+        elif self.cc_threshold != cc_threshold or self.bandpass_range != bandpass_range:
+            self._estimate_delays(
+                cc_filter=cc_filter,
+                max_delay=max_delay,
+                bandpass_range=bandpass_range,
             )
 
-        # filter by cross correlation threshold, removing time delays + locations
-        # if cross correlation did not exceed a minimum value
-        # (low max cross correlation values indicate low confidence that the time
-        # delay truly represents two recordings of the same sound event)
-        tdoas = self.tdoas
-        locations = self.receiver_locations
-        receiver_files = np.array(
-            self.receiver_files
-        )  # needs to be np array to access using a boolean mask
-        if cc_threshold is not None:
-            tdoas = tdoas[self.cc_maxs > cc_threshold]
-            locations = locations[self.cc_maxs > cc_threshold]
-            receiver_files = receiver_files[
-                self.cc_maxs > cc_threshold
-            ]  # fails is receiver_files is not a np.array
-
-        # assert there are enough receivers remaining to localize the event
-        if len(tdoas) < min_n_receivers:
-            self.location_estimate = None
-            self.receivers_used = None
-            self.distance_residuals = None
-            self.residual_rms = None
-            return None
-
-        # Store which receivers were used for localization. The location is estimated only from these.
-        self.receivers_used = receiver_files
-
-        # Estimate location from receiver locations and relative Times of Arrival
-        self.location_estimate = localize(
-            receiver_locations=locations,
-            tdoas=tdoas,
-            algorithm=algorithm,
-            speed_of_sound=speed_of_sound,
+        location_estimate = self._localize_after_cross_correlation(
+            algorithm, cc_threshold, min_n_receivers, speed_of_sound
         )
+        # Sets the attributes self.location_estimate, self.receivers_used_for_localization, self.distance_residuals, self.residual_rms
 
-        # Store the distance residuals (only for the receivers used) as an attribute
-        self.distance_residuals = calculate_tdoa_residuals(
-            receiver_locations=locations,
-            tdoas=tdoas,
-            location_estimate=self.location_estimate,
-            speed_of_sound=speed_of_sound,
-        )
+        return location_estimate
 
-        # Calculate root mean square of distance residuals and store as attribute
-        self.residual_rms = np.sqrt(np.mean(self.distance_residuals**2))
-
-        self.cc_threshold = (
-            cc_threshold  # update to ensure that the value most recently used is stored
-        )
-
-        return self.location_estimate
-
-    def estimate_delays(self, max_delay, bandpass_range=None, cc_filter="phat"):
+    def _estimate_delays(self, cc_filter, max_delay, bandpass_range):
         """estimate time delay of event relative to receiver_files[0] with gcc
 
         Performs Generalized Cross Correlation of each file against the first,
@@ -178,12 +155,14 @@ class SpatialEvent:
         Assumes audio files are synchronized such that they start at the same time
 
         Args:
-            max_delay: only delays in +/- this range (seconds) will be considered for possible delay
-                (see opensoundscape.signal_processing.tdoa())
-            bandpass_range: bandpass audio to [low, high] frequencies in Hz before
-                cross correlation; if None, defaults to self.bandpass_range
             cc_filter: filter for generalized cross correlation, see
                 opensoundscape.signal_processing.gcc()
+            max_delay: only delays in +/- this range (seconds) will be considered for possible delay
+                (see opensoundscape.signal_processing.tdoa());
+                If None, defaults to self.max_delay
+            bandpass_range: bandpass audio to [low, high] frequencies in Hz before
+                cross correlation
+                If None, defaults to self.bandpass_range=
 
         Returns:
             list of time delays, list of max cross correlation values
@@ -262,6 +241,65 @@ class SpatialEvent:
                 ]
             )
         return self.tdoas, self.cc_maxs
+
+    def _localize_after_cross_correlation(
+        self, algorithm, cc_threshold, min_n_receivers, speed_of_sound
+    ):
+        """
+        Hidden method to estimate localize after time delays have been estimated.
+        """
+
+        # filter by cross correlation threshold, removing time delays + locations
+        # if cross correlation did not exceed a minimum value
+        # (low max cross correlation values indicate low confidence that the time
+        # delay truly represents two recordings of the same sound event)
+        tdoas = self.tdoas
+        locations = self.receiver_locations
+        receiver_files = np.array(
+            self.receiver_files
+        )  # needs to be np array to access using a boolean mask
+        if cc_threshold is not None:
+            tdoas = tdoas[self.cc_maxs > cc_threshold]
+            locations = locations[self.cc_maxs > cc_threshold]
+            receiver_files = receiver_files[
+                self.cc_maxs > cc_threshold
+            ]  # fails is receiver_files is not a np.array
+
+        # assert there are enough receivers remaining to localize the event
+        if len(tdoas) < min_n_receivers:
+            self.location_estimate = None
+            self.receivers_used_for_localization = None
+            self.distance_residuals = None
+            self.residual_rms = None
+            return None
+
+        # Store which receivers were used for localization. The location is estimated only from these.
+        self.receivers_used_for_localization = receiver_files
+
+        # Estimate location from receiver locations and relative Times of Arrival
+        self.location_estimate = localize(
+            receiver_locations=locations,
+            tdoas=tdoas,
+            algorithm=algorithm,
+            speed_of_sound=speed_of_sound,
+        )
+
+        # Store the distance residuals (only for the receivers used) as an attribute
+        self.distance_residuals = calculate_tdoa_residuals(
+            receiver_locations=locations,
+            tdoas=tdoas,
+            location_estimate=self.location_estimate,
+            speed_of_sound=speed_of_sound,
+        )
+
+        # Calculate root mean square of distance residuals and store as attribute
+        self.residual_rms = np.sqrt(np.mean(self.distance_residuals**2))
+
+        self.cc_threshold = (
+            cc_threshold  # update to ensure that the value most recently used is stored
+        )
+
+        return self.location_estimate
 
 
 class SynchronizedRecorderArray:
@@ -471,13 +509,8 @@ class SynchronizedRecorderArray:
                 bandpass_range = None
 
             # perform gcc to estimate relative time of arrival at each receiver
-            # relative to the first in the list (reference receiver)
-            event.estimate_delays(
-                bandpass_range=bandpass_range,
-                cc_filter=cc_filter,
-                max_delay=max_delay,
-            )
             # estimate locations of sound event using time delays and receiver locations
+            # this calls estimate_delays under the hood
             event.estimate_location(
                 algorithm=localization_algorithm,
                 cc_threshold=cc_threshold,
