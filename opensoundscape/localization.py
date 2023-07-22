@@ -183,7 +183,7 @@ class SpatialEvent:
         """
         start, dur = self.start_time, self.duration
 
-        audio1 = Audio.from_file(
+        reference_audio = Audio.from_file(
             self.receiver_files[0],
             offset=start - max_delay,
             duration=dur + 2 * max_delay,
@@ -203,9 +203,7 @@ class SpatialEvent:
         bad_receivers_index = []
 
         for index, file in enumerate(self.receiver_files[1:]):
-            audio2 = Audio.from_file(
-                file, offset=start - max_delay, duration=dur + 2 * max_delay
-            )
+            audio2 = Audio.from_file(file, offset=start, duration=dur + 2 * max_delay)
             # catch edge cases where the audio lengths do not match.
             if (
                 abs(len(audio2.samples) - len(audio1.samples)) > 1
@@ -523,6 +521,7 @@ class SynchronizedRecorderArray:
                 cc_filter=cc_filter,
                 min_n_receivers=min_n_receivers,
                 speed_of_sound=SPEED_OF_SOUND,
+                bandpass_range=bandpass_range,
             )
             if (
                 event.location_estimate is None
