@@ -191,7 +191,9 @@ class SpatialEvent:
 
         # bandpass once now to avoid repeating operation for each receiver
         if bandpass_range is not None:
-            audio1 = audio1.bandpass(bandpass_range[0], bandpass_range[1], order=9)
+            reference_audio = reference_audio.bandpass(
+                low_f=bandpass_range[0], high_f=bandpass_range[1], order=9
+            )
 
         # estimate time difference of arrival (tdoa) for each file relative to the first
         # skip the first because we don't need to cross correlate a file with itself
@@ -206,13 +208,13 @@ class SpatialEvent:
             audio2 = Audio.from_file(file, offset=start, duration=dur + 2 * max_delay)
             # catch edge cases where the audio lengths do not match.
             if (
-                abs(len(audio2.samples) - len(audio1.samples)) > 1
+                abs(len(audio2.samples) - len(reference_audio.samples)) > 1
             ):  # allow for 1 sample difference
                 bad_receivers_index.append(index + 1)
             else:
                 tdoa, cc_max = audio.estimate_delay(
                     primary_audio=audio2,
-                    reference_audio=audio1,
+                    reference_audio=reference_audio,
                     max_delay=max_delay,
                     bandpass_range=bandpass_range,
                     cc_filter=cc_filter,
@@ -270,7 +272,7 @@ class SpatialEvent:
             ]  # fails is receiver_files is not a np.array
 
         # assert there are enough receivers remaining to localize the event
-        if len(tdoas) < min_n_receivers:
+        if len(tdoas) < min_n_receivers - 1:
             self.location_estimate = None
             self.receivers_used_for_localization = None
             self.distance_residuals = None
@@ -502,16 +504,19 @@ class SynchronizedRecorderArray:
             detections,
             min_n_receivers,
             max_receiver_dist,
+            bandpass_ranges=bandpass_ranges,
+            cc_filter=cc_filter,
         )
 
         # attempt to localize each event
-        for event in candidate_events:
-            # choose bandpass range based on this event's detected class
-            if bandpass_ranges is not None:
-                bandpass_range = bandpass_ranges[event.class_name]
-            else:
-                bandpass_range = None
+        # parallelize this step because cross-correlation is slow
+        # I will parallelize it using joblib
 
+        # unparallelized version:
+        # events = [e.estimate_location() for e in candidate_events]
+        # parallelized version:
+
+        for event in candidate_events:
             # perform gcc to estimate relative time of arrival at each receiver
             # estimate locations of sound event using time delays and receiver locations
             # this calls estimate_delays under the hood
@@ -521,7 +526,6 @@ class SynchronizedRecorderArray:
                 cc_filter=cc_filter,
                 min_n_receivers=min_n_receivers,
                 speed_of_sound=SPEED_OF_SOUND,
-                bandpass_range=bandpass_range,
             )
             if (
                 event.location_estimate is None
@@ -551,6 +555,8 @@ class SynchronizedRecorderArray:
         detections,
         min_n_receivers,
         max_receiver_dist,
+        bandpass_ranges,
+        cc_filter,
         max_delay=None,
     ):
         """
@@ -562,6 +568,7 @@ class SynchronizedRecorderArray:
                 that the audio files all started at the same time, not on different dates/times
             min_n_receivers: if fewer nearby receivers have a simultaneous detection, do not create candidate event
             max_receiver_dist: the maximum distance between recorders to consider a detection as a single event
+            bandpass_ranges: dictionary of form {"class name": [low_f, high_f]} for audio bandpass filtering during
             max_delay: the maximum delay (in seconds) to consider between receivers for a single event
                 if None, defaults to max_receiver_dist / SPEED_OF_SOUND
         returns:
@@ -589,6 +596,10 @@ class SynchronizedRecorderArray:
         # iterate through all classes in detections (0/1) dataframe
         # with index (file,start_time,end_time), column for each class
         for cls_i in detections.columns:
+            if bandpass_ranges is not None:
+                bandpass_range = bandpass_ranges[cls_i]
+            else:
+                bandpass_range = None
             # select one column: contains 0/1 for each file and clip time period
             # (index: (file,start_time,end_time), values: 0 or 1) for a single class
             det_cls = detections[[cls_i]]
@@ -633,10 +644,12 @@ class SynchronizedRecorderArray:
                             SpatialEvent(
                                 receiver_files=receiver_files,
                                 receiver_locations=receiver_locations,
+                                bandpass_range=bandpass_range,
                                 max_delay=max_delay,
                                 start_time=time_i,
                                 duration=clip_end - time_i,
                                 class_name=cls_i,
+                                cc_filter=cc_filter,
                             )
                         )
 
