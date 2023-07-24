@@ -265,3 +265,35 @@ def test_localization_pipeline_real_audio_edge_case(
     for event in localized_events:
         assert bad_file not in event.receiver_files
         assert len(event.receiver_files) == 6
+
+
+def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords, LOCA_2021_detections):
+    # Test ensure that SpatialEvent_estimate_delays returns what is expected
+
+    LOCA_2021_aru_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+
+    max_delay = 0.04
+    start_time = 0.2
+    duration = 0.3
+    cc_filter = "phat"
+    bandpass_range = (5000, 10000)
+
+    event = localization.SpatialEvent(
+        receiver_files=LOCA_2021_aru_coords.index,
+        receiver_locations=LOCA_2021_aru_coords.values,
+        max_delay=max_delay,
+        start_time=start_time,
+        duration=duration,
+        class_name="zeep",
+        bandpass_range=bandpass_range,
+        cc_filter=cc_filter,
+    )
+
+    # check that the delays are what we expect
+    event._estimate_delays(
+        cc_filter=cc_filter, max_delay=max_delay, bandpass_range=bandpass_range
+    )
+    true_TDOAS = np.array(
+        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
+    )  # with reference receiver LOCA_2021_3...
+    assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)

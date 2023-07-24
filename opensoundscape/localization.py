@@ -205,7 +205,9 @@ class SpatialEvent:
         bad_receivers_index = []
 
         for index, file in enumerate(self.receiver_files[1:]):
-            audio2 = Audio.from_file(file, offset=start, duration=dur + 2 * max_delay)
+            audio2 = Audio.from_file(
+                file, offset=start - max_delay, duration=dur + 2 * max_delay
+            )
             # catch edge cases where the audio lengths do not match.
             if (
                 abs(len(audio2.samples) - len(reference_audio.samples)) > 1
@@ -246,6 +248,7 @@ class SpatialEvent:
                     if index not in bad_receivers_index
                 ]
             )
+
         return self.tdoas, self.cc_maxs
 
     def _localize_after_cross_correlation(
