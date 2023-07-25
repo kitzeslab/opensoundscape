@@ -310,6 +310,31 @@ class SpatialEvent:
 
         return self.location_estimate
 
+    def _estimate_location_return_self(
+        self,
+        algorithm,
+        cc_filter,
+        min_n_receivers,
+        cc_threshold,
+        bandpass_range,
+        speed_of_sound,
+    ):
+        """
+        Convenience function for parallelization
+        Runs self.estimate_location() and returns self
+        Allows for parallelization of self.estimate_location() using joblib
+        """
+        self.estimate_location(
+            algorithm=algorithm,
+            cc_filter=cc_filter,
+            min_n_receivers=min_n_receivers,
+            cc_threshold=cc_threshold,
+            bandpass_range=bandpass_range,
+            speed_of_sound=speed_of_sound,
+        )
+
+        return self
+
 
 class SynchronizedRecorderArray:
     """
@@ -360,6 +385,7 @@ class SynchronizedRecorderArray:
         bandpass_ranges=None,
         residual_threshold=np.inf,
         return_unlocalized=False,
+        n_workers=1,
     ):
         """
         Attempt to localize locations for all detections
@@ -463,6 +489,7 @@ class SynchronizedRecorderArray:
                 (distance in meters) [default: np.inf does not filter out any events by residual]
             return_unlocalized: bool, optional. If True, returns the unlocalized events as well.
                 Two lists [localized_events, unlocalized events] will be returned.
+            n_workers : int, optional. Number of workers to use for parallelization. Default is 1 (no parallelization)
 
         Returns:
             A list of localized events, each of which is a SpatialEvent object.
@@ -496,6 +523,10 @@ class SynchronizedRecorderArray:
                     "classes that do not have a corresponding bandpass range."
                 )  # TODO support one bandpass range for all classes
 
+        # for convenience
+        if bandpass_ranges is None:
+            bandpass_ranges = {cls: None for cls in detections.columns}
+
         # initialize list to store events that successfully localize
         localized_events = []
         unlocalized_events = []
@@ -511,32 +542,47 @@ class SynchronizedRecorderArray:
             cc_filter=cc_filter,
         )
 
-        # attempt to localize each event
-        # parallelize this step because cross-correlation is slow
-        # I will parallelize it using joblib
-
-        # unparallelized version:
-        # events = [e.estimate_location() for e in candidate_events]
-        # parallelized version:
-
-        for event in candidate_events:
-            # perform gcc to estimate relative time of arrival at each receiver
-            # estimate locations of sound event using time delays and receiver locations
-            # this calls estimate_delays under the hood
-            event.estimate_location(
+        # perform gcc to estimate relative time of arrival at each receiver
+        # estimate locations of sound event using time delays and receiver locations
+        # this calls estimate_delays under the hood
+        events = [
+            e._estimate_location_return_self(
                 algorithm=localization_algorithm,
                 cc_threshold=cc_threshold,
                 cc_filter=cc_filter,
                 min_n_receivers=min_n_receivers,
                 speed_of_sound=SPEED_OF_SOUND,
+                bandpass_range=bandpass_ranges[e.class_name],
             )
+            for e in candidate_events
+        ]
+
+        # # paralelize the above using joblib
+        # from joblib import Parallel, delayed
+
+        # events = Parallel(n_jobs=n_workers)(
+        #     delayed(e._estimate_location_return_self)(
+        #         algorithm=localization_algorithm,
+        #         cc_threshold=cc_threshold,
+        #         cc_filter=cc_filter,
+        #         min_n_receivers=min_n_receivers,
+        #         speed_of_sound=SPEED_OF_SOUND,
+        #     )
+        # )
+
+        unlocalized_events = [
+            e
+            for e in events
+            if (e.location_estimate is None or e.residual_rms > residual_threshold)
+        ]
+
+        localized_events = [
+            e
+            for e in events
             if (
-                event.location_estimate is None
-                or event.residual_rms > residual_threshold
-            ):
-                unlocalized_events.append(event)
-            else:
-                localized_events.append(event)
+                e.location_estimate is not None and e.residual_rms <= residual_threshold
+            )
+        ]
 
         # unlocalized events include those with too few receivers (after cc threshold)
         # and those with too large of a spatial residual rms
