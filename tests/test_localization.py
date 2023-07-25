@@ -297,3 +297,26 @@ def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords, LOCA_2021_detections
         [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
     )  # with reference receiver LOCA_2021_3...
     assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
+
+
+def test_localization_pipeline_parallelized(LOCA_2021_aru_coords, LOCA_2021_detections):
+    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    localized_events = array.localize_detections(
+        detections=detections,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        localization_algorithm="gillette",
+        cc_filter="phat",
+        bandpass_ranges={"zeep": (7000, 10000)},
+        n_workers=4,
+    )
+
+    true_TDOAS = np.array(
+        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
+    )  # with reference receiver LOCA_2021_3...
+
+    for event in localized_events:
+        if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
+            assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)

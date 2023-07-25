@@ -545,8 +545,24 @@ class SynchronizedRecorderArray:
         # perform gcc to estimate relative time of arrival at each receiver
         # estimate locations of sound event using time delays and receiver locations
         # this calls estimate_delays under the hood
-        events = [
-            e._estimate_location_return_self(
+        # unparallelized below
+        # events = [
+        #     e._estimate_location_return_self(
+        #         algorithm=localization_algorithm,
+        #         cc_threshold=cc_threshold,
+        #         cc_filter=cc_filter,
+        #         min_n_receivers=min_n_receivers,
+        #         speed_of_sound=SPEED_OF_SOUND,
+        #         bandpass_range=bandpass_ranges[e.class_name],
+        #     )
+        #     for e in candidate_events
+        # ]
+
+        # # paralelize the above using joblib
+        from joblib import Parallel, delayed
+
+        events = Parallel(n_jobs=n_workers)(
+            delayed(e._estimate_location_return_self)(
                 algorithm=localization_algorithm,
                 cc_threshold=cc_threshold,
                 cc_filter=cc_filter,
@@ -555,20 +571,7 @@ class SynchronizedRecorderArray:
                 bandpass_range=bandpass_ranges[e.class_name],
             )
             for e in candidate_events
-        ]
-
-        # # paralelize the above using joblib
-        # from joblib import Parallel, delayed
-
-        # events = Parallel(n_jobs=n_workers)(
-        #     delayed(e._estimate_location_return_self)(
-        #         algorithm=localization_algorithm,
-        #         cc_threshold=cc_threshold,
-        #         cc_filter=cc_filter,
-        #         min_n_receivers=min_n_receivers,
-        #         speed_of_sound=SPEED_OF_SOUND,
-        #     )
-        # )
+        )
 
         unlocalized_events = [
             e
