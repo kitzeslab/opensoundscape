@@ -42,7 +42,7 @@ Suggested citation:
 Introduction
 ##############
 
-   :doc:`intro/quick-start.md`
+   :doc:`intro/quick-start`
    :doc:`intro/resources.md`
 
 
@@ -67,7 +67,8 @@ Step-by-step guides for how to use OpenSoundscape's common functions.
 
 These tutorials include code, examples, and downloadable data. All tutorials are written as Jupyter Notebooks that can also be downloaded `here <https://github.com/kitzeslab/opensoundscape/tree/master/docs/tutorials>` and run on your own computer.
 
-   :doc:`tutorials/audio_and_spectrogram`
+   :doc:`tutorials/audio`
+   :doc:`tutorials/spectrogram`
    :doc:`tutorials/format_data`
    :doc:`tutorials/create_training_dataset`
    :doc:`tutorials/quick_start_cnn_training`
@@ -140,7 +141,8 @@ The General Index is an alphabetized list of every function and class in OpenSou
    :hidden:
    :caption: Tutorials
 
-   tutorials/audio_and_spectrogram
+   tutorials/audio
+   tutorials/spectrogram
    tutorials/format_data
    tutorials/create_training_dataset
    tutorials/quick_start_cnn_training
