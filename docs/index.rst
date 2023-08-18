@@ -55,19 +55,17 @@ Step-by-step guides for how to use OpenSoundscape's common functions.
 
 These tutorials include code, examples, and downloadable data. All tutorials are written as Jupyter Notebooks that can also be downloaded `here <https://github.com/kitzeslab/opensoundscape/tree/master/docs/tutorials>` and run on your own computer.
 
-.. toctree::
-   :maxdepth: 1
 
-   tutorials/audio_and_spectrograms
-   tutorials/format_data
-   tutorials/create_training_dataset
-   tutorials/quick_start_cnn_training
-   tutorials/evaluate_cnn_performance
-   tutorials/customize_cnn_training
-   tutorials/predict_with_cnn
-   tutorials/review_cnn_predictions
-   tutorials/acoustic_localization
-   tutorials/signal_processing
+   :doc: `tutorials/audio_and_spectrograms`
+   :doc: `tutorials/format_data`
+   :doc: `tutorials/create_training_dataset`
+   :doc: `tutorials/quick_start_cnn_training`
+   :doc: `tutorials/evaluate_cnn_performance`
+   :doc: `tutorials/customize_cnn_training`
+   :doc: `tutorials/predict_with_cnn`
+   :doc: `tutorials/review_cnn_predictions`
+   :doc: `tutorials/acoustic_localization`
+   :doc: `tutorials/signal_processing`
 
 ############################
 Classifiers 101
@@ -87,14 +85,14 @@ An introduction to a philosophy for training and using classifiers, influenced b
 
 
 ############################
-API Documentation
+Codebase Documentation
 ############################
 
-This documentation contains a list of all of OpenSoundscape's functions (and their arguments) and classes (and their methods).
+This documentation contains documentation for the entire API of OpenSoundscape: its functions (and their arguments) and classes (and their methods).
+
 
 .. toctree::
    :maxdepth: 1
-   :caption: API Documentation
 
    api/modules
 
@@ -107,7 +105,77 @@ The General Index is an alphabetized list of every function and class in OpenSou
 
 .. toctree::
    :maxdepth: 0
+
+   General Index <genindex>
+   Module Index <py-modindex.html>
+
+
+
+.. Below is the code for creating the sidebar
+
+.. toctree::
+   :maxdepth: 1
+   :hidden: 
+   :caption: Introduction
+   
+   index.rst
+   intro/quick-start.md
+   intro/resources.md
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+   :caption: Installation
+
+   installation/mac_and_linux.md
+   installation/windows.md
+   installation/contributors.md
+   installation/google_colab.md
+   installation/jupyter.md
+
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+   :caption: Tutorials
+
+   tutorials/audio_and_spectrograms
+   tutorials/format_data
+   tutorials/create_training_dataset
+   tutorials/quick_start_cnn_training
+   tutorials/evaluate_cnn_performance
+   tutorials/customize_cnn_training
+   tutorials/predict_with_cnn
+   tutorials/review_cnn_predictions
+   tutorials/acoustic_localization
+   tutorials/signal_processing
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+   :caption: Classifiers 101
+
+   classifier_guide/overview
+   classifier_guide/why_classify
+   classifier_guide/data_organization
+   classifier_guide/create_training_dataset
+   classifier_guide/train_cnn
+   classifier_guide/evaluate_cnn
+   classifier_guide/retrain_cnn
+
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+   :caption: Codebase Documentation
+
+   api/modules
+
+
+.. toctree::
+   :maxdepth: 0
    :caption: Index
+   :hidden:
 
    General Index <genindex>
    Module Index <py-modindex.html>
