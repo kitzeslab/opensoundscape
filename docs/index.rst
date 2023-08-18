@@ -1,20 +1,44 @@
 OpenSoundscape
 ==============
 
-OpenSoundscape is free and open source software for the analysis of bioacoustic recordings (`GitHub <https://github.com/kitzeslab/opensoundscape>`_). Its main goals are to allow users to train their own custom species classification models using a variety of frameworks (including convolutional neural networks) and to use trained models to predict whether species are present in field recordings. OpSo can be installed and run on a single computer or in a cluster or cloud environment.
+OpenSoundscape is free and open source Python utility library analyzing bioacoustic data. It includes utilities which can be strung together to create data analysis pipelines, including functions to:
 
-OpenSoundcape is developed and maintained by the `Kitzes Lab <http://www.kitzeslab.org/>`_ at the University of Pittsburgh.
+* load and manipulate audio files
+* create and manipulate spectrograms
+* train convolutional neural networks (CNNs) on spectrograms with PyTorch
+* run pre-trained CNNs to detect vocalizations
+* detect periodic vocalizations with RIBBIT
+* load and manipulate Raven annotations
+* estimate the location of sound sources from synchronized recordings
 
-The Installation section below provides guidance on installing OpSo. The Tutorials pages below are written as Jupyter Notebooks that can also be downloaded from the `project repository <http://github.com/kitzeslab/opensoundscape/>`_ on GitHub.
+
+OpenSoundscape's source code can be found on `GitHub <https://github.com/kitzeslab/opensoundscape>` and its documentation can be found on `OpenSoundscape.org <https://opensoundscape.org>`.
+
+
+############################ 
+Show me the code!
+############################
+
+Just want to see quick examples of how to use OpenSoundscape? See the `Quick-start Guide <`
+
+OpenSoundcape is developed and maintained by the `Kitzes Lab <http://www.kitzeslab.org/>`_ at the University of Pittsburgh. It is currently in active development. If you find a bug, please `submit an issue <https://github.com/kitzeslab/opensoundscape/issues>` on the GitHub respository. If you have another question about OpenSoundscape, please use the `OpenSoundscape Discussions board <https://github.com/kitzeslab/opensoundscape/discussions>` or email Sam Lapp (```sam.lapp at pitt.edu```)
+
+
+Suggested citation:
+
+```
+Lapp, Sam; Rhinehart, Tessa; Freeland-Haynes, Louis; Khilnani, Jatin; Syunkova, Alexandra; Kitzes, Justin. “OpenSoundscape: An Open-Source Bioacoustics Analysis Package for Python.” Methods in Ecology and Evolution 2023. https://doi.org/10.1111/2041-210X.14196.
+```
+
+
+############## 
+Installation
+##############
+
+OpenSoundscape can be installed and run on a single computer or in a cluster or cloud environment. For cluster environments, follow the Linux operating system instructions. 
 
 .. toctree::
-   :hidden:
-
-   self
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Installation
+   :maxdepth: 1
 
    installation/mac_and_linux.md
    installation/windows.md
@@ -22,17 +46,51 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
    installation/google_colab.md
    installation/jupyter.md
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Tutorials
 
-   tutorials/audio_and_spectrogram
-   tutorials/annotation_tutorial
-   tutorials/predict_with_pretrained_cnn
-   tutorials/cnn
-   tutorials/preprocessors
-   tutorials/cnn_training_advanced
-   tutorials/RIBBIT_pulse_rate_demo
+##############
+Tutorials
+##############
+
+Step-by-step guides for how to use OpenSoundscape's common functions. 
+
+These tutorials include code, examples, and downloadable data. All tutorials are written as Jupyter Notebooks that can also be downloaded `here <https://github.com/kitzeslab/opensoundscape/tree/master/docs/tutorials>` and run on your own computer.
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/audio_and_spectrograms
+   tutorials/format_data
+   tutorials/create_training_dataset
+   tutorials/quick_start_cnn_training
+   tutorials/evaluate_cnn_performance
+   tutorials/customize_cnn_training
+   tutorials/predict_with_cnn
+   tutorials/review_cnn_predictions
+   tutorials/acoustic_localization
+   tutorials/signal_processing
+
+############################
+Classifiers 101
+############################
+An introduction to a philosophy for training and using classifiers, influenced by our lab's work using bioacoustic classifiers for large-scale bioacoustic monitoring of animal sounds
+
+.. toctree::
+   :maxdepth: 1
+
+   classifier_guide/overview
+   classifier_guide/why_classify
+   classifier_guide/data_organization
+   classifier_guide/create_training_dataset
+   classifier_guide/train_cnn
+   classifier_guide/evaluate_cnn
+   classifier_guide/retrain_cnn
+
+
+############################
+API Documentation
+############################
+
+This documentation contains a list of all of OpenSoundscape's functions (and their arguments) and classes (and their methods).
 
 .. toctree::
    :maxdepth: 1
@@ -41,9 +99,15 @@ The Installation section below provides guidance on installing OpSo. The Tutoria
    api/modules
 
 
+############################
+Index
+############################
+
+The General Index is an alphabetized list of every function and class in OpenSoundscape. The Module Index is a list of all of the modules. Each module is an individual file that defines functions that have a similar theme.
+
 .. toctree::
    :maxdepth: 0
    :caption: Index
 
-   genindex
-   api/indices
+   General Index <genindex>
+   Module Index <py-modindex.html>
