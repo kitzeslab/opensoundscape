@@ -14,6 +14,11 @@ def veryshort_wav_str():
 
 
 @pytest.fixture()
+def cswa_str():
+    return "tests/audio/aru_1.wav"
+
+
+@pytest.fixture()
 def spec():
     return Spectrogram(
         spectrogram=np.zeros((5, 10)),
@@ -200,6 +205,16 @@ def test_to_image_with_bandpass():
         ).to_image(),
         Image,
     )
+
+
+def test_melspectrogram_underflow(cswa_str):
+    """
+    Fixed a bug where log transform was applied twice.
+    Added a test to check the max value of dB scaled spec is as expected
+    """
+    audio = Audio.from_file(cswa_str)
+    mel_spec = MelSpectrogram.from_audio(audio)
+    assert math.isclose(mel_spec.spectrogram.max(), -30.914056301116943, abs_tol=1e-4)
 
 
 def test_to_image_shape(spec):
