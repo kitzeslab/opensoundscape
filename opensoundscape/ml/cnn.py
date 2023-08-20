@@ -609,18 +609,6 @@ class CNN(BaseModule):
                 # log metrics for this epoch to wandb
                 wandb_session.log({"training": self.train_metrics[self.current_epoch]})
 
-                # log confusion matrix
-                wandb_session.log(
-                    {
-                        "train_confusion_matrix": wandb.plot.confusion_matrix(
-                            probs=train_scores,
-                            y_true=train_targets,
-                            class_names=self.classes,
-                            title="Training Set Confusion Matrix",
-                        )
-                    }
-                )
-
             #### Validation ###
             if validation_df is not None and epoch % validation_interval == 0:
                 self._log("\nValidation.")
@@ -632,7 +620,7 @@ class CNN(BaseModule):
                     if self.single_target
                     else None,
                     split_files_into_clips=False,
-                )
+                )  # returns a dataframe matching validation_df
                 validation_targets = validation_df.values
                 validation_scores = validation_scores.values
 
@@ -646,18 +634,6 @@ class CNN(BaseModule):
             if wandb_session is not None:
                 wandb_session.log(
                     {"validation": self.valid_metrics[self.current_epoch]}
-                )
-
-                # log confusion matrix
-                wandb_session.log(
-                    {
-                        "validation_confusion_matrix": wandb.plot.confusion_matrix(
-                            probs=validation_scores,
-                            y_true=validation_targets,
-                            class_names=self.classes,
-                            title="Validation Set Confusion Matrix",
-                        )
-                    }
                 )
 
             ### Save ###
