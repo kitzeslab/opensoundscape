@@ -14,6 +14,7 @@ import pandas as pd
 
 import torch
 import torch.nn.functional as F
+import wandb
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
@@ -605,7 +606,20 @@ class CNN(BaseModule):
                 train_targets, train_scores
             )
             if wandb_session is not None:
+                # log metrics for this epoch to wandb
                 wandb_session.log({"training": self.train_metrics[self.current_epoch]})
+
+                # log confusion matrix
+                wandb_session.log(
+                    {
+                        "train_confusion_matrix": wandb.plot.confusion_matrix(
+                            probs=train_scores,
+                            y_true=train_targets,
+                            class_names=self.classes,
+                            title="Training Set Confusion Matrix",
+                        )
+                    }
+                )
 
             #### Validation ###
             if validation_df is not None and epoch % validation_interval == 0:
@@ -632,6 +646,18 @@ class CNN(BaseModule):
             if wandb_session is not None:
                 wandb_session.log(
                     {"validation": self.valid_metrics[self.current_epoch]}
+                )
+
+                # log confusion matrix
+                wandb_session.log(
+                    {
+                        "validation_confusion_matrix": wandb.plot.confusion_matrix(
+                            probs=validation_scores,
+                            y_true=validation_targets,
+                            class_names=self.classes,
+                            title="Validation Set Confusion Matrix",
+                        )
+                    }
                 )
 
             ### Save ###
