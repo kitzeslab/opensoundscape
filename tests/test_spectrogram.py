@@ -202,14 +202,24 @@ def test_to_image_with_bandpass():
     )
 
 
-def test_to_image_shape():
-    img = Spectrogram(
-        spectrogram=np.zeros((5, 10)),
-        frequencies=np.linspace(0, 100, 5),
-        times=np.linspace(0, 10, 10),
-        decibel_limits=(-100, -20),
-    ).to_image(return_type="torch")
-    assert img
+def test_to_image_shape(spec):
+    img = spec.to_image(shape=[5, 6], channels=2, return_type="torch")
+    assert list(img.shape) == [2, 5, 6]  # channels, height, width
+
+
+def test_to_image_shape_None(spec):
+    """should retain original shape of spectrogram if shape=None"""
+    img = spec.to_image(shape=None, channels=2, return_type="torch")
+    spec_shape = list(spec.spectrogram.shape)
+    assert list(img.shape) == [2] + spec_shape  #  width
+
+    # test when shape specifies only desired width
+    img = spec.to_image(shape=[None, 6], channels=2, return_type="torch")
+    assert list(img.shape) == [2] + [spec_shape[0]] + [6]
+
+    # test when shape specifies only desired height
+    img = spec.to_image(shape=[5, None], channels=2, return_type="torch")
+    assert list(img.shape) == [2, 5] + [spec_shape[1]]
 
 
 def test_melspectrogram_shape_of_S_for_veryshort(veryshort_wav_str):

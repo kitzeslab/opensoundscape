@@ -570,6 +570,7 @@ class Spectrogram:
         Args:
             shape: tuple of output dimensions as (height, width)
                 - if None, retains original shape of self.spectrogram
+                - if first or second value are None, retains original shape in that dimension
             channels: eg 3 for rgb, 1 for greyscale
                 - must be 3 to use colormap
             colormap:
@@ -616,8 +617,15 @@ class Spectrogram:
             array = cm(array)
 
         # resize and change channel dims
+        # if None, use original shape
         if shape is None:
             shape = np.shape(array)
+        else:
+            # if height or width are None, use original sizes
+            if shape[0] is None:
+                shape[0] = np.shape(array)[0]
+            if shape[1] is None:
+                shape[1] = np.shape(array)[1]
         out_shape = [shape[0], shape[1], channels]
         array = skimage.transform.resize(array, out_shape)
 
