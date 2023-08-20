@@ -1654,31 +1654,47 @@ def load_model(path, device=None):
     Returns:
         a model object with loaded weights
     """
-    # load the entire pickled model object from a file and
-    # move the model to the desired torch "device" (eg cpu or cuda for gpu)
-    if device is None:
-        device = (
-            torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-        )
-    model = torch.load(path, map_location=device)
+    try:
+        # load the entire pickled model object from a file and
+        # move the model to the desired torch "device" (eg cpu or cuda for gpu)
+        if device is None:
+            device = (
+                torch.device("cuda:0")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
+        model = torch.load(path, map_location=device)
 
-    # warn the user if loaded model's opso version doesn't match the current one
-    if model.opensoundscape_version != opensoundscape.__version__:
-        warnings.warn(
-            f"This model was saved with an earlier version of opensoundscape "
-            f"({model.opensoundscape_version}) and will not work properly in "
-            f"the current opensoundscape version ({opensoundscape.__version__}). "
-            f"To use models across package versions use .save_torch_dict and "
-            f".load_torch_dict"
-        )
+        # warn the user if loaded model's opso version doesn't match the current one
+        if model.opensoundscape_version != opensoundscape.__version__:
+            warnings.warn(
+                f"This model was saved with an earlier version of opensoundscape "
+                f"({model.opensoundscape_version}) and will not work properly in "
+                f"the current opensoundscape version ({opensoundscape.__version__}). "
+                f"To use models across package versions use .save_torch_dict and "
+                f".load_torch_dict"
+            )
 
-    # since ResampleLoss class overrides a method of an instance,
-    # we need to re-change the _init_loss_fn change when we reload
-    if model.loss_cls == ResampleLoss:
-        use_resample_loss(model)
+        # since ResampleLoss class overrides a method of an instance,
+        # we need to re-change the _init_loss_fn change when we reload
+        if model.loss_cls == ResampleLoss:
+            use_resample_loss(model)
 
-    model.device = device
-    return model
+        model.device = device
+        return model
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            """
+            This model file could not be loaded in this version of 
+            OpenSoundscape. You may need to load the model with the version 
+            of OpenSoundscape that created it and torch.save() the 
+            model.network.state_dict(), then load the weights with model.load_weights
+            in the current OpenSoundscape version (where model is a new instance of the
+            opensoundscape.CNN class). If you do this, make sure to
+            re-create any specific preprocessing steps that were used in the
+            original model. See the `Predict with pre-trained CNN` tutorial for details.
+            """
+        ) from e
 
 
 def load_outdated_model(
