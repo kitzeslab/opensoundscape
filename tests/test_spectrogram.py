@@ -16,9 +16,9 @@ def veryshort_wav_str():
 @pytest.fixture()
 def spec():
     return Spectrogram(
-        np.zeros((5, 10)),
-        np.linspace(0, 100, 5),
-        np.linspace(0, 10, 10),
+        spectrogram=np.zeros((5, 10)),
+        frequencies=np.linspace(0, 100, 5),
+        times=np.linspace(0, 10, 10),
         decibel_limits=(-100, -20),
         window_samples=100,
         overlap_samples=50,
@@ -123,30 +123,25 @@ def test_bandpass_spectrogram(spec):
     assert spec.scaling == "spectrum"
 
 
-def test_bandpass_spectrogram_out_of_bounds():
+def test_bandpass_spectrogram_out_of_bounds(spec):
+    """
+    Test that bandpass raises ValueError when out_of_bounds_ok=False
+    and the bandpass range is beyond the max value (100 Hz here)
+    """
     with pytest.raises(ValueError):
-        Spectrogram(
-            np.zeros((5, 10)),
-            np.linspace(0, 10, 5),
-            np.linspace(0, 10, 10),
-            (-100, -20),
-        ).bandpass(0, 11, out_of_bounds_ok=False)
+        spec.bandpass(0, 110, out_of_bounds_ok=False)
 
 
-def test_bandpass_spectrogram_not_out_of_bounds():
-    Spectrogram(
-        np.zeros((5, 10)), np.linspace(0, 10, 5), np.linspace(0, 10, 10), (-100, -20)
-    ).bandpass(0.0, 10.0, out_of_bounds_ok=False)
+def test_bandpass_spectrogram_not_out_of_bounds(spec):
+    """should not raise error"""
+    spec = spec.bandpass(0.0, 20.0, out_of_bounds_ok=False)
+    assert spec.frequencies.max() < 30
 
 
-def test_bandpass_spectrogram_bad_limits():
+def test_bandpass_spectrogram_bad_limits(spec):
+    """should complain because low > high"""
     with pytest.raises(ValueError):
-        Spectrogram(
-            np.zeros((5, 10)),
-            np.linspace(0, 100, 5),
-            np.linspace(0, 10, 10),
-            (-100, -20),
-        ).bandpass(4, 2)
+        spec.bandpass(4, 2)
 
 
 def test_trim_spectrogram(spec):
@@ -184,17 +179,6 @@ def test_net_amplitude_spectrogram():
 
 
 def test_to_image():
-
-    print(
-        type(
-            Spectrogram(
-                np.zeros((5, 10)),
-                np.linspace(0, 100, 5),
-                np.linspace(0, 10, 10),
-                (-100, -20),
-            ).to_image()
-        )
-    )
     assert isinstance(
         Spectrogram(
             np.zeros((5, 10)),
@@ -207,26 +191,25 @@ def test_to_image():
 
 
 def test_to_image_with_bandpass():
-
-    print(
-        type(
-            Spectrogram(
-                np.zeros((5, 10)),
-                np.linspace(0, 100, 5),
-                np.linspace(0, 10, 10),
-                (-100, -20),
-            ).to_image()
-        )
-    )
     assert isinstance(
         Spectrogram(
-            np.zeros((5, 10)),
-            np.linspace(0, 100, 5),
-            np.linspace(0, 10, 10),
-            (-100, -20),
+            spectrogram=np.zeros((5, 10)),
+            frequencies=np.linspace(0, 100, 5),
+            times=np.linspace(0, 10, 10),
+            decibel_limits=(-100, -20),
         ).to_image(),
         Image,
     )
+
+
+def test_to_image_shape():
+    img = Spectrogram(
+        spectrogram=np.zeros((5, 10)),
+        frequencies=np.linspace(0, 100, 5),
+        times=np.linspace(0, 10, 10),
+        decibel_limits=(-100, -20),
+    ).to_image(return_type="torch")
+    assert img
 
 
 def test_melspectrogram_shape_of_S_for_veryshort(veryshort_wav_str):
@@ -251,7 +234,6 @@ def test_melspectrogram_to_image_numchannels(veryshort_wav_str):
 
 
 def test_melspectrogram_to_image_alltypes(veryshort_wav_str):
-
     audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
     mel_spec = MelSpectrogram.from_audio(audio)
     img = mel_spec.to_image(shape=(10, 20), return_type="pil")
