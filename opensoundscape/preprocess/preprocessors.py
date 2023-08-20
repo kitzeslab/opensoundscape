@@ -216,50 +216,71 @@ class SpectrogramPreprocessor(BasePreprocessor):
     (to ensure all outputs have same scale in y-axis)
     can change with .pipeline.bandpass.set(min_f=,max_f=)
 
-    during prediction, will load clips from long audio files rather than entire
-    audio files.
-
     Args:
         sample_duration:
             length in seconds of audio samples generated
-            If not None, longer clips trimmed to this length. By default,
+            If not None, longer clips are trimmed to this length. By default,
             shorter clips will be extended (modify random_trim_audio and
             trim_audio to change behavior).
+
         overlay_df: if not None, will include an overlay action drawing
             samples from this df
-        out_shape:
-            output shape of tensor h,w,channels [default: (224,224,3)]
+        height: height of output sample (frequency axis)
+            - default None will use the original height of the spectrogram
+        width: width of output sample (time axis)
+            -  default None will use the original width of the spectrogram
+        channels: number of channels in output sample (default 1)
     """
 
-    def __init__(self, sample_duration, overlay_df=None, out_shape=(224, 224, 3)):
-
+    def __init__(
+        self, sample_duration, overlay_df=None, height=None, width=None, channels=1
+    ):
         super(SpectrogramPreprocessor, self).__init__(sample_duration=sample_duration)
-        self.out_shape = out_shape
+        self.height = height
+        self.width = width
+        self.channels = channels
 
         # define a default set of Actions
+        # each Action's .go() method is called during preprocessing
+        # the .go() method takes an AudioSample object as an argument
+        # and modifies it _in place_.
         self.pipeline = pd.Series(
             {
+                # load a segment of an audio file into an Audio object
+                # references AudioSample attributes: start_time and duration
                 "load_audio": AudioClipLoader(),
                 # if we are augmenting and get a long file, take a random trim from it
                 "random_trim_audio": AudioTrim(is_augmentation=True, random_trim=True),
                 # otherwise, we expect to get the correct duration. no random trim
                 "trim_audio": AudioTrim(),  # trim or extend (w/silence) clips to correct length
+                # convert Audio object to Spectrogram
                 "to_spec": Action(Spectrogram.from_audio),
+                # bandpass to 0-11.025 kHz (to ensure all outputs have same scale in y-axis)
                 "bandpass": Action(
                     Spectrogram.bandpass, min_f=0, max_f=11025, out_of_bounds_ok=False
                 ),
+                # convert Spectrogram to torch.Tensor and re-size to desired output shape
+                # references AudioSample attributes: target_height, target_width, target_channels
                 "to_tensor": SpectrogramToTensor(),  # uses sample.target_shape
+                ##  augmentations ##
+                # Overlay is a version of "mixup" that draws samples from a user-specified dataframe
+                # and overlays them on the current sample
                 "overlay": Overlay(
                     is_augmentation=True, overlay_df=overlay_df, update_labels=False
                 )
                 if overlay_df is not None
                 else None,
+                # add vertical (time) and horizontal (frequency) masking bars
                 "time_mask": Action(actions.time_mask, is_augmentation=True),
                 "frequency_mask": Action(actions.frequency_mask, is_augmentation=True),
+                # add noise to the sample
                 "add_noise": Action(
                     actions.tensor_add_noise, is_augmentation=True, std=0.005
                 ),
+                # linearly scale the _values_ of the sample
                 "rescale": Action(actions.scale_tensor),
+                # apply random affine (rotation, translation, scaling, shearing) augmentation
+                # default values are reasonable for spectrograms: no shearing or rotation
                 "random_affine": Action(
                     actions.torch_random_affine, is_augmentation=True
                 ),
@@ -271,9 +292,17 @@ class SpectrogramPreprocessor(BasePreprocessor):
             self.pipeline.drop("overlay", inplace=True)
 
     def _generate_sample(self, sample):
-        """add the target_shape attribute to the sample
+        """add attributes to the sample specifying desired shape of output sample
+
+        these will be used by the SpectrogramToTensor action in the pipeline
+
         otherwise, generate AudioSamples from paths as normal
         """
         sample = super()._generate_sample(sample)
-        sample.target_shape = self.out_shape
+
+        # add attributes specifying desired shape of output sample
+        sample.height = self.height
+        sample.width = self.width
+        sample.channels = self.channels
+
         return sample

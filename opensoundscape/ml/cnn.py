@@ -150,9 +150,13 @@ class CNN(BaseModule):
             self.device = torch.device("cpu")
 
         ### sample loading/preprocessing ###
-        # preprocessor will have attributes .sample_duration and .out_shape
+        # preprocessor will have attributes .sample_duration (seconds)
+        # and height, width, channels for output shape
         self.preprocessor = preprocessor_class(
-            sample_duration=sample_duration, out_shape=sample_shape
+            sample_duration=sample_duration,
+            height=sample_shape[0],
+            width=sample_shape[1],
+            channels=sample_shape[2],
         )
 
         ### loss function ###
@@ -818,7 +822,11 @@ class CNN(BaseModule):
                 "architecture": self.architecture_name,
                 "sample_duration": self.preprocessor.sample_duration,
                 "single_target": self.single_target,
-                "sample_shape": self.preprocessor.out_shape,
+                "sample_shape": [
+                    self.preprocessor.height,
+                    self.preprocessor.width,
+                    self.preprocessor.channels,
+                ],
             },
             path,
         )

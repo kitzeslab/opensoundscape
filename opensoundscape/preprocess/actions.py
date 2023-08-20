@@ -244,10 +244,10 @@ class SpectrogramToTensor(BaseAction):
     def go(self, sample):
         """converts sample.data from Spectrogram to Tensor"""
         # sample.data must be Spectrogram object
-        # sample should have attribute target_shape [h,w,channels]
+        # sample should have attributes: height, width, channels
         sample.data = sample.data.to_image(
-            shape=sample.target_shape[0:2],
-            channels=sample.target_shape[2],
+            shape=[sample.height, sample.width],
+            channels=sample.channels,
             return_type="torch",
             colormap=self.params["colormap"],
             invert=self.params["invert"],
