@@ -159,9 +159,14 @@ def multi_target_metrics(targets, scores, class_names, threshold):
         metrics_dict.update(
             {
                 class_i: {
+                    "au_roc": M.roc_auc_score(targets[:, i], scores[:, i]),
+                    "avg_precision": M.average_precision_score(
+                        targets[:, i], scores[:, i]
+                    ),
                     "precision": class_pre[i],
                     "recall": class_rec[i],
                     "f1": class_f1[i],
+                    "support": np.sum(targets[:, i]),
                 }
             }
         )
