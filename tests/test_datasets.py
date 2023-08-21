@@ -66,10 +66,23 @@ def test_subset_dataset(small_dataset):
 def test_audio_file_dataset(dataset_df, pre):
     """should return tensor and labels"""
     pre.bypass_augmentation = False
+    pre.height = 224
+    pre.width = 224
+    pre.channels = 3
     dataset = AudioFileDataset(dataset_df, pre)
     sample1 = dataset[0]
     assert sample1.data.numpy().shape == (3, 224, 224)
     assert dataset[0].labels.values.shape == (2,)
+
+
+def test_audio_file_dataset_no_reshape(dataset_df, pre):
+    """should return tensor and labels. Tensor is the same as the shape of the spectrogram"""
+    pre.bypass_augmentation = False
+    dataset = AudioFileDataset(dataset_df, pre)
+    sample1 = dataset[0]
+    # should be the same shape as
+    # Spectrogram.from_audio(Audio.from_file('tests/audio/silence_10s.mp3',duration=2)).bandpass(0,11025)
+    assert sample1.data.numpy().shape == (1, 129, 343)
 
 
 def test_spec_preprocessor_augment_off(dataset_df, pre):
@@ -88,7 +101,7 @@ def test_spec_preprocessor_augment_on(dataset_df, pre):
     assert not np.array_equal(sample1, sample2)
 
 
-def test_spec_preprocessor_overlay(dataset_df, overlay_df, overlay_pre):
+def test_spec_preprocessor_overlay(dataset_df, overlay_pre):
     dataset = AudioFileDataset(dataset_df, overlay_pre)
     sample1 = dataset[0].data
     dataset.preprocessor.pipeline.overlay.bypass = True

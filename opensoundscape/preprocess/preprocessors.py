@@ -228,7 +228,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
         height: height of output sample (frequency axis)
             - default None will use the original height of the spectrogram
         width: width of output sample (time axis)
-            -  default None will use the original width of the spectrogram
+            -  default None will use the originalwidth of the spectrogram
         channels: number of channels in output sample (default 1)
     """
 
