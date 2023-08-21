@@ -556,7 +556,7 @@ class CNN(BaseModule):
             log_freq = self.wandb_logging["watch_freq"]
             if log_freq is not None:
                 wandb_session.watch(
-                    self.network, log="all", log_freq=log_freq, log_graph=(True)
+                    self.network, log="all", log_freq=log_freq, log_graph=(False)
                 )
 
             # log tables of preprocessed samples
