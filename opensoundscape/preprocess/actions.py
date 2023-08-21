@@ -244,10 +244,10 @@ class SpectrogramToTensor(BaseAction):
     def go(self, sample):
         """converts sample.data from Spectrogram to Tensor"""
         # sample.data must be Spectrogram object
-        # sample should have attribute target_shape [h,w,channels]
+        # sample should have attributes: height, width, channels
         sample.data = sample.data.to_image(
-            shape=sample.target_shape[0:2],
-            channels=sample.target_shape[2],
+            shape=[sample.height, sample.width],
+            channels=sample.channels,
             return_type="torch",
             colormap=self.params["colormap"],
             invert=self.params["invert"],
@@ -478,6 +478,15 @@ def tensor_add_noise(tensor, std=1):
 class Overlay(Action):
     """Action Class for augmentation that overlays samples on eachother
 
+    Overlay is a flavor of "mixup" augmentation, where two samples are
+    overlayed on top of eachother. The samples are blended with a weighted
+    average, where the weight may be chosen randomly from a range of values.
+
+    In this implementation, the overlayed samples are chosen from a dataframe
+    of audio files and labels. The dataframe must have the audio file paths as
+    the index, and the labels as columns. The labels are used to choose
+    overlayed samples based on an "overlay_class" argument.
+
     Required Args:
         overlay_df: dataframe of audio files (index) and labels to use for overlay
         update_labels (bool): if True, labels of sample are updated to include
@@ -669,6 +678,13 @@ def overlay(
             overlay_sample = sample.preprocessor.forward(
                 overlay_sample, break_on_type=Overlay
             )
+
+            # the overlay_sample may have a different shape than the original sample
+            # force them into the same shape so we can overlay
+            if overlay_sample.data.shape != sample.data.shape:
+                overlay_sample.data = torchvision.transforms.Resize(
+                    sample.data.shape[1:]
+                )(overlay_sample.data)
 
             # now we blend the two tensors together with a weighted average
             # Select weight of overlay; <0.5 means more emphasis on original sample
