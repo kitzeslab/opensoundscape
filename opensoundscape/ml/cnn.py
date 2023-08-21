@@ -101,6 +101,9 @@ class CNN(BaseModule):
             n_top_samples=3,  # after prediction, log n top scoring samples per class
             # logs histograms of params & grads every n batches;
             watch_freq=10,  # use  None for no logging of params & grads
+            # log the model graph to wandb - seems to cause issues when attempting to
+            # continue training the model, so True is not recommended
+            log_graph=False,
         )
         self.loss_fn = None
         self.train_loader = None
@@ -556,7 +559,10 @@ class CNN(BaseModule):
             log_freq = self.wandb_logging["watch_freq"]
             if log_freq is not None:
                 wandb_session.watch(
-                    self.network, log="all", log_freq=log_freq, log_graph=(False)
+                    self.network,
+                    log="all",
+                    log_freq=log_freq,
+                    log_graph=(self.wandb_logging["log_graph"]),
                 )
 
             # log tables of preprocessed samples
