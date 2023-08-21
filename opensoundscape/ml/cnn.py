@@ -14,6 +14,7 @@ import pandas as pd
 
 import torch
 import torch.nn.functional as F
+import wandb
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
@@ -609,6 +610,7 @@ class CNN(BaseModule):
                 train_targets, train_scores
             )
             if wandb_session is not None:
+                # log metrics for this epoch to wandb
                 wandb_session.log({"training": self.train_metrics[self.current_epoch]})
 
             #### Validation ###
@@ -622,7 +624,7 @@ class CNN(BaseModule):
                     if self.single_target
                     else None,
                     split_files_into_clips=False,
-                )
+                )  # returns a dataframe matching validation_df
                 validation_targets = validation_df.values
                 validation_scores = validation_scores.values
 

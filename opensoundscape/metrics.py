@@ -145,23 +145,45 @@ def multi_target_metrics(targets, scores, class_names, threshold):
 
     Returns:
         metrics_dict: dictionary of various overall and per-class metrics
+        - precision, recall, F1 are np.nan if no 1-labels for a class
+        - au_roc, avg_precision are np.nan if all labels are either 0 or 1
+
+        Definitions:
+        - au_roc: area under the receiver operating characteristic curve
+        - avg_precision: average precision (same as area under PR curve)
+        - Jaccard: Jaccard similarity coefficient score (intersection over union)
+        - hamming_loss: fraction of labels that are incorrectly predicted
+
     """
     metrics_dict = {}
 
     preds = predict_multi_target_labels(scores=scores, threshold=threshold)
 
     # Store per-class precision, recall, and f1
-    class_pre, class_rec, class_f1, _ = M.precision_recall_fscore_support(
+    class_pre, class_rec, class_f1, support = M.precision_recall_fscore_support(
         targets, preds, average=None, zero_division=0
     )
 
     for i, class_i in enumerate(class_names):
+        n = support[i]  # number of samples for this class
+
+        # au_roc and avg precision are not defined if all samples are from one class
+        try:
+            rocauc = M.roc_auc_score(targets, scores, average="macro")
+            avgp = M.average_precision_score(targets, scores, average="macro")
+        except ValueError:
+            rocauc = np.nan
+            avgp = np.nan
+
         metrics_dict.update(
             {
                 class_i: {
-                    "precision": class_pre[i],
-                    "recall": class_rec[i],
-                    "f1": class_f1[i],
+                    "au_roc": rocauc,
+                    "avg_precision": avgp,
+                    "precision": class_pre[i] if n > 0 else np.nan,
+                    "recall": class_rec[i] if n > 0 else np.nan,
+                    "f1": class_f1[i] if n > 0 else np.nan,
+                    "support": n,
                 }
             }
         )
