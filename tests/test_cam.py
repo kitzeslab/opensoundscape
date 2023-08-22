@@ -12,8 +12,10 @@ import pandas as pd
 @pytest.fixture()
 def cam():
     base = torch.rand(3, 224, 224)
-    activation_maps = pd.Series({i: torch.rand(224, 224) for i in range(2)})
-    gbp_maps = pd.Series({i: torch.rand(224, 224, 3) for i in range(2)})
+    activation_maps = pd.Series(
+        {i: np.random.uniform(0, 1, [224, 224]) for i in range(2)}
+    )
+    gbp_maps = pd.Series({i: np.random.uniform(0, 1, [224, 224, 3]) for i in range(2)})
     return CAM(
         base_image=base,
         activation_maps=activation_maps,
