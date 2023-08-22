@@ -144,11 +144,8 @@ class CNN(BaseModule):
         # automatically gpu (default is 'cuda:0') if available
         # can override after init, eg model.device='cuda:1'
         # network and samples are moved to gpu during training/inference
-        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu')
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu'), torch.device('mps') etc
+        self.device = _gpu_if_available()
 
         ### sample loading/preprocessing ###
         # preprocessor will have attributes .sample_duration (seconds)
@@ -1667,12 +1664,10 @@ def load_model(path, device=None):
     try:
         # load the entire pickled model object from a file and
         # move the model to the desired torch "device" (eg cpu or cuda for gpu)
+        # by default, will choose cuda:0 if cuda is available,
+        # otherwise mps (Apple Silicon) if available, otherwise cpu
         if device is None:
-            device = (
-                torch.device("cuda:0")
-                if torch.cuda.is_available()
-                else torch.device("cpu")
-            )
+            device = _gpu_if_available()
         model = torch.load(path, map_location=device)
 
         # warn the user if loaded model's opso version doesn't match the current one
@@ -1753,9 +1748,7 @@ def load_outdated_model(
         a cnn model object with the weights loaded from the saved model
     """
     if device is None:
-        device = (
-            torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-        )
+        device = _gpu_if_available()
 
     try:
         # use torch to load the saved model object
@@ -1817,3 +1810,20 @@ def load_outdated_model(
     )
 
     return model
+
+
+def _gpu_if_available():
+    """
+    Return a torch.device, chosing cuda:0 or mps if available
+
+    Returns the first available GPU device (torch.device('cuda:0')) if cuda is available,
+    otherwise returns torch.device('mps') if MPS is available,
+    otherwise returns the CPU device.
+    """
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    return device
