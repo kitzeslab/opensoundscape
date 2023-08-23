@@ -158,7 +158,13 @@ class BoxedAnnotations:
             df["raven_file"] = raven_file
 
             # remove undesired columns
-            standard_columns = ["raven_file", "start_time", "end_time", "low_f", "high_f"]
+            standard_columns = [
+                "raven_file",
+                "start_time",
+                "end_time",
+                "low_f",
+                "high_f",
+            ]
             if annotation_column_idx is not None:
                 standard_columns.append("annotation")
             if hasattr(keep_extra_columns, "__iter__"):
@@ -463,7 +469,7 @@ class BoxedAnnotations:
         # the clip_df should have ['file','start_time','end_time'] as the index
         clip_df[classes] = float("nan")  # add columns for each class
 
-        for (file, start, end) in clip_df.index:
+        for file, start, end in clip_df.index:
             if not file == file:  # file is NaN, get corresponding rows
                 file_df = df[df["audio_file"].isnull()]
             else:  # subset annotations to this file
