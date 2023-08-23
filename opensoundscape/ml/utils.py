@@ -119,12 +119,15 @@ def apply_activation_layer(x, activation_layer=None):
     Returns:
         values with activation layer applied
 
+    Note: casts x to float before applying softmax, since torch's
+    softmax implementation doesn't support int or Long type
+
     """
     if activation_layer is None:  # scores [-inf,inf]
         pass
     elif activation_layer == "softmax":
         # "softmax" activation: preds across all classes sum to 1
-        x = F.softmax(x, dim=1)
+        x = F.softmax(x.float(), dim=1)
     elif activation_layer == "sigmoid":
         # map [-inf,inf] to [0,1]
         x = torch.sigmoid(x)
@@ -142,3 +145,38 @@ def apply_activation_layer(x, activation_layer=None):
         raise ValueError(f"invalid option for activation_layer: {activation_layer}")
 
     return x
+
+
+def collate_audio_samples_to_tensors(batch):
+    """
+    takes a list of AudioSample objects, returns batched tensors
+
+    use this collate function with DataLoader if you want to use AudioFileDataset (or AudioSplittingDataset)
+    but want the traditional output of PyTorch Dataloaders (returns two tensors:
+        the first is a tensor of the data with dim 0 as batch dimension,
+        the second is a tensor of the labels with dim 0 as batch dimension)
+
+    Args:
+        batch: a list of AudioSample objects
+
+    Returns:
+        (Tensor of stacked AudioSample.data, Tensor of stacked AudioSample.label.values)
+
+    Example usage:
+    ```
+        from opensoundscape import AudioFileDataset, SpectrogramPreprocessor
+
+        preprocessor = SpectrogramPreprocessor(sample_duration=2,height=224,width=224)
+        audio_dataset = AudioFileDataset(label_df,preprocessor)
+
+        train_dataloader = DataLoader(
+            audio_dataset,
+            batch_size=64,
+            shuffle=True,
+            collate_fn = collate_audio_samples_to_tensors
+        )
+    ```
+    """
+    tensors = torch.stack([i.data for i in batch])
+    labels = torch.tensor([i.labels.tolist() for i in batch])
+    return tensors, labels
