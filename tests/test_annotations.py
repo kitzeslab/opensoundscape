@@ -489,7 +489,9 @@ def test_warn_if_file_wont_get_raven_output(raven_file, saved_raven_file):
     # should also work when concatenating empty and non-empty annotation files
     boxed_annotations = BoxedAnnotations.from_raven_files([raven_file], ["path1"])
     with pytest.warns(UserWarning):
-        boxed_annotations.to_raven_files(saved_raven_file.parent, audio_files=["path2"])
+        boxed_annotations.to_raven_files(
+            saved_raven_file.parent, audio_files=["audio_file"]
+        )
 
 
 def test_assert_audio_files_annotation_files_match():
