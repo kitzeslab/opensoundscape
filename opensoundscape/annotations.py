@@ -178,7 +178,13 @@ class BoxedAnnotations:
             df["raven_file"] = raven_file
 
             # remove undesired columns
-            standard_columns = ["start_time", "end_time", "low_f", "high_f"]
+            standard_columns = [
+                "raven_file",
+                "start_time",
+                "end_time",
+                "low_f",
+                "high_f",
+            ]
             if annotation_column_idx is not None:
                 standard_columns.append("annotation")
             if hasattr(keep_extra_columns, "__iter__"):
