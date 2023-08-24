@@ -1145,7 +1145,7 @@ class CNN(BaseModule):
         if len(total_scores) > 0:
             total_scores = np.concatenate(total_scores, axis=0)
             # replace scores with nan for samples that failed in preprocessing
-            # this feels hacky (we predicted on substitute-samples rather than
+            # (we predicted on substitute-samples rather than
             # skipping the samples that failed preprocessing)
             total_scores[dataloader.dataset._invalid_indices, :] = np.nan
         else:
