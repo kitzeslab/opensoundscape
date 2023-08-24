@@ -31,7 +31,7 @@ class BoxedAnnotations:
     trim() [limit time range] and bandpass() [limit frequency range]
     """
 
-    def __init__(self, df):
+    def __init__(self, df, raven_files=None, audio_files=None):
         """
         create object directly from DataFrame of frequency-time annotations
 
@@ -46,12 +46,21 @@ class BoxedAnnotations:
                 - "audio_file": name or path of corresponding audio file
                 - "low_f": lower frequency bound (values can be None/nan)
                 - "high_f": upper frequency bound (values can be None/nan)
-            Note: other columns will be retained in the .df
+                Note: other columns will be retained in the .df
+
+            raven_files: list of raven .txt file paths (as str or pathlib.Path)
+                or None [default: None]
+            audio_files: list of audio file paths (as str or pathlib.Path)
+                or None [default: None]
 
         Returns:
             BoxedAnnotations object
 
         """
+        # save lists
+        self.raven_files = raven_files
+        self.audio_files = audio_files
+
         standard_cols = [
             "audio_file",
             "raven_file",
@@ -93,6 +102,9 @@ class BoxedAnnotations:
             raven_files: list of raven .txt file paths (as str or pathlib.Path)
             audio_files: (list) optionally specify audio files corresponding to each
                 raven file (length should match raven_files)
+                - if None (default), .one_hot_clip_labels() will not be able to
+                check the duration of each audio file, and will raise an error
+                unless `full_duration` is passed as an argument
             annotation_column_idx: (int) position of column containing annotations
                 - [default: 8] will be correct if the first user-created column
                 in Raven contains annotations. First column is 1, second is 2 etc.
@@ -116,6 +128,14 @@ class BoxedAnnotations:
             (the .df attribute is a dataframe containing each annotation)
         """
         all_file_dfs = []
+
+        if audio_files is not None:
+            assert len(audio_files) == len(
+                raven_files
+            ), """
+            audio_files and raven_files must have one-to-one correspondence,
+            but their lengths do not match.
+            """
         for i, raven_file in enumerate(raven_files):
             df = pd.read_csv(raven_file, delimiter="\t")
             if annotation_column_name is not None:
@@ -188,9 +208,13 @@ class BoxedAnnotations:
         # and keep all unique columns
         all_annotations = pd.concat(all_file_dfs).reset_index(drop=True)
 
-        return cls(df=all_annotations)
+        return cls(
+            df=all_annotations,
+            raven_files=raven_files,
+            audio_files=audio_files,
+        )
 
-    def to_raven_files(self, save_dir):  # TODO implement to_csv
+    def to_raven_files(self, save_dir, audio_files=None):  # TODO implement to_csv
         """save annotations to a Raven-compatible tab-separated text files
 
         Creates one file per unique audio file in 'file' column of self.df
@@ -198,6 +222,9 @@ class BoxedAnnotations:
         Args:
             save_dir: directory for saved files
                 - can be str or pathlib.Path
+            audio_files: list of audio file paths (as str or pathlib.Path)
+                or None [default: None]. If None, uses self.audio_files.
+                Note that it does not use self.df['audio_file'].unique()
 
         Outcomes:
             creates files containing the annotations for each audio file
@@ -210,6 +237,14 @@ class BoxedAnnotations:
         """
         assert Path(save_dir).exists(), f"Output directory {save_dir} does not exist"
 
+        if audio_files is None:
+            if self.audio_files is None:
+                raise ValueError(
+                    "`audio_files` must be specified since `self.audio` is `None`."
+                    "This function creates one annotation file per item in `audio_files`."
+                )
+            audio_files = self.audio_files
+
         # create a copy of the labels, and rename columns to match Raven defaults
         df = self.df.copy().rename(
             columns={
@@ -220,26 +255,47 @@ class BoxedAnnotations:
             }
         )
 
+        # warn user if self.df has audio files not in `audio_files`
+        # because these won't make it into any of the output files
+        if audio_files is not None:
+            if len(set(df["audio_file"].unique()) - set(audio_files)) > 0:
+                warnings.warn(
+                    """
+                    Some audio files in self.df['audio_file'] are not in `audio_files`.
+                    Annotations from these files will not be saved to Raven files.
+
+                    Consider passing `audio_files=ba.df['audio_file'].unique()` if 
+                    you want to save an annotation file for each file in `.df`.
+                    """
+                )
+
         # we will create one selection table for each file
         # this list may contain NaN, which we handle below
-        unique_files = df["audio_file"].unique()
+        unique_files = list(set(audio_files))
 
-        # If file names are no unique, raise an Exception
+        # If file names are not unique, raise an Exception
         # otherwise, multiple selection table files with the same name would be
         # written to one directory
         file_stems = set([Path(f).stem for f in unique_files])
         if len(file_stems) < len(unique_files):  # TODO write test for this exception
             raise Exception(
-                "File names were not unique! Some files in different folders have the same name. "
-                "Consider subsetting .df to avoid this issue"
+                """
+                File names were not unique! Some files in different folders have the same name.
+                This is not allowed since we plan to save each file's annotations to a
+                selection table with the same name in `save_dir`.  
+
+                Consider subsetting `.df` to avoid this issue. 
+                """
             )
 
+        # save each file's annotations to a separate raven-formatted txt file
         for file in unique_files:
-            # for NaN values of file, call the output file "unspecified.selections.txt"
+            # for NaN values of file, call the output file "unspecified_audio.selections.txt"
             if not file == file:
                 file_df = df[df["audio_file"].isnull()]
                 fname = "unspecified_audio.selections.txt"
             else:
+                # subset to annotations for this file
                 file_df = df[df["audio_file"] == file]
                 fname = f"{Path(file).stem}.selections.txt"
             file_df.to_csv(f"{save_dir}/{fname}", sep="\t", index=False)
@@ -463,7 +519,7 @@ class BoxedAnnotations:
         # the clip_df should have ['file','start_time','end_time'] as the index
         clip_df[classes] = float("nan")  # add columns for each class
 
-        for (file, start, end) in clip_df.index:
+        for file, start, end in clip_df.index:
             if not file == file:  # file is NaN, get corresponding rows
                 file_df = df[df["audio_file"].isnull()]
             else:  # subset annotations to this file
@@ -497,6 +553,7 @@ class BoxedAnnotations:
         full_duration=None,
         class_subset=None,
         final_clip=None,
+        audio_files=None,
     ):
         """Generate one-hot labels for clips of fixed duration
 
@@ -523,7 +580,8 @@ class BoxedAnnotations:
                 (if there are no gaps between clips).
             full_duration: The amount of time (seconds) to split into clips for each file
                 float or `None`; if `None`, attempts to get each file's duration
-                using `librosa.get_duration(path=file)`
+                using `librosa.get_duration(path=file)` where file is the value
+                of `audio` for each row of self.df
             class_subset: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
             final_clip (str): Behavior if final_clip is less than clip_duration
@@ -537,17 +595,35 @@ class BoxedAnnotations:
                     (final clip will be shorter than clip_duration)
                 - "full": Increase overlap with previous clip to yield a
                     clip with clip_duration length
+            audio_files: list of audio file paths (as str or pathlib.Path)
+                to create clips for. If None, uses self.audio_files. [default: None]
         Returns:
             dataframe with index ['file','start_time','end_time'] and columns=classes
         """
 
+        # use self.audio_files as list of files to create clips for, unless user passed audio_file
+        if audio_files is None:
+            if self.audio_files is None:
+                raise ValueError(
+                    """
+                    self.audio_files cannot be None. 
+                    This function uses self.audio_files to determine what files to
+                    create clips for. If you want to create clips for all files in
+                    self.df, pass `audio_files=self.df['audio_file'].unique()` 
+                    """
+                )
+            else:
+                audio_files = self.audio_files
+
+        audio_files = list(set(audio_files))  # remove duplicates
+
         # generate list of start and end times for each clip
         # if user passes None for full_duration, try to get the duration from each audio file
-        files = self.df["audio_file"].unique()
+
         if full_duration is None:
             try:
                 clip_df = make_clip_df(
-                    files=[f for f in files if f == f],  # remove NaN if present
+                    files=[f for f in audio_files if f == f],  # remove NaN if present
                     clip_duration=clip_duration,
                     clip_overlap=clip_overlap,
                     final_clip=final_clip,
@@ -560,7 +636,7 @@ class BoxedAnnotations:
                     not paths to valid audio files. Specifying `full_duration` as an 
                     argument to `one_hot_clip_labels()` will avoid the attempt to get 
                     audio file durations from file paths."""
-                )
+                ) from exc
         else:  # use fixed full_duration for all files
             # make a clip df, will be re-used for each file
             clip_df_template = generate_clip_times_df(
@@ -570,9 +646,9 @@ class BoxedAnnotations:
                 final_clip=final_clip,
             )
             # make a clip df for all files
-            clip_df = pd.concat([clip_df_template] * len(files))
+            clip_df = pd.concat([clip_df_template] * len(audio_files))
             # add file column, repeating value of file across each clip
-            clip_df["file"] = np.repeat(files, len(clip_df_template))
+            clip_df["file"] = np.repeat(audio_files, len(clip_df_template))
             clip_df = clip_df.set_index(["file", "start_time", "end_time"])
 
         # then create 0/1 labels for each clip and each class
