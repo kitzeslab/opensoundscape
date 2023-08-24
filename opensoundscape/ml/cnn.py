@@ -15,6 +15,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import wandb
+from tqdm.autonotebook import tqdm
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
@@ -303,7 +304,7 @@ class CNN(BaseModule):
             last_epoch=self.current_epoch - 1,
         )
 
-    def _train_epoch(self, train_loader, wandb_session=None):
+    def _train_epoch(self, train_loader, wandb_session=None, progress_bar=True):
         """perform forward pass, loss, and backpropagation for one epoch
 
         If wandb_session is passed, logs progress to wandb run
@@ -324,7 +325,9 @@ class CNN(BaseModule):
         total_scores = []
         batch_loss = []
 
-        for batch_idx, samples in enumerate(train_loader):
+        for batch_idx, samples in enumerate(
+            tqdm(train_loader, disable=not progress_bar)
+        ):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
             # we collate here rather than in the DataLoader so that
@@ -452,6 +455,7 @@ class CNN(BaseModule):
         invalid_samples_log="./invalid_training_samples.log",
         raise_errors=False,
         wandb_session=None,
+        progress_bar=True,
     ):
         """train the model on samples from train_dataset
 
@@ -605,7 +609,7 @@ class CNN(BaseModule):
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
             train_targets, _, train_scores = self._train_epoch(
-                self.train_loader, wandb_session
+                self.train_loader, wandb_session, progress_bar=progress_bar
             )
 
             ### Evaluate ###
@@ -993,6 +997,7 @@ class CNN(BaseModule):
         raise_errors=False,
         wandb_session=None,
         return_invalid_samples=False,
+        progress_bar=True,
     ):
         """Generate predictions on a dataset
 
@@ -1115,7 +1120,7 @@ class CNN(BaseModule):
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
-            for i, samples in enumerate(dataloader):
+            for i, samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
                 # load a batch of images and labels from the  dataloader
                 # we collate here rather than in the DataLoader so that
                 # we can still access the AudioSamples and thier information
@@ -1198,6 +1203,7 @@ class CNN(BaseModule):
         bypass_augmentations=True,
         batch_size=1,
         num_workers=0,
+        progress_bar=True,
     ):
         """
         Generate a activation and/or backprop heatmaps for each sample
@@ -1325,7 +1331,12 @@ class CNN(BaseModule):
         ## GENERATE SAMPLES ##
 
         generated_samples = []
-        for i, samples in enumerate(dataloader):
+        for i, samples in enumerate(
+            tqdm(
+                dataloader,
+                disable=not progress_bar,
+            )
+        ):
             # load a batch of images and labels from the dataloader
             # we collate here rather than in the DataLoader so that
             # we can still access the AudioSamples and thier information
