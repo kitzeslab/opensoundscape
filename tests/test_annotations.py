@@ -32,6 +32,11 @@ def saved_raven_file(request):
 
 
 @pytest.fixture()
+def save_path():
+    return Path("tests/raven_annots/")
+
+
+@pytest.fixture()
 def silence_10s_mp3_str():
     return "tests/audio/silence_10s.mp3"
 
@@ -478,11 +483,13 @@ def test_one_hot_clip_labels_with_empty_annotation_file(
     assert len(small_label_df) == 8
 
 
-def test_to_raven_files_raises_if_no_audio_files(raven_file, saved_raven_file):
+def test_to_raven_files_raises_if_no_audio_files(raven_file, save_path):
     # raises ValueError if no audio_files is provided and self.audio_files is none
     with pytest.raises(ValueError):
+        # don't save to a path with a .finalizer(), because the finalizer will complain
+        # if the file isn't actually created
         boxed_annotations = BoxedAnnotations.from_raven_files([raven_file])
-        boxed_annotations.to_raven_files(saved_raven_file.parent)
+        boxed_annotations.to_raven_files(save_path)
 
 
 def test_warn_if_file_wont_get_raven_output(raven_file, saved_raven_file):
