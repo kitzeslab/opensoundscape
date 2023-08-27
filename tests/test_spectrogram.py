@@ -24,7 +24,6 @@ def spec():
         spectrogram=np.zeros((5, 10)),
         frequencies=np.linspace(0, 100, 5),
         times=np.linspace(0, 10, 10),
-        decibel_limits=(-100, -20),
         window_samples=100,
         overlap_samples=50,
         window_type="Hann",
@@ -102,16 +101,6 @@ def test_construct_spectrogram_dimensions_mismatch_raises_two():
         Spectrogram(np.zeros((5, 10)), np.zeros((3)), np.zeros((10)), (-100, -20))
 
 
-def test_construct_spectrogram_no_decibel_limits_raises():
-    with pytest.raises(TypeError):
-        Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)))
-
-
-def test_construct_spectrogram_decibel_limits_incorrect_dimensions_raises():
-    with pytest.raises(TypeError):
-        Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100))
-
-
 def test_construct_spectrogram():
     Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20))
 
@@ -120,7 +109,6 @@ def test_bandpass_spectrogram(spec):
     spec = spec.bandpass(25, 75)
     assert np.allclose(spec.frequencies, np.array([25, 50, 75]))
     # make sure it didn't loose any properties
-    assert spec.decibel_limits == (-100, -20)
     assert spec.window_samples == 100
     assert spec.overlap_samples == 50
     assert spec.window_type == "Hann"
@@ -152,7 +140,6 @@ def test_bandpass_spectrogram_bad_limits(spec):
 def test_trim_spectrogram(spec):
     spec = spec.trim(2, 4)
     # make sure it didn't loose any properties
-    assert spec.decibel_limits == (-100, -20)
     assert spec.window_samples == 100
     assert spec.overlap_samples == 50
     assert spec.window_type == "Hann"
@@ -160,10 +147,10 @@ def test_trim_spectrogram(spec):
     assert spec.scaling == "spectrum"
 
 
-def test_limit_db_range():
+def test_limit_range():
     s = Spectrogram(
-        np.random.normal(0, 200, [5, 10]), np.zeros((5)), np.zeros((10)), (-100, -20)
-    ).limit_db_range(-100, -20)
+        np.random.normal(0, 200, [5, 10]), np.zeros((5)), np.zeros((10))
+    ).limit_range(-100, -20)
     assert np.max(s.spectrogram) <= -20 and np.min(s.spectrogram) >= -100
 
 
@@ -201,7 +188,6 @@ def test_to_image_with_bandpass():
             spectrogram=np.zeros((5, 10)),
             frequencies=np.linspace(0, 100, 5),
             times=np.linspace(0, 10, 10),
-            decibel_limits=(-100, -20),
         ).to_image(),
         Image,
     )
