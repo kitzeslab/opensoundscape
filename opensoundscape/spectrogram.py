@@ -306,11 +306,8 @@ class Spectrogram:
             raise AttributeError("Error: `feature_range` isn't increasing?")
 
         # use self.__class__ so that child classes can inherit this method
-        return self.__class__(
-            min_max_scale(self.spectrogram, feature_range=feature_range),
-            frequencies=self.frequencies,
-            times=self.times,
-            decibel_limits=self.decibel_limits,
+        return self._spawn(
+            spectrogram=min_max_scale(self.spectrogram, feature_range=feature_range)
         )
 
     def linear_scale(self, feature_range=(0, 1)):
@@ -332,18 +329,10 @@ class Spectrogram:
         if feature_range[1] < feature_range[0]:
             raise AttributeError("Error: `feature_range` isn't increasing?")
 
-        return self.__class__(
-            linear_scale(
-                self.spectrogram, in_range=self.decibel_limits, out_range=feature_range
-            ),
-            frequencies=self.frequencies,
-            times=self.times,
-            decibel_limits=self.decibel_limits,
-            window_samples=self.window_samples,
-            overlap_samples=self.overlap_samples,
-            window_type=self.window_type,
-            audio_sample_rate=self.audio_sample_rate,
-            scaling=self.scaling,
+        return self._spawn(
+            spectrogram=linear_scale(
+                self.spectrogram, in_range=input_range, out_range=feature_range
+            )
         )
 
     def limit_db_range(self, min_db=-100, max_db=-20):
@@ -365,22 +354,7 @@ class Spectrogram:
                 f"max_db must be greater than min_db (got max_db={max_db} and min_db={min_db})"
             )
 
-        _spec = self.spectrogram.copy()
-
-        _spec[_spec > max_db] = max_db
-        _spec[_spec < min_db] = min_db
-
-        return self.__class__(
-            _spec,
-            frequencies=self.frequencies,
-            times=self.times,
-            decibel_limits=self.decibel_limits,
-            window_samples=self.window_samples,
-            overlap_samples=self.overlap_samples,
-            window_type=self.window_type,
-            audio_sample_rate=self.audio_sample_rate,
-            scaling=self.scaling,
-        )
+        return self._spawn(spectrogram=self.spectrogram.clip(min, max))
 
     def bandpass(self, min_f, max_f, out_of_bounds_ok=True):
         """extract a frequency band from a spectrogram
@@ -417,16 +391,9 @@ class Spectrogram:
         highest_index = np.abs(self.frequencies - max_f).argmin()
 
         # take slices of the spectrogram and spec_freq that fall within desired range
-        return self.__class__(
-            self.spectrogram[lowest_index : highest_index + 1, :],
+        return self._spawn(
+            spectrogram=self.spectrogram[lowest_index : highest_index + 1, :],
             frequencies=self.frequencies[lowest_index : highest_index + 1],
-            times=self.times,
-            decibel_limits=self.decibel_limits,
-            window_samples=self.window_samples,
-            overlap_samples=self.overlap_samples,
-            window_type=self.window_type,
-            audio_sample_rate=self.audio_sample_rate,
-            scaling=self.scaling,
         )
 
     def trim(self, start_time, end_time):
@@ -446,9 +413,8 @@ class Spectrogram:
         highest_index = np.abs(self.times - end_time).argmin()
 
         # take slices of the spectrogram and spec_freq that fall within desired range
-        return self.__class__(
-            self.spectrogram[:, lowest_index : highest_index + 1],
-            frequencies=self.frequencies,
+        return self._spawn(
+            spectrogram=self.spectrogram[:, lowest_index : highest_index + 1],
             times=self.times[lowest_index : highest_index + 1],
             decibel_limits=self.decibel_limits,
             window_samples=self.window_samples,
@@ -644,6 +610,22 @@ class Spectrogram:
             image = torch.Tensor(array.transpose(2, 0, 1))
 
         return image
+
+    def _spawn(self, **kwargs):
+        """return copy of object, replacing any desired fields from __slots__
+
+        pass any desired updates as kwargs
+        """
+        assert np.all([k in self.__slots__ for k in kwargs.keys()]), (
+            "only pass members of Audio.__slots__ to _spawn as kwargs! "
+            f"slots: {self.__slots__}"
+        )
+        # load the current values from each __slots__ key
+        slots = {key: self.__getattribute__(key) for key in self.__slots__}
+        # update any user-specified values
+        slots.update(kwargs)
+        # create new instance of the class
+        return self.__class__(**slots)
 
 
 class MelSpectrogram(Spectrogram):
