@@ -432,7 +432,11 @@ class CNN(BaseModule):
             wandb_config["learning_rate"] = "n/a"
 
         try:
-            wandb_config["sample_shape"] = self.preprocessor.out_shape
+            wandb_config["sample_shape"] = [
+                self.preprocessor.height,
+                self.preprocessor.width,
+                self.preprocessor.channels,
+            ]
         except:
             wandb_config["sample_shape"] = "n/a"
 
