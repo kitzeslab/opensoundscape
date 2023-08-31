@@ -38,7 +38,7 @@ from opensoundscape.metrics import (
     multi_target_metrics,
 )
 from opensoundscape.sample import collate_samples
-from opensoundscape.utils import identity
+from opensoundscape.utils import identity, DEFAULT_CFG_PATH
 from opensoundscape.logging import wandb_table
 
 from opensoundscape.ml.cam import CAM
@@ -72,7 +72,7 @@ class CNN(BaseModule):
             [default: False]
         preprocessor_class: class of Preprocessor object
         sample_shape: tuple of height, width, channels for created sample
-            [default: (224,224,3)] #TODO: consider changing to (ch,h,w) to match torchww
+            [default: (224,224,1)] #TODO: consider changing to (ch,h,w) to match torch
 
     """
 
@@ -83,11 +83,19 @@ class CNN(BaseModule):
         sample_duration,
         single_target=False,
         preprocessor_class=SpectrogramPreprocessor,
-        sample_shape=(224, 224, 3),
+        sample_shape=(224, 224, 1),
+        config=None,
     ):
         super(CNN, self).__init__()
 
         self.name = "CNN"
+
+        # TODO: how to implement default preprocessor class or different classes from cfg? doesn't work
+        # do we require config or only use it if provided??
+        if config is not None:
+            # read yml (safely?)
+            # set relevant parameters
+            pass
 
         # model characteristics
         self.current_epoch = 0
@@ -452,6 +460,7 @@ class CNN(BaseModule):
         invalid_samples_log="./invalid_training_samples.log",
         raise_errors=False,
         wandb_session=None,
+        config_file="default",
     ):
         """train the model on samples from train_dataset
 
@@ -507,6 +516,9 @@ class CNN(BaseModule):
                 model.train(...,wandb_session=session)
                 session.finish()
                 ```
+            config_file: path to .yml config file. If None, no config is used. If
+                'default', default config from opensoundscape.configs.default_train.yml is used.
+                Use the default_train.yml as a template.
 
         Effects:
             If wandb_session is provided, logs progress and samples to Weights
@@ -516,6 +528,10 @@ class CNN(BaseModule):
             Use self.wandb_logging dictionary to change the number of samples
             logged.
         """
+        import yaml
+
+        with open("config.yaml", "r") as f:
+            config = yaml.load(f, Loader=yaml.FullLoader)
 
         ### Input Validation ###
         class_err = (

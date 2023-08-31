@@ -1,0 +1,90 @@
+# the thing about the config is that it will never capture everything a user might change
+# I guess we should treat it as "generally use 1 train script and modify the config; if needed make different
+# versions of the train script"
+
+# Default training settings and hyperparameters for OpenSoundscape training
+
+# basics:
+architecture: 'resnet18' #string
+class_list: [0] #list or path to text file
+sample_duration: 3 #in seconds
+single_target: False 
+sample_shape: (224,224,1) #height, width, channels
+
+
+# Train settings -------------------------------------------------------------------------------------------------------
+weights_path:  # (str, optional) path to model weights file
+epochs: 50  # (int) number of epochs to train for
+batch: 64  # (int) number of samples per batch
+save: True  # (bool) save train checkpoints and predict results
+save_period: -1 # (int) Save checkpoint every x epochs (disabled if < 1)
+device:  # (int | str | list, optional) device to run on, i.e. cuda:0, cpu, mps
+workers: 8  # (int) number of worker threads for data loading 
+pretrained: True  # (bool | str) whether to use a pretrained model (bool) or a model to load weights from (str)
+optimizer: auto  # (str) optimizer to use, choices=[SGD, Adam]
+verbose: True  # (bool) whether to print verbose output
+seed: 0  # (int) random seed for reproducibility
+deterministic: True  # (bool) whether to enable deterministic mode
+single_cls: False  # (bool) train multi-class data as single-class
+
+# rect: False  # (bool) rectangular training if mode='train' or rectangular validation if mode='val'
+# learning rate settings:
+# cos_lr: False  # (bool) use cosine learning rate scheduler
+# close_mosaic: 10  # (int) disable mosaic augmentation for final epochs (0 to disable)
+# resume: False  # (bool) resume training from last checkpoint
+# amp: True  # (bool) Automatic Mixed Precision (AMP) training, choices=[True, False], True runs AMP check
+# fraction: 1.0  # (float) dataset fraction to train on (default is 1.0, all images in train set)
+# profile: False  # (bool) profile ONNX and TensorRT speeds during training for loggers
+# freeze: None  # (int | list, optional) freeze first n layers, or freeze list of layer indices during training
+
+# Segmentation
+# overlap_mask: True  # (bool) masks should overlap during training (segment train only)
+# mask_ratio: 4  # (int) mask downsample ratio (segment train only)
+
+# Classification
+#dropout: 0.0  # (float) use dropout regularization (classify train only)
+
+# Logging & WandB ---------
+name:  # (str, optional) experiment name, results saved to 'project/name' directory
+exist_ok: False  # (bool) whether to overwrite existing experiment
+wandb_project: #wandb project name
+wandb_entity: #wandb entity name
+log_file: #file path for logging
+logging_level: #0 for logging nothing to log file, 1,2,3 for increasing verbosity
+verbose: #0 for printing nothing to console, 1,2,3 for increasing verbosity
+n_preview_samples: 8  # before train/predict, log n random samples
+top_samples_classes: None  # specify list of classes to see top samples from
+n_top_samples: 3  # after prediction, log n top scoring samples per class
+# logs histograms of params & grads every n batches;
+watch_freq: 10  # use  None for no logging of params & grads
+# log_graph: log the model architecture shape to wandb - seems to cause issues when attempting to
+# continue training the model, so True is not recommended
+log_graph: False
+
+
+# Val/Test settings ----------------------------------------------------------------------------------------------------
+val_interval: 1  # (int) run validation every n epochs
+
+
+# Hyperparameters ------------------------------------------------------------------------------------------------------
+lr0: 0.01  # (float) initial learning rate (i.e. SGD=1E-2, Adam=1E-3)
+lr_update_interval: 10 # (int) update lr every n epochs
+lr_update_ration: 0.7 # (int) multiply lr by this value every lr_update_interval epochs
+momentum: 0.9  # (float) SGD momentum/Adam beta1
+weight_decay: 0.0005  # (float) optimizer weight decay 5e-4
+# warmup_epochs: 3.0  # (float) warmup epochs (fractions ok) #TODO implement warmup?
+# warmup_momentum: 0.8  # (float) warmup initial momentum
+# warmup_bias_lr: 0.1  # (float) warmup initial bias lr
+
+# Augmentations
+translate_time: 0.1  # (float) image translation (+/- fraction)
+translate_freq: 0.1  # (float) image translation (+/- fraction)
+scale: 0.5  # (float) image scale (+/- gain)
+shear: 0.0  # (float) image shear (+/- deg)
+overlay: 0.0  # (float) image mixup (probability)
+# overlay_df: #file path?
+# train_df: # file path?
+# val_df: # file path?
+
+# Custom config.yaml ---------------------------------------------------------------------------------------------------
+cfg:  # (str, optional) for overriding defaults.yaml

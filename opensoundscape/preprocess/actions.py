@@ -7,6 +7,14 @@ or augmented sample, which may or may not be the same type as the original.
 
 See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
+
+new strategy: 
+decorator for each action class or fn; adds it to action register
+- for Action(action_fn), redefine from_dict
+config can then specify the actions and their parameters in a pipeline
+if user writes new action, they can register it script before loading model,
+then it will load from the config (?)
+
 """
 import random
 import warnings
@@ -19,6 +27,38 @@ from opensoundscape.audio import Audio, mix
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 from opensoundscape.sample import AudioSample
+
+ACTION_CLASS_DICT = {}
+ACTION_FN_DICT = {}
+
+
+def register_action_cls(class_name):
+    """add an Action class to CLASS_DICT"""
+    # register the model in dictionary
+    ACTION_CLASS_DICT[class_name.__name__] = class_name
+    # return the class
+    return class_name
+
+
+def register_action_fn(fn):
+    """add an Action function to FN_DICT"""
+    # register the model in dictionary
+    ACTION_FN_DICT[fn.__name__] = fn
+    # return the function
+    return fn
+
+
+def from_dict(dict):
+    """load an action from a dict of class name and parameters"""
+    if dict["class"] in ACTION_CLASS_DICT:
+        return ACTION_CLASS_DICT[dict["class"]].from_dict(dict)
+    else:
+        raise ValueError(f"Action class {dict['class']} not found in ACTION_CLASS_DICT")
+
+
+def to_dict(action):
+    """return a dict of the action's class name and parameters"""
+    return action.to_dict()
 
 
 class BaseAction:
@@ -62,7 +102,29 @@ class BaseAction:
     def get(self, arg):
         return self.params[arg]
 
+    def on(self):
+        """turn on the action"""
+        self.bypass = False
 
+    def off(self):
+        """turn off the action"""
+        self.bypass = True
+
+    def to_dict(self):
+        """return a dict of the action's class name and parameters"""
+        dict = self.params.to_dict()
+        dict["class"] = self.__class__.__name__
+        return dict
+
+    @classmethod
+    def from_dict(cls, dict):
+        """generate action from dict of class name and parameters"""
+        dict.pop("class")
+        return cls(**dict)
+
+
+# TODO: this break the idea of being able to load a preprocessor from a config file
+# redefine the from_dict method for Action
 class Action(BaseAction):
     """Action class for an arbitrary function
 
@@ -120,12 +182,25 @@ class Action(BaseAction):
         # def go(self, sample, **kwargs):
         #   self.action_fn(sample, **dict(self.params, **kwargs))
 
-        # should we make a copy to avoid modifying the original object?
-        # or accept that we are modifying the original sample in-place?
-        # I think its in-place since we now pass an object and update the data
+        # update .data in-place with the result of the action
         sample.data = self.action_fn(sample.data, **dict(self.params, **kwargs))
 
+    def to_dict(self):
+        """return a dict of the action's class name and parameters"""
+        dict = self.params.to_dict()
+        dict["class"] = self.__class__.__name__
+        dict["action_fn"] = self.action_fn.__name__
+        return dict
 
+    @classmethod
+    def from_dict(cls, dict):
+        """generate action from dict of class name and parameters"""
+        action_fn = ACTION_FN_DICT[dict["action_fn"]]
+        dict.pop("class"), dict.pop("action_fn")
+        return cls(action_fn, **dict)
+
+
+@register_action_cls
 class AudioClipLoader(Action):
     """Action to load clips from an audio file
 
@@ -141,9 +216,24 @@ class AudioClipLoader(Action):
     """
 
     def __init__(self, **kwargs):
+        # need to know how to find this function using its name
+        register_action_fn(Audio.from_file)
         super(AudioClipLoader, self).__init__(Audio.from_file, **kwargs)
         # two params are provided by sample.start_time and sample.duration
         self.params = self.params.drop(["offset", "duration"])
+
+        # use grandparent methods for to_dict and from_dict
+
+    def to_dict(self):
+        return BaseAction.to_dict(self)
+
+    @classmethod
+    def from_dict(cls, dict):
+        from copy import copy
+
+        params = copy(dict)
+        params.pop("class")
+        return cls(**params)
 
     def go(self, sample, **kwargs):
         offset = 0 if sample.start_time is None else sample.start_time
@@ -153,6 +243,7 @@ class AudioClipLoader(Action):
         )
 
 
+@register_action_cls
 class AudioTrim(Action):
     """Action to trim/extend audio to desired length
 
@@ -161,12 +252,14 @@ class AudioTrim(Action):
     """
 
     def __init__(self, **kwargs):
+        register_action_fn(trim_audio)
         super(AudioTrim, self).__init__(trim_audio, **kwargs)
 
     def go(self, sample, **kwargs):
         self.action_fn(sample, **dict(self.params, **kwargs))
 
 
+@register_action_fn
 def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
     """trim audio clips (Audio -> Audio)
 
@@ -224,6 +317,7 @@ def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
     return sample
 
 
+@register_action_cls
 class SpectrogramToTensor(BaseAction):
     """Action to create Tesnsor of desired shape from Spectrogram
 
@@ -254,6 +348,7 @@ class SpectrogramToTensor(BaseAction):
         )
 
 
+@register_action_fn
 def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
     """Applies a randomly selected gain level to an Audio object
 
@@ -271,6 +366,7 @@ def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
     return audio.apply_gain(dB=gain, clip_range=clip_range)
 
 
+@register_action_fn
 def audio_add_noise(audio, noise_dB=-30, signal_dB=0, color="white"):
     """Generates noise and adds to audio object
 
@@ -307,6 +403,7 @@ def audio_add_noise(audio, noise_dB=-30, signal_dB=0, color="white"):
     return mix([audio, noise], gain=[signal_dB, 0])
 
 
+@register_action_fn
 def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue=0):
     """Wraps torchvision.transforms.ColorJitter
 
@@ -332,6 +429,7 @@ def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue
     return transform(tensor)
 
 
+@register_action_fn
 def torch_random_affine(tensor, degrees=0, translate=(0.3, 0.1), fill=0):
     """Wraps for torchvision.transforms.RandomAffine
 
@@ -365,6 +463,7 @@ def torch_random_affine(tensor, degrees=0, translate=(0.3, 0.1), fill=0):
     return transform(tensor)
 
 
+@register_action_cls
 def image_to_tensor(img, greyscale=False):
     """Convert PIL image to RGB or greyscale Tensor (PIL.Image -> Tensor)
 
@@ -384,6 +483,7 @@ def image_to_tensor(img, greyscale=False):
     return transform(img)
 
 
+@register_action_cls
 def scale_tensor(tensor, input_mean=0.5, input_std=0.5):
     """linear scaling of tensor values using torch.transforms.Normalize
 
@@ -408,6 +508,7 @@ def scale_tensor(tensor, input_mean=0.5, input_std=0.5):
     return transform(tensor)
 
 
+@register_action_cls
 def time_mask(tensor, max_masks=3, max_width=0.2):
     """add random vertical bars over sample (Tensor -> Tensor)
 
@@ -435,6 +536,7 @@ def time_mask(tensor, max_masks=3, max_width=0.2):
     return tensor
 
 
+@register_action_cls
 def frequency_mask(tensor, max_masks=3, max_width=0.2):
     """add random horizontal bars over Tensor
 
@@ -462,6 +564,7 @@ def frequency_mask(tensor, max_masks=3, max_width=0.2):
     return tensor
 
 
+@register_action_cls
 def tensor_add_noise(tensor, std=1):
     """Add gaussian noise to sample (Tensor -> Tensor)
 
@@ -475,6 +578,7 @@ def tensor_add_noise(tensor, std=1):
     return tensor + noise
 
 
+@register_action_cls
 class Overlay(Action):
     """Action Class for augmentation that overlays samples on eachother
 
@@ -531,6 +635,7 @@ class Overlay(Action):
         )
 
 
+@register_action_fn
 def overlay(
     sample,
     overlay_df,

@@ -1,13 +1,16 @@
 """Utilities for opensoundscape"""
 
-import datetime
-import warnings
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytz
-import soundfile
 import librosa
+
+# Constants
+FILE = Path(__file__).resolve()
+ROOT = FILE.parents[1]  # opensoundscape
+ASSETS = ROOT / "assets"
+DEFAULT_CFG_PATH = ROOT / "configs/default_cnn.yaml"
 
 
 class GetDurationError(ValueError):
