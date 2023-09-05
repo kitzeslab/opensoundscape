@@ -306,3 +306,23 @@ class SpectrogramPreprocessor(BasePreprocessor):
         sample.channels = self.channels
 
         return sample
+
+
+class AudioPreprocessor(BasePreprocessor):
+    """Child of BasePreprocessor that only loads audio and resamples
+
+    Args:
+        sample_duration:
+            length in seconds of audio samples generated
+        sample_rate: target sample rate. [default: None] does not resample
+    """
+
+    def __init__(self, sample_duration, sample_rate):
+        super(AudioPreprocessor, self).__init__(sample_duration=sample_duration)
+        self.pipeline = pd.Series(
+            {
+                # load a segment of an audio file into an Audio object
+                # references AudioSample attributes: start_time and duration
+                "load_audio": AudioClipLoader(sample_rate=sample_rate),
+            }
+        )

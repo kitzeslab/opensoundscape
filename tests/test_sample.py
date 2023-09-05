@@ -30,6 +30,6 @@ def test_collate_samples():
     """collate should return tensors of joined data and joined labels"""
     l = pd.Series(name=("path", 2, 5), index=["a"], data=[0])
     s = sample.AudioSample(torch.Tensor([[1, 2, 1], [0, 2, 3]]), labels=l)
-    collated = sample.collate_samples([s, s, s, s])
+    collated = sample.collate_audio_samples_to_dict([s, s, s, s])
     assert list(collated["samples"].shape) == [4, 2, 3]
     assert list(collated["labels"].shape) == [4, 1]

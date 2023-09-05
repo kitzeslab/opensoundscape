@@ -2,6 +2,7 @@
 import wandb
 import pandas as pd
 from opensoundscape.audio import Audio
+from opensoundscape.spectrogram import Spectrogram
 
 
 def wandb_table(
@@ -51,9 +52,18 @@ def wandb_table(
                 sample.source, offset=sample.start_time, duration=sample.duration
             )
 
+            # use .data as image if image-like; otherwise make spec
+            try:
+                image = wandb.Image(sample.data * -1)
+            except ValueError:
+                # the sample is not image-like. Make a spectrogram
+                array = Spectrogram.from_audio(audio).to_image(return_type="np")
+                image = wandb.Image(array * -1)
+
+            # add contents to this row of the table
             row_info = [
                 wandb.Audio(audio.samples, audio.sample_rate),  # audio object
-                wandb.Image(sample.data * -1),  # spectrogram image
+                image,  # spectrogram image
                 sample.categorical_labels,
                 str(sample.source),
             ]
@@ -61,6 +71,7 @@ def wandb_table(
                 row_info += [sample.start_time, sample.duration]
             for c in classes_to_extract:
                 row_info += [sample.labels[c]]
+
             # add new row to wandb Table
             sample_table.loc[len(sample_table)] = row_info
 
