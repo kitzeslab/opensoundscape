@@ -429,7 +429,7 @@ class CNN(BaseClassifier):
         preprocessor_class=SpectrogramPreprocessor,
         sample_shape=(224, 224, 3),
     ):
-        super(CNN, self).__init__()
+        super(CNN, self).__init__(classes=classes)
 
         self.name = "CNN"
 
