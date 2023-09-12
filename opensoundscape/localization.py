@@ -485,9 +485,10 @@ class SynchronizedRecorderArray:
                 Dictionary of form {"class name": [low_f, high_f]} for audio bandpass filtering during
                 cross correlation. [Default: None] does not bandpass audio. Bandpassing audio to the
                 frequency range of the relevant sound is recommended for best cross correlation results.
-            residual_threshold: discard localized events if the root mean squared residual exceeds this value
+            residual_threshold: discard localized events if the root mean squared residual of the TDOAs exceeds this value
                 (distance in meters) [default: np.inf does not filter out any events by residual]
-            return_unlocalized: bool, optional. If True, returns the unlocalized events as well.
+            return_unlocalized: bool, optional. If True, returns the unlocalized events as well. These are events that were not successfully localized.
+                 for example because too few receivers had detections, or too few receivers passed the cc_threshold, or the TDOA residuals were too high.
                 Two lists [localized_events, unlocalized events] will be returned.
             num_workers : int, optional. Number of workers to use for parallelization. Default is 1 (no parallelization)
 
@@ -529,11 +530,15 @@ class SynchronizedRecorderArray:
 
         # initialize list to store events that successfully localize
         localized_events = []
+
+        # list that will store events that cannot be localized (e.g. too few receivers, high residual)
         unlocalized_events = []
 
-        # create list of SpatialEvent objects to attempt to localize
-        # creates events for every detection, adding nearby detections
-        # to assist in localization via time delay of arrival
+        # create list of SpatialEvents, each SpatialEvent will be used to estimate a location
+        # each SpatialEvent consists of a receiver with a detection, and every other receivers within max_receiver_dist, that also have a detection
+        # TDOA estimation and localization will be performed on each SpatialEvent
+        # multiple SpatialEvents may refer to the same real-world sound event
+
         candidate_events = self.create_candidate_events(
             detections,
             min_n_receivers,
@@ -545,7 +550,8 @@ class SynchronizedRecorderArray:
         # perform gcc to estimate relative time of arrival at each receiver
         # estimate locations of sound event using time delays and receiver locations
         # this calls estimate_delays under the hood
-        # unparallelized below
+
+        ## UNPARALLELLIZED IMPLEMENTATION FOR REFERENCE ##
         # events = [
         #     e._estimate_location_return_self(
         #         algorithm=localization_algorithm,
@@ -557,6 +563,7 @@ class SynchronizedRecorderArray:
         #     )
         #     for e in candidate_events
         # ]
+        ## END UNPARALLELLIZED IMPLEMENTATION ##
 
         # # paralelize the above using joblib
         from joblib import Parallel, delayed
@@ -573,12 +580,15 @@ class SynchronizedRecorderArray:
             for e in candidate_events
         )
 
+        # list of events that were not successfully localized
+        # (e.g. too few receivers, too few receivers after applying cc_threshold or high residual in localization)
         unlocalized_events = [
             e
             for e in events
             if (e.location_estimate is None or e.residual_rms > residual_threshold)
         ]
 
+        # list of events that were successfully localized
         localized_events = [
             e
             for e in events
@@ -587,8 +597,7 @@ class SynchronizedRecorderArray:
             )
         ]
 
-        # unlocalized events include those with too few receivers (after cc threshold)
-        # and those with too large of a spatial residual rms
+        # return_unlocalized can be used for troubleshooting, and working out why some events were not localized
         if return_unlocalized:
             return localized_events, unlocalized_events
         else:
