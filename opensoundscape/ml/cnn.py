@@ -14,6 +14,7 @@ import pandas as pd
 
 import torch
 import torch.nn.functional as F
+import wandb
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
@@ -101,6 +102,9 @@ class CNN(BaseModule):
             n_top_samples=3,  # after prediction, log n top scoring samples per class
             # logs histograms of params & grads every n batches;
             watch_freq=10,  # use  None for no logging of params & grads
+            # log the model graph to wandb - seems to cause issues when attempting to
+            # continue training the model, so True is not recommended
+            log_graph=False,
         )
         self.loss_fn = None
         self.train_loader = None
@@ -143,16 +147,17 @@ class CNN(BaseModule):
         # automatically gpu (default is 'cuda:0') if available
         # can override after init, eg model.device='cuda:1'
         # network and samples are moved to gpu during training/inference
-        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu')
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu'), torch.device('mps') etc
+        self.device = _gpu_if_available()
 
         ### sample loading/preprocessing ###
-        # preprocessor will have attributes .sample_duration and .out_shape
+        # preprocessor will have attributes .sample_duration (seconds)
+        # and height, width, channels for output shape
         self.preprocessor = preprocessor_class(
-            sample_duration=sample_duration, out_shape=sample_shape
+            sample_duration=sample_duration,
+            height=sample_shape[0],
+            width=sample_shape[1],
+            channels=sample_shape[2],
         )
 
         ### loss function ###
@@ -427,7 +432,11 @@ class CNN(BaseModule):
             wandb_config["learning_rate"] = "n/a"
 
         try:
-            wandb_config["sample_shape"] = self.preprocessor.out_shape
+            wandb_config["sample_shape"] = [
+                self.preprocessor.height,
+                self.preprocessor.width,
+                self.preprocessor.channels,
+            ]
         except:
             wandb_config["sample_shape"] = "n/a"
 
@@ -556,7 +565,10 @@ class CNN(BaseModule):
             log_freq = self.wandb_logging["watch_freq"]
             if log_freq is not None:
                 wandb_session.watch(
-                    self.network, log="all", log_freq=log_freq, log_graph=(True)
+                    self.network,
+                    log="all",
+                    log_freq=log_freq,
+                    log_graph=(self.wandb_logging["log_graph"]),
                 )
 
             # log tables of preprocessed samples
@@ -605,6 +617,7 @@ class CNN(BaseModule):
                 train_targets, train_scores
             )
             if wandb_session is not None:
+                # log metrics for this epoch to wandb
                 wandb_session.log({"training": self.train_metrics[self.current_epoch]})
 
             #### Validation ###
@@ -618,7 +631,7 @@ class CNN(BaseModule):
                     if self.single_target
                     else None,
                     split_files_into_clips=False,
-                )
+                )  # returns a dataframe matching validation_df
                 validation_targets = validation_df.values
                 validation_scores = validation_scores.values
 
@@ -818,7 +831,11 @@ class CNN(BaseModule):
                 "architecture": self.architecture_name,
                 "sample_duration": self.preprocessor.sample_duration,
                 "single_target": self.single_target,
-                "sample_shape": self.preprocessor.out_shape,
+                "sample_shape": [
+                    self.preprocessor.height,
+                    self.preprocessor.width,
+                    self.preprocessor.channels,
+                ],
             },
             path,
         )
@@ -1132,7 +1149,7 @@ class CNN(BaseModule):
         if len(total_scores) > 0:
             total_scores = np.concatenate(total_scores, axis=0)
             # replace scores with nan for samples that failed in preprocessing
-            # this feels hacky (we predicted on substitute-samples rather than
+            # (we predicted on substitute-samples rather than
             # skipping the samples that failed preprocessing)
             total_scores[dataloader.dataset._invalid_indices, :] = np.nan
         else:
@@ -1654,31 +1671,45 @@ def load_model(path, device=None):
     Returns:
         a model object with loaded weights
     """
-    # load the entire pickled model object from a file and
-    # move the model to the desired torch "device" (eg cpu or cuda for gpu)
-    if device is None:
-        device = (
-            torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-        )
-    model = torch.load(path, map_location=device)
+    try:
+        # load the entire pickled model object from a file and
+        # move the model to the desired torch "device" (eg cpu or cuda for gpu)
+        # by default, will choose cuda:0 if cuda is available,
+        # otherwise mps (Apple Silicon) if available, otherwise cpu
+        if device is None:
+            device = _gpu_if_available()
+        model = torch.load(path, map_location=device)
 
-    # warn the user if loaded model's opso version doesn't match the current one
-    if model.opensoundscape_version != opensoundscape.__version__:
-        warnings.warn(
-            f"This model was saved with an earlier version of opensoundscape "
-            f"({model.opensoundscape_version}) and will not work properly in "
-            f"the current opensoundscape version ({opensoundscape.__version__}). "
-            f"To use models across package versions use .save_torch_dict and "
-            f".load_torch_dict"
-        )
+        # warn the user if loaded model's opso version doesn't match the current one
+        if model.opensoundscape_version != opensoundscape.__version__:
+            warnings.warn(
+                f"This model was saved with an earlier version of opensoundscape "
+                f"({model.opensoundscape_version}) and will not work properly in "
+                f"the current opensoundscape version ({opensoundscape.__version__}). "
+                f"To use models across package versions use .save_torch_dict and "
+                f".load_torch_dict"
+            )
 
-    # since ResampleLoss class overrides a method of an instance,
-    # we need to re-change the _init_loss_fn change when we reload
-    if model.loss_cls == ResampleLoss:
-        use_resample_loss(model)
+        # since ResampleLoss class overrides a method of an instance,
+        # we need to re-change the _init_loss_fn change when we reload
+        if model.loss_cls == ResampleLoss:
+            use_resample_loss(model)
 
-    model.device = device
-    return model
+        model.device = device
+        return model
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            """
+            This model file could not be loaded in this version of 
+            OpenSoundscape. You may need to load the model with the version 
+            of OpenSoundscape that created it and torch.save() the 
+            model.network.state_dict(), then load the weights with model.load_weights
+            in the current OpenSoundscape version (where model is a new instance of the
+            opensoundscape.CNN class). If you do this, make sure to
+            re-create any specific preprocessing steps that were used in the
+            original model. See the `Predict with pre-trained CNN` tutorial for details.
+            """
+        ) from e
 
 
 def load_outdated_model(
@@ -1727,9 +1758,7 @@ def load_outdated_model(
         a cnn model object with the weights loaded from the saved model
     """
     if device is None:
-        device = (
-            torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-        )
+        device = _gpu_if_available()
 
     try:
         # use torch to load the saved model object
@@ -1791,3 +1820,20 @@ def load_outdated_model(
     )
 
     return model
+
+
+def _gpu_if_available():
+    """
+    Return a torch.device, chosing cuda:0 or mps if available
+
+    Returns the first available GPU device (torch.device('cuda:0')) if cuda is available,
+    otherwise returns torch.device('mps') if MPS is available,
+    otherwise returns the CPU device.
+    """
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    return device

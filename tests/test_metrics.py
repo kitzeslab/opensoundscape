@@ -6,6 +6,7 @@ import pandas as pd
 
 from opensoundscape import metrics
 
+
 # metrics are currently implicitly tested through test_cnn
 # however, we should add explicit tests
 def test_multitarget_metrics():
@@ -16,6 +17,8 @@ def test_multitarget_metrics():
     assert np.isclose(out["recall"], 0.75, 1e-5)
     assert np.isclose(out["map"], 0.75, 1e-5)
     assert np.isclose(out["au_roc"], 0.75, 1e-5)
+    assert np.isclose(out[0]["avg_precision"], 0.8333333333333333, 1e-5)
+    assert np.isclose(out[0]["au_roc"], 0.75, 1e-5)
 
 
 def test_singletarget_metrics():
