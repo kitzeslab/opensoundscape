@@ -1546,7 +1546,7 @@ class InceptionV3(CNN):
         )
         self.name = "InceptionV3"
 
-    def _train_epoch(self, train_loader, wandb_session=None):
+    def _train_epoch(self, train_loader, wandb_session=None, progress_bar=True):
         """perform forward pass, loss, backpropagation for one epoch
 
         need to override parent because Inception returns different outputs
@@ -1562,7 +1562,9 @@ class InceptionV3(CNN):
         total_scores = []
         batch_loss = []
 
-        for batch_idx, samples in enumerate(train_loader):
+        for batch_idx, samples in enumerate(
+            tqdm(train_loader, disable=not progress_bar)
+        ):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
             # we collate here rather than in the DataLoader so that
