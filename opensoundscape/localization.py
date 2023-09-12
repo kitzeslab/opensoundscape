@@ -385,7 +385,7 @@ class SynchronizedRecorderArray:
         bandpass_ranges=None,
         residual_threshold=np.inf,
         return_unlocalized=False,
-        n_workers=1,
+        num_workers=1,
     ):
         """
         Attempt to localize locations for all detections
@@ -489,7 +489,7 @@ class SynchronizedRecorderArray:
                 (distance in meters) [default: np.inf does not filter out any events by residual]
             return_unlocalized: bool, optional. If True, returns the unlocalized events as well.
                 Two lists [localized_events, unlocalized events] will be returned.
-            n_workers : int, optional. Number of workers to use for parallelization. Default is 1 (no parallelization)
+            num_workers : int, optional. Number of workers to use for parallelization. Default is 1 (no parallelization)
 
         Returns:
             A list of localized events, each of which is a SpatialEvent object.
@@ -561,7 +561,7 @@ class SynchronizedRecorderArray:
         # # paralelize the above using joblib
         from joblib import Parallel, delayed
 
-        events = Parallel(n_jobs=n_workers)(
+        events = Parallel(n_jobs=num_workers)(
             delayed(e._estimate_location_return_self)(
                 algorithm=localization_algorithm,
                 cc_threshold=cc_threshold,

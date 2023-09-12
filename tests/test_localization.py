@@ -310,7 +310,7 @@ def test_localization_pipeline_parallelized(LOCA_2021_aru_coords, LOCA_2021_dete
         localization_algorithm="gillette",
         cc_filter="phat",
         bandpass_ranges={"zeep": (7000, 10000)},
-        n_workers=4,
+        num_workers=4,
     )
 
     true_TDOAS = np.array(
