@@ -25,14 +25,9 @@ from opensoundscape.ml.loss import (
     CrossEntropyLoss_hot,
     ResampleLoss,
 )
-from opensoundscape.ml.safe_dataset import SafeDataset
-from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
 from opensoundscape.ml.dataloaders import SafeAudioDataloader
+from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.cnn_architectures import inception_v3
-from opensoundscape.metrics import (
-    predict_multi_target_labels,
-    predict_single_target_labels,
-)
 from opensoundscape.sample import collate_audio_samples_to_dict
 from opensoundscape.utils import identity
 from opensoundscape.logging import wandb_table
@@ -197,7 +192,7 @@ class BaseClassifier(torch.nn.Module):
 
         # check for matching class list
         if len(dataloader.dataset.dataset.classes) > 0 and list(self.classes) != list(
-            dataloader.dataset.datset.classes
+            dataloader.dataset.dataset.classes
         ):
             warnings.warn(
                 "The columns of input samples df differ from `model.classes`."
@@ -572,7 +567,7 @@ class CNN(BaseClassifier):
         # Dataloader setup #
         ######################
         # train_loader samples batches of images + labels from training set
-        self.train_loader = self.train_dataloader_cls(
+        return self.train_dataloader_cls(
             train_df,
             self.preprocessor,
             split_files_into_clips=True,
@@ -600,12 +595,11 @@ class CNN(BaseClassifier):
                 Weights and Biases run
                 - if None, does not log to wandb
 
-        Returns: (targets, predictions, scores) on training files
+        Returns: (targets, scores) on training files
         """
         self.network.train()
 
         epoch_labels = []
-        epoch_preds = []
         epoch_scores = []
         batch_loss = []
 
@@ -628,17 +622,8 @@ class CNN(BaseClassifier):
             logits = self.network(batch_tensors)
 
             # save targets and predictions
-            epoch_scores.extend(logits.detach().cpu().numpy())
-            epoch_labels.extend(batch_labels.detach().cpu().numpy())
-
-            # generate boolean predictions
-            if self.single_target:  # predict highest scoring class only
-                batch_preds = predict_single_target_labels(scores=logits)
-            else:  # multi-target: predict 0 or 1 based on a fixed threshold
-                batch_preds = predict_multi_target_labels(
-                    scores=torch.sigmoid(logits), threshold=self.prediction_threshold
-                )
-            epoch_preds.extend(batch_preds.detach().int().cpu().numpy())
+            epoch_scores.extend(list(logits.detach().cpu().numpy()))
+            epoch_labels.extend(list(batch_labels.detach().cpu().numpy()))
 
             # calculate loss
             loss = self.loss_fn(logits, batch_labels)
@@ -674,7 +659,6 @@ class CNN(BaseClassifier):
 
                 # Evaluate with model's eval function
                 tgts = batch_labels.int().detach().cpu().numpy()
-                # preds = batch_preds.int().detach().cpu().numpy()
                 scores = logits.int().detach().cpu().numpy()
                 self.eval(tgts, scores, logging_offset=-1)
 
@@ -687,8 +671,8 @@ class CNN(BaseClassifier):
         if wandb_session is not None:
             wandb_session.log({"loss": np.mean(batch_loss)})
 
-        # return labels, binary preds, continuous scores
-        return epoch_labels, epoch_preds, epoch_scores
+        # return labels, continuous scores
+        return np.array(epoch_labels), np.array(epoch_scores)
 
     def _generate_wandb_config(self):
         # create a dictinoary of parameters to save for this run
@@ -920,9 +904,7 @@ class CNN(BaseClassifier):
 
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
-            train_targets, _, train_scores = self._train_epoch(
-                dataloader, wandb_session
-            )
+            train_targets, train_scores = self._train_epoch(dataloader, wandb_session)
 
             ### Evaluate ###
             train_score, self.train_metrics[self.current_epoch] = self.eval(
@@ -1158,7 +1140,7 @@ class CNN(BaseClassifier):
                 logits = self.network(batch_tensors)
 
                 # disable gradients on returned values
-                pred_scores.extend(logits.detach().cpu().numpy())
+                pred_scores.extend(list(logits.detach().cpu().numpy()))
 
                 if wandb_session is not None:
                     wandb_session.log(
@@ -1171,6 +1153,7 @@ class CNN(BaseClassifier):
 
         # aggregate across all batches
         if len(pred_scores) > 0:
+            pred_scores = np.array(pred_scores)
             # replace scores with nan for samples that failed in preprocessing
             # (we predicted on substitute-samples rather than
             # skipping the samples that failed preprocessing)
@@ -1205,7 +1188,7 @@ class CNN(BaseClassifier):
                 str can be any of the following:
                     "gradcam": pytorch_grad_cam.GradCAM,
                     "hirescam": pytorch_grad_cam.HiResCAM,
-                    "scorecam": pytorch_grad_cam.ScoreCAM,
+                    "scorecam": pytorch_grad_cam.ScoreCAM, #note: using local version with bug fix
                     "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
                     "ablationcam": pytorch_grad_cam.AblationCAM,
                     "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1265,7 +1248,7 @@ class CNN(BaseClassifier):
         methods_dict = {
             "gradcam": pytorch_grad_cam.GradCAM,
             "hirescam": pytorch_grad_cam.HiResCAM,
-            "scorecam": pytorch_grad_cam.ScoreCAM,
+            "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
             "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
             "ablationcam": pytorch_grad_cam.AblationCAM,
             "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1328,7 +1311,10 @@ class CNN(BaseClassifier):
                     batch_maps = pd.Series({None: cam(batch_tensors)})
                 else:  # one activation map per class
                     batch_maps = pd.Series(
-                        {c: cam(batch_tensors, targets=target(c)) for c in classes}
+                        {
+                            c: cam(batch_tensors, targets=target(c).to(self.device))
+                            for c in classes
+                        }
                     )
 
             # update the AudioSample objects to include the activation maps
@@ -1382,7 +1368,7 @@ class CNN(BaseClassifier):
 
 def use_resample_loss(
     model, train_df
-):  # TODO revisit how this work. Should be able to set loss_cls=ReesampleLoss()
+):  # TODO revisit how this work. Should be able to set loss_cls=ResampleLoss()
     """Modify a model to use ResampleLoss for multi-target training
 
     ResampleLoss may perform better than BCE Loss for multitarget problems
@@ -1514,13 +1500,12 @@ class InceptionV3(CNN):
         need to override parent because Inception returns different outputs
         from the forward pass (final and auxiliary layers)
 
-        Returns: (targets, predictions, scores) on training files
+        Returns: (targets, scores) on training files
         """
 
         self.network.train()
 
         total_tgts = []
-        total_preds = []
         total_scores = []
         batch_loss = []
 
@@ -1547,13 +1532,6 @@ class InceptionV3(CNN):
             # save targets and predictions
             total_scores.append(logits.detach().cpu().numpy())
             total_tgts.append(batch_labels.detach().cpu().numpy())
-
-            # generate binary predictions
-            if self.single_target:  # predict highest scoring class only
-                batch_preds = F.one_hot(logits.argmax(1), len(logits[0]))
-            else:  # multi-target: predict 0 or 1 based on a fixed threshold
-                batch_preds = torch.sigmoid(logits) >= self.prediction_threshold
-            total_preds.append(batch_preds.int().detach().cpu().numpy())
 
             # calculate loss
             loss1 = self.loss_fn(logits, batch_labels)
@@ -1607,12 +1585,11 @@ class InceptionV3(CNN):
         # save the loss averaged over all batches
         self.loss_hist[self.current_epoch] = np.mean(batch_loss)
 
-        # return targets, preds, scores
+        # return targets, scores
         total_tgts = np.concatenate(total_tgts, axis=0)
-        total_preds = np.concatenate(total_preds, axis=0)
         total_scores = np.concatenate(total_scores, axis=0)
 
-        return total_tgts, total_preds, total_scores
+        return total_tgts, total_scores
 
     @classmethod
     def from_torch_dict(self):
@@ -1658,11 +1635,6 @@ def load_model(path, device=None):
                 f"To use models across package versions use .save_torch_dict and "
                 f".load_torch_dict"
             )
-
-        # since ResampleLoss class overrides a method of an instance,
-        # we need to re-change the _init_loss_fn change when we reload
-        if model.loss_cls == ResampleLoss:
-            use_resample_loss(model)
 
         model.device = device
         return model
