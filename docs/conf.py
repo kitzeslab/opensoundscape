@@ -41,7 +41,7 @@ extensions = [
     "sphinx_rtd_theme",
     "nbsphinx",
     "recommonmark",
-    "sphinx.ext.viewcode",
+    "sphinx.ext.linkcode",
     "sphinx_copybutton",
 ]
 
@@ -67,6 +67,19 @@ def setup(app):
     app.add_config_value("m2r_disable_inline_math", False, "env")
     app.add_directive("mdinclude", MdInclude)
 
+# see sklearn source for more complex example, including line numbers
+# and specific github commit versions
+def linkcode_resolve(domain, info):
+    """return url where sphinx.ext.linkcode should link to online code
+    
+    Note: right now, always returns link to"master" branch
+    """
+    if domain != 'py':
+        return None
+    if not info['module']:
+        return None
+    filename = info['module'].replace('.', '/')
+    return "https://github.com/kitzeslab/opensoundscape/blob/master/%s.py" % filename
 
 # -- Options for HTML output -------------------------------------------------
 
