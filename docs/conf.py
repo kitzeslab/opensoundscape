@@ -41,6 +41,8 @@ extensions = [
     "sphinx_rtd_theme",
     "nbsphinx",
     "recommonmark",
+    "sphinx.ext.viewcode",
+    "sphinx_copybutton",
 ]
 
 # List of patterns, relative to source directory, that match files and
