@@ -16,6 +16,9 @@ import sys
 from m2r import MdInclude
 from recommonmark.transform import AutoStructify
 
+#local import for linking to GitHub source code
+from sphinx_linkcode import make_linkcode_resolve
+
 sys.path.insert(0, os.path.abspath("../"))
 
 
@@ -67,19 +70,16 @@ def setup(app):
     app.add_config_value("m2r_disable_inline_math", False, "env")
     app.add_directive("mdinclude", MdInclude)
 
-# see sklearn source for more complex example, including line numbers
-# and specific github commit versions
-def linkcode_resolve(domain, info):
-    """return url where sphinx.ext.linkcode should link to online code
-    
-    Note: right now, always returns link to"master" branch
-    """
-    if domain != 'py':
-        return None
-    if not info['module']:
-        return None
-    filename = info['module'].replace('.', '/')
-    return "https://github.com/kitzeslab/opensoundscape/blob/master/%s.py" % filename
+# The following is used by sphinx.ext.linkcode to provide links to github
+# implementation based on sklearn
+linkcode_resolve = make_linkcode_resolve(
+    "opensoundscape",
+    (
+        "https://github.com/kitzeslab/"
+        "opensoundscape/blob/{revision}/"
+        "{package}/{path}#L{lineno}"
+    ),
+)
 
 # -- Options for HTML output -------------------------------------------------
 
