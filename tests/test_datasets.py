@@ -181,6 +181,35 @@ def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
     assert np.array_equal(sample.labels.values, [1, 1])
 
 
+def test_overlay_criterion_fn(dataset_df, overlay_pre):
+    """should only return a different overlay if
+    criterion_fn returns True
+    """
+    dataset = AudioFileDataset(dataset_df, overlay_pre)
+    # dataset.preprocessor.pipeline.overlay.set(overlay_class="different")
+    dataset.preprocessor.pipeline.overlay.set(
+        criterion_fn=lambda x: x.labels.values[0] == 1
+    )
+
+    # trick it into only performing the overlay, no other augmentations
+    # by marking overlay as not an augmentation
+    dataset.bypass_augmentations = True
+    dataset.preprocessor.pipeline.overlay.is_augmentation = False
+
+    sample1 = dataset[0]  # labels are [1,0], gets overlay
+    sample2 = dataset[1]  # labels are [0,1], no overlay
+
+    # now, turn off overlay
+    dataset.preprocessor.pipeline.overlay.bypass = True
+    sample1_noaug = dataset[0]
+    sample2_noaug = dataset[1]
+
+    # this one should have been augmented, and be different from no augmentation
+    assert not np.array_equal(sample1.data, sample1_noaug.data)
+    # this one should be the same with and without augmentation
+    assert np.array_equal(sample2.data, sample2_noaug.data)
+
+
 def test_audio_splitting_dataset(dataset_df, pre):
     dataset = AudioSplittingDataset(dataset_df, pre)
     assert len(dataset) == 10
