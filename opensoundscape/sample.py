@@ -127,7 +127,8 @@ class AudioSample(Sample):
                 return self.start_time + self.duration
 
 
-def collate_samples(samples):
+# TODO: move this to dataloaders.py? or preprocessing.utils?
+def collate_audio_samples_to_dict(samples):
     """generate batched tensors of data and labels (in a dictionary)
 
     returns collated samples: a dictionary with keys "samples" and "labels"
