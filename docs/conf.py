@@ -16,7 +16,7 @@ import sys
 from m2r import MdInclude
 from recommonmark.transform import AutoStructify
 
-#local import for linking to GitHub source code
+# local import for linking to GitHub source code
 from sphinx_linkcode import make_linkcode_resolve
 
 sys.path.insert(0, os.path.abspath("../"))
@@ -69,6 +69,7 @@ def setup(app):
     app.add_config_value("m2r_anonymous_references", False, "env")
     app.add_config_value("m2r_disable_inline_math", False, "env")
     app.add_directive("mdinclude", MdInclude)
+
 
 # The following is used by sphinx.ext.linkcode to provide links to github
 # implementation based on sklearn
