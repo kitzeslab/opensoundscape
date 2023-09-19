@@ -1219,7 +1219,7 @@ class CNN(BaseModule):
                 str can be any of the following:
                     "gradcam": pytorch_grad_cam.GradCAM,
                     "hirescam": pytorch_grad_cam.HiResCAM,
-                    "scorecam": pytorch_grad_cam.ScoreCAM,
+                    "scorecam": opensoundscape.ml.utils.ScoreCAM, #pytorch_grad_cam.ScoreCAM,
                     "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
                     "ablationcam": pytorch_grad_cam.AblationCAM,
                     "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1281,7 +1281,7 @@ class CNN(BaseModule):
         methods_dict = {
             "gradcam": pytorch_grad_cam.GradCAM,
             "hirescam": pytorch_grad_cam.HiResCAM,
-            "scorecam": pytorch_grad_cam.ScoreCAM,
+            "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
             "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
             "ablationcam": pytorch_grad_cam.AblationCAM,
             "xgradcam": pytorch_grad_cam.XGradCAM,

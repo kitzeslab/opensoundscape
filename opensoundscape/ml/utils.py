@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import torch
 import torch.nn.functional as F
-from pytorch_grad_cam.base_cam import BaseCAM
+import pytorch_grad_cam
 import tqdm
 
 from opensoundscape.ml.sampling import ClassAwareSampler
@@ -151,7 +151,7 @@ def apply_activation_layer(x, activation_layer=None):
 
 # override pytorch_grad_cam's score cam class because it has a bug
 # with device mismatch of upsampled (cpu) vs input_tensor (may be mps, cuda, etc)
-class ScoreCAM(BaseCAM):
+class ScoreCAM(pytorch_grad_cam.base_cam.BaseCAM):
     def __init__(self, model, target_layers, use_cuda=False, reshape_transform=None):
         super(ScoreCAM, self).__init__(
             model,
