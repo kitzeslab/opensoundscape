@@ -3720,6 +3720,24 @@ lint = ["docutils-stubs", "flake8 (>=3.5.0)", "isort", "mypy (>=0.800)"]
 test = ["cython", "html5lib", "pytest", "pytest-cov", "typed-ast"]
 
 [[package]]
+name = "sphinx-copybutton"
+version = "0.5.2"
+description = "Add a copy button to each of your code cells."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "sphinx-copybutton-0.5.2.tar.gz", hash = "sha256:4cf17c82fb9646d1bc9ca92ac280813a3b605d8c421225fd9913154103ee1fbd"},
+    {file = "sphinx_copybutton-0.5.2-py3-none-any.whl", hash = "sha256:fb543fd386d917746c9a2c50360c7905b605726b9355cd26e9974857afeae06e"},
+]
+
+[package.dependencies]
+sphinx = ">=1.8"
+
+[package.extras]
+code-style = ["pre-commit (==2.12.1)"]
+rtd = ["ipython", "myst-nb", "sphinx", "sphinx-book-theme", "sphinx-examples"]
+
+[[package]]
 name = "sphinx-rtd-theme"
 version = "0.5.1"
 description = "Read the Docs theme for Sphinx"
@@ -4413,4 +4431,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8"
-content-hash = "7c820f1bc45d6b0a5d695fc8a5f0b200e7cc5e12ac913109bd04fca124005d60"
+content-hash = "9daf16a60b0384aa08ff859984726bb19c5ea8de1ad776a633099a5ea8380b99"
