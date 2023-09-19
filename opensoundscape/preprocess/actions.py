@@ -653,7 +653,7 @@ def overlay(
 
                 if not good_choice:  # tried max_attempts samples, none worked
                     raise ValueError(
-                        "No samples found with non-overlapping labels after 100 random draws"
+                        f"No samples found with non-overlapping labels after {max_attempts} random draws"
                     )
 
                 overlay_path = overlay_df.index[candidate_idx]

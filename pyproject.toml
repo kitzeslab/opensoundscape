@@ -57,6 +57,8 @@ recommonmark = ">=0.6.0"
 nbsphinx = ">=0.7.1"
 m2r = ">=0.2"
 docutils = ">=0.20"
+sphinx-copybutton = ">=0.5.2"
+
 
 [tool.black]
 line-length = 88

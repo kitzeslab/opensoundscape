@@ -169,8 +169,10 @@ def multi_target_metrics(targets, scores, class_names, threshold):
 
         # au_roc and avg precision are not defined if all samples are from one class
         try:
-            rocauc = M.roc_auc_score(targets, scores, average="macro")
-            avgp = M.average_precision_score(targets, scores, average="macro")
+            rocauc = M.roc_auc_score(np.array(targets)[:, i], np.array(scores)[:, i])
+            avgp = M.average_precision_score(
+                np.array(targets)[:, i], np.array(scores)[:, i]
+            )
         except ValueError:
             rocauc = np.nan
             avgp = np.nan
