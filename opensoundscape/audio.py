@@ -38,9 +38,6 @@ import opensoundscape
 from opensoundscape.utils import generate_clip_times_df
 from opensoundscape.signal_processing import tdoa
 
-# unnecessary import that should trigger linter
-import tensorflow
-
 DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
 
 
