@@ -524,3 +524,25 @@ def test_generate_cams_target_layers(test_df):
     _ = model.generate_cams(
         test_df, target_layers=[model.network.layer3, model.network.layer4]
     )
+
+
+def test_train_with_posixpath(train_df):
+    """test that train works with pathlib.Path objects"""
+    from pathlib import Path
+
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+
+    # turn the file paths into Path objects. They are the first level in the multiindex
+    posix_paths = [Path(p) for p in train_df.index.get_level_values(0)]
+    posix_path_index = train_df.index.set_levels(posix_paths, level=0)
+
+    model.train(
+        train_df,
+        train_df,
+        save_path=Path("tests/models"),
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    shutil.rmtree("tests/models/")
