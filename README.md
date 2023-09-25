@@ -43,14 +43,23 @@ A guide to the most commonly used features of OpenSoundscape.
 
 ### Installation
 
-OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.8, 3.9, 3.10, and 3.11. For Apple Silicon (M1 chip) users, Python >=3.9 is recommended and may be required to avoid dependency issues.
+Details about installation are available on the OpenSoundscape documentation at [OpenSoundscape.org](https://opensoundscape.org). FAQs:
 
-Most users should install OpenSoundscape via pip: `pip install opensoundscape==0.9.1`. Contributors and advanced users can also use Poetry to install OpenSoundscape.
+#### How do I install OpenSoundscape?
 
-For more detailed instructions on how to install OpenSoundscape and use it in Jupyter, see the [documentation](http://opensoundscape.org).
+* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.9.1`. 
+* To use OpenSoundscape in Jupyter Notebooks (e.g. for tutorials), follow the installation instructions for your operating system, then follow the "Jupyter" instructions.
+* Contributors and advanced users can also use Poetry to install OpenSoundscape using the "Contributor" instructions
+
+#### Will OpenSoundscape work on my machine?
+
+* OpenSoundscape can be installed on Windows, Mac, and Linux machines.
+* It has been tested on Python 3.8, 3.9, 3.10, and 3.11.
+* For Apple Silicon (M1 chip) users, Python >=3.9 is recommended and may be required to avoid dependency issues.
+* Most computer cluster users should follow the Linux installation instructions
 
 
-### Using Audio and Spectrogram classes
+### Use Audio and Spectrogram classes
 ```python
 from opensoundscape import Audio, Spectrogram
 
@@ -74,7 +83,7 @@ path = '/path/to/audiomoth_file.WAV' #an AudioMoth recording
 Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 ```
 
-### Using a pre-trained CNN to make predictions on long audio files
+### Use a pre-trained CNN to make predictions on long audio files
 ```python
 from opensoundscape import load_model
 
@@ -89,9 +98,7 @@ scores = model.predict(files)
 #containing inference scores for each class and each audio window
 ```
 
-### Training a CNN using audio files and Raven annotations 
-
-
+### Train a CNN using audio files and Raven annotations 
 ```python
 from sklearn.model_selection import train_test_split
 from opensoundscape import BoxedAnnotations, CNN
@@ -119,8 +126,7 @@ model = CNN(architecture='resnet18', sample_duration=2, classes=class_list)
 model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
 ```
 
-### Training a CNN with labeled audio data (one label per audio file):
-
+### Train a CNN with labeled audio data (one label per audio file):
 ```python
 from opensoundscape import CNN
 from sklearn.model_selection import train_test_split
