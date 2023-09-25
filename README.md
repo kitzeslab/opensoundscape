@@ -1,21 +1,47 @@
 [![CI Status](https://github.com/kitzeslab/opensoundscape/workflows/CI/badge.svg)](https://github.com/kitzeslab/opensoundscape/actions?query=workflow%3ACI)
 [![Documentation Status](https://readthedocs.org/projects/opensoundscape/badge/?version=latest)](http://opensoundscape.org/en/latest/?badge=latest)
 
-# OpenSoundscape
+OpenSoundscape (OPSO) is free and open source Python utility library analyzing bioacoustic data. 
 
-OpenSoundscape is a utility library for analyzing bioacoustic data. It consists of Python modules for tasks such as preprocessing audio data, training machine learning models to classify vocalizations, estimating the spatial location of sounds, identifying which species' sounds are present in acoustic data, and more.
+OpenSoundscape includes utilities which can be strung together to create data analysis pipelines, including functions to:
 
-These utilities can be strung together to create data analysis pipelines. OpenSoundscape is designed to be run on any scale of computer: laptop, desktop, or computing cluster.
+* load and manipulate audio files
+* create and manipulate spectrograms
+* train convolutional neural networks (CNNs) on spectrograms with PyTorch
+* run pre-trained CNNs to detect vocalizations
+* detect periodic vocalizations with RIBBIT
+* load and manipulate Raven annotations
+* estimate the location of sound sources from synchronized recordings
 
-OpenSoundscape is currently in active development. If you find a bug, please submit an issue. If you have another question about OpenSoundscape, please email Sam Lapp (`sam.lapp` at `pitt.edu`).
+
+OpenSoundscape's source code can be found on [GitHub] (https://github.com/kitzeslab/opensoundscape) and its documentation can be found on [OpenSoundscape.org](https://opensoundscape.org).
+
+## Show me the code!
+
+For examples of how to use OpenSoundscape, see the [Quick Start Guide](#quick-start-guide) below.
+
+For full API documentation and tutorials on how to use OpenSoundscape to work with audio and spectrograms, train machine learning models, apply trained machine learning models to acoustic data, and detect periodic vocalizations using RIBBIT, see the [documentation](http://opensoundscape.org).
 
 
-#### Suggested Citation
-```
-Lapp, Rhinehart, Freeland-Haynes, Khilnani, Syunkova, and Kitzes, 2023. "OpenSoundscape v0.9.1".
-```
+## Contact & Citation
 
-# Installation
+OpenSoundcape is developed and maintained by the [Kitzes Lab](http://www.kitzeslab.org/) at the University of Pittsburgh. It is currently in active development. If you find a bug, please [submit an issue](https://github.com/kitzeslab/opensoundscape/issues) on the GitHub repository. If you have another question about OpenSoundscape, please use the (OpenSoundscape Discussions board)[https://github.com/kitzeslab/opensoundscape/discussions] or email Sam Lapp (`sam.lapp at pitt.edu`)
+
+
+Suggested citation:
+
+    Lapp, Sam; Rhinehart, Tessa; Freeland-Haynes, Louis; 
+    Khilnani, Jatin; Syunkova, Alexandra; Kitzes, Justin. 
+    “OpenSoundscape: An Open-Source Bioacoustics Analysis Package for Python.” 
+    Methods in Ecology and Evolution 2023. https://doi.org/10.1111/2041-210X.14196.
+
+
+## Quick Start Guide
+
+A guide to the most commonly used features of OpenSoundscape.
+
+
+### Installation
 
 OpenSoundscape can be installed on Windows, Mac, and Linux machines. It has been tested on Python 3.8, 3.9, 3.10, and 3.11. For Apple Silicon (M1 chip) users, Python >=3.9 is recommended and may be required to avoid dependency issues.
 
@@ -23,23 +49,8 @@ Most users should install OpenSoundscape via pip: `pip install opensoundscape==0
 
 For more detailed instructions on how to install OpenSoundscape and use it in Jupyter, see the [documentation](http://opensoundscape.org).
 
-# Features & Tutorials
-OpenSoundscape includes functions to:
-* load and manipulate audio files
-* create and manipulate spectrograms
-* train CNNs on spectrograms with PyTorch
-* run pre-trained CNNs to detect vocalizations
-* detect periodic vocalizations with RIBBIT
-* load and manipulate Raven annotations
-* estimate the location of sound sources from synchronized recordings
 
-OpenSoundscape can also be used with our library of publicly available trained machine learning models for the detection of 500 common North American bird species.
-
-For full API documentation and tutorials on how to use OpenSoundscape to work with audio and spectrograms, train machine learning models, apply trained machine learning models to acoustic data, and detect periodic vocalizations using RIBBIT, see the [documentation](http://opensoundscape.org).
-
-# Quick Start
-
-Using Audio and Spectrogram classes
+### Using Audio and Spectrogram classes
 ```python
 from opensoundscape import Audio, Spectrogram
 
@@ -52,7 +63,7 @@ my_spec = Spectrogram.from_audio(clip_5s)
 my_spec.plot()
 ```
 
-Load audio starting at a real-world timestamp
+### Load audio starting at a real-world timestamp
 ```python
 from datetime import datetime; import pytz
 
@@ -63,7 +74,7 @@ path = '/path/to/audiomoth_file.WAV' #an AudioMoth recording
 Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 ```
 
-Using a pre-trained CNN to make predictions on long audio files
+### Using a pre-trained CNN to make predictions on long audio files
 ```python
 from opensoundscape import load_model
 
@@ -78,7 +89,7 @@ scores = model.predict(files)
 #containing inference scores for each class and each audio window
 ```
 
-Training a CNN using audio files and Raven annotations 
+### Training a CNN using audio files and Raven annotations 
 
 
 ```python
@@ -108,7 +119,7 @@ model = CNN(architecture='resnet18', sample_duration=2, classes=class_list)
 model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
 ```
 
-Training a CNN with labeled audio data (one label per audio file):
+### Training a CNN with labeled audio data (one label per audio file):
 
 ```python
 from opensoundscape import CNN
