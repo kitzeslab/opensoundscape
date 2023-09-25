@@ -17,7 +17,11 @@ OpenSoundscape includes utilities which can be strung together to create data an
 OpenSoundscape's source code can be found on `GitHub <https://github.com/kitzeslab/opensoundscape>`__ and its documentation can be found on `OpenSoundscape.org <https://opensoundscape.org>`__.
 
 
+Table of Contents
+~~~~~~~~~~~~~~~~~~
+
 The documentation is organized into the following sections:
+
 **Introduction**: Basic info, quick-start guide, and resources
 
 **Installation**: 
@@ -36,7 +40,8 @@ The documentation is organized into the following sections:
     * Documentation for the entire API ("application programming interface") of OpenSoundscape: its functions (and their arguments) and classes (and their methods).
 
 
-
+Contact & Citation
+~~~~~~~~~~~~~~~~~~
 
 OpenSoundcape is developed and maintained by the `Kitzes Lab <http://www.kitzeslab.org/>`_ at the University of Pittsburgh. It is currently in active development. If you find a bug, please `submit an issue <https://github.com/kitzeslab/opensoundscape/issues>`__ on the GitHub repository. If you have another question about OpenSoundscape, please use the `OpenSoundscape Discussions board <https://github.com/kitzeslab/opensoundscape/discussions>`__ or email Sam Lapp (``sam.lapp at pitt.edu``)
 
