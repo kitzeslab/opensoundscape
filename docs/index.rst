@@ -17,16 +17,9 @@ OpenSoundscape includes utilities which can be strung together to create data an
 OpenSoundscape's source code can be found on `GitHub <https://github.com/kitzeslab/opensoundscape>`__ and its documentation can be found on `OpenSoundscape.org <https://opensoundscape.org>`__.
 
 
-############################ 
-Show me the code!
-############################
 
-Just want to see quick examples of how to use OpenSoundscape? See the :doc:`intro/quick-start`_ 
+For quick examples of how to use OpenSoundscape, see the :doc:`intro/quick-start`_ 
 
-
-############################ 
-Contact us
-############################
 
 OpenSoundcape is developed and maintained by the `Kitzes Lab <http://www.kitzeslab.org/>`_ at the University of Pittsburgh. It is currently in active development. If you find a bug, please `submit an issue <https://github.com/kitzeslab/opensoundscape/issues>`__ on the GitHub repository. If you have another question about OpenSoundscape, please use the `OpenSoundscape Discussions board <https://github.com/kitzeslab/opensoundscape/discussions>`__ or email Sam Lapp (``sam.lapp at pitt.edu``)
 
@@ -39,10 +32,8 @@ Suggested citation:
     Methods in Ecology and Evolution 2023. https://doi.org/10.1111/2041-210X.14196.
 
 
-.. Below is the code for creating the sidebar
-
 .. toctree::
-   :maxdepth: 0
+   :maxdepth: 2
    :hidden: 
    :caption: Introduction
    
@@ -51,7 +42,7 @@ Suggested citation:
    intro/resources.md
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :hidden:
    :caption: Installation
 
@@ -63,7 +54,7 @@ Suggested citation:
 
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :hidden:
    :caption: Tutorials
 
@@ -80,7 +71,7 @@ Suggested citation:
    tutorials/signal_processing
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :hidden:
    :caption: Classifiers 101
 
