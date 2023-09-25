@@ -36,8 +36,8 @@ Suggested citation:
    :maxdepth: 2
    :hidden: 
    :caption: Introduction
-   
-   index.rst
+
+   self
    intro/quick-start.md
    intro/resources.md
 
