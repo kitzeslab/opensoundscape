@@ -21,7 +21,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 * Most computer cluster users should follow the Linux installation instructions
 
 
-## Using Audio and Spectrogram classes
+## Use Audio and Spectrogram classes
 ```python
 from opensoundscape import Audio, Spectrogram
 
