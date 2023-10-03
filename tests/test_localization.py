@@ -290,9 +290,7 @@ def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords, LOCA_2021_detections
     )
 
     # check that the delays are what we expect
-    event._estimate_delays(
-        cc_filter=cc_filter, max_delay=max_delay, bandpass_range=bandpass_range
-    )
+    event._estimate_delays()
     true_TDOAS = np.array(
         [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
     )  # with reference receiver LOCA_2021_3...
