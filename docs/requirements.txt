@@ -2,6 +2,4 @@ sphinx>=4.2
 ipykernel
 nbsphinx
 m2r
-docutils>=0.20
 mistune<2.0.0
-jinja2<3.1
