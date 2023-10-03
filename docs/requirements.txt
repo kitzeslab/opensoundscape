@@ -1,6 +1,6 @@
-sphinx>=1.4
+sphinx>=2.1
 ipykernel
 nbsphinx
 m2r
-docutils<0.18
+docutils>=0.20
 mistune<2.0.0
