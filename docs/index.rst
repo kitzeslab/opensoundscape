@@ -89,7 +89,7 @@ Suggested citation:
 
    tutorials/audio
    tutorials/spectrogram
-   tutorials/format_data
+   tutorials/annotations
    tutorials/create_training_dataset
    tutorials/quick_start_cnn_training
    tutorials/evaluate_cnn_performance
