@@ -3,4 +3,5 @@ ipykernel
 nbsphinx
 m2r
 recommonmark
+sphinx_rtd_theme
 mistune<2.0.0
