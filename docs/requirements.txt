@@ -2,4 +2,5 @@ sphinx>=4.2
 ipykernel
 nbsphinx
 m2r
+recommonmark
 mistune<2.0.0
