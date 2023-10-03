@@ -90,14 +90,12 @@ Suggested citation:
    tutorials/audio
    tutorials/spectrogram
    tutorials/annotations
-   tutorials/create_training_dataset
-   tutorials/quick_start_cnn_training
-   tutorials/evaluate_cnn_performance
+   tutorials/preprocess_audio_dataset
+   tutorials/train_a_cnn
    tutorials/customize_cnn_training
-   tutorials/predict_with_cnn
-   tutorials/review_cnn_predictions
+   tutorials/predict_with_a_cnn
    tutorials/acoustic_localization
-   tutorials/signal_processing
+   tutorials/RIBBIT_pulse_rate_demo
 
 .. toctree::
    :maxdepth: 2
