@@ -95,7 +95,7 @@ Suggested citation:
    tutorials/customize_cnn_training
    tutorials/predict_with_a_cnn
    tutorials/acoustic_localization
-   tutorials/RIBBIT_pulse_rate_demo
+   tutorials/signal_processing
 
 .. toctree::
    :maxdepth: 2
