@@ -1,7 +1,6 @@
 sphinx>=7.2.6
 ipykernel
 nbsphinx
-m2r
 docutils>=0.18.1
 mistune<2.0.0
 sphinx-copybutton>=0.5.2
