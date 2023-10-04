@@ -115,6 +115,7 @@ autodoc_mock_imports = [
     "aru_metadata_parser",
     "pytz",
     "pillow",
+    "PIL",
 ]
 
 master_doc = "index"
