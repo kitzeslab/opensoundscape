@@ -526,10 +526,12 @@ class CNN(BaseModule):
         """
 
         ### Input Validation ###
-        class_err = (
-            "Train and validation datasets must have same classes "
-            "and class order as model object."
-        )
+        class_err = """
+            Train and validation datasets must have same classes
+            and class order as model object. Consider using
+            `train_df=train_df[cnn.classes]` or `cnn.classes=train_df.columns` 
+            before training.
+            """
         assert list(self.classes) == list(train_df.columns), class_err
         if validation_df is not None:
             assert list(self.classes) == list(validation_df.columns), class_err
@@ -1225,7 +1227,7 @@ class CNN(BaseModule):
                 str can be any of the following:
                     "gradcam": pytorch_grad_cam.GradCAM,
                     "hirescam": pytorch_grad_cam.HiResCAM,
-                    "scorecam": pytorch_grad_cam.ScoreCAM,
+                    "scorecam": opensoundscape.ml.utils.ScoreCAM, #pytorch_grad_cam.ScoreCAM,
                     "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
                     "ablationcam": pytorch_grad_cam.AblationCAM,
                     "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1287,7 +1289,7 @@ class CNN(BaseModule):
         methods_dict = {
             "gradcam": pytorch_grad_cam.GradCAM,
             "hirescam": pytorch_grad_cam.HiResCAM,
-            "scorecam": pytorch_grad_cam.ScoreCAM,
+            "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
             "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
             "ablationcam": pytorch_grad_cam.AblationCAM,
             "xgradcam": pytorch_grad_cam.XGradCAM,
