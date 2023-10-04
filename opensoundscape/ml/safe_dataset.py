@@ -130,7 +130,7 @@ class SafeDataset:
             if log is not None:
                 with open(log, "w") as f:
                     for p in self._invalid_samples:
-                        f.write(p + "\n")
+                        f.write(f"{p} \n")
                 msg += f"The invalid file paths are logged in {log}"
             warnings.warn(msg)
         return self._invalid_samples
