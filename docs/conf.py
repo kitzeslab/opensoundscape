@@ -1,5 +1,3 @@
-# Configuration file for the Sphinx documentation builder.
-#
 # This file only contains a selection of the most common options. For a full
 # list see the documentation:
 # http://www.sphinx-doc.org/en/master/config
@@ -14,7 +12,9 @@ import os
 import sys
 
 from m2r import MdInclude
-from recommonmark.transform import AutoStructify
+
+# recommonmark is deprecated--try removing this
+# from recommonmark.transform import AutoStructify
 
 # local import for linking to GitHub source code
 from sphinx_linkcode import make_linkcode_resolve
@@ -60,8 +60,9 @@ def setup(app):
         "auto_toc_tree_section": "Contents",
         "enable_eval_rst": True,
     }
-    app.add_config_value("recommonmark_config", config, True)
-    app.add_transform(AutoStructify)
+    # recommonmark is deprecated--try removing this
+    # app.add_config_value("recommonmark_config", config, True)
+    # app.add_transform(AutoStructify)
 
     # from m2r to make `mdinclude` work
     app.add_config_value("no_underscore_emphasis", False, "env")
