@@ -43,7 +43,7 @@ extensions = [
     "sphinx.ext.githubpages",
     "sphinx_rtd_theme",
     "nbsphinx",
-    "recommonmark",
+    #    "recommonmark",
     "sphinx.ext.linkcode",
     "sphinx_copybutton",
 ]
