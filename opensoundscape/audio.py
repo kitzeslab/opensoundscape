@@ -29,6 +29,7 @@ import numpy as np
 import scipy
 
 import librosa
+import librosa.core.audio
 import soundfile
 import IPython.display
 from aru_metadata_parser.parse import parse_audiomoth_metadata
@@ -407,7 +408,10 @@ class Audio:
         samples, original_sample_rate = soundfile.read(
             io.BytesIO(urllib.request.urlopen(url).read())
         )
-        samples = samples.mean(1)  # sum to mono
+
+        # sum to mono, if multiple channels
+        samples = librosa.core.audio.to_mono(samples.transpose())
+
         if sample_rate is not None and sample_rate != original_sample_rate:
             samples = librosa.resample(
                 samples,
