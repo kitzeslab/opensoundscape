@@ -42,6 +42,7 @@ extensions = [
     "nbsphinx",
     "sphinx.ext.linkcode",
     "sphinx_copybutton",
+    "sphinx_mdinclude",
 ]
 
 # List of patterns, relative to source directory, that match files and
