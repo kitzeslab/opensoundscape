@@ -521,6 +521,16 @@ def test_bandpass(silence_10s_mp3_str):
     assert isinstance(s.bandpass(1, 100, 9), Audio)
 
 
+def test_lowpass(silence_10s_mp3_str):
+    s = Audio.from_file(silence_10s_mp3_str)
+    assert isinstance(s.lowpass(100, 9), Audio)
+
+
+def test_highpass(silence_10s_mp3_str):
+    s = Audio.from_file(silence_10s_mp3_str)
+    assert isinstance(s.highpass(100, 9), Audio)
+
+
 def test_bandpass_sample_rate_10000(silence_10s_mp3_str):
     s = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     assert isinstance(s.bandpass(0.001, 4999, 9), Audio)
@@ -841,3 +851,12 @@ def test_estimate_delay_return_cc_max(veryshort_audio):
         ccmax, sum(section_used.samples * section_used.samples), abs_tol=1e-5
     )
     assert math.isclose(delay, 0, abs_tol=1e-6)
+
+
+def test_from_url_multichannel_to_mono():
+    """note: test will fail if the file is removed from xeno-canto
+    or is inaccessible at this url
+
+    downloads a 2-channel audio file and sums to 1, ensuring resolution of #837
+    """
+    Audio.from_url("https://xeno-canto.org/830406/download")

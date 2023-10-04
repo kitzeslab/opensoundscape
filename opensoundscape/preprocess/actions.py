@@ -475,6 +475,10 @@ def tensor_add_noise(tensor, std=1):
     return tensor + noise
 
 
+def always_true(x):
+    return True
+
+
 class Overlay(Action):
     """Action Class for augmentation that overlays samples on eachother
 
@@ -487,12 +491,17 @@ class Overlay(Action):
     the index, and the labels as columns. The labels are used to choose
     overlayed samples based on an "overlay_class" argument.
 
-    Required Args:
+    Args:
         overlay_df: dataframe of audio files (index) and labels to use for overlay
         update_labels (bool): if True, labels of sample are updated to include
             labels of overlayed sample
+        criterion_fn: function that takes AudioSample and returns True or False
+            - if True, perform overlay
+            - if False, do not perform overlay
+            Default is `always_true`, perform overlay on all samples
 
-    See overlay() for other arguments and default values.
+        See overlay() for **kwargs and default values
+
     """
 
     def __init__(self, is_augmentation=True, **kwargs):
@@ -527,7 +536,9 @@ class Overlay(Action):
 
     def go(self, sample, **kwargs):
         self.action_fn(
-            sample, overlay_df=self.overlay_df, **dict(self.params, **kwargs)
+            sample,
+            overlay_df=self.overlay_df,
+            **dict(self.params, **kwargs),
         )
 
 
@@ -539,12 +550,16 @@ def overlay(
     overlay_prob=1,
     max_overlay_num=1,
     overlay_weight=0.5,
+    criterion_fn=always_true,
 ):
     """iteratively overlay 2d samples on top of eachother
 
     Overlays (blends) image-like samples from overlay_df on top of
     the sample with probability `overlay_prob` until stopping condition.
     If necessary, trims overlay audio to the length of the input audio.
+
+    Optionally provide `criterion_fn` which takes sample and returns True/False
+    to determine whether to perform overlay on this sample.
 
     Overlays can be used in a few general ways:
         1. a separate df where any file can be overlayed (overlay_class=None)
@@ -574,11 +589,29 @@ def overlay(
         overlay_weight: a float > 0 and < 1, or a list of 2 floats [min, max]
             between which the weight will be randomly chosen. e.g. [0.1,0.7]
             An overlay_weight <0.5 means more emphasis on original sample.
+        criterion_fn: function that takes AudioSample and returns True or False
+            - if True, perform overlay
+            - if False, do not perform overlay
+            Default is `always_true`, perform overlay on all samples
 
     Returns:
         overlayed sample, (possibly updated) labels
 
+
+    Example:
+        check if sample is from a xeno canto file (has "XC" in name),
+        and only perform overlay on xeno canto files
+        ```
+        def is_xc(audio_sample):
+            return "XC" in Path(audio_sample.source).stem
+        s=overlay(s, overlay_df, False, criterion_fn=is_xc)
+        ```
     """
+
+    # Use the criterion_fn to determine if we should perform overlay on this sample
+    if not criterion_fn(sample):
+        return sample  # no overlay, just return the original sample
+
     ##  INPUT VALIDATION ##
     assert (
         overlay_class in ["different", None] or overlay_class in overlay_df.columns
@@ -613,7 +646,7 @@ def overlay(
                 overlay_df[overlay_class].sum() > 0
             ), "overlay_df did not contain positive labels for overlay_class"
 
-    if len(overlay_df.columns) > 0:
+    if len(overlay_df.columns) > 0 and sample.labels is not None:
         assert list(overlay_df.columns) == list(
             sample.labels.index
         ), "overlay_df mast have same columns as sample's _labels or no columns"
@@ -653,7 +686,7 @@ def overlay(
 
                 if not good_choice:  # tried max_attempts samples, none worked
                     raise ValueError(
-                        "No samples found with non-overlapping labels after 100 random draws"
+                        f"No samples found with non-overlapping labels after {max_attempts} random draws"
                     )
 
                 overlay_path = overlay_df.index[candidate_idx]

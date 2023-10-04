@@ -170,19 +170,37 @@ class BasePreprocessor:
         return sample
 
     def _generate_sample(self, sample):
-        """create AudioSample object from initial input (file path)
+        """create AudioSample object from initial input: any of
+            (path, start time) tuple
+            pd.Series with (file, start_time, end_time) as .name
+                (eg index of a pd.DataFrame from which row was taken)
+            AudioSample object
 
-        can override this method is subclasses to modify how samples
+        can override this method in subclasses to modify how samples
         are created, or to add additional attributes to samples
         """
         # handle paths or pd.Series as input for `sample`
-        if type(sample) == str or issubclass(type(sample), Path):
-            sample = AudioSample(sample)  # initialize with source = file path
+        if isinstance(sample, tuple):
+            path, start = sample
+            assert isinstance(
+                path, (str, Path)
+            ), "if passing tuple, first element must be str or pathlib.Path"
+            sample = AudioSample(path, start_time=start, duration=self.sample_duration)
+        elif isinstance(sample, pd.Series):
+            # .name should contain (path, start_time, end_time)
+            # note: end is not used, uses start_time self.sample_duration
+            path, start, _ = sample.name
+            assert isinstance(
+                path, (str, Path)
+            ), "if passing a series, series.name must contain (path, start_time, end_time)"
+            sample = AudioSample(path, start_time=start, duration=self.sample_duration)
         else:
             assert isinstance(sample, AudioSample), (
-                "sample must be AudioSample OR file path (str or pathlib.Path), "
+                "sample must be AudioSample, tuple of (path, start_time), "
+                "or pd.Series with (path, start_time, end_time) as .name. "
                 f"was {type(sample)}"
             )
+            pass  # leave it as an AudioSample
 
         # add attributes to the sample that might be needed by actions in the pipeline
         sample.preprocessor = self
@@ -306,3 +324,23 @@ class SpectrogramPreprocessor(BasePreprocessor):
         sample.channels = self.channels
 
         return sample
+
+
+class AudioPreprocessor(BasePreprocessor):
+    """Child of BasePreprocessor that only loads audio and resamples
+
+    Args:
+        sample_duration:
+            length in seconds of audio samples generated
+        sample_rate: target sample rate. [default: None] does not resample
+    """
+
+    def __init__(self, sample_duration, sample_rate):
+        super(AudioPreprocessor, self).__init__(sample_duration=sample_duration)
+        self.pipeline = pd.Series(
+            {
+                # load a segment of an audio file into an Audio object
+                # references AudioSample attributes: start_time and duration
+                "load_audio": AudioClipLoader(sample_rate=sample_rate),
+            }
+        )
