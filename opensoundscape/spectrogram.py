@@ -570,6 +570,7 @@ class Spectrogram:
         Args:
             shape: tuple of output dimensions as (height, width)
                 - if None, retains original shape of self.spectrogram
+                - if first or second value are None, retains original shape in that dimension
             channels: eg 3 for rgb, 1 for greyscale
                 - must be 3 to use colormap
             colormap:
@@ -616,8 +617,15 @@ class Spectrogram:
             array = cm(array)
 
         # resize and change channel dims
+        # if None, use original shape
         if shape is None:
             shape = np.shape(array)
+        else:
+            # if height or width are None, use original sizes
+            if shape[0] is None:
+                shape[0] = np.shape(array)[0]
+            if shape[1] is None:
+                shape[1] = np.shape(array)[1]
         out_shape = [shape[0], shape[1], channels]
         array = skimage.transform.resize(array, out_shape)
 
@@ -725,7 +733,7 @@ class MelSpectrogram(Spectrogram):
             raise TypeError("Class method expects Audio class as input")
 
         # Generate a linear-frequency spectrogram
-        # with raw stft values rather than decibels
+        # with linear stft values rather than dB values (dB_scale=False)
         linear_spec = Spectrogram.from_audio(
             audio,
             window_type=window_type,
@@ -735,7 +743,7 @@ class MelSpectrogram(Spectrogram):
             overlap_fraction=overlap_fraction,
             fft_size=fft_size,
             decibel_limits=decibel_limits,
-            dB_scale=dB_scale,
+            dB_scale=False,
             scaling=scaling,
         )
 
@@ -745,7 +753,7 @@ class MelSpectrogram(Spectrogram):
         filter_bank = librosa.filters.mel(
             sr=audio.sample_rate, n_fft=n_fft, n_mels=n_mels, norm=norm, htk=htk
         )
-        # normalize filter bank: rows should sum to 1 #TODO: is this correct?
+        # normalize filter bank: rows should sum to 1
         fb_constant = np.sum(filter_bank, 1).mean()
         filter_bank = filter_bank / fb_constant
 

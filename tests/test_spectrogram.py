@@ -14,11 +14,16 @@ def veryshort_wav_str():
 
 
 @pytest.fixture()
+def cswa_str():
+    return "tests/audio/aru_1.wav"
+
+
+@pytest.fixture()
 def spec():
     return Spectrogram(
-        np.zeros((5, 10)),
-        np.linspace(0, 100, 5),
-        np.linspace(0, 10, 10),
+        spectrogram=np.zeros((5, 10)),
+        frequencies=np.linspace(0, 100, 5),
+        times=np.linspace(0, 10, 10),
         decibel_limits=(-100, -20),
         window_samples=100,
         overlap_samples=50,
@@ -123,30 +128,25 @@ def test_bandpass_spectrogram(spec):
     assert spec.scaling == "spectrum"
 
 
-def test_bandpass_spectrogram_out_of_bounds():
+def test_bandpass_spectrogram_out_of_bounds(spec):
+    """
+    Test that bandpass raises ValueError when out_of_bounds_ok=False
+    and the bandpass range is beyond the max value (100 Hz here)
+    """
     with pytest.raises(ValueError):
-        Spectrogram(
-            np.zeros((5, 10)),
-            np.linspace(0, 10, 5),
-            np.linspace(0, 10, 10),
-            (-100, -20),
-        ).bandpass(0, 11, out_of_bounds_ok=False)
+        spec.bandpass(0, 110, out_of_bounds_ok=False)
 
 
-def test_bandpass_spectrogram_not_out_of_bounds():
-    Spectrogram(
-        np.zeros((5, 10)), np.linspace(0, 10, 5), np.linspace(0, 10, 10), (-100, -20)
-    ).bandpass(0.0, 10.0, out_of_bounds_ok=False)
+def test_bandpass_spectrogram_not_out_of_bounds(spec):
+    """should not raise error"""
+    spec = spec.bandpass(0.0, 20.0, out_of_bounds_ok=False)
+    assert spec.frequencies.max() < 30
 
 
-def test_bandpass_spectrogram_bad_limits():
+def test_bandpass_spectrogram_bad_limits(spec):
+    """should complain because low > high"""
     with pytest.raises(ValueError):
-        Spectrogram(
-            np.zeros((5, 10)),
-            np.linspace(0, 100, 5),
-            np.linspace(0, 10, 10),
-            (-100, -20),
-        ).bandpass(4, 2)
+        spec.bandpass(4, 2)
 
 
 def test_trim_spectrogram(spec):
@@ -184,17 +184,6 @@ def test_net_amplitude_spectrogram():
 
 
 def test_to_image():
-
-    print(
-        type(
-            Spectrogram(
-                np.zeros((5, 10)),
-                np.linspace(0, 100, 5),
-                np.linspace(0, 10, 10),
-                (-100, -20),
-            ).to_image()
-        )
-    )
     assert isinstance(
         Spectrogram(
             np.zeros((5, 10)),
@@ -207,26 +196,45 @@ def test_to_image():
 
 
 def test_to_image_with_bandpass():
-
-    print(
-        type(
-            Spectrogram(
-                np.zeros((5, 10)),
-                np.linspace(0, 100, 5),
-                np.linspace(0, 10, 10),
-                (-100, -20),
-            ).to_image()
-        )
-    )
     assert isinstance(
         Spectrogram(
-            np.zeros((5, 10)),
-            np.linspace(0, 100, 5),
-            np.linspace(0, 10, 10),
-            (-100, -20),
+            spectrogram=np.zeros((5, 10)),
+            frequencies=np.linspace(0, 100, 5),
+            times=np.linspace(0, 10, 10),
+            decibel_limits=(-100, -20),
         ).to_image(),
         Image,
     )
+
+
+def test_melspectrogram_underflow(cswa_str):
+    """
+    Fixed a bug where log transform was applied twice.
+    Added a test to check the max value of dB scaled spec is as expected
+    """
+    audio = Audio.from_file(cswa_str)
+    mel_spec = MelSpectrogram.from_audio(audio)
+    assert math.isclose(mel_spec.spectrogram.max(), -30.914056301116943, abs_tol=1e-4)
+
+
+def test_to_image_shape(spec):
+    img = spec.to_image(shape=[5, 6], channels=2, return_type="torch")
+    assert list(img.shape) == [2, 5, 6]  # channels, height, width
+
+
+def test_to_image_shape_None(spec):
+    """should retain original shape of spectrogram if shape=None"""
+    img = spec.to_image(shape=None, channels=2, return_type="torch")
+    spec_shape = list(spec.spectrogram.shape)
+    assert list(img.shape) == [2] + spec_shape  #  width
+
+    # test when shape specifies only desired width
+    img = spec.to_image(shape=[None, 6], channels=2, return_type="torch")
+    assert list(img.shape) == [2] + [spec_shape[0]] + [6]
+
+    # test when shape specifies only desired height
+    img = spec.to_image(shape=[5, None], channels=2, return_type="torch")
+    assert list(img.shape) == [2, 5] + [spec_shape[1]]
 
 
 def test_melspectrogram_shape_of_S_for_veryshort(veryshort_wav_str):
@@ -251,7 +259,6 @@ def test_melspectrogram_to_image_numchannels(veryshort_wav_str):
 
 
 def test_melspectrogram_to_image_alltypes(veryshort_wav_str):
-
     audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
     mel_spec = MelSpectrogram.from_audio(audio)
     img = mel_spec.to_image(shape=(10, 20), return_type="pil")
