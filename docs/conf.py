@@ -13,9 +13,6 @@ import sys
 
 from m2r import MdInclude
 
-# recommonmark is deprecated--try removing this
-# from recommonmark.transform import AutoStructify
-
 # local import for linking to GitHub source code
 from sphinx_linkcode import make_linkcode_resolve
 
@@ -43,7 +40,6 @@ extensions = [
     "sphinx.ext.githubpages",
     "sphinx_rtd_theme",
     "nbsphinx",
-    #    "recommonmark",
     "sphinx.ext.linkcode",
     "sphinx_copybutton",
 ]
@@ -60,9 +56,6 @@ def setup(app):
         "auto_toc_tree_section": "Contents",
         "enable_eval_rst": True,
     }
-    # recommonmark is deprecated--try removing this
-    # app.add_config_value("recommonmark_config", config, True)
-    # app.add_transform(AutoStructify)
 
     # from m2r to make `mdinclude` work
     app.add_config_value("no_underscore_emphasis", False, "env")
@@ -121,6 +114,7 @@ autodoc_mock_imports = [
     "pytorch_grad_cam",
     "aru_metadata_parser",
     "pytz",
+    "pillow",
 ]
 
 master_doc = "index"
