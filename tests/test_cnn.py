@@ -8,6 +8,7 @@ import shutil
 
 import warnings
 
+import opensoundscape
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.loss import ResampleLoss
@@ -496,7 +497,7 @@ def test_generate_cams_methods(test_df):
     methods_dict = {
         "gradcam": pytorch_grad_cam.GradCAM,
         "hirescam": pytorch_grad_cam.HiResCAM,
-        "scorecam": pytorch_grad_cam.ScoreCAM,
+        "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
         "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
         "ablationcam": pytorch_grad_cam.AblationCAM,
         "xgradcam": pytorch_grad_cam.XGradCAM,
