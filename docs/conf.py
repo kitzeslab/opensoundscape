@@ -49,6 +49,8 @@ extensions = [
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
+nbsphinx_kernel_name = "python3"
+
 
 def setup(app):
     config = {
