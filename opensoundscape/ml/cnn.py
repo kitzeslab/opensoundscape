@@ -913,7 +913,9 @@ class CNN(BaseClassifier):
 
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
-            train_targets, train_scores = self._train_epoch(dataloader, wandb_session, progress_bar=progress_bar)
+            train_targets, train_scores = self._train_epoch(
+                dataloader, wandb_session, progress_bar=progress_bar
+            )
 
             ### Evaluate ###
             train_score, self.train_metrics[self.current_epoch] = self.eval(
