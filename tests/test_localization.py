@@ -318,3 +318,31 @@ def test_localization_pipeline_parallelized(LOCA_2021_aru_coords, LOCA_2021_dete
     for event in localized_events:
         if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
             assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
+
+
+def test_localization_pipeline_cc_filters(LOCA_2021_aru_coords, LOCA_2021_detections):
+    ## Test that the different filters work, and are returning DIFFERENT cc values
+    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+
+    cc_scores = {}
+    for cc_filter in ["phat", "cc_norm", "roth"]:
+        localized_events = array.localize_detections(
+            detections=detections,
+            min_n_receivers=4,
+            max_receiver_dist=30,
+            localization_algorithm="gillette",
+            cc_filter=cc_filter,
+            bandpass_ranges={"zeep": (7000, 10000)},
+            num_workers=4,
+        )
+        for event in localized_events:
+            if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
+                cc_scores[cc_filter] = event.cc_maxs  # save the cc scores
+        # check that the cc scores are different
+    assert (
+        not np.allclose(cc_scores["phat"], cc_scores["cc_norm"], atol=0.001)
+        and not np.allclose(cc_scores["phat"], cc_scores["roth"], atol=0.001)
+        and not np.allclose(cc_scores["cc_norm"], cc_scores["roth"], atol=0.001)
+    )
