@@ -346,3 +346,29 @@ def test_localization_pipeline_cc_filters(LOCA_2021_aru_coords, LOCA_2021_detect
         and not np.allclose(cc_scores["phat"], cc_scores["roth"], atol=0.001)
         and not np.allclose(cc_scores["cc_norm"], cc_scores["roth"], atol=0.001)
     )
+
+
+def test_spatial_event_timestamps(LOCA_2021_aru_coords, LOCA_2021_detections):
+    """Check that the timestamps of the spatial events are correct"""
+    import datetime
+
+    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(
+        file_coords=file_coords,
+        start_timestamp=datetime.datetime(2021, 9, 24, 6, 52, 0),
+    )
+
+    localized_events = array.localize_detections(
+        detections=detections,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        localization_algorithm="gillette",
+        cc_filter="phat",
+        bandpass_ranges={"zeep": (7000, 10000)},
+        num_workers=4,
+    )
+    for event in localized_events:
+        assert event.start_timestamp == datetime.datetime(
+            2021, 9, 24, 6, 52, 0
+        ) + datetime.timedelta(seconds=event.start_time)
