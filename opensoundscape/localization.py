@@ -1,6 +1,7 @@
 """Tools for localizing audio events from synchronized recording arrays"""
 import warnings
 import numpy as np
+import datetime
 
 from opensoundscape.audio import Audio
 from opensoundscape import audio
@@ -24,6 +25,7 @@ class SpatialEvent:
         max_delay,
         min_n_receivers=3,
         start_time=0,
+        start_timestamp=None,
         duration=None,
         class_name=None,
         bandpass_range=None,
@@ -38,7 +40,8 @@ class SpatialEvent:
             receiver_files: list of audio files, one for each receiver
             receiver_locations: list of [x,y] or [x,y,z] positions of each receiver in meters
             max_delay: maximum time delay (in seconds) to consider for time-delay-of-arrival estimate. Cannot be longer than 1/2 the duration.
-            start_time: start_time of detection relative to start of audio file, for cross correlation #TODO: consider making timestamp object
+            start_time: start_time of detection relative to start of audio file, for cross correlation
+            start_timestamp: start time of detection relative to start of audio file, in datetime format
             duration: duration of sound event. This duration of audio will be used for cross-correlation to estimate TDOAs.
             class_name: (str) name of detection's class. Default: None
             bandpass_range: [low,high] frequency range that audio will be bandpassed to before cross-correlation.
@@ -57,6 +60,7 @@ class SpatialEvent:
         self.receiver_locations = np.array(receiver_locations)
         self.max_delay = max_delay
         self.start_time = start_time
+        self.start_timestamp = start_timestamp
         self.min_n_receivers = min_n_receivers
         self.duration = duration
         self.class_name = class_name
@@ -108,11 +112,8 @@ class SpatialEvent:
             sets the value of self.location_estimate to the same value as the returned location
         """
         # If no values are already stored, perform generalized cross correlation to estimate time delays
-        if self.tdoas is None or self.cc_maxs is None:
-            self._estimate_delays()  # Stores the results in the the attributes self.cc_maxs and self.tdoas
-
-        # If the user wants the time delays to be re-estimated, perform generalized cross correlation to estimate time delays
-        if use_stored_tdoas is False:
+        # or if user wants to re-estimate the time delays, perform generalized cross correlation to estimate time delays
+        if self.tdoas is None or self.cc_maxs is None or use_stored_tdoas is False:
             self._estimate_delays()  # Stores the results in the the attributes self.cc_maxs and self.tdoas
 
         location_estimate = self._localize_after_cross_correlation(
@@ -125,7 +126,7 @@ class SpatialEvent:
             return location_estimate
 
     def _estimate_delays(self):
-        """estimate time delay of event relative to receiver_files[0] with gcc
+        """Hidden method to estimate time delay of event relative to receiver_files[0] with gcc
 
         Performs Generalized Cross Correlation of each file against the first,
             extracting the segment of audio of length self.duration at self.start_time
@@ -224,7 +225,7 @@ class SpatialEvent:
 
     def _localize_after_cross_correlation(self, localization_algorithm):
         """
-        Hidden method to estimate localize after time delays have been estimated.
+        Hidden method to estimate location from time delays and receiver locations
         """
 
         # filter by cross correlation threshold, removing time delays + locations
@@ -299,6 +300,7 @@ class SynchronizedRecorderArray:
     def __init__(
         self,
         file_coords,
+        start_timestamp=None,
         speed_of_sound=SPEED_OF_SOUND,
     ):
         """
@@ -310,9 +312,11 @@ class SynchronizedRecorderArray:
                 3d if columns are (x,y,z). When running .localize_detections() or .create_candidate_events(),
                 Each audio file in `detections` must have a corresponding
                 row in `file_coords` specifiying the location of the reciever that recorded the file.
+            start_timestamp: datetime object, optional. A datetime object specifying the start time of the first audio file in file_coords.
             speed_of_sound : float, optional. Speed of sound in meters per second. Default is 343.
         """
         self.file_coords = file_coords
+        self.start_timestamp = start_timestamp
         self.speed_of_sound = speed_of_sound
 
     def localize_detections(
@@ -523,6 +527,11 @@ class SynchronizedRecorderArray:
             return localized_events
 
     def check_files_missing_coordinates(self, detections):
+        """
+        Check that all files in detections have coordinates in file_coords
+        Returns:
+            - a list of files that are in detections but not in file_coords
+        """
         files_missing_coordinates = []
         files = list(detections.reset_index()["file"].unique())
         for file in files:
@@ -619,7 +628,13 @@ class SynchronizedRecorderArray:
                         # find the clip end time
                         clip = dets_at_time_i.loc[ref_file, time_i, :]
                         clip_end = clip.reset_index()["end_time"].values[0]
-
+                        # specify a timestamp if we have one
+                        if self.start_timestamp is None:
+                            start_timestamp = None
+                        else:
+                            start_timestamp = self.start_timestamp + datetime.timedelta(
+                                seconds=time_i
+                            )
                         # create a SpatialEvent for this cluster of simultaneous detections
                         candidate_events.append(
                             SpatialEvent(
@@ -629,6 +644,7 @@ class SynchronizedRecorderArray:
                                 cc_threshold=cc_threshold,
                                 max_delay=max_delay,
                                 start_time=time_i,
+                                start_timestamp=start_timestamp,
                                 duration=clip_end - time_i,
                                 class_name=cls_i,
                                 cc_filter=cc_filter,
