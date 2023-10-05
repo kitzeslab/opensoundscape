@@ -56,7 +56,7 @@ jobs:
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
         run: /Users/runner/.local/bin/poetry install
-      - name: MPS_memory_workaround
+      - name: MPS memoery workaround
 	run: export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
       - name: Poetry run pytest
         run: /Users/runner/.local/bin/poetry run pytest
