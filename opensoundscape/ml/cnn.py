@@ -15,6 +15,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import wandb
+from tqdm.autonotebook import tqdm
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
@@ -102,6 +103,7 @@ class BaseClassifier(torch.nn.Module):
         raise_errors=False,
         wandb_session=None,
         return_invalid_samples=False,
+        progress_bar=True,
         **kwargs,
     ):
         """Generate predictions on a set of samples
@@ -151,6 +153,7 @@ class BaseClassifier(torch.nn.Module):
             return_invalid_samples: bool, if True, returns second argument, a set
                 containing file paths of samples that caused errors during preprocessing
                 [default: False]
+            progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             **kwargs: additional arguments to inference_dataloader_cls.__init__
 
         Returns:
@@ -224,7 +227,7 @@ class BaseClassifier(torch.nn.Module):
 
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
-        pred_scores = self.__call__(dataloader, wandb_session)
+        pred_scores = self.__call__(dataloader, wandb_session, progress_bar)
 
         ### Apply activation layer ### #TODO: test speed vs. doing it in __call__ on batches
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
@@ -583,7 +586,7 @@ class CNN(BaseClassifier):
             pin_memory=False if self.device == torch.device("cpu") else True,
         )
 
-    def _train_epoch(self, train_loader, wandb_session=None):
+    def _train_epoch(self, train_loader, wandb_session=None, progress_bar=True):
         """perform forward pass, loss, and backpropagation for one epoch
 
         If wandb_session is passed, logs progress to wandb run
@@ -603,7 +606,9 @@ class CNN(BaseClassifier):
         epoch_scores = []
         batch_loss = []
 
-        for batch_idx, samples in enumerate(train_loader):
+        for batch_idx, samples in enumerate(
+            tqdm(train_loader, disable=not progress_bar)
+        ):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
             # we collate here rather than in the DataLoader so that
@@ -720,6 +725,7 @@ class CNN(BaseClassifier):
         invalid_samples_log="./invalid_training_samples.log",
         raise_errors=False,
         wandb_session=None,
+        progress_bar=True,
     ):
         """train the model on samples from train_dataset
 
@@ -775,6 +781,7 @@ class CNN(BaseClassifier):
                 model.train(...,wandb_session=session)
                 session.finish()
                 ```
+            progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
 
         Effects:
             If wandb_session is provided, logs progress and samples to Weights
@@ -906,7 +913,9 @@ class CNN(BaseClassifier):
 
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
-            train_targets, train_scores = self._train_epoch(dataloader, wandb_session)
+            train_targets, train_scores = self._train_epoch(
+                dataloader, wandb_session, progress_bar=progress_bar
+            )
 
             ### Evaluate ###
             train_score, self.train_metrics[self.current_epoch] = self.eval(
@@ -1120,7 +1129,7 @@ class CNN(BaseClassifier):
         """
         self.network.load_state_dict(torch.load(path), strict=strict)
 
-    def __call__(self, dataloader, wandb_session=None):
+    def __call__(self, dataloader, wandb_session=None, progress_bar=True):
         # move network to device
         self.network.to(self.device)
         self.network.eval()
@@ -1130,7 +1139,7 @@ class CNN(BaseClassifier):
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
-            for i, samples in enumerate(dataloader):
+            for i, samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
                 # load a batch of images and labels from the  dataloader
                 # we collate here rather than in the DataLoader so that
                 # we can still access the AudioSamples and thier information
@@ -1172,6 +1181,7 @@ class CNN(BaseClassifier):
         classes=None,
         target_layers=None,
         guided_backprop=False,
+        progress_bar=True,
         **kwargs,
     ):
         """
@@ -1292,7 +1302,12 @@ class CNN(BaseClassifier):
         ## GENERATE SAMPLES ##
 
         generated_samples = []
-        for i, samples in enumerate(dataloader):
+        for i, samples in enumerate(
+            tqdm(
+                dataloader,
+                disable=not progress_bar,
+            )
+        ):
             # load a batch of images and labels from the dataloader
             # we collate here rather than in the DataLoader so that
             # we can still access the AudioSamples and thier information
@@ -1496,7 +1511,7 @@ class InceptionV3(CNN):
         )
         self.name = "InceptionV3"
 
-    def _train_epoch(self, train_loader, wandb_session=None):
+    def _train_epoch(self, train_loader, wandb_session=None, progress_bar=True):
         """perform forward pass, loss, backpropagation for one epoch
 
         need to override parent because Inception returns different outputs
@@ -1511,7 +1526,9 @@ class InceptionV3(CNN):
         total_scores = []
         batch_loss = []
 
-        for batch_idx, samples in enumerate(train_loader):
+        for batch_idx, samples in enumerate(
+            tqdm(train_loader, disable=not progress_bar)
+        ):
             # load a batch of images and labels from the train loader
             # all augmentation occurs in the Preprocessor (train_loader)
             # we collate here rather than in the DataLoader so that
