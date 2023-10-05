@@ -18,7 +18,7 @@ def test_apply_activation_layer():
     assert np.allclose(y, torch.tensor([[0.0900, 0.2447, 0.6652]]), atol=1e-4)
 
 
-def test_collate_audio_samples_to_tensors(audio_path):
+def test_collate_audio_samples_to_tensors():
     data = torch.tensor([[1, 2, 3], [4, 5, 6]])
     s = AudioSample(data, labels=torch.tensor([1, 0, 0]))
     batch = [s, s, s, s]
