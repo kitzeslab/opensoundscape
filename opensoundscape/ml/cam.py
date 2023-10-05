@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import torch
+import os
+import warnings
 
 
 class CAM:
@@ -132,7 +134,11 @@ class CAM:
             fig.savefig(save_path)
 
         if plt_show:
-            plt.show()
+            # if plt.show() is desired, check that MPLBACKEND is available
+            if os.environ.get("MPLBACKEND") is None:
+                warnings.warn("MPLBACKEND is 'None' in os.environ. Skipping plot.")
+            else:
+                plt.show()
 
         return fig, ax
 
