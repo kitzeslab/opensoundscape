@@ -1,5 +1,3 @@
-# Configuration file for the Sphinx documentation builder.
-#
 # This file only contains a selection of the most common options. For a full
 # list see the documentation:
 # http://www.sphinx-doc.org/en/master/config
@@ -12,9 +10,6 @@
 #
 import os
 import sys
-
-from m2r import MdInclude
-from recommonmark.transform import AutoStructify
 
 # local import for linking to GitHub source code
 from sphinx_linkcode import make_linkcode_resolve
@@ -43,15 +38,17 @@ extensions = [
     "sphinx.ext.githubpages",
     "sphinx_rtd_theme",
     "nbsphinx",
-    "recommonmark",
     "sphinx.ext.linkcode",
     "sphinx_copybutton",
+    "sphinx_mdinclude",
 ]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+
+nbsphinx_kernel_name = "python3"
 
 
 def setup(app):
@@ -60,15 +57,6 @@ def setup(app):
         "auto_toc_tree_section": "Contents",
         "enable_eval_rst": True,
     }
-    app.add_config_value("recommonmark_config", config, True)
-    app.add_transform(AutoStructify)
-
-    # from m2r to make `mdinclude` work
-    app.add_config_value("no_underscore_emphasis", False, "env")
-    app.add_config_value("m2r_parse_relative_links", False, "env")
-    app.add_config_value("m2r_anonymous_references", False, "env")
-    app.add_config_value("m2r_disable_inline_math", False, "env")
-    app.add_directive("mdinclude", MdInclude)
 
 
 # The following is used by sphinx.ext.linkcode to provide links to github
@@ -120,6 +108,8 @@ autodoc_mock_imports = [
     "pytorch_grad_cam",
     "aru_metadata_parser",
     "pytz",
+    "pillow",
+    "PIL",
 ]
 
 master_doc = "index"
