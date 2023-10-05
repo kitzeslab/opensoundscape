@@ -8,7 +8,6 @@ from opensoundscape.ml import utils as ml_utils
 from opensoundscape import AudioSample
 import torch
 
-def 
 
 def test_apply_activation_layer():
     x = torch.tensor([[1, 2, 3]])
