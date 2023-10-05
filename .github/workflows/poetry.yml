@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11"]
       # Ensure that all flavours are run to completion even if an other flavor failed
       fail-fast: false
     
@@ -39,7 +39,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11"]
       # Ensure that all flavours are run to completion even if an other flavor failed
       fail-fast: false
     steps:
@@ -56,6 +56,8 @@ jobs:
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
         run: /Users/runner/.local/bin/poetry install
+      - name: MPS memory workaround
+        run: export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
       - name: Poetry run pytest
         run: /Users/runner/.local/bin/poetry run pytest
       - name: Poetry run black check

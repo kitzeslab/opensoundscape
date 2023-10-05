@@ -17,7 +17,7 @@ packages = [{include = "opensoundscape"}]
 include = ["opensoundscape/**/*.py"]
 
 [tool.poetry.dependencies]
-python = ">=3.9"
+python = ">=3.9,<3.12"
 docopt = ">=0.6.2"
 librosa = ">=0.10.0"
 torch = "==2.0.0"
@@ -44,6 +44,8 @@ certifi = ">=2022.12.7"
 grad-cam = ">=1.4.6"
 sentry-sdk = ">=1.14.0"
 aru-metadata-parser = ">=0.1.0"
+tqdm = ">=4.66.1"
+ipywidgets = ">=8.1.0"
 
 [tool.poetry.dev-dependencies]
 black = "~=22.8"
@@ -56,6 +58,16 @@ m2r = ">=0.2"
 docutils = ">=0.20"
 sphinx-copybutton = ">=0.5.2"
 
+
+# optional dependencies
+# these are included in lists of "extras",
+# each of which installs a set of optional dependencies
+tensorflow = { version = ">=2.13.0", optional = true }
+tensorflow-hub = { version = ">=0.14.0", optional = true }
+
+[tool.poetry.extras]
+# to include these when using pip: `pip install opensoundscape[tensorflow]`
+tensorflow = ["tensorflow", "tensorflow-hub"]
 
 [tool.black]
 line-length = 88

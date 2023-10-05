@@ -10,28 +10,6 @@ import tqdm
 from opensoundscape.ml.sampling import ClassAwareSampler
 
 
-class BaseModule(torch.nn.Module):
-    """
-    Base class for a pytorch model pipeline class.
-
-    All child classes should define load, save, etc
-    """
-
-    name = None
-
-    def setup_net(self):
-        pass
-
-    def setup_critera(self):
-        pass
-
-    def save(self, out_path):
-        pass
-
-    def update_best(self):
-        pass
-
-
 def cas_dataloader(dataset, batch_size, num_workers):
     """
     Return a dataloader that uses the class aware sampler

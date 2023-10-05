@@ -2,6 +2,9 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import torch
+import os
+import warnings
 
 
 class CAM:
@@ -31,7 +34,7 @@ class CAM:
 
         Note: activation_maps and gbp_maps will be stored as Series indexed by classes
         """
-        self.base_image = base_image
+        self.base_image = base_image.detach().cpu()
         self.activation_maps = activation_maps
         self.gbp_maps = gbp_maps
 
@@ -79,7 +82,7 @@ class CAM:
         if show_base:  # plot image of sample
             # remove the first (batch) dimension
             # move the first dimension (Nchannels) to last dimension for imshow
-            base_image = -self.base_image.permute(1, 2, 0).detach()
+            base_image = -self.base_image.permute(1, 2, 0)
             # if not 3 channels, average over channels and copy to 3 RGB channels
             if base_image.shape[2] != 3:
                 base_image = base_image.mean(2).unsqueeze(2).tile([1, 1, 3])
@@ -131,7 +134,11 @@ class CAM:
             fig.savefig(save_path)
 
         if plt_show:
-            plt.show()
+            # if plt.show() is desired, check that MPLBACKEND is available
+            if os.environ.get("MPLBACKEND") is None:
+                warnings.warn("MPLBACKEND is 'None' in os.environ. Skipping plot.")
+            else:
+                plt.show()
 
         return fig, ax
 

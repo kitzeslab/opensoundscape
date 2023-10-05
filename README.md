@@ -54,7 +54,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 #### Will OpenSoundscape work on my machine?
 
 * OpenSoundscape can be installed on Windows, Mac, and Linux machines.
-* It has been tested on Python 3.8, 3.9, 3.10, and 3.11.
+* It has been tested on Python 3.9, 3.10, and 3.11.
 * For Apple Silicon (M1 chip) users, Python >=3.9 is recommended and may be required to avoid dependency issues.
 * Most computer cluster users should follow the Linux installation instructions
 
