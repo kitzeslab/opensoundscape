@@ -32,7 +32,7 @@ class CAM:
 
         Note: activation_maps and gbp_maps will be stored as Series indexed by classes
         """
-        self.base_image = base_image.detach().cpu().numpy()
+        self.base_image = base_image.detach().cpu()
         self.activation_maps = activation_maps
         self.gbp_maps = gbp_maps
 
