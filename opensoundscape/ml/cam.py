@@ -5,6 +5,9 @@ import numpy as np
 import torch
 import os
 import warnings
+from matplotlib.patches import Patch
+
+from opensoundscape.utils import generate_opacity_colormaps
 
 
 class CAM:
@@ -13,10 +16,6 @@ class CAM:
     Stores activation maps as .activation_maps, and guided backprop as .gbp_cams
 
     each is a Series indexed by class
-
-    #TODO: implement plotting multiple classes, each a different color
-    basically, create greyscale images, then convert each one to a different color from color cycler
-    getting transparency right might be tricky though
     """
 
     def __init__(self, base_image, activation_maps=None, gbp_maps=None):
@@ -40,37 +39,39 @@ class CAM:
 
     def plot(
         self,
-        target_class=None,
+        class_subset=None,
         mode="activation",
         show_base=True,
         alpha=0.5,
-        cmap="inferno",
+        color_cycle=("#067bc2", "#43a43d", "#ecc30b", "#f37748", "#d56062"),
         interpolation="bilinear",
         figsize=None,
         plt_show=True,
         save_path=None,
     ):
-        """Plot the activation map, guided back propogation, or their product
+        """Plot per-class activation maps, guided back propogations, or their products
+
         Args:
-            target_class: which class's maps to visualize
-                - must be in the index of self.gbp_map / self.activation_maps
-                - note that the class `None` is created when classes are not specified
-                during CNN.generate_cams() [default: None]
+            class_subset: iterable of classes to visualize with activation maps
+                - default `None` plots all classes
+                - each item must be in the index of self.gbp_map / self.activation_maps
+                - note that a class `None` is created by cnn.generate_cams() when classes are not
+                specified during CNN.generate_cams()
             mode: str selecting which maps to visualize, one of:
                 'activation' [default]: overlay activation map
                 'backprop': overlay guided back propogation result
                 'backprop_and_activation': overlay product of both maps
-                None: do not overlay anything
+                None: do not overlay anything on the original sample
             show_base: if False, does not plot the image of the original sample
                 [default: True]
             alpha: opacity of the activation map overlap [default: 0.5]
-            cmap: matplotlib colormap for the activation map [default: 'jet']
+            color_cycle: iterable of colors activation maps
+                - cycles through the list using one color per class
             interpolation: the interpolation method for the activation map
                 [default: bilinear] see matplotlib.pyplot.imshow()
             figsize: the figure size for the plot [default: None]
             plt_show: if True, runs plt.show() [default: True]
             save_path: path to save image to [default: None does not save file]
-
         Returns:
             (fig, ax) of matplotlib figure
 
@@ -88,46 +89,78 @@ class CAM:
                 base_image = base_image.mean(2).unsqueeze(2).tile([1, 1, 3])
             ax.imshow(base_image, alpha=1)
 
-        # choose what maps to show
-        if mode == "activation":
-            assert self.activation_maps is not None
-            assert target_class in self.activation_maps, (
-                f"passed target class {target_class}, which is"
-                "not a class indexed in self.activation_maps!"
-            )
-            overlay = self.activation_maps[target_class]
-        elif mode == "backprop":
-            assert self.gbp_maps is not None
-            assert target_class in self.gbp_maps, (
-                f"passed target class {target_class}, which is"
-                "not a class indexed in self.gbp_maps!"
-            )
-            overlay = self.gbp_maps[target_class]
-        elif mode == "backprop_and_activation":
-            assert self.activation_maps is not None
-            assert self.gbp_maps is not None
-            assert (
-                target_class in self.activation_maps and target_class in self.gbp_maps
-            ), (
-                f"passed target class {target_class}, which is"
-                "not a class indexed in self.gbp_maps!"
-            )
-            # we combine them using the product of the two maps
-            am = self.activation_maps[target_class][..., np.newaxis]  # add channel axis
-            overlay = am * self.gbp_maps[target_class]
-        elif mode is None:
-            pass
-        else:
-            raise ValueError(
-                f"unsupported mode {mode}: choose "
-                "'activation', 'backprop', or 'backprop_and_activation'."
+        # Default is to show all classes contained in the cam:
+        if class_subset is None:
+            class_subset = (
+                self.activation_maps.keys()
+                if mode == "activation"
+                else self.gbp_maps.keys()
             )
 
+        # generate matplotlib color maps using specified color cycle
+        colormaps = generate_opacity_colormaps(color_cycle)
+
+        for i, target_class in enumerate(class_subset):
+            # make the overlay mask for this class
+            if mode == "activation":
+                assert self.activation_maps is not None
+                assert target_class in self.activation_maps, (
+                    f"passed target class {target_class}, which is"
+                    "not a class indexed in self.activation_maps!"
+                )
+                overlay = self.activation_maps[target_class]
+            elif mode == "backprop":
+                assert self.gbp_maps is not None
+                assert target_class in self.gbp_maps, (
+                    f"passed target class {target_class}, which is"
+                    "not a class indexed in self.gbp_maps!"
+                )
+                overlay = self.gbp_maps[target_class]
+            elif mode == "backprop_and_activation":
+                assert self.activation_maps is not None
+                assert self.gbp_maps is not None
+                assert (
+                    target_class in self.activation_maps
+                    and target_class in self.gbp_maps
+                ), (
+                    f"passed target class {target_class}, which is"
+                    "not a class indexed in self.gbp_maps!"
+                )
+                # we combine them using the product of the two maps
+                am = self.activation_maps[target_class][
+                    ..., np.newaxis
+                ]  # add channel axis
+                overlay = am * self.gbp_maps[target_class]
+            elif mode is None:
+                pass
+            else:
+                raise ValueError(
+                    f"unsupported mode {mode}: choose "
+                    "'activation', 'backprop', or 'backprop_and_activation'."
+                )
+
+            # plot the mask onto the image
+            if mode is not None:
+                colormap = colormaps[i % len(colormaps)]  # cycle through color list
+                ax.imshow(
+                    overlay, cmap=colormap, alpha=alpha, interpolation=interpolation
+                )
+
         if mode is not None:
-            ax.imshow(overlay, cmap=cmap, alpha=alpha, interpolation=interpolation)
-            ax.set_title(f"{mode} for class {target_class}")
+            ax.set_title(f"{mode} for classes {class_subset}")
         else:
             ax.set_title(f"sample without cam")
+
+        # Create a legend for the layers
+        colors = [color_cycle[i % len(color_cycle)] for i in range(len(class_subset))]
+        legend_patches = [
+            Patch(color=color, label=layer)
+            for color, layer in zip(colors, class_subset)
+        ]
+
+        # Show the overlay image with the legend
+        ax.legend(handles=legend_patches, loc="upper right")
+
         ax.axis("off")
 
         if save_path is not None:

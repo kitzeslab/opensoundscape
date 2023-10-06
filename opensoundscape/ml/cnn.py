@@ -1227,7 +1227,8 @@ class CNN(BaseClassifier):
                 raise_errors, overlap_fraction, final_clip, other DataLoader args)
 
         Returns:
-            a list of cam class activation objects. see the cam class for more details
+            a list of AudioSample objects with .cam attribute, an instance of the CAM class (
+            visualize with `sample.cam.plot()`). See the CAM class for more details
 
         See pytorch_grad_cam documentation for references to the source of each method.
         """
@@ -1328,10 +1329,7 @@ class CNN(BaseClassifier):
                     batch_maps = pd.Series({None: cam(batch_tensors)})
                 else:  # one activation map per class
                     batch_maps = pd.Series(
-                        {
-                            c: cam(batch_tensors, targets=target(c).to(self.device))
-                            for c in classes
-                        }
+                        {c: cam(batch_tensors, targets=target(c)) for c in classes}
                     )
 
             # update the AudioSample objects to include the activation maps

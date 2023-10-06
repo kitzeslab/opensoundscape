@@ -31,6 +31,8 @@ def test_cam_init(cam):
 
 
 def test_cam_plot(cam):
-    cam.plot(target_class=0)
-    cam.plot(target_class=0, mode="backprop")
-    cam.plot(target_class=0, mode="backprop_and_activation")
+    cam.plot()
+    cam.plot(class_subset=[0])
+    cam.plot(class_subset=(0, 1))
+    cam.plot(class_subset=(0,), mode="backprop")
+    cam.plot(class_subset=(0,), mode="backprop_and_activation")
