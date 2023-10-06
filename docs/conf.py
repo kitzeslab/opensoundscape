@@ -110,6 +110,7 @@ autodoc_mock_imports = [
     "pytz",
     "pillow",
     "PIL",
+    "tqdm",
 ]
 
 master_doc = "index"
