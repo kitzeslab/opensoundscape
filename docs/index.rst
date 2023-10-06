@@ -91,9 +91,9 @@ Suggested citation:
    tutorials/spectrogram
    tutorials/annotations
    tutorials/preprocess_audio_dataset
-   tutorials/train_a_cnn
+   tutorials/train_cnn
    tutorials/customize_cnn_training
-   tutorials/predict_with_a_cnn
+   tutorials/predict_with_cnn
    tutorials/acoustic_localization
    tutorials/signal_processing
 
