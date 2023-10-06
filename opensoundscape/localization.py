@@ -500,7 +500,10 @@ class SynchronizedRecorderArray:
         from joblib import Parallel, delayed
 
         events = Parallel(n_jobs=num_workers)(
-            delayed(e.estimate_location)(return_self=True) for e in candidate_events
+            delayed(e.estimate_location)(
+                localization_algorithm=localization_algorithm, return_self=True
+            )
+            for e in candidate_events
         )
 
         # list of events that were not successfully localized
