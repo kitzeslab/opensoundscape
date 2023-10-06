@@ -463,7 +463,7 @@ class SynchronizedRecorderArray:
             )
         # check that bandpass_ranges have been set for all classes
         if bandpass_ranges is not None:
-            if set(bandpass_ranges.keys()) != set(detections.columns):
+            if len(set(detections.columns) - set(bandpass_ranges.keys())) > 0:
                 warnings.warn(
                     "WARNING: Not all classes have corresponding bandpass ranges. "
                     "Default behavior will be to not bandpass before cross-correlation for "
