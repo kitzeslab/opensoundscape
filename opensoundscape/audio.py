@@ -1211,12 +1211,11 @@ def estimate_delay(
     skip_ref_bandpass=False,
 ):
     """
-    Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal. The audio objects must be time-synchronized
+    Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal. The audio objects must be time-synchronized.
+    For example, if audio is delayed by 1 second compared to reference_audio, then estimate_delay(audio, reference_audio, max_delay) will return 1.0.
 
-    Optionally bandpass audio signals to a frequency range
-
-    For example, if audio is delayed by 1 second compared to reference_audio,
-    result is 1.0.
+    NOTE: Only the central portion of the signal (between start + max_delay and end - max_delay) is used for cross-correlation. This is to avoid edge effects.
+    This means estimate_delay(primary_audio, reference_audio, max_delay) is not necessarily == estimate_delay(reference_audio, primary_audio, max_delay
 
     Args:
         primary_audio: audio object containing the signal of interest

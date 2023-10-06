@@ -570,7 +570,7 @@ def tdoa(
     of two signals. The two signals are discrete-time series with the same sample rate.
 
     Only the central portion of the signal, from max_delay after the start and max_delay before the end, is used for the calculation.
-    All of the reference signal is used.
+    All of the reference signal is used. This means that tdoa(sig, ref_sig, max_delay) will not necessarily be the same as -tdoa(ref_sig, sig, max_delay
 
     For example, if the signal arrives 2.5 seconds _after_ the reference signal, returns 2.5;
     if it arrives 0.5 seconds _before_ the reference signal, returns -0.5.
