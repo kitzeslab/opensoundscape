@@ -264,6 +264,7 @@ class BaseClassifier(torch.nn.Module):
                     classes_to_extract=[c],
                     drop_labels=True,
                     gradcam_model=self if self.wandb_logging["gradcam"] else None,
+                    raise_exceptions=True,
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
 
@@ -440,18 +441,6 @@ class CNN(BaseClassifier):
         self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
-
-        # number of samples to preprocess and log to wandb during train/predict
-        self.wandb_logging = dict(
-            n_preview_samples=8,  # before train/predict, log n random samples
-            top_samples_classes=None,  # specify list of classes to see top samples from
-            n_top_samples=3,  # after prediction, log n top scoring samples per class
-            # logs histograms of params & grads every n batches;
-            watch_freq=10,  # use  None for no logging of params & grads
-            # log the model graph to wandb - seems to cause issues when attempting to
-            # continue training the model, so True is not recommended
-            log_graph=False,
-        )
         self.scheduler = None
 
         # to use a custom DataLoader or Sampler, change these attributes

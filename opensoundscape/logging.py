@@ -43,9 +43,7 @@ def wandb_table(
         table_columns += ["clip start time"]
         table_columns += ["clip duration"]
     for c in classes_to_extract:
-        table_columns += c
-        if gradcam_model is not None:
-            table_columns += f"{c} GradCAM"
+        table_columns.append(c)
 
     sample_table = pd.DataFrame(columns=table_columns)
     for i in range(len(dataset)):
@@ -86,8 +84,8 @@ def wandb_table(
     # add GradCAMs to table
     if gradcam_model is not None:
         for c in classes_to_extract:
-            samples = dataset.dataset.df
-            samples = gradcam_model.get_cams(samples, c)
+            samples = dataset.label_df
+            samples = gradcam_model.generate_cams(samples, classes=[c])
             cam_images = []
             for s in samples:
                 array = s.cam.plot(class_subset=[c], return_numpy=True, plt_show=False)
