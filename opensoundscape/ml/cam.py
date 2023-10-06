@@ -48,6 +48,7 @@ class CAM:
         figsize=None,
         plt_show=True,
         save_path=None,
+        return_numpy=False,
     ):
         """Plot per-class activation maps, guided back propogations, or their products
 
@@ -73,7 +74,7 @@ class CAM:
             plt_show: if True, runs plt.show() [default: True]
             save_path: path to save image to [default: None does not save file]
         Returns:
-            (fig, ax) of matplotlib figure
+            (fig, ax) of matplotlib figure, or np.array if return_numpy=True
 
         Note: if base_image does not have 3 channels, channels are averaged then copied
         across 3 RGB channels to create a greyscale image
@@ -87,7 +88,10 @@ class CAM:
             # if not 3 channels, average over channels and copy to 3 RGB channels
             if base_image.shape[2] != 3:
                 base_image = base_image.mean(2).unsqueeze(2).tile([1, 1, 3])
-            ax.imshow(base_image, alpha=1)
+            # ax.imshow(base_image, alpha=1)
+            overlayed_image = np.array(base_image * 255, dtype=np.uint8)
+        else:
+            overlayed_image = None
 
         # Default is to show all classes contained in the cam:
         if class_subset is None:
@@ -139,12 +143,20 @@ class CAM:
                     "'activation', 'backprop', or 'backprop_and_activation'."
                 )
 
-            # plot the mask onto the image
             if mode is not None:
                 colormap = colormaps[i % len(colormaps)]  # cycle through color list
-                ax.imshow(
-                    overlay, cmap=colormap, alpha=alpha, interpolation=interpolation
-                )
+                # Converts to RGB and scale to [0, 255]
+                heatmap_rgb = colormap(overlay)[:, :, :3] * 255
+
+                # copy overlay to 3 channels in 3rd dimension
+                mask = overlay * alpha
+                mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
+
+                # use overlay as mask to combine heatmap with image
+                overlayed_image = heatmap_rgb * mask + overlayed_image * (1 - mask)
+
+        overlayed_image = np.array(overlayed_image, dtype=np.uint8)
+        ax.imshow(overlayed_image, interpolation=interpolation)
 
         if mode is not None:
             ax.set_title(f"{mode} for classes {class_subset}")
@@ -173,6 +185,8 @@ class CAM:
             else:
                 plt.show()
 
+        if return_numpy:
+            return overlayed_image
         return fig, ax
 
     def __repr__(self):

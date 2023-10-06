@@ -70,6 +70,7 @@ class BaseClassifier(torch.nn.Module):
             n_top_samples=3,  # after prediction, log n top scoring samples per class
             # logs histograms of params & grads every n batches;
             watch_freq=10,  # use  None for no logging of params & grads
+            gradcam=True,  # if True, logs GradCAMs for top scoring samples during predict()
             # log the model graph to wandb - seems to cause issues when attempting to
             # continue training the model, so True is not recommended
             log_graph=False,
@@ -259,7 +260,10 @@ class BaseClassifier(torch.nn.Module):
                     bypass_augmentations=True,
                 )
                 table = wandb_table(
-                    dataset=dataset, classes_to_extract=[c], drop_labels=True
+                    dataset=dataset,
+                    classes_to_extract=[c],
+                    drop_labels=True,
+                    gradcam_model=self if self.wandb_logging["gradcam"] else None,
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
 
@@ -1272,10 +1276,12 @@ class CNN(BaseClassifier):
             "gradcamelementwise": pytorch_grad_cam.GradCAMElementWise,
         }
         if isinstance(method, str) and method in methods_dict:
+            # get cam clsas based on string name and create instance
             cam = methods_dict[method](model=self.network, target_layers=target_layers)
         elif method is None:
             cam = None
         elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
+            # generate instance of cam from class
             cam = method(model=self.network, target_layers=target_layers)
         else:
             raise ValueError(
@@ -1316,6 +1322,9 @@ class CNN(BaseClassifier):
             batch_tensors = batch_data["samples"].to(self.device)
             batch_tensors.requires_grad = False
 
+            # generate logits with forward pass
+            logits = self.network(batch_tensors)
+
             # generate class activation maps using cam object
             def target(class_name):
                 """helper for pytorch_grad_cam class syntax"""
@@ -1333,8 +1342,14 @@ class CNN(BaseClassifier):
                     )
 
             # update the AudioSample objects to include the activation maps
-            # and create guided backprop maps, one at a time
+            # and create guided backprop maps, one sample at a time
             for i, sample in enumerate(samples):
+                # add the scores (logits) from the network to AudioSample as dictionary
+                sample.scores = dict(
+                    zip(self.classes, logits[i].detach().cpu().numpy())
+                )
+
+                # add the cams as a dictionary keyed by class
                 if cam is None:
                     activation_maps = None
                 else:

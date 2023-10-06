@@ -12,6 +12,7 @@ def wandb_table(
     random_state=None,
     raise_exceptions=False,
     drop_labels=False,
+    gradcam_model=None,
 ):
     """Generate a wandb Table visualizing n random samples from a sample_df
 
@@ -23,6 +24,7 @@ def wandb_table(
         classes_to_extract: tuple of classes - will create columns containing the scores/labels
         random_state: default None; if integer provided, used for reproducible random sample
         drop_labels: if True, does not include 'label' column in Table
+        gradcam_model: if not None, will generate GradCAMs for each sample using gradcam_model.get_cams()
 
     Returns: a W&B Table of preprocessed samples with labels and playable audio
 
@@ -42,6 +44,8 @@ def wandb_table(
         table_columns += ["clip duration"]
     for c in classes_to_extract:
         table_columns += c
+        if gradcam_model is not None:
+            table_columns += f"{c} GradCAM"
 
     sample_table = pd.DataFrame(columns=table_columns)
     for i in range(len(dataset)):
@@ -78,6 +82,17 @@ def wandb_table(
         except:  # by default, ignore exceptions
             if raise_exceptions:
                 raise
+
+    # add GradCAMs to table
+    if gradcam_model is not None:
+        for c in classes_to_extract:
+            samples = dataset.dataset.df
+            samples = gradcam_model.get_cams(samples, c)
+            cam_images = []
+            for s in samples:
+                array = s.cam.plot(class_subset=[c], return_numpy=True, plt_show=False)
+                cam_images.append(wandb.Image(array))
+            sample_table[f"{c} GradCAM"] = cam_images
 
     if drop_labels:
         sample_table = sample_table.drop(columns=["labels"])
