@@ -96,9 +96,11 @@ class BasePreprocessor:
         = True can be skipped by passing bypass_augmentations=True.
 
         Args:
-            sample: either:
-                - pd.Series with file path as index (.name) and labels
-                - OR a file path as pathlib.Path or string
+            sample: any of
+                - (path, start time) tuple
+                - pd.Series with (file, start_time, end_time) as .name
+                (eg index of a pd.DataFrame from which row was taken)
+                - AudioSample object
             break_on_type: if not None, the pipeline will be stopped when it
                 reaches an Action of this class. The matching action is not
                 performed.
