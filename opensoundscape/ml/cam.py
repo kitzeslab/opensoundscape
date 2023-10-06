@@ -37,20 +37,17 @@ class CAM:
         self.activation_maps = activation_maps
         self.gbp_maps = gbp_maps
 
-    def plot(
+    def create_rgb_heatmaps(
         self,
         class_subset=None,
         mode="activation",
         show_base=True,
         alpha=0.5,
         color_cycle=("#067bc2", "#43a43d", "#ecc30b", "#f37748", "#d56062"),
-        interpolation="bilinear",
-        figsize=None,
-        plt_show=True,
-        save_path=None,
-        return_numpy=False,
     ):
-        """Plot per-class activation maps, guided back propogations, or their products
+        """create rgb numpy array of heatmaps overlaid on the sample
+
+        Can choose a subset of classes and activation/backprop modes
 
         Args:
             class_subset: iterable of classes to visualize with activation maps
@@ -68,19 +65,10 @@ class CAM:
             alpha: opacity of the activation map overlap [default: 0.5]
             color_cycle: iterable of colors activation maps
                 - cycles through the list using one color per class
-            interpolation: the interpolation method for the activation map
-                [default: bilinear] see matplotlib.pyplot.imshow()
-            figsize: the figure size for the plot [default: None]
-            plt_show: if True, runs plt.show() [default: True]
-            save_path: path to save image to [default: None does not save file]
+
         Returns:
-            (fig, ax) of matplotlib figure, or np.array if return_numpy=True
-
-        Note: if base_image does not have 3 channels, channels are averaged then copied
-        across 3 RGB channels to create a greyscale image
+            numpy array of shape [w, h, 3] representing the image with CAM heatmaps
         """
-        fig, ax = plt.subplots(figsize=figsize)
-
         if show_base:  # plot image of sample
             # remove the first (batch) dimension
             # move the first dimension (Nchannels) to last dimension for imshow
@@ -156,7 +144,57 @@ class CAM:
                 overlayed_image = heatmap_rgb * mask + overlayed_image * (1 - mask)
 
         overlayed_image = np.array(overlayed_image, dtype=np.uint8)
-        ax.imshow(overlayed_image, interpolation=interpolation)
+
+        return overlayed_image
+
+    def plot(
+        self,
+        class_subset=None,
+        mode="activation",
+        show_base=True,
+        alpha=0.5,
+        color_cycle=("#067bc2", "#43a43d", "#ecc30b", "#f37748", "#d56062"),
+        figsize=None,
+        plt_show=True,
+        save_path=None,
+    ):
+        """Plot per-class activation maps, guided back propogations, or their products
+
+        Args:
+            class_subset, mode, show_base, alpha, color_cycle: see create_rgb_heatmaps
+            figsize: the figure size for the plot [default: None]
+            plt_show: if True, runs plt.show() [default: True]
+                - ignored if return_numpy=True
+            save_path: path to save image to [default: None does not save file]
+        Returns:
+            (fig, ax) of matplotlib figure, or np.array if return_numpy=True
+
+        Note: if base_image does not have 3 channels, channels are averaged then copied
+        across 3 RGB channels to create a greyscale image
+
+        Note 2: If return_numpy is true, fig and ax are never created, it simply creates
+            a numpy array representing the image with the CAMs overlaid and returns it
+        """
+        # Default is to show all classes contained in the cam:
+        if class_subset is None:
+            class_subset = (
+                self.activation_maps.keys()
+                if mode == "activation"
+                else self.gbp_maps.keys()
+            )
+
+        # create numpy array of the sample with the CAM heatmaps overlaid
+        overlayed_image = self.create_rgb_heatmaps(
+            class_subset=class_subset,
+            mode=mode,
+            show_base=show_base,
+            alpha=alpha,
+            color_cycle=color_cycle,
+        )
+
+        # create and plot a figure
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.imshow(overlayed_image, interpolation="bilinear")
 
         if mode is not None:
             ax.set_title(f"{mode} for classes {class_subset}")
@@ -185,8 +223,6 @@ class CAM:
             else:
                 plt.show()
 
-        if return_numpy:
-            return overlayed_image
         return fig, ax
 
     def __repr__(self):

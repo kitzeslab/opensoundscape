@@ -264,7 +264,7 @@ class BaseClassifier(torch.nn.Module):
                     classes_to_extract=[c],
                     drop_labels=True,
                     gradcam_model=self if self.wandb_logging["gradcam"] else None,
-                    raise_exceptions=True,
+                    raise_exceptions=True,  # TODO back to false when done debugging
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
 

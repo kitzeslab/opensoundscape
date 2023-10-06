@@ -88,7 +88,7 @@ def wandb_table(
             samples = gradcam_model.generate_cams(samples, classes=[c])
             cam_images = []
             for s in samples:
-                array = s.cam.plot(class_subset=[c], return_numpy=True, plt_show=False)
+                array = s.cam.create_rgb_heatmaps(class_subset=[c])
                 cam_images.append(wandb.Image(array))
             sample_table[f"{c} GradCAM"] = cam_images
 
