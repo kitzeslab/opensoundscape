@@ -14,7 +14,7 @@ def test_get_args():
         "tensor": inspect._empty,
         "channel": None,
         "transform_from_zero_centered": True,
-        "invert": True,
+        "invert": False,
     }
     assert args == expected_args
 
