@@ -1368,6 +1368,13 @@ class CNN(BaseClassifier):
                                 for c in classes
                             }
                         )
+
+                    # average the guided backprop map over the channel dimension
+                    def avg_over_channels(img):
+                        return img.mean(axis=-1)
+
+                    gbp_maps = gbp_maps.apply(avg_over_channels)
+
                 else:  # no guided backprop requested
                     gbp_maps = None
 

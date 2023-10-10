@@ -28,7 +28,7 @@ class CAM:
             base_image: 3d tensor of shape [channel, w, h] containing original sample
             activation_maps:  pd.Series of [w,h] tensors representing spatial activation
                 of some layer of a network, indexed by class name [default: None]
-            gbp_maps: pd.Series of [channel, w, h] guided back propagation maps;
+            gbp_maps: pd.Series of [w, h] guided back propagation maps;
                 indexed by class name
 
         Note: activation_maps and gbp_maps will be stored as Series indexed by classes
@@ -44,6 +44,7 @@ class CAM:
         show_base=True,
         alpha=0.5,
         color_cycle=("#067bc2", "#43a43d", "#ecc30b", "#f37748", "#d56062"),
+        gbp_normalization_q=99,
     ):
         """create rgb numpy array of heatmaps overlaid on the sample
 
@@ -65,6 +66,10 @@ class CAM:
             alpha: opacity of the activation map overlap [default: 0.5]
             color_cycle: iterable of colors activation maps
                 - cycles through the list using one color per class
+            gbp_normalization_q: guided backprop is normalized such that the q'th
+                percentile of the map is 1. [default: 99]. This helps avoid gbp
+                maps that are too dark to see. Lower values make brighter and noiser
+                maps, higher values make darker and smoother maps.
 
         Returns:
             numpy array of shape [w, h, 3] representing the image with CAM heatmaps
@@ -89,6 +94,11 @@ class CAM:
                 else self.gbp_maps.keys()
             )
 
+        def normalize_q(x):
+            """normalize x such that q'th percentile value is 1.0"""
+            devisor = np.percentile(x, gbp_normalization_q)
+            return x / devisor
+
         # generate matplotlib color maps using specified color cycle
         colormaps = generate_opacity_colormaps(color_cycle)
 
@@ -107,7 +117,7 @@ class CAM:
                     f"passed target class {target_class}, which is"
                     "not a class indexed in self.gbp_maps!"
                 )
-                overlay = self.gbp_maps[target_class]
+                overlay = normalize_q(self.gbp_maps[target_class])
             elif mode == "backprop_and_activation":
                 assert self.activation_maps is not None
                 assert self.gbp_maps is not None
@@ -119,10 +129,9 @@ class CAM:
                     "not a class indexed in self.gbp_maps!"
                 )
                 # we combine them using the product of the two maps
-                am = self.activation_maps[target_class][
-                    ..., np.newaxis
-                ]  # add channel axis
-                overlay = am * self.gbp_maps[target_class]
+                am = self.activation_maps[target_class]
+                overlay = am * (normalize_q(self.gbp_maps[target_class]))
+
             elif mode is None:
                 pass
             else:
@@ -136,12 +145,23 @@ class CAM:
                 # Converts to RGB and scale to [0, 255]
                 heatmap_rgb = colormap(overlay)[:, :, :3] * 255
 
-                # copy overlay to 3 channels in 3rd dimension
+                # scale by gain
+                heatmap_rgb = heatmap_rgb
+
+                # clip to [0, 255]
+                heatmap_rgb = np.clip(heatmap_rgb, 0, 255)
+
+                # strength vs original image controlled by alpha parameter
                 mask = overlay * alpha
+
+                # copy overlay to 3 channels in 3rd dimension
                 mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
 
                 # use overlay as mask to combine heatmap with image
-                overlayed_image = heatmap_rgb * mask + overlayed_image * (1 - mask)
+                if overlayed_image is None:  # if no base image, just use heatmap
+                    overlayed_image = heatmap_rgb * mask
+                else:
+                    overlayed_image = heatmap_rgb * mask + overlayed_image * (1 - mask)
 
         overlayed_image = np.array(overlayed_image, dtype=np.uint8)
 
@@ -157,11 +177,12 @@ class CAM:
         figsize=None,
         plt_show=True,
         save_path=None,
+        gbp_normalization_q=99,
     ):
         """Plot per-class activation maps, guided back propogations, or their products
 
         Args:
-            class_subset, mode, show_base, alpha, color_cycle: see create_rgb_heatmaps
+            class_subset, mode, show_base, alpha, color_cycle, gbp_normalization_q: see create_rgb_heatmaps
             figsize: the figure size for the plot [default: None]
             plt_show: if True, runs plt.show() [default: True]
                 - ignored if return_numpy=True
@@ -190,6 +211,7 @@ class CAM:
             show_base=show_base,
             alpha=alpha,
             color_cycle=color_cycle,
+            gbp_normalization_q=gbp_normalization_q,
         )
 
         # create and plot a figure
