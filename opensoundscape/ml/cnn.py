@@ -70,6 +70,7 @@ class BaseClassifier(torch.nn.Module):
             n_top_samples=3,  # after prediction, log n top scoring samples per class
             # logs histograms of params & grads every n batches;
             watch_freq=10,  # use  None for no logging of params & grads
+            gradcam=True,  # if True, logs GradCAMs for top scoring samples during predict()
             # log the model graph to wandb - seems to cause issues when attempting to
             # continue training the model, so True is not recommended
             log_graph=False,
@@ -259,7 +260,11 @@ class BaseClassifier(torch.nn.Module):
                     bypass_augmentations=True,
                 )
                 table = wandb_table(
-                    dataset=dataset, classes_to_extract=[c], drop_labels=True
+                    dataset=dataset,
+                    classes_to_extract=[c],
+                    drop_labels=True,
+                    gradcam_model=self if self.wandb_logging["gradcam"] else None,
+                    raise_exceptions=True,  # TODO back to false when done debugging
                 )
                 wandb_session.log({f"Samples / Top scoring [{c}]": table})
 
@@ -436,18 +441,6 @@ class CNN(BaseClassifier):
         self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         self.opensoundscape_version = opensoundscape.__version__
-
-        # number of samples to preprocess and log to wandb during train/predict
-        self.wandb_logging = dict(
-            n_preview_samples=8,  # before train/predict, log n random samples
-            top_samples_classes=None,  # specify list of classes to see top samples from
-            n_top_samples=3,  # after prediction, log n top scoring samples per class
-            # logs histograms of params & grads every n batches;
-            watch_freq=10,  # use  None for no logging of params & grads
-            # log the model graph to wandb - seems to cause issues when attempting to
-            # continue training the model, so True is not recommended
-            log_graph=False,
-        )
         self.scheduler = None
 
         # to use a custom DataLoader or Sampler, change these attributes
@@ -1227,7 +1220,8 @@ class CNN(BaseClassifier):
                 raise_errors, overlap_fraction, final_clip, other DataLoader args)
 
         Returns:
-            a list of cam class activation objects. see the cam class for more details
+            a list of AudioSample objects with .cam attribute, an instance of the CAM class (
+            visualize with `sample.cam.plot()`). See the CAM class for more details
 
         See pytorch_grad_cam documentation for references to the source of each method.
         """
@@ -1271,10 +1265,12 @@ class CNN(BaseClassifier):
             "gradcamelementwise": pytorch_grad_cam.GradCAMElementWise,
         }
         if isinstance(method, str) and method in methods_dict:
+            # get cam clsas based on string name and create instance
             cam = methods_dict[method](model=self.network, target_layers=target_layers)
         elif method is None:
             cam = None
         elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
+            # generate instance of cam from class
             cam = method(model=self.network, target_layers=target_layers)
         else:
             raise ValueError(
@@ -1315,6 +1311,9 @@ class CNN(BaseClassifier):
             batch_tensors = batch_data["samples"].to(self.device)
             batch_tensors.requires_grad = False
 
+            # generate logits with forward pass
+            logits = self.network(batch_tensors)
+
             # generate class activation maps using cam object
             def target(class_name):
                 """helper for pytorch_grad_cam class syntax"""
@@ -1328,15 +1327,18 @@ class CNN(BaseClassifier):
                     batch_maps = pd.Series({None: cam(batch_tensors)})
                 else:  # one activation map per class
                     batch_maps = pd.Series(
-                        {
-                            c: cam(batch_tensors, targets=target(c).to(self.device))
-                            for c in classes
-                        }
+                        {c: cam(batch_tensors, targets=target(c)) for c in classes}
                     )
 
             # update the AudioSample objects to include the activation maps
-            # and create guided backprop maps, one at a time
+            # and create guided backprop maps, one sample at a time
             for i, sample in enumerate(samples):
+                # add the scores (logits) from the network to AudioSample as dictionary
+                sample.scores = dict(
+                    zip(self.classes, logits[i].detach().cpu().numpy())
+                )
+
+                # add the cams as a dictionary keyed by class
                 if cam is None:
                     activation_maps = None
                 else:
@@ -1366,6 +1368,13 @@ class CNN(BaseClassifier):
                                 for c in classes
                             }
                         )
+
+                    # average the guided backprop map over the channel dimension
+                    def avg_over_channels(img):
+                        return img.mean(axis=-1)
+
+                    gbp_maps = gbp_maps.apply(avg_over_channels)
+
                 else:  # no guided backprop requested
                     gbp_maps = None
 
