@@ -763,6 +763,8 @@ def one_hot_labels_on_time_interval(
     Returns:
         dictionary of {class:label 0/1} for all classes
     """
+    # create a copy of the dataframe to avoid modifying the original
+    df = df.copy()
 
     # calculate amount of overlap of each clip with this time window
     df["overlap"] = [
