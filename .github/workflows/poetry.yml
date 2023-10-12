@@ -57,7 +57,7 @@ jobs:
       - name: Poetry install
         run: /Users/runner/.local/bin/poetry install
       - name: MPS memory workaround
-        run: export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
+        run: export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.7
       - name: Poetry run pytest
         run: /Users/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
