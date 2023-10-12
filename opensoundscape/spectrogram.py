@@ -7,7 +7,7 @@ import os
 import scipy
 import numpy as np
 import librosa.filters
-import skimage
+import skimage.transform
 from PIL import Image
 import torch
 import matplotlib
