@@ -463,7 +463,7 @@ class SynchronizedRecorderArray:
             )
         # check that bandpass_ranges have been set for all classes
         if bandpass_ranges is not None:
-            if set(bandpass_ranges.keys()) != set(detections.columns):
+            if len(set(detections.columns) - set(bandpass_ranges.keys())) > 0:
                 warnings.warn(
                     "WARNING: Not all classes have corresponding bandpass ranges. "
                     "Default behavior will be to not bandpass before cross-correlation for "
@@ -500,7 +500,10 @@ class SynchronizedRecorderArray:
         from joblib import Parallel, delayed
 
         events = Parallel(n_jobs=num_workers)(
-            delayed(e.estimate_location)(return_self=True) for e in candidate_events
+            delayed(e.estimate_location)(
+                localization_algorithm=localization_algorithm, return_self=True
+            )
+            for e in candidate_events
         )
 
         # list of events that were not successfully localized
