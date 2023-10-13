@@ -735,7 +735,7 @@ class Audio:
             raise ValueError("Must not specify both peak_level and peak_dBFS")
 
         if peak_level is None and peak_dBFS is None:
-            peak_level = 0
+            peak_level = 1.0
         elif peak_dBFS is not None:
             if peak_dBFS > 0:
                 warnings.warn("user requested decibels Full Scale >0 !")

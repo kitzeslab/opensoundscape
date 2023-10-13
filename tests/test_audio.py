@@ -192,6 +192,22 @@ def test_normalize(veryshort_wav_audio):
     )
 
 
+def test_normalize_default(veryshort_wav_audio):
+    assert math.isclose(
+        max(abs(veryshort_wav_audio.normalize().samples)),
+        1.0,
+        abs_tol=1e-4,
+    )
+
+
+def test_normalize_dBFS(veryshort_wav_audio):
+    assert math.isclose(
+        max(abs(veryshort_wav_audio.normalize(peak_dBFS=-3).samples)),
+        0.707946,
+        abs_tol=1e-4,
+    )
+
+
 def test_apply_gain():
     a = Audio([1, -1, 0], sample_rate=10).apply_gain(dB=-20)
     assert math.isclose(a.samples.max(), 0.1, abs_tol=1e-6)
