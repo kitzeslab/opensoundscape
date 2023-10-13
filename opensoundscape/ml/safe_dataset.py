@@ -163,7 +163,7 @@ class SafeDataset:
             while attempts < len(self.dataset):
                 sample_or_exc = self._safe_get_item(idx)
                 if not isinstance(sample_or_exc, Exception):
-                    return sample
+                    return sample_or_exc
                 idx += 1
                 attempts += 1
                 idx = idx % len(self.dataset)  # loop around end to beginning
