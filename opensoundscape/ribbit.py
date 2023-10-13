@@ -29,6 +29,7 @@ def calculate_pulse_score(
     Returns:
         pulse rate score for this audio segment (float)
     """
+    # TODO: apply .limit_db_range to spectrograms to avoid breaking expected behavior
 
     # input validation
     if len(amplitude) < 1:  # what is the minimum signal length?
@@ -78,6 +79,7 @@ def ribbit(
     clip_overlap=0,
     final_clip=None,
     noise_bands=None,
+    spec_clip_range=(-100, -20),
     plot=False,
 ):
     """Run RIBBIT detector to search for periodic calls in audio
@@ -107,6 +109,11 @@ def ribbit(
             For instance: [ [min1,max1] , [min2,max2] ]
             - if `None`, no noise bands are used
             - default: None
+        spec_clip_range: tuple of (low,high) spectrogram values. The values in
+            spectrogram will be clipped to this range (`spectrogram.limit_range()`)
+            - Default of (-100,-20) matches default `decibel_limits` parameter of earlier
+            opensoundscape versions, which clipped spectrogram values to this range
+            when the spectrogram was initialized.
         plot=False: if True, plot the power spectral density for each clip
 
     Returns:
@@ -165,7 +172,12 @@ def ribbit(
             "consider using 'remainder'."
         )
 
+    # clip extreme values in the spectrogram to lie within spec_clip_range
+    min_val, max_val = spec_clip_range
+    spectrogram = spectrogram.limit_range(min_val, max_val)
+
     # Make a 1d amplitude signal from signal_band & subtract amplitude from noise bands
+    # this sums columns of the spectrogram using rows defined by signal_band and noise_bands
     amplitude = np.array(spectrogram.net_amplitude(signal_band, noise_bands))
     time = spectrogram.times
     # we calculate the sample rate of the amplitude signal using the difference
@@ -183,7 +195,6 @@ def ribbit(
 
     # analyze each clip and save scores in the clip_df
     for i, row in clip_df.iterrows():
-
         # extract the amplitude signal for this clip
         window = amplitude[(time >= row["start_time"]) & (time < row["end_time"])]
 
