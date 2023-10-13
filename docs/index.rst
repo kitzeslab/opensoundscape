@@ -22,25 +22,29 @@ Table of Contents
 
 The documentation is organized into the following sections:
 
-**Introduction**: Quick Start Guide and resources for bioacoustic analyses
+**Introduction**: 
+
    * Quick Start Guide
    * Links to resources 
    * Orientation for PyTorch users
 
 **Installation**: 
-    * Installation instructions for Windows, Mac, and Linux operating systems
-        * For cluster or cloud environments, follow the Linux operating system instructions
+
+    * Installation instructions for Windows, Mac, and Linux operating systems. For cluster or cloud environments, follow the Linux operating system instructions
     * Instructions for using OpenSoundscape with different utilities, e.g. Jupyter, Google Colab, and Poetry (for contributors)
 
 **Tutorials**: 
+
   * Step-by-step guides for how to use OpenSoundscape's common functions. 
   * These tutorials include code, examples, and downloadable data. 
   * All tutorials are written as Jupyter Notebooks that can be downloaded and run on your own computer or run on Google Colab.
 
 **Classifiers 101**:
+
     * An introduction to a philosophy for training and using classifiers, influenced by our lab's work using bioacoustic classifiers for large-scale bioacoustic monitoring of animal sounds
 
 **Codebase Documentation**:
+
     * Documentation for the entire API ("application programming interface") of OpenSoundscape: its functions (and their arguments) and classes (and their methods).
 
 
@@ -81,9 +85,9 @@ Suggested citation:
 
    installation/mac_and_linux.md
    installation/windows.md
-   installation/contributors.md
-   installation/google_colab.md
    installation/jupyter.md
+   installation/google_colab.md
+   installation/contributors.md
 
 
 .. toctree::
