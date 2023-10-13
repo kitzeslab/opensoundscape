@@ -95,6 +95,7 @@ class BoxedAnnotations:
         annotation_column_idx=8,
         annotation_column_name=None,
         keep_extra_columns=True,
+        column_mapping_dict=None,
     ):
         """load annotations from Raven .txt files
 
@@ -122,6 +123,19 @@ class BoxedAnnotations:
                 - True: keep all
                 - False: keep none
                 - or iterable of specific columns to keep
+            column_mapping_dict: dictionary mapping Raven column names to
+                desired column names in the output dataframe. The columns of the
+                laoded Raven file are renamed according to this dictionary. The resulting
+                dataframe must contain: ['start_time','end_time','low_f','high_f']
+                [default: None]
+                If None (or for any unspecified columns), will use the standard column names:
+                   {
+                        "Begin Time (s)": "start_time",
+                        "End Time (s)": "end_time",
+                        "Low Freq (Hz)": "low_f",
+                        "High Freq (Hz)": "high_f",
+                    }
+                This dictionary will be updated with any user-specified mappings.
 
         Returns:
             BoxedAnnotations object containing annotations from the Raven files
@@ -129,12 +143,23 @@ class BoxedAnnotations:
         """
         all_file_dfs = []
 
+        # mapping of Raven file columns to standard opensoundscape names
+        # key: Raven file; value: opensoundscape name
+        column_mapping_dict = {
+            "Begin Time (s)": "start_time",
+            "End Time (s)": "end_time",
+            "Low Freq (Hz)": "low_f",
+            "High Freq (Hz)": "high_f",
+        }
+        # update defaults with any user-specified mappings
+        column_mapping_dict.update(column_mapping_dict or {})
+
         if audio_files is not None:
             assert len(audio_files) == len(
                 raven_files
             ), """
-            audio_files and raven_files must have one-to-one correspondence,
-            but their lengths do not match.
+            `audio_files` and `raven_files` lists must have one-to-one correspondence,
+            but their lengths did not match.
             """
         for i, raven_file in enumerate(raven_files):
             df = pd.read_csv(raven_file, delimiter="\t")
@@ -165,14 +190,17 @@ class BoxedAnnotations:
                 df["annotation"] = np.nan
 
             # rename Raven columns to standard opensoundscape names
-            df = df.rename(
-                columns={
-                    "Begin Time (s)": "start_time",
-                    "End Time (s)": "end_time",
-                    "Low Freq (Hz)": "low_f",
-                    "High Freq (Hz)": "high_f",
-                }
-            )
+            try:
+                df = df.rename(
+                    columns=column_mapping_dict,
+                    errors="raise",
+                )
+            except KeyError as e:
+                raise KeyError(
+                    "Raven file is missing a required column. "
+                    "Raven files must have columns matching the following names: "
+                    f"{column_mapping_dict.keys()}"
+                ) from e
 
             # add column containing the raven file path
             df["raven_file"] = raven_file
