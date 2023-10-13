@@ -11,7 +11,7 @@ If you have another question about OpenSoundscape, please use the [OpenSoundscap
 * [Bioacoustics Stack Exchange](https://bioacoustics.stackexchange.com/): a question & answer board about bioacoustic research and techniques.
 * [Bioacoustics Software Database](https://rhine3.github.io/bioacoustics-software/software/): a list of free and paid software available for bioacoustic analyses
 * Our lab's [Bioacoustics Cookbook](https://github.com/kitzeslab/bioacoustics-cookbook/tree/main) contains "recipes" for various bioacoustics workflows and problems, including:
-    - machine learning
+    - machine learning and model training examples
     - classifier-guided listening
     - calculating sunrise and sunset times
     - filtering AudioMoth files by date and time

@@ -23,6 +23,9 @@ Table of Contents
 The documentation is organized into the following sections:
 
 **Introduction**: Quick Start Guide and resources for bioacoustic analyses
+   * Quick Start Guide
+   * Links to resources 
+   * Orientation for PyTorch users
 
 **Installation**: 
     * Installation instructions for Windows, Mac, and Linux operating systems
@@ -69,6 +72,7 @@ Suggested citation:
 
    intro/quick-start.md
    intro/resources.md
+   intro/pytorch_orientation.md
 
 .. toctree::
    :maxdepth: 2
@@ -109,7 +113,6 @@ Suggested citation:
    classifier_guide/train_cnn
    classifier_guide/evaluate_cnn
    classifier_guide/retrain_cnn
-
 
 .. toctree::
    :maxdepth: 1
