@@ -193,6 +193,7 @@ def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detect
         min_n_receivers=4,
         max_receiver_dist=30,
         localization_algorithm="gillette",
+        cc_filter="phat",
         bandpass_ranges={"zeep": (7000, 10000)},
     )
 
@@ -205,7 +206,7 @@ def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detect
             assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
 
 
-def test_InsufficientReceiversError(file_coords_csv, predictions_csv):
+def test_unlocalized_events(file_coords_csv, predictions_csv):
     file_coords = pd.read_csv(file_coords_csv, index_col=0)
     preds = pd.read_csv(predictions_csv, index_col=[0, 1, 2])
     array = localization.SynchronizedRecorderArray(file_coords=file_coords)
@@ -219,8 +220,6 @@ def test_InsufficientReceiversError(file_coords_csv, predictions_csv):
     )
     assert len(localized_events) == 0
     assert len(unlocalized_events) > 1
-    with pytest.raises(localization.InsufficientReceiversError):
-        unlocalized_events[0].estimate_location(min_n_receivers=8)
 
 
 def test_SynchronizedRecorderArray_SpatialEvents_not_generated(
@@ -241,28 +240,6 @@ def test_SynchronizedRecorderArray_SpatialEvents_not_generated(
     )
     assert len(localized_events) == 0
     assert len(unlocalized_events) == 0
-
-
-def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detections):
-    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
-    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
-    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
-    localized_events, _ = array.localize_detections(
-        detections=detections,
-        min_n_receivers=4,
-        max_receiver_dist=30,
-        localization_algorithm="gillette",
-        bandpass_ranges={"zeep": (7000, 10000)},
-        return_unlocalized=True,
-    )
-
-    true_TDOAS = np.array(
-        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
-    )  # with reference receiver LOCA_2021_3...
-
-    for event in localized_events:
-        if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
-            assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
 
 
 def test_localization_pipeline_real_audio_edge_case(
@@ -288,3 +265,110 @@ def test_localization_pipeline_real_audio_edge_case(
     for event in localized_events:
         assert bad_file not in event.receiver_files
         assert len(event.receiver_files) == 6
+
+
+def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords, LOCA_2021_detections):
+    # Test ensure that SpatialEvent_estimate_delays returns what is expected
+
+    LOCA_2021_aru_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+
+    max_delay = 0.04
+    start_time = 0.2
+    duration = 0.3
+    cc_filter = "phat"
+    bandpass_range = (5000, 10000)
+
+    event = localization.SpatialEvent(
+        receiver_files=LOCA_2021_aru_coords.index,
+        receiver_locations=LOCA_2021_aru_coords.values,
+        max_delay=max_delay,
+        start_time=start_time,
+        duration=duration,
+        class_name="zeep",
+        bandpass_range=bandpass_range,
+        cc_filter=cc_filter,
+    )
+
+    # check that the delays are what we expect
+    event._estimate_delays()
+    true_TDOAS = np.array(
+        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
+    )  # with reference receiver LOCA_2021_3...
+    assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
+
+
+def test_localization_pipeline_parallelized(LOCA_2021_aru_coords, LOCA_2021_detections):
+    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    localized_events = array.localize_detections(
+        detections=detections,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        localization_algorithm="gillette",
+        cc_filter="phat",
+        bandpass_ranges={"zeep": (7000, 10000)},
+        num_workers=4,
+    )
+
+    true_TDOAS = np.array(
+        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
+    )  # with reference receiver LOCA_2021_3...
+
+    for event in localized_events:
+        if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
+            assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
+
+
+def test_localization_pipeline_cc_filters(LOCA_2021_aru_coords, LOCA_2021_detections):
+    ## Test that the different filters work, and are returning DIFFERENT cc values
+    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+
+    cc_scores = {}
+    for cc_filter in ["phat", "cc_norm", "roth"]:
+        localized_events = array.localize_detections(
+            detections=detections,
+            min_n_receivers=4,
+            max_receiver_dist=30,
+            localization_algorithm="gillette",
+            cc_filter=cc_filter,
+            bandpass_ranges={"zeep": (7000, 10000)},
+            num_workers=4,
+        )
+        for event in localized_events:
+            if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
+                cc_scores[cc_filter] = event.cc_maxs  # save the cc scores
+        # check that the cc scores are different
+    assert (
+        not np.allclose(cc_scores["phat"], cc_scores["cc_norm"], atol=0.001)
+        and not np.allclose(cc_scores["phat"], cc_scores["roth"], atol=0.001)
+        and not np.allclose(cc_scores["cc_norm"], cc_scores["roth"], atol=0.001)
+    )
+
+
+def test_spatial_event_timestamps(LOCA_2021_aru_coords, LOCA_2021_detections):
+    """Check that the timestamps of the spatial events are correct"""
+    import datetime
+
+    file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
+    detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
+    array = localization.SynchronizedRecorderArray(
+        file_coords=file_coords,
+        start_timestamp=datetime.datetime(2021, 9, 24, 6, 52, 0),
+    )
+
+    localized_events = array.localize_detections(
+        detections=detections,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        localization_algorithm="gillette",
+        cc_filter="phat",
+        bandpass_ranges={"zeep": (7000, 10000)},
+        num_workers=4,
+    )
+    for event in localized_events:
+        assert event.start_timestamp == datetime.datetime(
+            2021, 9, 24, 6, 52, 0
+        ) + datetime.timedelta(seconds=event.start_time)

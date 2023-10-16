@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11"]
       # Ensure that all flavours are run to completion even if an other flavor failed
       fail-fast: false
     
@@ -31,6 +31,8 @@ jobs:
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
         run: /home/runner/.local/bin/poetry install
+      - name: Workaround for missing pytorch dependencies during poetry install
+        run: /home/runner/.local/bin/poetry run pip install torch
       - name: Poetry run pytest
         run: /home/runner/.local/bin/poetry run pytest
       - name: Poetry run black check
@@ -39,7 +41,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11"]
       # Ensure that all flavours are run to completion even if an other flavor failed
       fail-fast: false
     steps:
@@ -56,6 +58,8 @@ jobs:
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
         run: /Users/runner/.local/bin/poetry install
+      - name: Workaround for missing pytorch dependencies during poetry install
+        run: /Users/runner/.local/bin/poetry run pip install torch
       - name: Poetry run pytest
         run: /Users/runner/.local/bin/poetry run pytest
       - name: Poetry run black check

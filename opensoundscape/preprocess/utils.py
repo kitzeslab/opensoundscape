@@ -25,7 +25,7 @@ def get_reqd_args(func):
     ]
 
 
-def show_tensor(tensor, channel=None, transform_from_zero_centered=True, invert=True):
+def show_tensor(tensor, channel=None, transform_from_zero_centered=True, invert=False):
     """helper function for displaying a sample as an image
 
     Args:
@@ -68,7 +68,7 @@ def show_tensor_grid(
     columns,
     channel=None,
     transform_from_zero_centered=True,
-    invert=True,
+    invert=False,
     labels=None,
 ):
     """create image of nxn tensors

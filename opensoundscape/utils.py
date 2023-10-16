@@ -8,6 +8,7 @@ import pandas as pd
 import pytz
 import soundfile
 import librosa
+from matplotlib.colors import LinearSegmentedColormap
 
 
 class GetDurationError(ValueError):
@@ -313,3 +314,18 @@ def make_clip_df(
         return clip_df, invalid_samples
     else:
         return clip_df
+
+
+def generate_opacity_colormaps(
+    colors=["#067bc2", "#43a43d", "#ecc30b", "#f37748", "#d56062"]
+):
+    """Create a colormap for each color from transparent to opaque"""
+    colormaps = []
+
+    for color in colors:
+        cmap = LinearSegmentedColormap.from_list(
+            "custom_cmap", [(0, 0, 0, 0), color], N=256
+        )
+        colormaps.append(cmap)
+
+    return colormaps

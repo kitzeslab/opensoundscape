@@ -66,10 +66,23 @@ def test_subset_dataset(small_dataset):
 def test_audio_file_dataset(dataset_df, pre):
     """should return tensor and labels"""
     pre.bypass_augmentation = False
+    pre.height = 224
+    pre.width = 224
+    pre.channels = 3
     dataset = AudioFileDataset(dataset_df, pre)
     sample1 = dataset[0]
     assert sample1.data.numpy().shape == (3, 224, 224)
     assert dataset[0].labels.values.shape == (2,)
+
+
+def test_audio_file_dataset_no_reshape(dataset_df, pre):
+    """should return tensor and labels. Tensor is the same as the shape of the spectrogram"""
+    pre.bypass_augmentation = False
+    dataset = AudioFileDataset(dataset_df, pre)
+    sample1 = dataset[0]
+    # should be the same shape as
+    # Spectrogram.from_audio(Audio.from_file('tests/audio/silence_10s.mp3',duration=2)).bandpass(0,11025)
+    assert sample1.data.numpy().shape == (1, 129, 343)
 
 
 def test_spec_preprocessor_augment_off(dataset_df, pre):
@@ -88,7 +101,7 @@ def test_spec_preprocessor_augment_on(dataset_df, pre):
     assert not np.array_equal(sample1, sample2)
 
 
-def test_spec_preprocessor_overlay(dataset_df, overlay_df, overlay_pre):
+def test_spec_preprocessor_overlay(dataset_df, overlay_pre):
     dataset = AudioFileDataset(dataset_df, overlay_pre)
     sample1 = dataset[0].data
     dataset.preprocessor.pipeline.overlay.bypass = True
@@ -166,6 +179,35 @@ def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
     dataset.preprocessor.pipeline.overlay.set(update_labels=True)
     sample = dataset[0]
     assert np.array_equal(sample.labels.values, [1, 1])
+
+
+def test_overlay_criterion_fn(dataset_df, overlay_pre):
+    """should only return a different overlay if
+    criterion_fn returns True
+    """
+    dataset = AudioFileDataset(dataset_df, overlay_pre)
+    # dataset.preprocessor.pipeline.overlay.set(overlay_class="different")
+    dataset.preprocessor.pipeline.overlay.set(
+        criterion_fn=lambda x: x.labels.values[0] == 1
+    )
+
+    # trick it into only performing the overlay, no other augmentations
+    # by marking overlay as not an augmentation
+    dataset.bypass_augmentations = True
+    dataset.preprocessor.pipeline.overlay.is_augmentation = False
+
+    sample1 = dataset[0]  # labels are [1,0], gets overlay
+    sample2 = dataset[1]  # labels are [0,1], no overlay
+
+    # now, turn off overlay
+    dataset.preprocessor.pipeline.overlay.bypass = True
+    sample1_noaug = dataset[0]
+    sample2_noaug = dataset[1]
+
+    # this one should have been augmented, and be different from no augmentation
+    assert not np.array_equal(sample1.data, sample1_noaug.data)
+    # this one should be the same with and without augmentation
+    assert np.array_equal(sample2.data, sample2_noaug.data)
 
 
 def test_audio_splitting_dataset(dataset_df, pre):
