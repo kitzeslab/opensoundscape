@@ -568,6 +568,10 @@ class Spectrogram:
         # note the low values represent silence, so a silent img would be black
         # if plotted directly from these values.
         array = linear_scale(self.spectrogram, in_range=range, out_range=(0, 1))
+
+        # clip values to [0,1]
+        array = np.clip(array, 0, 1)
+
         # flip up-down so that frequency increases from bottom to top
         array = array[::-1, :]
 
