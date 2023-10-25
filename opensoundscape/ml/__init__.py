@@ -6,3 +6,4 @@ from . import loss
 from . import safe_dataset
 from . import sampling
 from . import utils
+from . import bioacoustics_model_zoo

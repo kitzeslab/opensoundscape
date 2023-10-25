@@ -15,7 +15,7 @@ from . import preprocess
 from . import logging
 
 # expose some modules at the top level
-from .ml import cnn
+from .ml import cnn, bioacoustics_model_zoo, cnn_architectures
 from .preprocess import preprocessors, actions
 
 # expose some classes at the top level
