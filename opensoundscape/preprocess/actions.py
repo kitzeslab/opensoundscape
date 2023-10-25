@@ -19,6 +19,7 @@ from opensoundscape.audio import Audio, mix
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 from opensoundscape.sample import AudioSample
+from opensoundscape.spectrogram import Spectrogram
 
 
 class BaseAction:
@@ -224,34 +225,26 @@ def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
     return sample
 
 
-class SpectrogramToTensor(BaseAction):
+class SpectrogramToTensor(Action):
     """Action to create Tesnsor of desired shape from Spectrogram
 
     calls .to_image on sample.data, which should be type Spectrogram
 
-    exposes `invert` argument in self.params
+    **kwargs are passed to Spectrogram.to_image()
+
     """
 
-    def __init__(
-        self,
-        colormap=None,
-        invert=False,
-    ):
-        super(SpectrogramToTensor, self).__init__()
-        self.params["colormap"] = colormap
-        self.params["invert"] = invert
+    def __init__(self, fn=Spectrogram.to_image, is_augmentation=False, **kwargs):
+        kwargs.update(dict(return_type="torch"))  # return a tensor, not PIL.Image
+        super(SpectrogramToTensor, self).__init__(fn, is_augmentation, **kwargs)
 
-    def go(self, sample):
+    def go(self, sample, **kwargs):
         """converts sample.data from Spectrogram to Tensor"""
         # sample.data must be Spectrogram object
         # sample should have attributes: height, width, channels
-        sample.data = sample.data.to_image(
-            shape=[sample.height, sample.width],
-            channels=sample.channels,
-            return_type="torch",
-            colormap=self.params["colormap"],
-            invert=self.params["invert"],
-        )
+        # use info from sample for desired shape and n channels
+        kwargs.update(shape=[sample.height, sample.width], channels=sample.channels)
+        sample.data = self.action_fn(sample.data, **dict(self.params, **kwargs))
 
 
 def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
