@@ -159,6 +159,29 @@ def test_spectrogram_to_tensor(sample, sample_audio):
     assert list(sample.data.shape) == [3, 20, 30]  # note channels as dim0
 
 
+def test_spectrogram_to_tensor_range(sample, sample_audio):
+    """ensure that range is limited to 0,1 and values are scaled correctly"""
+    action = actions.SpectrogramToTensor(range=(-80, 0))
+    sample.data = Spectrogram.from_audio(sample_audio.data)
+    # these attributes normally get set in SpectrogramPreprocessor._generate_sample
+    sample.height = 20
+    sample.width = 30
+    sample.channels = 1
+
+    action.go(sample)  # converts .data from Spectrogram to Tensor
+    assert isinstance(sample.data, torch.Tensor)
+    assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
+    assert math.isclose(sample.data.min(), 0.0, abs_tol=1e-6) and sample.data.max() < 1
+    assert math.isclose(sample.data.mean(), 0.0442, abs_tol=1e-4)
+
+    # repeat with lower range
+    action = actions.SpectrogramToTensor(range=(-150, -90))
+    sample.data = Spectrogram.from_audio(sample_audio.data)
+    action.go(sample)  # converts .data from Spectrogram to Tensor
+    assert sample.data.min() > 0 and math.isclose(sample.data.max(), 1.0, abs_tol=1e-6)
+    assert math.isclose(sample.data.mean(), 0.8427, abs_tol=1e-4)
+
+
 def test_spectrogram_to_tensor_retain_shape(sample, sample_audio):
     """
     test that SpectrogramToTensor retains the shape of the spectrogram

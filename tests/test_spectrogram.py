@@ -208,6 +208,15 @@ def test_to_image_shape(spec):
     assert list(img.shape) == [2, 5, 6]  # channels, height, width
 
 
+def test_to_image_range(spec):
+    """make sure spec is clipped to range 0-1 after the linear rescaling from range to 0-1"""
+    img = spec.to_image(shape=[5, 6], channels=1, return_type="torch", range=(-20, -10))
+    assert img.min() >= 0 and img.max() <= 1
+
+    img = spec.to_image(shape=[5, 6], channels=1, return_type="torch", range=(5, 10))
+    assert img.min() >= 0 and img.max() <= 1
+
+
 def test_to_image_shape_None(spec):
     """should retain original shape of spectrogram if shape=None"""
     img = spec.to_image(shape=None, channels=2, return_type="torch")

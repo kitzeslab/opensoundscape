@@ -417,6 +417,22 @@ def test_trim_from_negative_time(silence_10s_mp3_str):
     assert math.isclose(audio.duration, 5, abs_tol=1e-5)
 
 
+def test_trim_samples(silence_10s_mp3_str):
+    """correct behavior is to trim from time zero"""
+    audio = Audio.from_file(silence_10s_mp3_str)
+    assert len(audio.trim_samples(0, 10).samples) == 10
+
+    assert len(audio.trim_samples(200, 210).samples) == 10
+
+    assert len(audio.trim_samples(-10, 10).samples) == 10
+
+    assert len(audio.trim_samples(10, 10).samples) == 0
+
+    with pytest.raises(AssertionError):
+        # cannot pass start index > end index
+        audio.trim_samples(20, 10)
+
+
 def test_trim_past_end_of_clip(silence_10s_mp3_str):
     """correct behavior is to trim to the end of the clip"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(9, 11)

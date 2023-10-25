@@ -29,9 +29,25 @@ class BoxedAnnotations:
 
     Contains some analogous functions to Audio and Spectrogram, such as
     trim() [limit time range] and bandpass() [limit frequency range]
+
+    the .df attribute is a Pandas DataFrame containing the annotations
+    with time and frequency bounds
+
+    the .annotation_files and .audio_files attributes are lists of
+    annotation and audio file paths, respectively. They are retained as
+    a record of _what audio was annotated_, rather than what annotations
+    were placed on the audio. For instance, an audio file may have no entries
+    in the dataframe if it contains no annotations, but is listed in audio_files
+    because it was annotated/reviewed.
     """
 
-    def __init__(self, df, raven_files=None, audio_files=None):
+    __slots__ = (
+        "df",
+        "annotation_files",
+        "audio_files",
+    )
+
+    def __init__(self, df, annotation_files=None, audio_files=None):
         """
         create object directly from DataFrame of frequency-time annotations
 
@@ -47,9 +63,8 @@ class BoxedAnnotations:
                 - "low_f": lower frequency bound (values can be None/nan)
                 - "high_f": upper frequency bound (values can be None/nan)
                 Note: other columns will be retained in the .df
-
-            raven_files: list of raven .txt file paths (as str or pathlib.Path)
-                or None [default: None]
+            annotation_files: list of annotation file paths (as str or pathlib.Path)
+                (e.g., raven .txt files) or None [default: None]
             audio_files: list of audio file paths (as str or pathlib.Path)
                 or None [default: None]
 
@@ -58,12 +73,12 @@ class BoxedAnnotations:
 
         """
         # save lists
-        self.raven_files = raven_files
+        self.annotation_files = annotation_files
         self.audio_files = audio_files
 
         standard_cols = [
             "audio_file",
-            "raven_file",
+            "annotation_file",
             "annotation",
             "start_time",
             "end_time",
@@ -203,11 +218,11 @@ class BoxedAnnotations:
                 ) from e
 
             # add column containing the raven file path
-            df["raven_file"] = raven_file
+            df["annotation_file"] = raven_file
 
             # remove undesired columns
             standard_columns = [
-                "raven_file",
+                "annotation_file",
                 "start_time",
                 "end_time",
                 "low_f",
@@ -244,7 +259,7 @@ class BoxedAnnotations:
 
         return cls(
             df=all_annotations,
-            raven_files=raven_files,
+            annotation_files=raven_files,
             audio_files=audio_files,
         )
 
@@ -279,8 +294,10 @@ class BoxedAnnotations:
                 )
             audio_files = self.audio_files
 
-        # create a copy of the labels, and rename columns to match Raven defaults
-        df = self.df.copy().rename(
+        df = self.df.copy()  # avoid modifying df of original object
+
+        # rename columns to match Raven defaults
+        df = df.rename(
             columns={
                 "start_time": "Begin Time (s)",
                 "end_time": "End Time (s)",
@@ -334,6 +351,22 @@ class BoxedAnnotations:
                 fname = f"{Path(file).stem}.selections.txt"
             file_df.to_csv(f"{save_dir}/{fname}", sep="\t", index=False)
 
+    def _spawn(self, **kwargs):
+        """return copy of object, replacing any desired fields from __slots__
+
+        pass any desired updates as kwargs
+        """
+        assert np.all([k in self.__slots__ for k in kwargs.keys()]), (
+            "only pass members of BoxedAnnotations.__slots__ to _spawn as kwargs! "
+            f"slots: {self.__slots__}"
+        )
+        # load the current values from each __slots__ key
+        slots = {key: self.__getattribute__(key) for key in self.__slots__}
+        # update any user-specified values
+        slots.update(kwargs)
+        # create new instance of the class
+        return self.__class__(**slots)
+
     def subset(self, classes):
         """subset annotations to those from a list of classes
 
@@ -346,8 +379,10 @@ class BoxedAnnotations:
         Returns:
             new BoxedAnnotations object containing only annotations in `classes`
         """
-        df = self.df[self.df["annotation"].apply(lambda x: x in classes)]
-        return BoxedAnnotations(df)
+        df = self.df.copy()  # avoid modifying df of original object
+        df = df[df["annotation"].apply(lambda x: x in classes)]
+        # keep the same lists of annotation_files and audio_files
+        return self._spawn(df=df)
 
     def trim(self, start_time, end_time, edge_mode="trim"):
         """Trim the annotations of each file in time
@@ -388,7 +423,7 @@ class BoxedAnnotations:
         assert start_time >= 0, "start time must be non-negative"
         assert end_time > start_time, "end time_must be greater than start_time"
 
-        df = self.df.copy()
+        df = self.df.copy()  # avoid modifying df of original object
 
         # select annotations that overlap with window
         def in_bounds(t0, t1):
@@ -420,7 +455,7 @@ class BoxedAnnotations:
         df["start_time"] = df["start_time"] - start_time
         df["end_time"] = df["end_time"] - start_time
 
-        return BoxedAnnotations(df)
+        return self._spawn(df=df)
 
     def bandpass(self, low_f, high_f, edge_mode="trim"):
         """Bandpass a set of annotations, analogous to Spectrogram.bandpass()
@@ -469,7 +504,7 @@ class BoxedAnnotations:
         else:  #'keep': leave boxes hanging over the edges
             pass
 
-        return BoxedAnnotations(df)
+        return self._spawn(df=df)
 
     def unique_labels(self):
         """get list of all unique labels
@@ -540,7 +575,7 @@ class BoxedAnnotations:
             a column for each class, and values of 0=absent or 1=present
         """
         # drop nan annotations
-        df = self.df.dropna(subset=["annotation"])
+        df = self.df.dropna(subset=["annotation"])  # creates new copy of df object
 
         if class_subset is None:  # include all annotations
             classes = df["annotation"].unique()

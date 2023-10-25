@@ -58,7 +58,11 @@ def boxed_annotations():
             "annotation": ["a", "b", None],
         }
     )
-    return BoxedAnnotations(df, audio_files=["audio_file.wav"] * 3)
+    return BoxedAnnotations(
+        df,
+        audio_files=["audio_file.wav"] * 3,
+        annotation_files=["audio_file.annotations.txt"] * 3,
+    )
 
 
 @pytest.fixture()
@@ -130,7 +134,7 @@ def test_load_raven_annotations_different_columns(raven_file, raven_file_empty):
     )
     assert "distance" in list(ba.df.columns)
     assert "type" in list(ba.df.columns)
-    assert "raven_file" in list(ba.df.columns)
+    assert "annotation_file" in list(ba.df.columns)
 
     # keep one extra column
     ba = BoxedAnnotations.from_raven_files(
@@ -139,7 +143,7 @@ def test_load_raven_annotations_different_columns(raven_file, raven_file_empty):
     assert "distance" in list(ba.df.columns)
     assert not "type" in list(ba.df.columns)
     # this would fail before #737 was resolved
-    assert "raven_file" in list(ba.df.columns)
+    assert "annotation_file" in list(ba.df.columns)
     # check for #769
 
     # keep no extra column
@@ -148,7 +152,7 @@ def test_load_raven_annotations_different_columns(raven_file, raven_file_empty):
     )
     assert not "distance" in list(ba.df.columns)
     assert not "type" in list(ba.df.columns)
-    assert "raven_file" in list(ba.df.columns)
+    assert "annotation_file" in list(ba.df.columns)
 
 
 def test_to_raven_files(boxed_annotations, saved_raven_file):
@@ -159,7 +163,11 @@ def test_to_raven_files(boxed_annotations, saved_raven_file):
 
 
 def test_subset(boxed_annotations):
-    assert len(boxed_annotations.subset(["a", None]).df) == 2
+    subset = boxed_annotations.subset(["a", None])
+    assert len(subset.df) == 2
+    # should retain .audio_files and .annotation_files
+    assert subset.audio_files == boxed_annotations.audio_files
+    assert subset.annotation_files == boxed_annotations.annotation_files
 
 
 def test_subset_to_nan(raven_file):
@@ -172,6 +180,10 @@ def test_trim(boxed_annotations):
     assert len(trimmed.df) == 2
     assert np.max(trimmed.df["end_time"]) == 3.0
     assert np.min(trimmed.df["start_time"]) == 0.0
+
+    # should retain .audio_files and .annotation_files
+    assert trimmed.audio_files == boxed_annotations.audio_files
+    assert trimmed.annotation_files == boxed_annotations.annotation_files
 
 
 def test_trim_keep(boxed_annotations):
@@ -191,6 +203,9 @@ def test_bandpass(boxed_annotations):
     assert len(bandpassed.df) == 2
     assert np.max(bandpassed.df["high_f"]) == 1400
     assert np.min(bandpassed.df["low_f"]) == 600
+    # should retain .audio_files and .annotation_files
+    assert bandpassed.audio_files == boxed_annotations.audio_files
+    assert bandpassed.annotation_files == boxed_annotations.annotation_files
 
 
 def test_bandpass_keep(boxed_annotations):

@@ -490,9 +490,41 @@ class Audio:
 
         Returns:
             a new Audio object containing samples from start_time to end_time
+            - metadata is updated to reflect new start time and duration
+
+        see also: trim_samples() to trim using sample positions instead of times
         """
         start_sample = max(0, self._get_sample_index(start_time))
         end_sample = self._get_sample_index(end_time)
+        return self.trim_samples(start_sample, end_sample)
+
+    def trim_samples(self, start_sample, end_sample):
+        """Trim Audio object by sample indices
+
+        resulting sample array contains self.samples[start_sample:end_sample]
+
+        If start_sample is less than zero, output starts from sample 0
+        If end_sample is beyond the end of the sample, trims to end of sample
+
+        Args:
+            start_sample: sample index for start of extracted clip, inclusive
+            end_sample: sample index for end of extracted clip, exlusive
+
+        Returns:
+            a new Audio object containing samples from start_sample to end_sample
+            - metadata is updated to reflect new start time and duration
+
+        see also: trim() to trim using time in seconds instead of sample positions
+        """
+        assert (
+            end_sample >= start_sample
+        ), f"end_sample ({end_sample}) must be >= start_sample ({start_sample})"
+
+        start_sample = max(0, start_sample)
+
+        # list slicing is exclusive of the end index but inclusive of the start index
+        # if end_sample is beyond the end of the sample, does not raise error just
+        # includes all samples to the end
         samples_trimmed = self.samples[start_sample:end_sample]
 
         # update metadata with new start time and duration
@@ -502,7 +534,7 @@ class Audio:
             metadata = self.metadata.copy()
             if "recording_start_time" in metadata:
                 metadata["recording_start_time"] += datetime.timedelta(
-                    seconds=start_time
+                    seconds=start_sample / self.sample_rate
                 )
 
             if "duration" in metadata:
