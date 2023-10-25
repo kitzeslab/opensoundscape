@@ -31,7 +31,7 @@ class BoxedAnnotations:
     trim() [limit time range] and bandpass() [limit frequency range]
     """
 
-    def __init__(self, df, raven_files=None, audio_files=None):
+    def __init__(self, df, annotation_files=None, audio_files=None):
         """
         create object directly from DataFrame of frequency-time annotations
 
@@ -47,9 +47,8 @@ class BoxedAnnotations:
                 - "low_f": lower frequency bound (values can be None/nan)
                 - "high_f": upper frequency bound (values can be None/nan)
                 Note: other columns will be retained in the .df
-
-            raven_files: list of raven .txt file paths (as str or pathlib.Path)
-                or None [default: None]
+            annotation_files: list of annotation file paths (as str or pathlib.Path)
+                (e.g., raven .txt files) or None [default: None]
             audio_files: list of audio file paths (as str or pathlib.Path)
                 or None [default: None]
 
@@ -58,12 +57,12 @@ class BoxedAnnotations:
 
         """
         # save lists
-        self.raven_files = raven_files
+        self.annotation_files = annotation_files
         self.audio_files = audio_files
 
         standard_cols = [
             "audio_file",
-            "raven_file",
+            "annotation_file",
             "annotation",
             "start_time",
             "end_time",
@@ -203,11 +202,11 @@ class BoxedAnnotations:
                 ) from e
 
             # add column containing the raven file path
-            df["raven_file"] = raven_file
+            df["annotation_file"] = raven_file
 
             # remove undesired columns
             standard_columns = [
-                "raven_file",
+                "annotation_file",
                 "start_time",
                 "end_time",
                 "low_f",
@@ -244,7 +243,7 @@ class BoxedAnnotations:
 
         return cls(
             df=all_annotations,
-            raven_files=raven_files,
+            annotation_files=raven_files,
             audio_files=audio_files,
         )
 

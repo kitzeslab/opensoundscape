@@ -130,7 +130,7 @@ def test_load_raven_annotations_different_columns(raven_file, raven_file_empty):
     )
     assert "distance" in list(ba.df.columns)
     assert "type" in list(ba.df.columns)
-    assert "raven_file" in list(ba.df.columns)
+    assert "annotation_file" in list(ba.df.columns)
 
     # keep one extra column
     ba = BoxedAnnotations.from_raven_files(
@@ -139,7 +139,7 @@ def test_load_raven_annotations_different_columns(raven_file, raven_file_empty):
     assert "distance" in list(ba.df.columns)
     assert not "type" in list(ba.df.columns)
     # this would fail before #737 was resolved
-    assert "raven_file" in list(ba.df.columns)
+    assert "annotation_file" in list(ba.df.columns)
     # check for #769
 
     # keep no extra column
@@ -148,7 +148,7 @@ def test_load_raven_annotations_different_columns(raven_file, raven_file_empty):
     )
     assert not "distance" in list(ba.df.columns)
     assert not "type" in list(ba.df.columns)
-    assert "raven_file" in list(ba.df.columns)
+    assert "annotation_file" in list(ba.df.columns)
 
 
 def test_to_raven_files(boxed_annotations, saved_raven_file):
