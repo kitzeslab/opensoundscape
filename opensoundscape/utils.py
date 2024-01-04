@@ -331,12 +331,6 @@ def generate_opacity_colormaps(
 
     return colormaps
 
-
-import numpy as np
-import torch
-import random
-
-
 def set_seed(seed, verbose=True):
     """Set random state across different libraries for reproducibility
 

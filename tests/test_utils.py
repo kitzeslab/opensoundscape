@@ -178,6 +178,9 @@ def test_make_clip_df_from_label_df(silence_10s_mp3_str, metadata_wav_str):
 # If you add --verbose, it also prints if it passed for each value in the list for each function 
 # that takes it as input.
 
+# For all utils.set_seed() tests, assert that results are determistic for the the same seed AND
+# for different seeds, in a tensor/array at least one element is different.
+
 @pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234]) 
 def test_torch_rand(input):
     utils.set_seed(input)
