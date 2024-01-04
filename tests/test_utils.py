@@ -174,7 +174,7 @@ def test_make_clip_df_from_label_df(silence_10s_mp3_str, metadata_wav_str):
     
     
 
-@pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
+@pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234]) # Loops trough each value in list when running pytest
 def test_torch_rand(input):
     utils.set_seed(input)
     tr1 = torch.rand(100)
