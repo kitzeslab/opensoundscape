@@ -171,17 +171,17 @@ def test_make_clip_df_from_label_df(silence_10s_mp3_str, metadata_wav_str):
     # should copy labels for each file to all clips of that file
     # duplicate file should have labels from _first_ occurrence in label_df
     assert np.array_equal(clip_df["a"].values, [0, 0, 0, 0, 2, 2])
-    
-    
 
-# The @pytest.mark.parametrize decorator loops trough each value in list when running pytest. 
-# If you add --verbose, it also prints if it passed for each value in the list for each function 
+
+# The @pytest.mark.parametrize decorator loops trough each value in list when running pytest.
+# If you add --verbose, it also prints if it passed for each value in the list for each function
 # that takes it as input.
 
 # For all utils.set_seed() tests, assert that results are determistic for the the same seed AND
 # for different seeds, in a tensor/array at least one element is different.
 
-@pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234]) 
+
+@pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
 def test_torch_rand(input):
     utils.set_seed(input)
     tr1 = torch.rand(100)
@@ -193,6 +193,7 @@ def test_torch_rand(input):
     tr3 = torch.rand(100)
 
     assert all(tr1 == tr2) & any(tr1 != tr3)
+
 
 @pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
 def test_numpy_random_rand(input):
@@ -206,6 +207,7 @@ def test_numpy_random_rand(input):
     nr3 = np.random.rand(100)
 
     assert all(nr1 == nr2) & any(nr1 != nr3)
+
 
 @pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
 def test_radom_sample(input):
@@ -221,6 +223,7 @@ def test_radom_sample(input):
     rs3 = random.sample(list1000, 100)
 
     assert (rs1 == rs2) & (rs1 != rs3)
+
 
 @pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
 def test_cnn(input):

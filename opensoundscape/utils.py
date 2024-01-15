@@ -12,6 +12,7 @@ from matplotlib.colors import LinearSegmentedColormap
 import torch
 import random
 
+
 class GetDurationError(ValueError):
     """raised if librosa.get_duration(path=f) causes an error"""
 
@@ -330,6 +331,7 @@ def generate_opacity_colormaps(
         colormaps.append(cmap)
 
     return colormaps
+
 
 def set_seed(seed, verbose=True):
     """Set random state across different libraries for reproducibility
