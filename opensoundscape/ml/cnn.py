@@ -610,7 +610,7 @@ class CNN(BaseClassifier):
             batch_tensors = batch_data["samples"].to(self.device)
             batch_labels = batch_data["labels"].to(self.device)
             if len(self.classes) > 1:  # squeeze one dimension [1,2] -> [1,1]
-                batch_labels = batch_labels.squeeze(1)
+                batch_labels = batch_labels.squeeze(1)  # why is this here? #TODO
 
             ####################
             # Forward and loss #
@@ -656,9 +656,9 @@ class CNN(BaseClassifier):
                 self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
 
                 # Evaluate with model's eval function
-                tgts = batch_labels.int().detach().cpu().numpy()
-                scores = logits.int().detach().cpu().numpy()
-                self.eval(tgts, scores, logging_offset=-1)
+                # tgts = batch_labels.detach().cpu().numpy()
+                # scores = logits.detach().cpu().numpy()
+                # self.eval(tgts, scores, logging_offset=-1)
 
         # update learning parameters each epoch
         self.scheduler.step()

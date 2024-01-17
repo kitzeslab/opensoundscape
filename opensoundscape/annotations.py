@@ -602,6 +602,7 @@ class BoxedAnnotations:
                 )
 
             # add clip labels for this row of clip dataframe
+            # TODO: this could be what's slow, maybe concat will be much faster
             clip_df.loc[(file, start, end), :] = one_hot_labels_on_time_interval(
                 file_df,
                 start_time=start,
