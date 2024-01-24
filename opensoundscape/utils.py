@@ -1,14 +1,10 @@
 """Utilities for opensoundscape"""
 
-import datetime
-import warnings
-
 import numpy as np
 import pandas as pd
-import pytz
-import soundfile
 import librosa
 from matplotlib.colors import LinearSegmentedColormap
+from pathlib import Path
 
 
 class GetDurationError(ValueError):
@@ -329,3 +325,9 @@ def generate_opacity_colormaps(
         colormaps.append(cmap)
 
     return colormaps
+
+
+def _check_is_path(path):
+    assert isinstance(path, str) or isinstance(
+        path, Path
+    ), f"Expected str or Path, got {type(path)}. Did you set the index correctly?"

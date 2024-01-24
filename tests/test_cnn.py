@@ -305,6 +305,27 @@ def test_train_on_clip_df(train_df):
     )
 
 
+def test_train_bad_index(train_df):
+    """
+    AssertionError catches case where index is not one of the allowed formats
+    """
+    model = cnn.CNN("resnet18", [0, 1], sample_duration=2)
+    # reset the index so that train_df index is integers (not an allowed format)
+    train_df = make_clip_df(train_df.index.values, clip_duration=2).reset_index()
+    train_df[0] = np.random.choice([0, 1], size=10)
+    train_df[1] = np.random.choice([0, 1], size=10)
+    with pytest.raises(AssertionError):
+        model.train(
+            train_df,
+            train_df,
+            save_path="tests/models/",
+            epochs=1,
+            batch_size=2,
+            save_interval=10,
+            num_workers=0,
+        )
+
+
 def test_predict_without_splitting(test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     scores = model.predict(test_df, split_files_into_clips=False)

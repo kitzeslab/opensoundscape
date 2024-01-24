@@ -4,7 +4,7 @@ import pandas as pd
 import warnings
 from pathlib import Path
 
-from opensoundscape.utils import identity
+from opensoundscape.utils import identity, _check_is_path
 from opensoundscape.ml.safe_dataset import SafeDataset
 from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
 
@@ -124,10 +124,3 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         self.dataset._invalid_samples = self.dataset._invalid_samples.union(
             dataset.invalid_samples
         )
-
-
-def _check_is_path(path):
-    assert isinstance(path, str) or isinstance(path, Path), (
-        f"First item of multi-index must be str or Path, got {type(path)}. "
-        "Did you set the index correctly?"
-    )

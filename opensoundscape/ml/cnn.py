@@ -30,7 +30,7 @@ from opensoundscape.ml.dataloaders import SafeAudioDataloader
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.sample import collate_audio_samples_to_dict
-from opensoundscape.utils import identity
+from opensoundscape.utils import identity, _check_is_path
 from opensoundscape.logging import wandb_table
 
 from opensoundscape.ml.cam import CAM
@@ -786,6 +786,7 @@ class CNN(BaseClassifier):
         """
 
         ### Input Validation ###
+        # Validation of class list
         class_err = """
             Train and validation datasets must have same classes
             and class order as model object. Consider using
@@ -802,6 +803,8 @@ class CNN(BaseClassifier):
                 "No validation set was provided. Model will be "
                 "evaluated using the performance on the training set."
             )
+
+        ## Initialization ##
 
         # Initialize attributes
         self.log_interval = log_interval
