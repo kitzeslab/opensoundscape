@@ -586,8 +586,12 @@ class BoxedAnnotations:
             df = df[df["annotation"].isin(classes)]
 
         # the clip_df should have ['file','start_time','end_time'] as the index
+        # and a column for each class with 0/1 values
         clip_df[classes] = float("nan")  # add columns for each class
 
+        # for efficiency, store the labels for each row as a list of pd.Series
+        # then aggregate at the end
+        rows = []
         for file, start, end in clip_df.index:
             if not file == file:  # file is NaN, get corresponding rows
                 file_df = df[df["audio_file"].isnull()]
@@ -603,16 +607,21 @@ class BoxedAnnotations:
 
             # add clip labels for this row of clip dataframe
             # TODO: this could be what's slow, maybe concat will be much faster
-            clip_df.loc[(file, start, end), :] = one_hot_labels_on_time_interval(
-                file_df,
-                start_time=start,
-                end_time=end,
-                min_label_overlap=min_label_overlap,
-                min_label_fraction=min_label_fraction,
-                class_subset=classes,
+            rows.append(
+                one_hot_labels_on_time_interval(
+                    file_df,
+                    start_time=start,
+                    end_time=end,
+                    min_label_overlap=min_label_overlap,
+                    min_label_fraction=min_label_fraction,
+                    class_subset=classes,
+                )
             )
 
-        return clip_df
+        # aggregate into a dataframe
+        labels = pd.concat(rows)
+        labels.index = clip_df.index
+        return labels
 
     def one_hot_clip_labels(
         self,
