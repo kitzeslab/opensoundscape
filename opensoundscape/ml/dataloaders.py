@@ -72,26 +72,28 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             and type(samples.index) == pd.core.indexes.multi.MultiIndex
         ):  # c1 user provided multi-index df with file,start_time,end_time of clips
             # raise AssertionError if first item of multi-index is not str or Path
-            _check_is_path(samples.index.values[0][0])
+            if len(samples) > 0:
+                _check_is_path(samples.index.values[0][0])
             dataset = AudioFileDataset(samples=samples, preprocessor=preprocessor)
         elif (
             split_files_into_clips
         ):  # c2 user provided file list; split each file into appropriate length clips
             # raise AssertionError if first item is not str or Path
-            _check_is_path(samples.index.values[0])
-
+            if len(samples) > 0:
+                _check_is_path(samples[0])
             dataset = AudioSplittingDataset(
                 samples=samples,
                 preprocessor=preprocessor,
                 overlap_fraction=overlap_fraction,
                 final_clip=final_clip,
             )
-        else:  # c3 split_files_into_clips=False -> one sample & one prediction per file provided
+        else:  # c3 samples is list of files and
+            # split_files_into_clips=False -> one sample & one prediction per file provided
             # eg, each file is a 5 second clips and the model expects 5 second clips
 
             # raise AssertionError if first item is not str or Path
-            _check_is_path(samples.index.values[0])
-
+            if len(samples) > 0:
+                _check_is_path(samples[0])
             dataset = AudioFileDataset(samples=samples, preprocessor=preprocessor)
 
         dataset.bypass_augmentations = bypass_augmentations
