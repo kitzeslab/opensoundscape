@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import pandas as pd
 import warnings
+from pathlib import Path
 
 from opensoundscape.utils import identity
 from opensoundscape.ml.safe_dataset import SafeDataset
@@ -70,8 +71,15 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             type(samples) == pd.DataFrame
             and type(samples.index) == pd.core.indexes.multi.MultiIndex
         ):  # c1 user provided multi-index df with file,start_time,end_time of clips
+            # raise AssertionError if first item of multi-index is not str or Path
+            _check_is_path(samples.index.values[0][0])
             dataset = AudioFileDataset(samples=samples, preprocessor=preprocessor)
-        elif split_files_into_clips:  # c2 user provided file list; split into
+        elif (
+            split_files_into_clips
+        ):  # c2 user provided file list; split each file into appropriate length clips
+            # raise AssertionError if first item is not str or Path
+            _check_is_path(samples.index.values[0])
+
             dataset = AudioSplittingDataset(
                 samples=samples,
                 preprocessor=preprocessor,
@@ -79,7 +87,13 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
                 final_clip=final_clip,
             )
         else:  # c3 split_files_into_clips=False -> one sample & one prediction per file provided
+            # eg, each file is a 5 second clips and the model expects 5 second clips
+
+            # raise AssertionError if first item is not str or Path
+            _check_is_path(samples.index.values[0])
+
             dataset = AudioFileDataset(samples=samples, preprocessor=preprocessor)
+
         dataset.bypass_augmentations = bypass_augmentations
 
         if len(dataset) < 1:
@@ -110,3 +124,10 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         self.dataset._invalid_samples = self.dataset._invalid_samples.union(
             dataset.invalid_samples
         )
+
+
+def _check_is_path(path):
+    assert isinstance(path, str) or isinstance(path, Path), (
+        f"First item of multi-index must be str or Path, got {type(path)}. "
+        "Did you set the index correctly?"
+    )
