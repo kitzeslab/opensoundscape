@@ -119,6 +119,7 @@ class BasePreprocessor:
             sample (instance of AudioSample class)
 
         """
+        # validate input
         if break_on_key is not None:
             assert (
                 break_on_key in self.pipeline
@@ -196,6 +197,13 @@ class BasePreprocessor:
                 path, (str, Path)
             ), "if passing a series, series.name must contain (path, start_time, end_time)"
             sample = AudioSample(path, start_time=start, duration=self.sample_duration)
+        elif isinstance(sample, pd.DataFrame):
+            raise AssertionError(
+                "sample must be AudioSample, tuple of (path, start_time), "
+                "or pd.Series with (path, start_time, end_time) as .name. "
+                f"was {type(sample)}. "
+                "Perhaps a dataset was accessed like dataset[[0,1,2]] instead of dataset[0]?"
+            )
         else:
             assert isinstance(sample, AudioSample), (
                 "sample must be AudioSample, tuple of (path, start_time), "
