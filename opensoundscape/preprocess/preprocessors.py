@@ -2,6 +2,7 @@
 from pathlib import Path
 import pandas as pd
 import copy
+import time
 
 from opensoundscape.preprocess import actions
 from opensoundscape.preprocess.actions import (
@@ -89,6 +90,7 @@ class BasePreprocessor:
         break_on_key=None,
         bypass_augmentations=False,
         trace=False,
+        profile=False,
     ):
         """perform actions in self.pipeline on a sample (until a break point)
 
@@ -113,8 +115,10 @@ class BasePreprocessor:
                     the start and end time of clip in audio
             bypass_augmentations: if True, actions with .is_augmentatino=True
                 are skipped
-            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for analysis/debugging on samples of interest
-
+            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument
+                Can be used for analysis/debugging of intermediate values of the sample during preprocessing
+            profile (boolean - default False): if True, saves the runtime of each pipeline step in `.runtime`
+                (a series indexed like .pipeline)
         Returns:
             sample (instance of AudioSample class)
 
@@ -129,10 +133,15 @@ class BasePreprocessor:
         if trace:
             sample.trace = pd.Series(index=self.pipeline.index)
 
+        if profile:
+            sample.runtime = pd.Series(index=self.pipeline.index)
+
         # run the pipeline by performing each Action on the AudioSample
         try:
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
+                time0 = time.time()
+
                 if type(action) == break_on_type or k == break_on_key:
                     if trace:
                         # saved "output" of this step informs user pipeline was stopped
@@ -147,6 +156,9 @@ class BasePreprocessor:
 
                 # perform the action (modifies the AudioSample in-place)
                 action.go(sample)
+
+                if profile:
+                    sample.runtime[k] = time.time() - time0
 
                 if trace:  # user requested record of preprocessing steps
                     # save the current state of the sample's data
