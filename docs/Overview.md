@@ -126,8 +126,7 @@ is my turf" versus "look out, hawk!" This fortunately makes the task of
 human classification of sounds relatively simple (in most cases but not
 all).
 
-![](./Images/media/image41.png){width="6.40625in"
-height="3.1145833333333335in"}
+<img src="./media/image41.png" style="width: 6.40625in; height: 3.1145833333333335in;">
 
 Fig. 1. A \~15 s spectrogram containing the songs of six bird species.
 Some examples of songs are boxed and the species that made them are
@@ -168,8 +167,7 @@ Soc. Bull.]{.underline}*
 document focuses on the training of CNNs, but be aware that signal
 processing algorithms are options for sound classification.]{.mark}
 
-![](./Images/media/image17.png){width="6.5in"
-height="3.4444444444444446in"}
+<img src="./media/image17.png" style="width: 6.5in; height: 4444444444444446in;">
 
 Fig. 2. A spectrogram of a Great Plains toad call; a sound suitable for
 classification using RIBBIT.
@@ -212,15 +210,11 @@ different classes for the CNN to classify audio clips into.
 
 a\. b.
 
-![](./Images/media/image19.png){width="2.325in"
-height="2.5in"}![](./Images/media/image27.png){width="2.35in"
-height="2.5in"}
+<img src="./media/image19.png" style="width: 2.325in; height: 2.5in;"> <img src="./media/image27.png" style="width: 2.325in; height: 2.5in;">
 
 c\. d.
 
-![](./Images/media/image16.png){width="2.675in"
-height="2.5in"}![](./Images/media/image38.png){width="1.775in"
-height="2.5in"}
+![](./media/image16.png)![](./media/image38.png)
 
 Fig. 3. Examples of Chestnut-sided Warbler songs. On the top row (a and
 b) are type 1, and on the bottom row (c and d) are type 2.
