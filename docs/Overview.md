@@ -4,11 +4,22 @@ Created by Lauren Chronister, Tessa Rhinehart, and Sam Lapp
 
 Last updated on 2023-01-31 by Lauren Chronister
 
-This document is intended to serve as an introduction to the classifier
+
+<span style="font-size:3.5em;">This document is intended to serve as an introduction to the classifier
 training workflow and considerations that need to be made before diving
 in rather than a programming how-to. For more detailed instructions on
 ***how*** to use OpenSoundscape, see the
-[[documentation]{.underline}](http://opensoundscape.org/en/latest/).
+[[documentation]{.underline}](http://opensoundscape.org/en/latest/)
+.</span></span>
+
+
+<span style="font-size: 69px;"> This document is intended to serve as an introduction to the classifier
+training workflow and considerations that need to be made before diving
+in rather than a programming how-to. For more detailed instructions on
+***how*** to use OpenSoundscape, see the
+[[documentation]{.underline}](http://opensoundscape.org/en/latest/)
+.</span>
+
 
 ## Table of Contents
 
@@ -126,13 +137,19 @@ is my turf" versus "look out, hawk!" This fortunately makes the task of
 human classification of sounds relatively simple (in most cases but not
 all).
 
-<img src="./media/image41.png" style="width: 6.40625in; height: 3.1145833333333335in;">
 
-Fig. 1. A \~15 s spectrogram containing the songs of six bird species.
+
+<figure>
+    <img src="./media/image41.png">
+    <figcaption>Fig. 1. A ~15 s spectrogram containing the songs of six bird species.
 Some examples of songs are boxed and the species that made them are
 displayed above. From left to right: Black-and-white Warbler, Kentucky
-Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler.
-[[Source.]{.underline}](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44)
+Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler. <a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank"> Source</a>
+
+
+        
+ 
+
 
 ### Kinds of classifiers
 
@@ -208,13 +225,13 @@ both Chestnut-sided Warbler type 1 song and Chestnut-sided Warbler type
 2 song (see Fig. 3 below). These two song types would present as
 different classes for the CNN to classify audio clips into.
 
-a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image19.png" style="width: 2.325in; height: 2.5in;"> <img src="./media/image27.png" style="width: 2.325in; height: 2.5in;">
+<img src="./media/image19.png" width="500" height="400"> <img src="./media/image27.png" width="500" height="400">
 
-c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
+c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-<img src="./media/image16.png" style="width: 3.5in; height: 3.5in;"> <img src="./media/image38.png" style="width: 1.5in; height: 1.5in;">
+<img src="./media/image16.png" width="500" height="400"> <img src="./media/image38.png" width="500" height="400">
 
 
 Fig. 3. Examples of Chestnut-sided Warbler songs. On the top row (a and
@@ -244,7 +261,7 @@ audio clips into.
 
 ## Organization
 
-**[Organization is key to reproducibility!]{.underline}**
+### <ins>Organization is key to reproducibility</ins>.
 
 This can't be said enough. Training a CNN is an iterative process. As
 you improve previous classifiers, you will end up with different
@@ -272,12 +289,13 @@ Here's a simple list to follow which can help keep you organized:
 
     a.  **Slap a date stamp on everything.**
 
-        i.  When you create new versions of training scripts, training
-            datasets, etc. add a datestamp to them and save a new copy
-            so you know which version they are (e.g.,
-            2022-10-01_train_model.py -\> 2022-10-05_train_model.py).
+>> i. When you create new versions of training scripts, training
+>> datasets, etc. add a datestamp to them and save a new copy
+>> so you know which version they are (e.g.,
+>> 2022-10-01_train_model.py -\> 2022-10-05_train_model.py).
 
-        ii. You can automatically add datestamps in your code like such:
+>> ii. You can automatically add datestamps in your code like such:
+
 
 **from datetime import date**
 
