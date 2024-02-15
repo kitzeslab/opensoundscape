@@ -1,3 +1,5 @@
+# Introduction to training classifiers
+
 Created by Lauren Chronister, Tessa Rhinehart, and Sam Lapp
 
 Last updated on 2023-01-31 by Lauren Chronister
@@ -8,7 +10,7 @@ in rather than a programming how-to. For more detailed instructions on
 ***how*** to use OpenSoundscape, see the
 [[documentation]{.underline}](http://opensoundscape.org/en/latest/).
 
-# Table of Contents
+## Table of Contents
 
 [[Table of Contents]{.underline}](#table-of-contents)
 
@@ -104,7 +106,7 @@ Dataset]{.underline}](#creating-a-training-dataset)
 > [[Labeled datasets (in-house
 > only)]{.underline}](#labeled-datasets-in-house-only)
 
-# How we use automated classification of sound
+## How we use automated classification of sound
 
 The purpose of a **classifier** is to take some data and assign a
 "class" to it. Let's say you have some audio data that you recorded in
@@ -133,7 +135,7 @@ displayed above. From left to right: Black-and-white Warbler, Kentucky
 Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler.
 [[Source.]{.underline}](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44)
 
-## Kinds of classifiers
+### Kinds of classifiers
 
 Many different types of classifiers for sound exist, but we typically
 use something called a **Convolutional Neural Network**, or **"CNN"**
@@ -183,12 +185,12 @@ available in
 which slides a template spectrogram over audio data to score how well
 the audio matches the template.
 
-## CNN classification problems
+### CNN classification problems
 
 The following are some examples of the types of questions we have asked
 in this lab and CNN classifiers we have or could create to answer them.
 
-### Example 1: Warbler song types
+#### Example 1: Warbler song types
 
 Many warbler species such as the Chestnut-sided Warbler have been known
 to begin their breeding season singing predominantly a "type 1" song and
@@ -223,7 +225,7 @@ height="2.5in"}
 Fig. 3. Examples of Chestnut-sided Warbler songs. On the top row (a and
 b) are type 1, and on the bottom row (c and d) are type 2.
 
-### Example 2: Declining forest birds
+#### Example 2: Declining forest birds
 
 Many forest bird species across Pennsylvania are undergoing declines due
 to changes in forest composition and structure as forests in
@@ -245,7 +247,7 @@ target species and their set of three confusion species. Each of these
 six species would present as a different class for the CNN to classify
 audio clips into.
 
-# Organization
+## Organization
 
 **[Organization is key to reproducibility!]{.underline}**
 
@@ -380,7 +382,7 @@ reproducible, check out [[The Practice of Reproducible
 Research]{.underline}](http://www.practicereproducibleresearch.org/),
 copies of which are also hanging out around the lab.
 
-# Creating a Training Dataset
+## Creating a Training Dataset
 
 **This and the following sections pertain only to the training of CNNs;
 other types of classifiers are created in other ways.**
@@ -395,7 +397,7 @@ Training data can be thought of as **negatives** and **positives** for
 each specific class. A negative is simply a clip that is not an example
 of a class. A positive is a clip that is an example of a class.
 
-## Step 1: Decide on sources of training data
+### Step 1: Decide on sources of training data
 
 Most typically, training data (in this lab) come in two
 mutually-exclusive formats:
@@ -409,7 +411,7 @@ mutually-exclusive formats:
 2)  **Field data** containing the sound classes recorded by autonomous
     recorders.
 
-### Targeted Recordings with Field Data Overlays
+#### Targeted Recordings with Field Data Overlays
 
 A mix of targeted recordings (i.e., directional recordings of a certain
 species frequently created using a parabolic microphone) and field data
@@ -468,7 +470,7 @@ for your classifier because the classifier has learned that those clips
 do not contain the target making it seem like it has better performance
 than it really does.
 
-### Field Data
+#### Field Data
 
 If targeted recordings are not representative of the field data I will
 be later predicting on, why use it at all? Why not just use field data?
@@ -516,7 +518,7 @@ positive examples will only be those which the classifier *thinks* look
 like the target sound, potentially missing other variations of the
 target sound.
 
-## Step 2: Annotate
+### Step 2: Annotate
 
 Whatever the source of data, the first step to using it involves
 annotation, or attaching some metadata to the audio data. We usually
@@ -563,7 +565,7 @@ annotation phase could be useful ("BTNW_songA" versus "BTNW_songB"). If
 you are interested in song only but in a more general sense, you may be
 able to skip annotating tedious calls.
 
-## Step 2.5: Collect negatives
+### Step 2.5: Collect negatives
 
 The requirement for positive examples to train a CNN on what to look for
 should seem obvious, but the classifier also needs to be told what
@@ -582,7 +584,7 @@ consider that the related Hermit Thrush has a very similar song that is
 sometimes mistaken for Wood Thrush and the two often live in the same
 places. Thus, we should also annotate files for Hermit Thrush.
 
-## Step 3: Decide some visual parameters for clips
+### Step 3: Decide some visual parameters for clips
 
 As mentioned previously, the classifiers we use only interact with audio
 data in the form of spectrograms. As such, it's important to make
@@ -605,7 +607,7 @@ Fig. 6. An example of a 224x224 tensor which contains the spectrogram of
 a Barred Owl song clip of 5 seconds in length and 0-4,000 Hz in
 frequency.
 
-### Clip length
+#### Clip length
 
 Clips do not need to be any specified length--how they look visually in
 a 224x224 pixel image will dictate what the appropriate length is. This
@@ -638,7 +640,7 @@ from the songs of other birds while the 20-second song does not provide
 enough detail. The 4-second song is in the sweet spot for this species.
 All of these clips are displayed as 224x224 pixel tensors.
 
-### Bandpass
+#### Bandpass
 
 To **bandpass** means to trim the frequency range of the tensor (the
 up-down dimension as opposed to the left-right dimension for the clip
@@ -739,7 +741,7 @@ drop-down menu in the upper left corner of the audio panel, click
 "Spectrogram Settings...", and click the "Window size" dropdown menu.
 This also allows you to see some typical values for window size.
 
-## Step 4: Create labels
+### Step 4: Create labels
 
 To initiate training, the code which trains the model is provided with a
 **data frame** (a csv file stored in memory) that in turn links to the
@@ -803,7 +805,7 @@ be needed.
   /Path/to/clip4.wav      0                       0
   -----------------------------------------------------------------------
 
-## Step 5: Balance the training dataset
+### Step 5: Balance the training dataset
 
 A good training dataset requires "balance" to make an effective
 classifier. What balance means in this context is making a dataset be
@@ -890,7 +892,7 @@ Parameters used in creating clips such as the proportion of a
 vocalization that must be present to be considered a positive are not
 saved unless you make a record of them.
 
-# CNN Training
+## CNN Training
 
 Training a machine learning model is the process through which the
 algorithm learns to predict the correct class (or classes) for a given
@@ -917,14 +919,14 @@ from the labels on the validation dataset to improve itself, so each
 time we use it it acts as a fair assessment of the model (ie, the model
 can't memorize the answers to this assessment).
 
-## **Behind the scenes, what is a CNN and how does it "learn"?** 
+### **Behind the scenes, what is a CNN and how does it "learn"?** 
 
 While this section is not strictly necessary for understanding how to
 train a classifier, it may provide you with more context for why we make
 the decisions we do in training CNNs. It's a good idea to understand how
 your tool of choice works.
 
-### Neural Networks
+#### Neural Networks
 
 A neural network is a network of many nodes and connections between
 them, structured as a sequence of layers (see Fig. 12).
@@ -964,7 +966,7 @@ zero. The goal of the algorithm is to adjust the weights (those black
 line connections in Fig. 12 and Fig. 13) so that for any input sample it
 consistently predicts the correct classes.
 
-### From neural networks to CNNs
+#### From neural networks to CNNs
 
 A convolutional neural network (CNN) is a specialized version of a
 neural network designed for 2-dimensional data like images, and has a
@@ -1008,7 +1010,7 @@ height="0.9281572615923009in"}
 
 Fig. 14. Example of how kernels work on images to generate predictions.
 
-## Batches and epochs
+### Batches and epochs
 
 As described at the start of this section, a CNN learns on batches of
 clips viewed many times. There will usually be multiple batches of clips
@@ -1027,7 +1029,7 @@ classes). Too low and it might not learn enough about the target
 sound(s). You may choose to investigate how much performance changes
 from epoch to epoch throughout the training process to make a decision.
 
-## Preprocessing
+### Preprocessing
 
 Preprocessing basically means what parameters are applied to create the
 tensors. You already saw some of these parameters in the previous
@@ -1038,7 +1040,7 @@ and ***overlay weights***, or the weight (e.g., 0.5) or random range of
 weights (e.g., 0.3-0.7) applied to the overlay when the overlay and
 underlying training image are averaged together.
 
-### Data Augmentation
+#### Data Augmentation
 
 In each epoch, the classifier does not see precisely the same image
 every time. Instead, to increase its ability to generalize the features
@@ -1072,7 +1074,7 @@ removing augmentations, or adding pre-built augmentations (such as
 overlays), but besides applying overlays, we generally do no not make
 changes to the default data augmentation.
 
-# Testing a CNN
+## Testing a CNN
 
 You should not simply trust that a final classifier is a good one.
 Often, first classifiers will not perform very well in a real-world
@@ -1081,7 +1083,7 @@ real-world setting, and then apply one of multiple methods of examining
 classifier performance, including calculating performance metrics or
 examining histograms.
 
-### Assembling an Appropriate Test Set
+#### Assembling an Appropriate Test Set
 
 Testing performance of a classifier really comes down to the **test
 set**. Like the **validation set**, the test set is used to assess the
@@ -1134,7 +1136,7 @@ annotated for the target species can be combined with other
 fully-annotated soundscapes that do not contain the target sounds to get
 a better picture of how the classifier performs on a variety of data.
 
-### Precision and Recall
+#### Precision and Recall
 
 One of the more universally-accepted ways of testing CNN performance is
 by examining ***precision*** and ***recall***. These can be hard metrics
@@ -1211,7 +1213,7 @@ dataset. A and b are with respect to a test dataset that is very similar
 to the training data used to create the model. C and d pertain to test
 data from different domains.
 
-### Score Histograms
+#### Score Histograms
 
 Frequently, we have found ourselves favoring the use of histograms to
 display the distributions of true positive and true negative scores from
@@ -1254,7 +1256,7 @@ highest frequency. Also note that some of the true positives form a
 second distribution at the tail. After retraining in d, the score
 distribution is considered much more acceptable for this same test set.
 
-### A case study: Great Horned Owl begging calls
+#### A case study: Great Horned Owl begging calls
 
 We created a classifier to detect the begging calls of Great Horned Owls
 using Xeno-canto recordings and overlays from field audio data collected
@@ -1292,14 +1294,14 @@ Fig. 19. Histograms of the true positives and true negatives scores from
 the same classifier on two different test datasets (a from Montana and b
 from the East Coast).
 
-# Further Steps
+## Further Steps
 
 So you've trained a classifier, tested its performance, and now you're
 wondering what to do next. Should I retrain based on performance on the
 test set or proceed? There's no right answer, but keep in mind, **the
 classifier does not need to be perfect, only useful.**
 
-## Retraining the classifier
+### Retraining the classifier
 
 While it is possible to load your previously trained classifier and
 proceed with additional training on new training data, we typically
@@ -1344,14 +1346,14 @@ e.  Include more positive training examples. Maybe the classifier simply
     Barred Owl/Great Horned Owl classifier increased performance despite
     already having the target 200 positive examples for each class.
 
-# Additional Resources
+## Additional Resources
 
 Over time, this lab has amassed many resources to assist with training
 both internal and external to this lab including numerous annotated
 datasets and libraries of audio data. Below are some lists of these
 resources.
 
-## Sound libraries
+### Sound libraries
 
 -   [[Xeno-canto]{.underline}](https://xeno-canto.org/): a free sound
     library focusing on bird sounds from species around the world. Has
@@ -1373,7 +1375,7 @@ resources.
 
     -   Must contact managers directly for copies of audio files.
 
-## Annotated datasets (publically released)
+### Annotated datasets (publically released)
 
 -   [[PNRE2019]{.underline}](https://doi.org/10.1002/ecy.3329): an
     \~6-hour dataset of audio recordings annotated for all birds and
@@ -1463,7 +1465,7 @@ resources.
         converted to be usable. In-house version can be found at
         snowy:/media/emu/datasets/annotated/edansa.
 
-## Annotated datasets (in-house only)
+### Annotated datasets (in-house only)
 
 -   Big Annotation Push: a continuously updating dataset of annotated
     diurnal songbird audio from Pennsylvania created by a team of
@@ -1568,7 +1570,7 @@ resources.
 
         -   Canada Warbler
 
-## Labeled datasets (in-house only)
+### Labeled datasets (in-house only)
 
 -   Field Sparrow, Black-and-white Warbler, and Chestnut-sided Warbler:
     four-second clips of these three species derived from the DEER2020a
