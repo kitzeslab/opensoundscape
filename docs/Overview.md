@@ -22,10 +22,10 @@ sound]{.underline}](#how-we-use-automated-classification-of-sound)
 > [[CNN classification
 > problems]{.underline}](#cnn-classification-problems)
 >
-> [[Example 1: Warbler song
+>> [[Example 1: Warbler song
 > types]{.underline}](#example-1-warbler-song-types)
 >
-> [[Example 2: Declining forest
+>> [[Example 2: Declining forest
 > birds]{.underline}](#example-2-declining-forest-birds)
 
 [[Organization]{.underline}](#organization)
@@ -36,10 +36,10 @@ Dataset]{.underline}](#creating-a-training-dataset)
 > [[Step 1: Decide on sources of training
 > data]{.underline}](#step-1-decide-on-sources-of-training-data)
 >
-> [[Targeted Recordings with Field Data
+>> [[Targeted Recordings with Field Data
 > Overlays]{.underline}](#targeted-recordings-with-field-data-overlays)
 >
-> [[Field Data]{.underline}](#field-data)
+>> [[Field Data]{.underline}](#field-data)
 >
 > [[Step 2: Annotate]{.underline}](#step-2-annotate)
 >
@@ -49,11 +49,11 @@ Dataset]{.underline}](#creating-a-training-dataset)
 > [[Step 3: Decide some visual parameters for
 > clips]{.underline}](#step-3-decide-some-visual-parameters-for-clips)
 >
-> [[Clip length]{.underline}](#clip-length)
+>> [[Clip length]{.underline}](#clip-length)
 >
-> [[Bandpass]{.underline}](#bandpass)
+>> [[Bandpass]{.underline}](#bandpass)
 >
-> [[Window samples and overlap
+>> [[Window samples and overlap
 > samples]{.underline}](#window-samples-and-overlap-samples)
 >
 > [[Step 4: Create labels]{.underline}](#step-4-create-labels)
@@ -66,27 +66,27 @@ Dataset]{.underline}](#creating-a-training-dataset)
 > [[Behind the scenes, what is a CNN and how does it
 > "learn"?]{.underline}](#behind-the-scenes-what-is-a-cnn-and-how-does-it-learn)
 >
-> [[Neural Networks]{.underline}](#neural-networks)
+>> [[Neural Networks]{.underline}](#neural-networks)
 >
-> [[From neural networks to
+>> [[From neural networks to
 > CNNs]{.underline}](#from-neural-networks-to-cnns)
 >
 > [[Batches and epochs]{.underline}](#batches-and-epochs)
 >
 > [[Preprocessing]{.underline}](#preprocessing)
 >
-> [[Data Augmentation]{.underline}](#data-augmentation)
+>> [[Data Augmentation]{.underline}](#data-augmentation)
 
 [[Testing a CNN]{.underline}](#testing-a-cnn)
 
-> [[Assembling an Appropriate Test
+>> [[Assembling an Appropriate Test
 > Set]{.underline}](#assembling-an-appropriate-test-set)
 >
-> [[Precision and Recall]{.underline}](#precision-and-recall)
+>> [[Precision and Recall]{.underline}](#precision-and-recall)
 >
-> [[Score Histograms]{.underline}](#score-histograms)
+>> [[Score Histograms]{.underline}](#score-histograms)
 >
-> [[A case study: Great Horned Owl begging
+>> [[A case study: Great Horned Owl begging
 > calls]{.underline}](#a-case-study-great-horned-owl-begging-calls)
 
 [[Further Steps]{.underline}](#further-steps)
