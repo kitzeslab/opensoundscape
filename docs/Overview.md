@@ -265,7 +265,7 @@ Here's a simple list to follow which can help keep you organized:
     provide a couple of options here, but you can come up with your own
     plan of action.
 
-    a.  **Slap a date stamp on everything.**<br>
+     a.  **Slap a date stamp on everything.**<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;i.&nbsp;&nbsp;&nbsp;&nbsp;When you create new versions of training scripts, training
         datasets, etc. add a datestamp to them and save a new copy<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10-05_train_model.py).<br>
@@ -284,76 +284,52 @@ model.train(
 	model_save = f”{path_to_saved_models}/{todays_date}_{project}”,
 	…
 	)
-![image](https://github.com/kitzeslab/opensoundscape/assets/90922772/e55000f9-bb8c-446f-abde-35810b33c47b)
-
 ```
 
-iii. If you will be making multiple versions in the same day, use a
-     timestamp as well.
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;iii.&nbsp;&nbsp;&nbsp;&nbsp;If you will be making multiple versions in the same day, use a timestamp as well.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.  **Use git versioning.** This is a little more advanced, but it can
+ help you keep a record of changes you may have made to files over time.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;i.&nbsp;&nbsp;&nbsp;&nbsp;[Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin wrote on how to use it.<br>
 
-```{=html}
-<!-- -->
+2.  **Keep rigorous notes on *why* and *when* you do something.** <br>
+a.   Just like keeping a notebook of experiments in a wet lab, you should take notes every time you sit down to work on a project.<br>
+b.  You might, for instance, be trying to improve the performance of a classifier by adding in new overlays or negative training clips <br>
+&nbsp;&nbsp;&nbsp;&nbsp; by using high-scoring negative clips from testing. Keeping record of why and how many you add in will help you keep track of the<br>
+&nbsp;&nbsp;&nbsp;&nbsp; methods you used later on.<br>
+c.  Some of us use note taking apps such as [Workflowy](https://workflowy.com/) while others keep pen-and-paper journals. Other approaches include using a <br>
+&nbsp;&nbsp;&nbsp;&nbsp; Google Document or a Jupyter Notebook. Choose the method that works best for you and encourages you to keep notes.<br>
+
+3.  **Create readme.txt files where you keep your training scripts, data, and model files.** <br>
+a.  Readme's are great for reminding yourself what you were doing with a project or any other people who might be jumping<br>
+&nbsp;&nbsp;&nbsp;&nbsp;on the project as well.<br>
+b.  A simple readme is just a log of what you were doing and why (similar to your notes but probably more succinct).<br>
+&nbsp;&nbsp;&nbsp;&nbsp; It might look like this but can take on a different format:
+
 ```
-b.  **Use git versioning.** This is a little more advanced, but it can
-    help you keep a record of changes you may have made to files over
-    time.
-
-    i.  [[Here's an
-        intro]{.underline}](http://datasci.kitzes.com/lessons/git/)
-        Justin wrote on how to use it.
-
-```{=html}
-<!-- -->
-```
-2.  **Keep rigorous notes on *why* and *when* you do something.**
-
-    a.  Just like keeping a notebook of experiments in a wet lab, you
-        should take notes every time you sit down to work on a project.
-
-    b.  You might, for instance, be trying to improve the performance of
-        a classifier by adding in new overlays or negative training
-        clips by using high-scoring negative clips from testing. Keeping
-        a record of why and how many you add in will help you keep track
-        of the methods you used later on.
-
-    c.  Some of us use note taking apps such as
-        [[Workflowy]{.underline}](https://workflowy.com/) while others
-        keep pen-and-paper journals. Other approaches include using a
-        Google Document or a Jupyter Notebook. Choose the method that
-        works best for you and encourages you to keep notes.
-
-3.  **Create readme.txt files where you keep your training scripts,
-    data, and model files.**
-
-    a.  Readme's are great for reminding yourself what you were doing
-        with a project or any other people who might be jumping on the
-        project as well.
-
-    b.  A simple readme is just a log of what you were doing and why
-        (similar to your notes but probably more succinct). It might
-        look like this but can take on a different format:
-
-**This readme was created for the {X project code} on {Y date} by {Z
+This readme was created for the {X project code} on {Y date} by {Z
 user}. Training scripts can be found in {A directory}, labels and
-training clips in {B directory}, and models in {C directory}.**
+training clips in {B directory}, and models in {C directory}.
 
-**2022-10-01: I uploaded an initial training script and trained the
-first version of my model.**
+2022-10-01: I uploaded an initial training script and trained the
+first version of my model.
 
-**2022-10-05: After testing the model, I found it was not performing
+2022-10-05: After testing the model, I found it was not performing
 well on the target sound because of a confusion sound, so I added 100 of
 these high-scoring confusion sounds to the overlays from {X labels
-file}. I trained a new version of the model.**
+file}. I trained a new version of the model.
+```
 
-4.  **Make final products "read only"**
-
+4.  **Make final products "read only"**<br>
     a.  When you create something that you might potentially use in the
         future - for instance, a trained CNN classifier or a set of
-        labeled data, you should give it a unique name (including a
+        labeled<br>
+    	&nbsp;&nbsp;&nbsp;&nbsp;data, you should give it a unique name (including a
         version number if it might be updated in the future: for
-        example, "song8_cerw_cnn_v1-0.model") and make the file "read
+        example,<br>
+    	&nbsp;&nbsp;&nbsp;&nbsp;"song8_cerw_cnn_v1-0.model") and make the file "read
         only" on your computer. This ensures you (or someone else) can't
-        accidentally change the contents.
+        &nbsp;&nbsp;&nbsp;&nbsp;accidentally change the contents.<br>
+    
 
 **A final note:**
 
