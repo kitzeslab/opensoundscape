@@ -125,8 +125,6 @@ is my turf" versus "look out, hawk!" This fortunately makes the task of
 human classification of sounds relatively simple (in most cases but not
 all).
 
-
-
 <figure>
     <img src="./media/image41.png">
     <figcaption>Fig. 1. A ~15 s spectrogram containing the songs of six bird species.
@@ -136,10 +134,7 @@ Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler. <a href="
 
 
         
- 
-
-
-### Kinds of classifiers
+## Kinds of classifiers
 
 Many different types of classifiers for sound exist, but we typically
 use something called a **Convolutional Neural Network**, or **"CNN"**
@@ -161,46 +156,41 @@ other environmental sounds by a naive observer. For such purposes, this
 lab has also developed other classifiers which rely on the periodic
 structure of simple sounds to classify them, which we often refer to as
 **signal processing** algorithms.
-[**[RIBBIT]{.underline}**](http://opensoundscape.org/en/latest/tutorials/RIBBIT_pulse_rate_demo.html)
+[**RIBBIT**](http://opensoundscape.org/en/latest/tutorials/RIBBIT_pulse_rate_demo.html)
 (which stands for "Repeat-Interval Based Bioacoustic Identification
 Tool") is one of these classifiers which can be used for animals such as
 certain frogs (see Fig. 2 below for an example). Another was created
 specifically to classify the accelerating pulses of Ruffed Grouse drums
-([[Lapp]{.underline} *[et al.]{.underline}* [2022.]{.underline} *[Wildl.
-Soc. Bull.]{.underline}*
-[[e1395]{.underline}]{.mark}](https://doi.org/10.1002/wsb.1395)[). This
-document focuses on the training of CNNs, but be aware that signal
-processing algorithms are options for sound classification.]{.mark}
+<a href="https://doi.org/10.1002/wsb.1395" target="_blank"> (Lapp *et al.* 2022 *Wildl.Soc. Bull.*  e1395) </a>
+This document focuses on the training of CNNs, but be aware that signal
+processing algorithms are options for sound classification.
 
-<img src="./media/image17.png" style="width: 6.5in; height: 3.444444444444446in;">
+<img src="./media/image17.png" style="width: 6.5in; height: 3.444444444444446in">
 
-Fig. 2. A spectrogram of a Great Plains toad call; a sound suitable for
-classification using RIBBIT.
+Fig. 2. A spectrogram of a Great Plains toad call; a sound suitable for classification using RIBBIT.<br>
 
 Beyond this lab, you may see others use certain **clustering**
 algorithms as classifiers such as that available from Wildlife Acoustics
 through
-[[Kaleidoscope]{.underline}](https://www.wildlifeacoustics.com/products/kaleidoscope/cluster-analysis).
+[Kaleidoscope](https://www.wildlifeacoustics.com/products/kaleidoscope/cluster-analysis).
 These work by grouping together similar sounds for further review.
 Others may use **template matching** algorithms such as the one
 available in
-[[RavenPro]{.underline}](https://ravensoundsoftware.com/wp-content/uploads/2017/11/Raven14UsersManual.pdf)
+[RavenPro](https://ravensoundsoftware.com/wp-content/uploads/2017/11/Raven14UsersManual.pdf)
 which slides a template spectrogram over audio data to score how well
 the audio matches the template.
 
-### CNN classification problems
+## CNN classification problems
 
 The following are some examples of the types of questions we have asked
 in this lab and CNN classifiers we have or could create to answer them.
 
-#### Example 1: Warbler song types
+### Example 1: Warbler song types
 
 Many warbler species such as the Chestnut-sided Warbler have been known
 to begin their breeding season singing predominantly a "type 1" song and
 switch to predominantly singing a "type 2" song after they have found a
-mate ([[Kroodsma]{.underline} *[et al.]{.underline}* [1987.]{.underline}
-*[Can. J. Zool.]{.underline}*
-[67(2):447-456]{.underline}](https://doi.org/10.1139/z89-065)). Could we
+mate <a href="https://doi.org/10.1139/z89-065" target="_blank"> (Kroodsma *et al.* 1987 *Can. J. Zool.*  67(2):447-456). </a> Could we
 use the switch between type 1 and type 2 songs to say something about
 where and when female Chestnut-sided Warblers choose to pair with males?
 It seems biologically plausible that females might choose to mate with
@@ -225,7 +215,7 @@ c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Fig. 3. Examples of Chestnut-sided Warbler songs. On the top row (a and
 b) are type 1, and on the bottom row (c and d) are type 2.
 
-#### Example 2: Declining forest birds
+### Example 2: Declining forest birds
 
 Many forest bird species across Pennsylvania are undergoing declines due
 to changes in forest composition and structure as forests in
@@ -275,39 +265,28 @@ Here's a simple list to follow which can help keep you organized:
     provide a couple of options here, but you can come up with your own
     plan of action.
 
-    a.  **Slap a date stamp on everything.**
+    a.  **Slap a date stamp on everything.**<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;i.&nbsp;&nbsp;&nbsp;&nbsp;When you create new versions of training scripts, training
+        datasets, etc. add a datestamp to them and save a new copy<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10-05_train_model.py).<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ii.&nbsp;&nbsp; You can automatically add datestamps in your code like such:
 
->> i. When you create new versions of training scripts, training
->> datasets, etc. add a datestamp to them and save a new copy
->> so you know which version they are (e.g.,
->> 2022-10-01_train_model.py -\> 2022-10-05_train_model.py).
+```
+from datetime import date
+todays_date = date.today().strftime(‘%Y-%m-%d’)
+…
+training_data.to_csv(f”{todays_date}_{project}_train.csv”)
+validation_data.to_csv(f”{todays_date}_{project}_validate.csv”)
+…
+model.train(
+	train_df = training_data,
+	validation_df = validation_data,
+	model_save = f”{path_to_saved_models}/{todays_date}_{project}”,
+	…
+	)
+![image](https://github.com/kitzeslab/opensoundscape/assets/90922772/e55000f9-bb8c-446f-abde-35810b33c47b)
 
->> ii. You can automatically add datestamps in your code like such:
-
-
-**from datetime import date**
-
-**todays_date = date.today().strftime('%Y-%m-%d')**
-
-**...**
-
-**training_data.to_csv(f"{todays_date}\_{project}\_train.csv")**
-
-**validation_data.to_csv(f"{todays_date}\_{project}\_validate.csv")**
-
-**...**
-
-**model.train(**
-
-**train_df = training_data,**
-
-**validation_df = validation_data,**
-
-**model_save = f"{path_to_saved_models}/{todays_date}\_{project}",**
-
-**...**
-
-**)**
+```
 
 iii. If you will be making multiple versions in the same day, use a
      timestamp as well.
