@@ -305,19 +305,15 @@ a.  Readme's are great for reminding yourself what you were doing with a project
 b.  A simple readme is just a log of what you were doing and why (similar to your notes but probably more succinct).<br>
 &nbsp;&nbsp;&nbsp;&nbsp; It might look like this but can take on a different format:
 
-```
-This readme was created for the {X project code} on {Y date} by {Z
-user}. Training scripts can be found in {A directory}, labels and
+
+This readme was created for the {X project code} on {Y date} by {Z user}. Training scripts can be found in {A directory}, labels and
 training clips in {B directory}, and models in {C directory}.
 
-2022-10-01: I uploaded an initial training script and trained the
-first version of my model.
+2022-10-01: I uploaded an initial training script and trained the first version of my model.
 
-2022-10-05: After testing the model, I found it was not performing
-well on the target sound because of a confusion sound, so I added 100 of
-these high-scoring confusion sounds to the overlays from {X labels
-file}. I trained a new version of the model.
-```
+2022-10-05: After testing the model, I found it was not performing well on the target sound because of a confusion sound, so I added 100 of
+these high-scoring confusion sounds to the overlays from {X labels file}. I trained a new version of the model.
+
 
 4.  **Make final products "read only"**<br>
     a.  When you create something that you might potentially use in the
@@ -333,10 +329,8 @@ file}. I trained a new version of the model.
 
 **A final note:**
 
-If you are interested in learning more about how to make your work more
-reproducible, check out [[The Practice of Reproducible
-Research]{.underline}](http://www.practicereproducibleresearch.org/),
-copies of which are also hanging out around the lab.
+If you are interested in learning more about how to make your work more reproducible, check out The Practice of [Reproducible
+Research](http://www.practicereproducibleresearch.org/), copies of which are also hanging out around the lab.
 
 ## Creating a Training Dataset
 
@@ -359,9 +353,9 @@ Most typically, training data (in this lab) come in two
 mutually-exclusive formats:
 
 1)  **Targeted recordings** from sound libraries such as
-    [[Xeno-canto]{.underline}](https://xeno-canto.org/) or [[Macaulay
-    Library]{.underline}](https://www.macaulaylibrary.org/) paired with
-    field data that **[does not]{.underline}** include the sound
+    [Xeno-canto](https://xeno-canto.org/) or [Macaulay
+    Library](https://www.macaulaylibrary.org/) paired with
+    field data that **<ins>does not<ins>** include the sound
     classes.
 
 2)  **Field data** containing the sound classes recorded by autonomous
@@ -386,7 +380,7 @@ The idea here is that you start with a set of targeted recordings which
 contains whatever the species of interest is. These are split into
 clips, some of which will contain the sound class(es) (Fig. 4a) and some
 will not (Fig. 4b). You also have a separate set of field data overlays
-which **[do not]{.underline}** contain the sound class(es) (Fig. 4c).
+which **<ins>do not<ins>** contain the sound class(es) (Fig. 4c).
 During the CNN training process, you "overlay" these field data clips on
 top of your sound class clips. This actually creates composite images
 that are averages of the two types of clips (so technically neither is
@@ -395,17 +389,13 @@ really overlaid on top of the other; Fig. 4d). The classifier will
 subject of a class and that the sound classes can vary in loudness and
 context.
 
-a\. b.
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-![](./Images/media/image22.png){width="3.0in"
-height="2.19in"}![](./Images/media/image1.png){width="3.0in"
-height="2.1958759842519684in"}
+<img src="./media/image22.png" width="500" height="400"> <img src="./media/image1.png" width="500" height="400">
 
-c\. d.
+c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-![](./Images/media/image3.png){width="3.0in"
-height="2.19869750656168in"}![](./Images/media/image8.png){width="3.0in"
-height="2.2in"}
+<img src="./media/image3.png" width="500" height="400"> <img src="./media/image8.png" width="500" height="400">
 
 Fig. 4. Targeted training data clips sourced from Xeno-canto and field
 data overlays displayed as spectrograms. The first clip, a, contains a
@@ -415,10 +405,11 @@ American Redstart song from a different recording. Finally, c is
 overlaid on a with a weight of 0.5 (50% comes from a and 50% from c) to
 create a composite image used in training.
 
+
 One easy source of overlays are pre-annotated datasets such as the
-"[[PNRE dataset]{.underline}](https://doi.org/10.1002/ecy.3329)" or the
-"[[Ithaca
-dataset]{.underline}](https://zenodo.org/record/7050014#.Y4-Lx-zMLuU)"
+"[PNRE dataset](https://doi.org/10.1002/ecy.3329)" or the
+"[Ithaca
+dataset](https://zenodo.org/record/7050014#.Y4-Lx-zMLuU)"
 because you already know exactly what these datasets contain making it
 easy to exclude clips that may contain your target species. The caveat
 is that you should not use a dataset you used for overlays as a test set
@@ -433,23 +424,14 @@ be later predicting on, why use it at all? Why not just use field data?
 Targeted recordings paired with field data overlays might actually be
 advantageous in at least some situations.
 
-a.  You're interested in a sound that's hard to find examples of. You
-    might be wasting hours of time just trying to search for it in field
-    data whereas you know with high certainty that it will be in
-    recordings labeled with it from sound libraries.
-
-b.  You're interested in a sound that's highly variable and may vary
-    with geographic location. You may not have field data from a variety
-    of geographic locations, but there's a high chance sound libraries
-    will.
-
-c.  If you use just field recordings, you won't be able to use the
-    overlaying process described above to create more variation in your
-    dataset. You could put overlays on field recordings, but you run the
-    risk of actually making a training set that is *less* representative
-    of the prediction set. For instance, if already quiet clips get
-    overlays the sound of interest may be totally obscured, or they
-    become busier with background noise than actual field recordings.
+a.  You're interested in a sound that's hard to find examples of. Youmight be wasting hours of time just trying to search for it in fielddata <br>
+&nbsp;&nbsp;&nbsp;&nbsp;whereas you know with high certainty that it will be inrecordings labeled with it from sound libraries.<br>
+b.  You're interested in a sound that's highly variable and may vary with geographic location. You may not have field data from a variety<br>
+&nbsp;&nbsp;&nbsp;&nbsp;of geographic locations, but there's a high chance sound libraries will.<br>
+c.  If you use just field recordings, you won't be able to use the overlaying process described above to create more variation in your<br>
+&nbsp;&nbsp;&nbsp;&nbsp;dataset. You could put overlays on field recordings, but you run the risk of actually making a training set that is *less* representative<br>
+&nbsp;&nbsp;&nbsp;&nbsp;of the prediction set. For instance, if already quiet clips get overlays the sound of interest may be totally obscured, or they<br>
+&nbsp;&nbsp;&nbsp;&nbsp;become busier with background noise than actual field recordings.<br>
 
 If field data still makes sense, proceed by gathering recordings with as
 much variability as you can find in the target sounds. A process by
@@ -458,21 +440,17 @@ class is the most ideal case, but you can also target recordings from
 areas or times when you know the subject of a class in the CNN will be
 there (e.g., you have point count data from the same location).
 
+
 **A final note:**
 
-You can create training datasets in other ways, but you should carefully
-consider why you want to do so. For instance, other lab groups have
-created training data by first using a clustering algorithm on field
-data to isolate their sound classes from other clips to then train a
-CNN. We do not consider this a good approach because clusters produced
-may be biased. Target sounds which are overlapping other sounds tend to
-form different clusters from non-overlapping target sounds. Variable
-target sounds may also form multiple clusters. Some may also wish to use
-a previously trained classifier to dredge up more training data from
-field data. We also do not consider this a good approach because
-positive examples will only be those which the classifier *thinks* look
-like the target sound, potentially missing other variations of the
+You can create training datasets in other ways, but you should carefully consider why you want to do so. For instance, other lab groups have
+created training data by first using a clustering algorithm on field data to isolate their sound classes from other clips to then train a
+CNN. We do not consider this a good approach because clusters produced may be biased. Target sounds which are overlapping other sounds tend to
+form different clusters from non-overlapping target sounds. Variable target sounds may also form multiple clusters. Some may also wish to use
+a previously trained classifier to dredge up more training data from field data. We also do not consider this a good approach because
+positive examples will only be those which the classifier *thinks* look like the target sound, potentially missing other variations of the
 target sound.
+
 
 ### Step 2: Annotate
 
@@ -485,19 +463,15 @@ it from spectrograms.
 
 The "boxing" feature of Raven allows you to take the timing and
 frequency boundaries of sounds in the recording by clicking and dragging
-around them (see Fig. 5b). See [[the annotation
-guide]{.underline}](https://docs.google.com/document/d/14WmQz3oBJUPTkPq2Q9BPToQ1F97wUqn_XCTNwrE7mRU/edit#heading=h.nlo85n1esrhc)
+around them (see Fig. 5b). See [the annotation
+guide](https://docs.google.com/document/d/14WmQz3oBJUPTkPq2Q9BPToQ1F97wUqn_XCTNwrE7mRU/edit#heading=h.nlo85n1esrhc)
 for detailed instructions on how to annotate recordings.
 
 a\.
-
-![](./Images/media/image29.png){width="6.5in"
-height="2.486111111111111in"}
+<img src="./media/image29.png"> 
 
 b\.
-
-![](./Images/media/image9.png){width="6.5in"
-height="3.0694444444444446in"}
+<img src="./media/image9.png">
 
 Fig. 5. A spectrogram of a recording containing a Black-throated Green
 Warbler visualized in RavenPro. Along the x-axis is the time and along
@@ -525,7 +499,7 @@ able to skip annotating tedious calls.
 
 The requirement for positive examples to train a CNN on what to look for
 should seem obvious, but the classifier also needs to be told what
-**[not]{.underline}** to look for. This can be as simple as grabbing a
+**not** to look for. This can be as simple as grabbing a
 bunch of random clips from Xeno-canto files that don't target the sound
 classes. Adding clips with specific common noises like rain or wind
 could be helpful too.
@@ -551,13 +525,13 @@ modified to be larger at the cost of prediction speed.
 
 **While this section deals with the topic of spectrogram parameters, the
 parameters you choose are mostly not implemented until the training
-phase. The only parameter you** **act on at this point is choosing the
-clip length because** **you will need to generate a csv of clip start
-and end times for training. We highlight here other important visual
+phase. The only parameter you act on at this point is choosing the
+clip length because** **<ins>you will need to generate a csv of clip start
+and end times for training.<ins>** **We highlight here other important visual
 parameters because these are vital to consider at the same time as you
-are choosing the clip length.**
+are choosing the clip length.** <br>
 
-## ![](./Images/media/image23.png){width="3.7239588801399823in" height="2.792969160104987in"}
+<img src="./media/image23.png">
 
 Fig. 6. An example of a 224x224 tensor which contains the spectrogram of
 a Barred Owl song clip of 5 seconds in length and 0-4,000 Hz in
@@ -582,12 +556,10 @@ occur in recordings. Below, in Fig. 7 is a nice example of the same
 audio file trimmed into different sized clips and the effect that has on
 the appearance of the target sound.
 
-a\. b. c.
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; c.
 
-![](./Images/media/image15.png){width="2.1in"
-height="2.1in"}![](./Images/media/image32.png){width="2.1in"
-height="2.1in"}![](./Images/media/image11.png){width="2.1in"
-height="2.1in"}
+<img src="./media/image15.png" width="300" height="200"> <img src="./media/image32.png" width="300" height="200"> <img src="./media/image11.png" width="300" height="200">
+
 
 Fig. 7. A 4-second clip (a) versus a 20-second clip (b) versus a
 1-second clip (c) of a Canada Warbler song. The 1-second clip does not
@@ -621,11 +593,10 @@ greatly improved the performance of the classifier and aided in
 differentiating the two species. Sometimes finding the right parameters
 requires experimentation.
 
-a\. b.
 
-![](./Images/media/image18.png){width="2.3333333333333335in"
-height="2.3333333333333335in"}![](./Images/media/image2.png){width="2.3333333333333335in"
-height="2.3333333333333335in"}
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
+
+<img src="./media/image18.png" width="500" height="400"> <img src="./media/image2.png" width="500" height="400">
 
 Fig. 8. Two tensors containing the same Northern Cardinal clip at
 different bandpass ranges (the cardinal is boxed in red). The first (a)
@@ -651,14 +622,10 @@ different on spectrograms (see Fig. 10). **Overlap samples** should
 typically be ½ of the value of window samples.
 
 a\.
-
-![](./Images/media/image4.png){width="6.135416666666667in"
-height="4.541666666666667in"}
+<img src="./media/image4.png">
 
 b\.
-
-![](./Images/media/image5.png){width="6.135416666666667in"
-height="4.5625in"}
+<img src="./media/image5.png">
 
 Fig. 9. An example of frequency modulation that is revealed by modifying
 the window_samples and overlap_samples parameters of the same 1 s clip.
@@ -668,11 +635,9 @@ only apparent in a. Frequency modulation may or may not be visible when
 spectrograms are squished into 224x224 pixel tensors, depending on the
 clip length.
 
-a\. b.
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; c.
 
-![](./Images/media/image43.png){width="2.6185345581802273in"
-height="2.5in"} ![](./Images/media/image37.png){width="2.62in"
-height="2.5in"}
+<img src="./media/image43.png" width="300" height="200"> <img src="./media/image37.png" width="300" height="200"> <img src="./media/image11.png" width="300" height="200">
 
 Fig. 10. Another example of how spectrogram parameters can drastically
 change the appearance of a sound on a spectrogram. This is the same
@@ -680,17 +645,13 @@ American Woodcock call at 1024 Hz (a) and at 256 Hz (b).
 
 A quick and easy way to investigate how window samples affect your
 training data is to use software such as
-[[Audacity]{.underline}](https://www.audacityteam.org/) (see Fig. 11).
+[Audacity](https://www.audacityteam.org/) (see Fig. 11).
 
 a\.
-
-![](./Images/media/image10.png){width="6.5in"
-height="2.9305555555555554in"}
+<img src="./media/image10.png">
 
 b\.
-
-![](./Images/media/image13.png){width="4.348958880139983in"
-height="2.9062751531058617in"}
+<img src="./media/image13.png">
 
 Fig. 11. Adjusting the spectrogram parameters in Audacity. Click the
 drop-down menu in the upper left corner of the audio panel, click
@@ -806,8 +767,8 @@ paragraph). By downsampling, you lose some of the variability in clips
 from the species with more positives, but you don't run the risk
 described previously. Some combination of upsampling and downsampling
 could also be performed. Opensoundscape includes a function for
-[[resampling
-clips]{.underline}](http://opensoundscape.org/en/latest/api/modules.html?highlight=resample#opensoundscape.data_selection.resample).
+[resampling
+clips](http://opensoundscape.org/en/latest/api/modules.html?highlight=resample#opensoundscape.data_selection.resample).
 
 When annotating targeted recordings, inevitably there will be portions
 of the recordings that do not contain the target species when the
@@ -834,8 +795,8 @@ from the training dataset, and put them in the validation dataset. The
 clips put into the validation dataset should also be balanced. This
 means taking the same relative proportions of positive and negative
 clips from each class as appear in the training dataset. The Python
-package scikit-learn includes a function for [[splitting
-data]{.underline}](http://opensoundscape.org/en/latest/tutorials/cnn_training_advanced.html?highlight=validation#Split-into-train-and-validation-sets)
+package scikit-learn includes a function for [splitting
+data](http://opensoundscape.org/en/latest/tutorials/cnn_training_advanced.html?highlight=validation#Split-into-train-and-validation-sets)
 into training and validation datasets.
 
 **A final note:**
@@ -887,8 +848,7 @@ your tool of choice works.
 A neural network is a network of many nodes and connections between
 them, structured as a sequence of layers (see Fig. 12).
 
-![](./Images/media/image33.png){width="4.380208880139983in"
-height="2.2483956692913387in"}
+<img src="./media/image33.png">
 
 Fig. 12. A schematic of the structure of a neural network.
 
@@ -904,8 +864,7 @@ entering a new node. For example, the bottom node of the first green
 ("hidden") layer receives the sum of inputs of the from the first layer
 multiplied by their respective weights (see Fig. 13).
 
-![](./Images/media/image40.png){width="4.538496281714786in"
-height="2.2910673665791776in"}
+<img src="./media/image40.png">
 
 Fig. 13. Neural network schematic showing example inputs to one hidden
 layer.
@@ -959,10 +918,9 @@ predict. (This is called a "fully connected layer").
 
 a\. b.
 
-![](./Images/media/image21.png){width="2.4008147419072614in"
-height="0.9272375328083989in"}
-![](./Images/media/image31.png){width="1.046875546806649in"
-height="0.9281572615923009in"}
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
+
+<img src="./media/image21.png" width="500" height="400"> <img src="./media/image31.png" width="500" height="400">
 
 Fig. 14. Example of how kernels work on images to generate predictions.
 
@@ -974,8 +932,6 @@ viewed each epoch, model weights are updated from epoch to epoch, models
 are evaluated at the end of each epoch to determine how they perform on
 the validation dataset, and the final epoch during training does not
 necessarily produce the best model.
-
-There is an ideal balance in deciding how large batches should be...
 
 We have typically used 20-100 epochs as our standard for training
 models, but this is not necessarily the correct choice in every case.
@@ -1000,7 +956,7 @@ underlying training image are averaged together.
 
 In each epoch, the classifier does not see precisely the same image
 every time. Instead, to increase its ability to generalize the features
-of the image that it\'s learning, it gets a modified, or "augmented"
+of the image that it's learning, it gets a modified, or "augmented"
 version of the image which differs a bit each epoch. The parameters used
 in augmentation of the image are also part of the preprocessor. Overlays
 are considered part of augmentation.
@@ -1010,17 +966,13 @@ vertical gray bars are overlaid, and the tensor is trimmed a bit around
 the edges (see Fig. 15). From epoch-to-epoch, these shift a little and
 any overlays hop around between underlying training images.
 
-a\. b.
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-![](./Images/media/image6.png){width="3.0in"
-height="3.0650601487314084in"}![](./Images/media/image30.png){width="3.0in"
-height="3.0650601487314084in"}
+<img src="./media/image6.png" width="500" height="400"> <img src="./media/image30.png" width="500" height="400">
 
-c\. d.
+c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-![](./Images/media/image35.png){width="3.0in"
-height="3.0650601487314084in"}![](./Images/media/image12.png){width="3.0in"
-height="3.0650601487314084in"}
+<img src="./media/image35.png" width="500" height="400"> <img src="./media/image12.png" width="500" height="400">
 
 Fig. 15. The original tensor (a) versus the same tensor with default
 augmentation applied in three different epochs (b-d).
@@ -1061,8 +1013,8 @@ Acquiring said recordings can be tough. Some potential options you could
 try are as follows:
 
 a.  From fully-annotated soundscapes. A list of some of these that are
-    available to use is at the [[bottom of the
-    document]{.underline}](#additional-resources). Preferably, a fully
+    available to use is at the [bottom of the
+    document](#additional-resources). Preferably, a fully
     annotated soundscape would be produced from randomly sampling all
     audio data available in a larger dataset. Keep in mind, using
     overlays from these data will specifically increase performance on
@@ -1127,15 +1079,14 @@ determine the classifier's performance at that threshold.
 ***Precision*** is the number of true positives out of the number of all
 positives [at that particular threshold]{.underline}. ***Recall*** is
 the number of true positives out of the number of all clips that
-actually contain the target sound [at that particular
-threshold]{.underline} (see Fig. 16).
+actually contain the target sound </ins> at that particular
+threshold </ins> (see Fig. 16).
 
-![](./Images/media/image7.png){width="3.3257338145231845in"
-height="6.057292213473316in"}
+<img src="./media/image7.png" width="500" height="400">
 
 Fig. 16. A visual demonstration of the meaning of precision and recall.
 Source:
-[[https://en.wikipedia.org/wiki/Precision_and_recall]{.underline}](https://en.wikipedia.org/wiki/Precision_and_recall)
+[https://en.wikipedia.org/wiki/Precision_and_recall](https://en.wikipedia.org/wiki/Precision_and_recall)
 
 Often, these are displayed as "PR curves" where recall is plotted
 against precision by varying the threshold used (see Fig. 17a and Fig.
@@ -1150,17 +1101,13 @@ other depending on the project, but generally if you can get \>0.7
 precision *and* recall, this is a good sign. Fig. 17a and 17b show very
 good performance while 17c and 17d show very poor performance.
 
-a\. b.
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-![](./Images/media/image25.png){width="3.15in"
-height="2.103386920384952in"}![](./Images/media/image42.png){width="3.15in"
-height="2.0932261592300963in"}
+<img src="./media/image25.png" width="500" height="400"> <img src="./media/image42.png" width="500" height="400">
 
-c\. d.
+c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-![](./Images/media/image28.png){width="3.15in"
-height="2.103386920384952in"}![](./Images/media/image34.png){width="3.15in"
-height="2.103386920384952in"}
+<img src="./media/image28.png" width="500" height="400"> <img src="./media/image34.png" width="500" height="400">
 
 Fig. 17. Examples of typical precision-recall curves (a and c) and a
 threshold versus precision and recall plots (b and d). All of these
@@ -1188,17 +1135,13 @@ Fig. 18c below shows an example of a bimodal histogram. In this
 instance, it was caused by another type of vocalization produced by the
 bird in question which was not well-represented in the training dataset.
 
-a\. b.
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-![](./Images/media/image14.png){width="3.0in"
-height="2.0in"}![](./Images/media/image24.png){width="3.0in"
-height="2.0in"}
+<img src="./media/image14.png" width="500" height="400"> <img src="./media/image24.png" width="500" height="400">
 
-c\. d.
+c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-![](./Images/media/image20.png){width="3.0in"
-height="2.6666666666666665in"}![](./Images/media/image36.png){width="3.0in"
-height="2.6527777777777777in"}
+<img src="./media/image20.png" width="500" height="400"> <img src="./media/image36.png" width="500" height="400">
 
 Fig. 18. Some example score histograms. The top row (a and b) are
 considered to be good classifier performance. There is overlap between
@@ -1240,11 +1183,9 @@ differences can wildly impact estimates of performance.
 
 For precision and recall on these two test datasets, see Fig. 16 above.
 
-a\. b.
+c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-![](./Images/media/image26.png){width="3.15in"
-height="2.103386920384952in"}![](./Images/media/image39.png){width="3.15in"
-height="2.103386920384952in"}
+<img src="./media/image26.png" width="500" height="400"> <img src="./media/image39.png" width="500" height="400">
 
 Fig. 19. Histograms of the true positives and true negatives scores from
 the same classifier on two different test datasets (a from Montana and b
@@ -1311,7 +1252,7 @@ resources.
 
 ### Sound libraries
 
--   [[Xeno-canto]{.underline}](https://xeno-canto.org/): a free sound
+-   [Xeno-canto](https://xeno-canto.org/): a free sound
     library focusing on bird sounds from species around the world. Has
     mammal sounds and now Orthoptera as well.
 
@@ -1323,7 +1264,7 @@ resources.
     -   Verify that the foreground species is actually there; users are
         pretty good but sometimes wrong.
 
--   [[Macaulay Library]{.underline}](https://www.macaulaylibrary.org/):
+-   [Macaulay Library](https://www.macaulaylibrary.org/):
     a sound library focusing on birds and run by the Cornell Laboratory
     of Ornithology.
 
@@ -1333,7 +1274,7 @@ resources.
 
 ### Annotated datasets (publically released)
 
--   [[PNRE2019]{.underline}](https://doi.org/10.1002/ecy.3329): an
+-   [PNRE2019](https://doi.org/10.1002/ecy.3329): an
     \~6-hour dataset of audio recordings annotated for all birds and
     containing more than 16,000 vocalizations from 48 species.
     Recordings came from Powdermill Nature Reserve in Pennsylvania.
@@ -1341,8 +1282,7 @@ resources.
     -   Use dryad copy containing wav files or in-house copy of dataset
         located at snowy:/media/emu/datasets/annotated/pnre_ecy3329.
 
--   [[Cornell
-    Ithaca]{.underline}](https://doi.org/10.5281/zenodo.7018484): an
+-   [Cornell Ihaca]https://doi.org/10.5281/zenodo.7018484): an
     \~285-hour dataset of audio recordings annotated for all birds and
     containing more than 50,000 vocalizations from 81 species.
     Recordings came from Ithaca, New York.
@@ -1353,8 +1293,8 @@ resources.
         converted to be usable. In-house version can be found at
         snowy:/media/emu/datasets/annotated/cornell_ithaca.
 
--   [[Cornell
-    Western]{.underline}](https://doi.org/10.5281/zenodo.7050014): an
+-   [Cornell
+    Western](https://doi.org/10.5281/zenodo.7050014): an
     \~33-hour dataset of audio recordings annotated for all birds and
     containing more than 20,000 vocalizations from 56 species.
     Recordings came from the Sierra Nevadas of California.
@@ -1365,8 +1305,8 @@ resources.
         converted to be usable. In-house version can be found at
         snowy:/media/emu/datasets/annotated/cornell_western.
 
--   [[Cornell
-    Hawaii]{.underline}](https://doi.org/10.5281/zenodo.7078499): an
+-   [Cornell
+    Hawaii](https://doi.org/10.5281/zenodo.7078499): an
     \~51-hour dataset of audio recordings annotated for all birds and
     containing more than 59,000 vocalizations from 27 species.
     Recordings came from the Hawaiian islands.
@@ -1377,8 +1317,8 @@ resources.
         converted to be usable. In-house version can be found at
         snowy:/media/emu/datasets/annotated/cornell_hawaii.
 
--   [[Cornell
-    Amazon]{.underline}](https://doi.org/10.5281/zenodo.7079124): an
+-   [Cornell
+    Amazon](https://doi.org/10.5281/zenodo.7079124): an
     \~21-hour dataset of audio recordings annotated for all birds and
     containing more than 14,000 vocalizations from 132 species.
     Recordings came from Peru.
@@ -1389,7 +1329,7 @@ resources.
         converted to be usable. In-house version can be found at
         snowy:/media/emu/datasets/annotated/cornell_amazon.
 
--   [[Cornell_CoffeeFarm]{.underline}](https://zenodo.org/record/7525349):
+-   [Cornell_CoffeeFarm](https://zenodo.org/record/7525349):
     an \~34-hour dataset of audio recordings annotated for all birds and
     containing more than 6,900 vocalizations from 89 species. Recordings
     came from coffee farms in Columbia and Costa Rica.
@@ -1400,7 +1340,7 @@ resources.
         converted to be usable. In-house version can be found at
         snowy:/media/emu/datasets/annotated/cornell_coffeefarm.
 
--   [[Cornell_SierraNevada]{.underline}](https://zenodo.org/record/7525805):
+-   [Cornell_SierraNevada](https://zenodo.org/record/7525805):
     an \~160-hour dataset of audio recordings annotated for all birds
     and containing more than 10,000 vocalizations from 21 species.
     Recordings came from the southern Sierra Nevada mountains.
@@ -1411,7 +1351,7 @@ resources.
         converted to be usable. In-house version can be found at
         snowy:/media/emu/datasets/annotated/cornell_sierranevada.
 
--   [[EDANSA]{.underline}](https://zenodo.org/record/6824272#.Yzsbk-xufhM):
+-   [EDANSA](https://zenodo.org/record/6824272#.Yzsbk-xufhM):
     an \~27-hour dataset of audio recordings annotated for mostly birds
     and containing around 28 species. Recordings came from Alaska.
 
