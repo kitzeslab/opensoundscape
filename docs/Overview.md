@@ -11,99 +11,99 @@ rather than a programming how-to. For more detailed instructions on
 
 ## Table of Contents
 
-[[Table of Contents]{.underline}](#table-of-contents)
+[Table of Contents](#table-of-contents)
 
-[[How we use automated classification of
-sound]{.underline}](#how-we-use-automated-classification-of-sound)
+[How we use automated classification of
+sound](#how-we-use-automated-classification-of-sound)
 
-> [[Kinds of classifiers]{.underline}](#kinds-of-classifiers)
+> [Kinds of classifiers](#kinds-of-classifiers)
 >
-> [[CNN classification
-> problems]{.underline}](#cnn-classification-problems)
+> [CNN classification
+> problems](#cnn-classification-problems)
 >
->> [[Example 1: Warbler song
-> types]{.underline}](#example-1-warbler-song-types)
+>> [Example 1: Warbler song
+> types](#example-1-warbler-song-types)
 >
->> [[Example 2: Declining forest
-> birds]{.underline}](#example-2-declining-forest-birds)
+>> [Example 2: Declining forest
+> birds](#example-2-declining-forest-birds)
 
-[[Organization]{.underline}](#organization)
+[Organization](#organization)
 
-[[Creating a Training
-Dataset]{.underline}](#creating-a-training-dataset)
+[Creating a Training
+Dataset](#creating-a-training-dataset)
 
-> [[Step 1: Decide on sources of training
-> data]{.underline}](#step-1-decide-on-sources-of-training-data)
+> [Step 1: Decide on sources of training
+> data](#step-1-decide-on-sources-of-training-data)
 >
->> [[Targeted Recordings with Field Data
-> Overlays]{.underline}](#targeted-recordings-with-field-data-overlays)
+>> [Targeted Recordings with Field Data
+> Overlays](#targeted-recordings-with-field-data-overlays)
 >
->> [[Field Data]{.underline}](#field-data)
+>> [Field Data](#field-data)
 >
-> [[Step 2: Annotate]{.underline}](#step-2-annotate)
+> [Step 2: Annotate](#step-2-annotate)
 >
-> [[Step 2.5: Collect
-> negatives]{.underline}](#step-2.5-collect-negatives)
+> [Step 2.5: Collect
+> negatives](#step-2.5-collect-negatives)
 >
-> [[Step 3: Decide some visual parameters for
-> clips]{.underline}](#step-3-decide-some-visual-parameters-for-clips)
+> [Step 3: Decide some visual parameters for
+> clips](#step-3-decide-some-visual-parameters-for-clips)
 >
->> [[Clip length]{.underline}](#clip-length)
+>> [Clip length](#clip-length)
 >
->> [[Bandpass]{.underline}](#bandpass)
+>> [Bandpass](#bandpass)
 >
->> [[Window samples and overlap
-> samples]{.underline}](#window-samples-and-overlap-samples)
+>> [Window samples and overlap
+> samples](#window-samples-and-overlap-samples)
 >
-> [[Step 4: Create labels]{.underline}](#step-4-create-labels)
+> [Step 4: Create labels](#step-4-create-labels)
 >
-> [[Step 5: Balance the training
-> dataset]{.underline}](#step-5-balance-the-training-dataset)
+> [Step 5: Balance the training
+> dataset](#step-5-balance-the-training-dataset)
 
-[[CNN Training]{.underline}](#cnn-training)
+[CNN Training](#cnn-training)
 
-> [[Behind the scenes, what is a CNN and how does it
-> "learn"?]{.underline}](#behind-the-scenes-what-is-a-cnn-and-how-does-it-learn)
+> [Behind the scenes, what is a CNN and how does it
+> "learn"?](#behind-the-scenes-what-is-a-cnn-and-how-does-it-learn)
 >
->> [[Neural Networks]{.underline}](#neural-networks)
+>> [Neural Networks](#neural-networks)
 >
->> [[From neural networks to
-> CNNs]{.underline}](#from-neural-networks-to-cnns)
+>> [From neural networks to
+> CNNs](#from-neural-networks-to-cnns)
 >
-> [[Batches and epochs]{.underline}](#batches-and-epochs)
+> [Batches and epochs](#batches-and-epochs)
 >
-> [[Preprocessing]{.underline}](#preprocessing)
+> [Preprocessing](#preprocessing)
 >
->> [[Data Augmentation]{.underline}](#data-augmentation)
+>> [Data Augmentation](#data-augmentation)
 
-[[Testing a CNN]{.underline}](#testing-a-cnn)
+[Testing a CNN](#testing-a-cnn)
 
->> [[Assembling an Appropriate Test
-> Set]{.underline}](#assembling-an-appropriate-test-set)
+>> [Assembling an Appropriate Test
+> Set](#assembling-an-appropriate-test-set)
 >
->> [[Precision and Recall]{.underline}](#precision-and-recall)
+>> [Precision and Recall](#precision-and-recall)
 >
->> [[Score Histograms]{.underline}](#score-histograms)
+>> [Score Histograms](#score-histograms)
 >
->> [[A case study: Great Horned Owl begging
-> calls]{.underline}](#a-case-study-great-horned-owl-begging-calls)
+>> [A case study: Great Horned Owl begging
+> calls](#a-case-study-great-horned-owl-begging-calls)
 
-[[Further Steps]{.underline}](#further-steps)
+[Further Steps](#further-steps)
 
-> [[Retraining the classifier]{.underline}](#retraining-the-classifier)
+> [Retraining the classifier](#retraining-the-classifier)
 
-[[Additional Resources]{.underline}](#additional-resources)
+[Additional Resources](#additional-resources)
 
-> [[Sound libraries]{.underline}](#sound-libraries)
+> [Sound libraries](#sound-libraries)
 >
-> [[Annotated datasets (publically
-> released)]{.underline}](#annotated-datasets-publically-released)
+> [Annotated datasets (publically
+> released)](#annotated-datasets-publically-released)
 >
-> [[Annotated datasets (in-house
-> only)]{.underline}](#annotated-datasets-in-house-only)
+> [Annotated datasets (in-house
+> only)](#annotated-datasets-in-house-only)
 >
-> [[Labeled datasets (in-house
-> only)]{.underline}](#labeled-datasets-in-house-only)
+> [Labeled datasets (in-house
+> only)](#labeled-datasets-in-house-only)
 
 ## How we use automated classification of sound
 
