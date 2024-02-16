@@ -1,25 +1,13 @@
 # Introduction to training classifiers
 
-Created by Lauren Chronister, Tessa Rhinehart, and Sam Lapp
+### Created by Lauren Chronister, Tessa Rhinehart, and Sam Lapp
 
 Last updated on 2023-01-31 by Lauren Chronister
 
-
-<span style="font-size:3.5em;">This document is intended to serve as an introduction to the classifier
-training workflow and considerations that need to be made before diving
-in rather than a programming how-to. For more detailed instructions on
-***how*** to use OpenSoundscape, see the
-[[documentation]{.underline}](http://opensoundscape.org/en/latest/)
-.</span></span>
-
-
-<span style="font-size: 69px;"> This document is intended to serve as an introduction to the classifier
-training workflow and considerations that need to be made before diving
-in rather than a programming how-to. For more detailed instructions on
-***how*** to use OpenSoundscape, see the
-[[documentation]{.underline}](http://opensoundscape.org/en/latest/)
-.</span>
-
+This document is intended to serve as an introduction to the classifier 
+training workflow and considerations that need to be made before diving in 
+rather than a programming how-to. For more detailed instructions on 
+***how*** to use OpenSoundscape, see the <a href="http://opensoundscape.org/en/latest/" target="_blank"> documentation</a>
 
 ## Table of Contents
 
