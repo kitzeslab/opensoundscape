@@ -621,10 +621,11 @@ Changing the window samples may also make the same call look very
 different on spectrograms (see Fig. 10). **Overlap samples** should
 typically be ½ of the value of window samples.
 
-a\.
+a\.<br>
 <img src="./media/image4.png">
 
-b\.
+
+b\.<br>
 <img src="./media/image5.png">
 
 Fig. 9. An example of frequency modulation that is revealed by modifying
@@ -635,9 +636,9 @@ only apparent in a. Frequency modulation may or may not be visible when
 spectrograms are squished into 224x224 pixel tensors, depending on the
 clip length.
 
-a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; c.
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image43.png" width="300" height="200"> <img src="./media/image37.png" width="300" height="200"> <img src="./media/image11.png" width="300" height="200">
+<img src="./media/image43.png" width="300" height="200"> <img src="./media/image37.png" width="300" height="200"> 
 
 Fig. 10. Another example of how spectrogram parameters can drastically
 change the appearance of a sound on a spectrogram. This is the same
@@ -695,31 +696,26 @@ single-target dataframe, each row must have exactly one "1"; the other
 columns must be "0"s. If this were a single class problem, only the
 "Species_A" and "Other" columns would be needed.
 
-  --------------------------------------------------------------------------
-  file                 Species_A         Species_B         Other
-  -------------------- ----------------- ----------------- -----------------
-  /Path/to/clip1.wav   1                 0                 0
-
-  /Path/to/clip2.wav   0                 1                 0
-
-  /Path/to/clip3.wav   0                 0                 1
-  --------------------------------------------------------------------------
+  --------------------------------------------------------------
+  file                 |Species_A       |  Species_B |    Other|
+ | ------------------- | -------------- |------------|-------- |
+ | /Path/to/clip1.wav  | 1              |   0        |       0|
+ |  /Path/to/clip2.wav | 0              |   1        |       0|
+ | /Path/to/clip3.wav  | 0              |   0        |       1|
+  -------------------------------------------------------------
 
 Table 2. An example multi-class, multi-target data frame. In a
 multi-target dataframe, each row can have zero, one, or multiple "1"s.
 If this were a single class problem, only the "Species_A" column would
 be needed.
 
-  -----------------------------------------------------------------------
-  file                    Species_A               Species_B
-  ----------------------- ----------------------- -----------------------
-  /Path/to/clip1.wav      1                       0
-
-  /Path/to/clip2.wav      0                       1
-
-  /Path/to/clip3.wav      1                       1
-
-  /Path/to/clip4.wav      0                       0
+  -------------------------------------------------------------
+  |file                  |  Species_A     |      Species_B     |
+ | --------------------- | -------------- |-----------------   |
+ | /Path/to/clip1.wav   |   1             |          0         |
+ | /Path/to/clip2.wav   |  0              |         1 		|
+ | /Path/to/clip3.wav   |   1             |          1 		|
+ | /Path/to/clip4.wav   |   0             |          0 		|	
   -----------------------------------------------------------------------
 
 ### Step 5: Balance the training dataset
@@ -916,11 +912,10 @@ look just like those of the neural network shown above (Fig. 12 and Fig.
 13), so that it still has one output node for each class it is trying to
 predict. (This is called a "fully connected layer").
 
-a\. b.
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image21.png" width="500" height="400"> <img src="./media/image31.png" width="500" height="400">
+<img src="./media/image21.png" width="500" height="200"> <img src="./media/image31.png" width="200" height="200">
 
 Fig. 14. Example of how kernels work on images to generate predictions.
 
@@ -1012,30 +1007,21 @@ be predicting on.
 Acquiring said recordings can be tough. Some potential options you could
 try are as follows:
 
-a.  From fully-annotated soundscapes. A list of some of these that are
-    available to use is at the [bottom of the
-    document](#additional-resources). Preferably, a fully
-    annotated soundscape would be produced from randomly sampling all
-    audio data available in a larger dataset. Keep in mind, using
-    overlays from these data will specifically increase performance on
-    them, especially if you do not exclude clips you used as overlays.
+a.  From fully-annotated soundscapes. A list of some of these that are available to use is at the [bottom of the document](#additional-resources). <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;Preferably, a fully annotated soundscape would be produced from randomly sampling all  audio data available in a larger <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;dataset. Keep in mind, using overlays from these data will specifically increase performance on them, especially if you <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;do not exclude clips you used as overlays.
 
-b.  From cards where point-counters found the species of interest. These
-    may still be a chore to skim through for the target species, but
-    this might be the best bet for rare species that you are unlikely to
-    encounter while listening to random data. Aim also to get examples
-    from more than one site as individuals may vary in their
-    vocalizations.
+b.  From cards where point-counters found the species of interest. These may still be a chore to skim through for the target species, but this <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;might  be the best bet for rare species that you are unlikely to encounter while listening to random data. Aim also  <br>
+    &nbsp;&nbsp;&nbsp;&nbsp; to get examplesfrom more than one site as individuals may vary in their vocalizations.
 
-c.  By predicting on a whole field dataset. You can listen to the
-    high-scoring clips from the set and find some that contain the
-    species of interest. However, note that this may introduce biases to
-    your test dataset, as it will only turn up recordings that the
-    classifier already scored relatively highly.
+c.  By predicting on a whole field dataset. You can listen to the high-scoring clips from the set and find some that contain the species of  <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;interest. However, note that this may introduce  biases to your test dataset, as it will only turn up recordings <br>
+    &nbsp;&nbsp;&nbsp;&nbsp; that the classifier already scored relatively highly.
 
-d.  Using a clustering algorithm to find when/where the sounds you want
-    are occurring. Note this may also be a biased approach that leads
-    you to missing variations in the sound you are interested in.
+d.  Using a clustering algorithm to find when/where the sounds you want are occurring. Note this may also be a biased approach that leads <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;you to missing variations in the sound you are interested in.
 
 Preferably, a test set should include several dozen positive examples of
 a target sound but even a handful can give you an idea of score
@@ -1066,23 +1052,22 @@ Table 3. Demonstration of true and false positives and negatives.
 Columns are the true state of a sound in a clip while rows are the
 predicted state of a sound in a clip.
 
-  -----------------------------------------------------------------------
-                          Present                 Absent
-  ----------------------- ----------------------- -----------------------
-  Predicted present       True positive           False positive
+|                     | Present              |    Absent          |
+| ------------------- | -------------------- |------------------- |
+| Predicted present   |    True positive     |     False positive |
+| Predicted absent    |   False negative     |     True negative  |
 
-  Predicted absent        False negative          True negative
-  -----------------------------------------------------------------------
+
 
 When you select a threshold, you can use the labeled dataset to
 determine the classifier's performance at that threshold.
 ***Precision*** is the number of true positives out of the number of all
-positives [at that particular threshold]{.underline}. ***Recall*** is
+positives  at that particular threshold. ***Recall*** is
 the number of true positives out of the number of all clips that
-actually contain the target sound </ins> at that particular
-threshold </ins> (see Fig. 16).
+actually contain the target sound <ins>at that particular
+threshold <ins> (see Fig. 16).
 
-<img src="./media/image7.png" width="500" height="400">
+<img src="./media/image7.png" width="500" height="900">
 
 Fig. 16. A visual demonstration of the meaning of precision and recall.
 Source:
@@ -1183,7 +1168,7 @@ differences can wildly impact estimates of performance.
 
 For precision and recall on these two test datasets, see Fig. 16 above.
 
-c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
+a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
 <img src="./media/image26.png" width="500" height="400"> <img src="./media/image39.png" width="500" height="400">
 
@@ -1217,31 +1202,22 @@ that you can tell, maybe your classifier isn't learning enough about the
 target sound and requires different preprocessing parameters. Some
 options are:
 
-a.  Tweak preprocessing parameters so that training samples more clearly
-    show distinctive features of the target sound.
+a.  Tweak preprocessing parameters so that training samples more clearly show distinctive features of the target sound.<br>
 
-b.  Add confusion sounds into the negatives. For instance, if your
-    Common Nighthawk model keeps scoring American Woodcock highly, you
-    could add more clips from Xeno-Canto American Woodcock files into
-    your negatives.
+b.  Add confusion sounds into the negatives. For instance, if your Common Nighthawk model keeps scoring American Woodcock highly, you<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;could add more clips from Xeno-Canto American Woodcock files into your negatives.<br>
 
-c.  Add high-scoring negatives from the test set into the overlays. This
-    can increase the variety of sounds the classifier is exposed to but
-    keep in mind that these clips will now score lower when predicting
-    on the test set.
+c.  Add high-scoring negatives from the test set into the overlays. This can increase the variety of sounds the classifier is exposed to but<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;keep in mind that these clips will now score lower when predicting on the test set.<br>
 
-d.  Add another class to the classifier containing a confusion species.
-    This may help in instances where it's difficult to differentiate two
-    species--for instance, telling apart Black-throated Blue Warbler and
-    Cerulean Warbler songs can be challenging to the untrained observer.
-    Including both can give the classifier more specificity to the
-    target species.
+d.  Add another class to the classifier containing a confusion species. This may help in instances where it's difficult to differentiate two<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;species--for instance, telling apart Black-throated Blue Warbler and Cerulean Warbler songs can be challenging<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;to the untrained observer. Including both can give the classifier more specificity to the <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;target species.<br>
 
-e.  Include more positive training examples. Maybe the classifier simply
-    doesn't have enough to work off of. Including the first 120 rather
-    than the first 60 seconds of Xeno-canto recordings in a two-class
-    Barred Owl/Great Horned Owl classifier increased performance despite
-    already having the target 200 positive examples for each class.
+e.  Include more positive training examples. Maybe the classifier simplydoesn't have enough to work off of. Including the first 120 rather<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;than the first 60 seconds of Xeno-canto recordings in a two-class Barred Owl/Great Horned Owl classifier <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;increased performance despite already having the target 200 positive examples for each class.<br>
 
 ## Additional Resources
 
@@ -1282,7 +1258,7 @@ resources.
     -   Use dryad copy containing wav files or in-house copy of dataset
         located at snowy:/media/emu/datasets/annotated/pnre_ecy3329.
 
--   [Cornell Ihaca]https://doi.org/10.5281/zenodo.7018484): an
+-   [Cornell Ihaca](https://doi.org/10.5281/zenodo.7018484): an
     \~285-hour dataset of audio recordings annotated for all birds and
     containing more than 50,000 vocalizations from 81 species.
     Recordings came from Ithaca, New York.
