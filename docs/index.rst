@@ -117,6 +117,7 @@ Suggested citation:
    classifier_guide/train_cnn
    classifier_guide/evaluate_cnn
    classifier_guide/retrain_cnn
+   classifier_guide/Intro.md
 
 .. toctree::
    :maxdepth: 1
