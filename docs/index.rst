@@ -110,15 +110,14 @@ Suggested citation:
    :hidden:
    :caption: Classifiers 101
 
-   classifier_guide/overview
+   classifier_guide/Intro.md
    classifier_guide/why_classify
    classifier_guide/data_organization
    classifier_guide/create_training_dataset
    classifier_guide/train_cnn
    classifier_guide/evaluate_cnn
    classifier_guide/retrain_cnn
-   classifier_guide/Intro.md
-
+   
 .. toctree::
    :maxdepth: 1
    :hidden:
