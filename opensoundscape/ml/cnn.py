@@ -2,6 +2,7 @@
 
 For tutorials, see notebooks on opensoundscape.org
 """
+
 from pathlib import Path
 import warnings
 import copy
@@ -219,10 +220,12 @@ class BaseClassifier(torch.nn.Module):
             # Log a table of preprocessed samples to wandb
             wandb_session.log(
                 {
-                    "Samples / Preprocessed samples": wandb_table(
-                        dataloader.dataset.dataset,
-                        self.wandb_logging["n_preview_samples"],
-                    )
+                    "Samples": {
+                        "Peprocessed_samples": wandb_table(
+                            dataloader.dataset.dataset,
+                            self.wandb_logging["n_preview_samples"],
+                        )
+                    }
                 }
             )
 
@@ -266,7 +269,9 @@ class BaseClassifier(torch.nn.Module):
                     gradcam_model=self if self.wandb_logging["gradcam"] else None,
                     raise_exceptions=True,  # TODO back to false when done debugging
                 )
-                wandb_session.log({f"Samples / Top scoring [{c}]": table})
+                wandb_session.log(
+                    {"Samples": {f"Top_scoring_{c.replace(' ','_')}": table}}
+                )
 
         if return_invalid_samples:
             return score_df, invalid_samples
@@ -840,24 +845,28 @@ class CNN(BaseClassifier):
             # log tables of preprocessed samples
             wandb_session.log(
                 {
-                    "Samples / training samples": wandb_table(
-                        AudioFileDataset(
-                            train_df, self.preprocessor, bypass_augmentations=False
+                    "Samples": {
+                        "training_samples": wandb_table(
+                            AudioFileDataset(
+                                train_df, self.preprocessor, bypass_augmentations=False
+                            ),
+                            self.wandb_logging["n_preview_samples"],
                         ),
-                        self.wandb_logging["n_preview_samples"],
-                    ),
-                    "Samples / training samples no aug": wandb_table(
-                        AudioFileDataset(
-                            train_df, self.preprocessor, bypass_augmentations=True
+                        "training_samples_no_aug": wandb_table(
+                            AudioFileDataset(
+                                train_df, self.preprocessor, bypass_augmentations=True
+                            ),
+                            self.wandb_logging["n_preview_samples"],
                         ),
-                        self.wandb_logging["n_preview_samples"],
-                    ),
-                    "Samples / validation samples": wandb_table(
-                        AudioFileDataset(
-                            validation_df, self.preprocessor, bypass_augmentations=True
+                        "validation_samples": wandb_table(
+                            AudioFileDataset(
+                                validation_df,
+                                self.preprocessor,
+                                bypass_augmentations=True,
+                            ),
+                            self.wandb_logging["n_preview_samples"],
                         ),
-                        self.wandb_logging["n_preview_samples"],
-                    ),
+                    }
                 }
             )
 
@@ -925,9 +934,9 @@ class CNN(BaseClassifier):
                     validation_df,
                     batch_size=batch_size,
                     num_workers=num_workers,
-                    activation_layer="softmax_and_logit"
-                    if self.single_target
-                    else None,
+                    activation_layer=(
+                        "softmax_and_logit" if self.single_target else None
+                    ),
                     split_files_into_clips=False,
                 )  # returns a dataframe matching validation_df
                 validation_targets = validation_df.values
