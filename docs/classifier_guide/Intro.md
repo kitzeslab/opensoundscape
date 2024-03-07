@@ -1,111 +1,6 @@
-# Introduction to training classifiers
-
-### Created by Lauren Chronister, Tessa Rhinehart, and Sam Lapp
-
-Last updated on 2023-01-31 by Lauren Chronister
-
-This document is intended to serve as an introduction to the classifier 
-training workflow and considerations that need to be made before diving in 
-rather than a programming how-to. For more detailed instructions on 
-***how*** to use OpenSoundscape, see the <a href="http://opensoundscape.org/en/latest/" target="_blank"> documentation</a>
-
-## Table of Contents
-
-[Table of Contents](#table-of-contents)
-
-[How we use automated classification of
-sound](#how-we-use-automated-classification-of-sound)
-
-> [Kinds of classifiers](#kinds-of-classifiers)
->
-> [CNN classification
-> problems](#cnn-classification-problems)
->
->> [Example 1: Warbler song
-> types](#example-1-warbler-song-types)
->
->> [Example 2: Declining forest
-> birds](#example-2-declining-forest-birds)
-
-[Organization](#organization)
-
-[Creating a Training
-Dataset](#creating-a-training-dataset)
-
-> [Step 1: Decide on sources of training
-> data](#step-1-decide-on-sources-of-training-data)
->
->> [Targeted Recordings with Field Data
-> Overlays](#targeted-recordings-with-field-data-overlays)
->
->> [Field Data](#field-data)
->
-> [Step 2: Annotate](#step-2-annotate)
->
-> [Step 2.5: Collect
-> negatives](#step-2.5-collect-negatives)
->
-> [Step 3: Decide some visual parameters for
-> clips](#step-3-decide-some-visual-parameters-for-clips)
->
->> [Clip length](#clip-length)
->
->> [Bandpass](#bandpass)
->
->> [Window samples and overlap
-> samples](#window-samples-and-overlap-samples)
->
-> [Step 4: Create labels](#step-4-create-labels)
->
-> [Step 5: Balance the training
-> dataset](#step-5-balance-the-training-dataset)
-
-[CNN Training](#cnn-training)
-
-> [Behind the scenes, what is a CNN and how does it
-> "learn"?](#behind-the-scenes-what-is-a-cnn-and-how-does-it-learn)
->
->> [Neural Networks](#neural-networks)
->
->> [From neural networks to
-> CNNs](#from-neural-networks-to-cnns)
->
-> [Batches and epochs](#batches-and-epochs)
->
-> [Preprocessing](#preprocessing)
->
->> [Data Augmentation](#data-augmentation)
-
-[Testing a CNN](#testing-a-cnn)
-
->> [Assembling an Appropriate Test
-> Set](#assembling-an-appropriate-test-set)
->
->> [Precision and Recall](#precision-and-recall)
->
->> [Score Histograms](#score-histograms)
->
->> [A case study: Great Horned Owl begging
-> calls](#a-case-study-great-horned-owl-begging-calls)
-
-[Further Steps](#further-steps)
-
-> [Retraining the classifier](#retraining-the-classifier)
-
-[Additional Resources](#additional-resources)
-
-> [Sound libraries](#sound-libraries)
->
-> [Annotated datasets (publically
-> released)](#annotated-datasets-publically-released)
->
-> [Annotated datasets (in-house
-> only)](#annotated-datasets-in-house-only)
->
-> [Labeled datasets (in-house
-> only)](#labeled-datasets-in-house-only)
-
 ## How we use automated classification of sound
+
+*Created by Lauren Chronister, Tessa Rhinehart, Sam Lapp, and Santiago Ruiz Guzman*
 
 The purpose of a **classifier** is to take some data and assign a
 "class" to it. Let's say you have some audio data that you recorded in
@@ -126,7 +21,7 @@ human classification of sounds relatively simple (in most cases but not
 all).
 
 <figure>
-    <img src="./media/image41.png">
+    <img src="https://github.com/kitzeslab/opensoundscape/blob/docs/docs/classifier_guide/media/image41.png">
     <figcaption>Fig. 1. A ~15 s spectrogram containing the songs of six bird species.
 Some examples of songs are boxed and the species that made them are
 displayed above. From left to right: Black-and-white Warbler, Kentucky
