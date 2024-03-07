@@ -20,7 +20,7 @@ is my turf" versus "look out, hawk!" This fortunately makes the task of
 human classification of sounds relatively simple (in most cases but not
 all).
 
-![Spectrogram](https://github.com/kitzeslab/opensoundscape/blob/docs/docs/classifier_guide/media/image41.png)
+![Spectrogram](./media/image41.png)
 Fig. 1. A ~15 s spectrogram containing the songs of six bird species.
 Some examples of songs are boxed and the species that made them are
 displayed above. From left to right: Black-and-white Warbler, Kentucky
