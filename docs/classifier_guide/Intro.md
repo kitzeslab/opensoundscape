@@ -20,12 +20,8 @@ is my turf" versus "look out, hawk!" This fortunately makes the task of
 human classification of sounds relatively simple (in most cases but not
 all).
 
-![]
-<figure>
-    <img src="https://github.com/kitzeslab/opensoundscape/blob/docs/docs/classifier_guide/media/image41.png">
-    <figcaption>Fig. 1. A ~15 s spectrogram containing the songs of six bird species. </figcaption>
-</figure>
-
+![Spectrogram](https://github.com/kitzeslab/opensoundscape/blob/docs/docs/classifier_guide/media/image41.png)
+Fig. 1. A ~15 s spectrogram containing the songs of six bird species.
 Some examples of songs are boxed and the species that made them are
 displayed above. From left to right: Black-and-white Warbler, Kentucky
 Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler. <a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank"> Source</a>
