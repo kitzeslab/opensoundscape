@@ -25,13 +25,7 @@ Some examples of songs are boxed and the species that made them are
 displayed above. From left to right: Black-and-white Warbler, Kentucky
 Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler. <a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank"> Source</a>
 
-<span style="font-size: medium;">Kinds of classifiers</span>
-
-<span style="font-size: x-small;">x-small</span>
-
-<span style="font-size: small;">small</span>
-
-<span style="font-size: 1.5em;">This text will be 1.5 times the size of the default font.</span>
+<span style="font-size: 1.5em;">**Kinds of classifiers**</span>
 
 
 Many different types of classifiers for sound exist, but we typically
@@ -64,7 +58,7 @@ This document focuses on the training of CNNs, but be aware that signal
 processing algorithms are options for sound classification.
 
 <img src="./media/image17.png" style="width: 6.5in; height: 3.444444444444446in">
-
+ =100x20
 Fig. 2. A spectrogram of a Great Plains toad call; a sound suitable for classification using RIBBIT.<br>
 
 Beyond this lab, you may see others use certain **clustering**
@@ -78,12 +72,12 @@ available in
 which slides a template spectrogram over audio data to score how well
 the audio matches the template.
 
-## CNN classification problems
+<span style="font-size: 1.5em;">**CNN classification problems**</span>
 
 The following are some examples of the types of questions we have asked
 in this lab and CNN classifiers we have or could create to answer them.
 
-### Example 1: Warbler song types
+<span style="font-size: 1.3em;">**Example 1: Warbler song types**</span>
 
 Many warbler species such as the Chestnut-sided Warbler have been known
 to begin their breeding season singing predominantly a "type 1" song and
@@ -113,7 +107,7 @@ c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Fig. 3. Examples of Chestnut-sided Warbler songs. On the top row (a and
 b) are type 1, and on the bottom row (c and d) are type 2.
 
-### Example 2: Declining forest birds
+<span style="font-size: 1.3em;">**Example 2: Declining forest birds**</span>
 
 Many forest bird species across Pennsylvania are undergoing declines due
 to changes in forest composition and structure as forests in
@@ -135,9 +129,11 @@ target species and their set of three confusion species. Each of these
 six species would present as a different class for the CNN to classify
 audio clips into.
 
-## Organization
+# Organization
 
+Example 2: Declining forest birds
 ### <ins>Organization is key to reproducibility</ins>.
+<span style="font-size: 1.5em;">**Kinds of classifiers**</span>
 
 This can't be said enough. Training a CNN is an iterative process. As
 you improve previous classifiers, you will end up with different
