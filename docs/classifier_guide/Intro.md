@@ -1,6 +1,13 @@
-# How we use automated classification of sound
+# Introduction to training classifiers
 *Created by Lauren Chronister, Tessa Rhinehart, Sam Lapp, and Santiago Ruiz Guzman*
 
+This document is intended to serve as an introduction to the classifier 
+training workflow and considerations that need to be made before diving in 
+rather than a programming how-to. For more detailed instructions on 
+***how*** to use OpenSoundscape, see the <a href="http://opensoundscape.org/en/latest/" target="_blank"> documentation</a>
+
+
+# How we use automated classification of sound
 The purpose of a **classifier** is to take some data and assign a
 "class" to it. Let's say you have some audio data that you recorded in
 the field. You're trying to find some particular "classes" of sound:
@@ -19,15 +26,13 @@ is my turf" versus "look out, hawk!" This fortunately makes the task of
 human classification of sounds relatively simple (in most cases but not
 all).
 
-![Spectrogram](./media/image41.png)
+![](./media/image41.png)
 Fig. 1. A ~15 s spectrogram containing the songs of six bird species.
 Some examples of songs are boxed and the species that made them are
 displayed above. From left to right: Black-and-white Warbler, Kentucky
 Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler. <a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank"> Source</a>
 
-<span style="font-size: 1.5em;">**Kinds of classifiers**</span>
-
-
+## Kinds of classifiers 
 Many different types of classifiers for sound exist, but we typically
 use something called a **Convolutional Neural Network**, or **"CNN"**
 for short. This is a type of classifier created using machine learning.
@@ -57,8 +62,7 @@ specifically to classify the accelerating pulses of Ruffed Grouse drums
 This document focuses on the training of CNNs, but be aware that signal
 processing algorithms are options for sound classification.
 
-<img src="./media/image17.png" style="width: 6.5in; height: 3.444444444444446in">
- =100x20
+![<img src="./media/image17.png" height="3.444444444444446in" width="6.5in"/>](./media/image17.png) <br>
 Fig. 2. A spectrogram of a Great Plains toad call; a sound suitable for classification using RIBBIT.<br>
 
 Beyond this lab, you may see others use certain **clustering**
@@ -72,13 +76,11 @@ available in
 which slides a template spectrogram over audio data to score how well
 the audio matches the template.
 
-<span style="font-size: 1.5em;">**CNN classification problems**</span>
-
+## CNN classification problems
 The following are some examples of the types of questions we have asked
 in this lab and CNN classifiers we have or could create to answer them.
 
-<span style="font-size: 1.3em;">**Example 1: Warbler song types**</span>
-
+### Example 1: Warbler song types
 Many warbler species such as the Chestnut-sided Warbler have been known
 to begin their breeding season singing predominantly a "type 1" song and
 switch to predominantly singing a "type 2" song after they have found a
@@ -97,17 +99,18 @@ different classes for the CNN to classify audio clips into.
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image19.png" width="500" height="400"> <img src="./media/image27.png" width="500" height="400">
+![<img src="./media/image19.png" height="400" width="500"/>](./media/image19.png) 
+![<img src="./media/image27.png" height="400" width="500"/>](./media/image27.png)
 
 c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-<img src="./media/image16.png" width="500" height="400"> <img src="./media/image38.png" width="500" height="400">
-
+![<img src="./media/image16.png" height="400" width="500"/>](./media/image16.png) 
+![<img src="./media/image38.png" height="400" width="500"/>](./media/image38.png)
 
 Fig. 3. Examples of Chestnut-sided Warbler songs. On the top row (a and
 b) are type 1, and on the bottom row (c and d) are type 2.
 
-<span style="font-size: 1.3em;">**Example 2: Declining forest birds**</span>
+### Example 2: Declining forest birds
 
 Many forest bird species across Pennsylvania are undergoing declines due
 to changes in forest composition and structure as forests in
@@ -130,10 +133,8 @@ six species would present as a different class for the CNN to classify
 audio clips into.
 
 # Organization
-
 Example 2: Declining forest birds
-### <ins>Organization is key to reproducibility</ins>.
-<span style="font-size: 1.5em;">**Kinds of classifiers**</span>
+<u>Organization is key to reproducibility</u>
 
 This can't be said enough. Training a CNN is an iterative process. As
 you improve previous classifiers, you will end up with different
@@ -226,7 +227,7 @@ these high-scoring confusion sounds to the overlays from {X labels file}. I trai
 If you are interested in learning more about how to make your work more reproducible, check out The Practice of [Reproducible
 Research](http://www.practicereproducibleresearch.org/), copies of which are also hanging out around the lab.
 
-## Creating a Training Dataset
+# Creating a Training Dataset
 
 **This and the following sections pertain only to the training of CNNs;
 other types of classifiers are created in other ways.**
@@ -241,7 +242,7 @@ Training data can be thought of as **negatives** and **positives** for
 each specific class. A negative is simply a clip that is not an example
 of a class. A positive is a clip that is an example of a class.
 
-### Step 1: Decide on sources of training data
+## Step 1: Decide on sources of training data
 
 Most typically, training data (in this lab) come in two
 mutually-exclusive formats:
@@ -255,7 +256,7 @@ mutually-exclusive formats:
 2)  **Field data** containing the sound classes recorded by autonomous
     recorders.
 
-#### Targeted Recordings with Field Data Overlays
+### Targeted Recordings with Field Data Overlays
 
 A mix of targeted recordings (i.e., directional recordings of a certain
 species frequently created using a parabolic microphone) and field data
@@ -285,11 +286,13 @@ context.
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image22.png" width="500" height="400"> <img src="./media/image1.png" width="500" height="400">
+![<img src="./media/image22.png" height="400" width="500"/>](./media/image22.png) 
+![<img src="./media/image1.png" height="400" width="500"/>](./media/image1.png)
 
 c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-<img src="./media/image3.png" width="500" height="400"> <img src="./media/image8.png" width="500" height="400">
+![<img src="./media/image38.png" height="400" width="500"/>](./media/image38.png) 
+![<img src="./media/image8.png" height="400" width="500"/>](./media/image8.png)
 
 Fig. 4. Targeted training data clips sourced from Xeno-canto and field
 data overlays displayed as spectrograms. The first clip, a, contains a
@@ -311,7 +314,7 @@ for your classifier because the classifier has learned that those clips
 do not contain the target making it seem like it has better performance
 than it really does.
 
-#### Field Data
+### Field Data
 
 If targeted recordings are not representative of the field data I will
 be later predicting on, why use it at all? Why not just use field data?
@@ -346,7 +349,7 @@ positive examples will only be those which the classifier *thinks* look like the
 target sound.
 
 
-### Step 2: Annotate
+## Step 2: Annotate
 
 Whatever the source of data, the first step to using it involves
 annotation, or attaching some metadata to the audio data. We usually
@@ -362,10 +365,10 @@ guide](https://docs.google.com/document/d/14WmQz3oBJUPTkPq2Q9BPToQ1F97wUqn_XCTNw
 for detailed instructions on how to annotate recordings.
 
 a\.
-<img src="./media/image29.png"> 
+![<img src="./media/image29.png" />](./media/image29.png) 
 
 b\.
-<img src="./media/image9.png">
+![<img src="./media/image9.png" />](./media/image9.png) 
 
 Fig. 5. A spectrogram of a recording containing a Black-throated Green
 Warbler visualized in RavenPro. Along the x-axis is the time and along
@@ -389,7 +392,7 @@ annotation phase could be useful ("BTNW_songA" versus "BTNW_songB"). If
 you are interested in song only but in a more general sense, you may be
 able to skip annotating tedious calls.
 
-### Step 2.5: Collect negatives
+## Step 2.5: Collect negatives
 
 The requirement for positive examples to train a CNN on what to look for
 should seem obvious, but the classifier also needs to be told what
@@ -408,7 +411,7 @@ consider that the related Hermit Thrush has a very similar song that is
 sometimes mistaken for Wood Thrush and the two often live in the same
 places. Thus, we should also annotate files for Hermit Thrush.
 
-### Step 3: Decide some visual parameters for clips
+## Step 3: Decide some visual parameters for clips
 
 As mentioned previously, the classifiers we use only interact with audio
 data in the form of spectrograms. As such, it's important to make
@@ -425,13 +428,13 @@ and end times for training.<ins>** **We highlight here other important visual
 parameters because these are vital to consider at the same time as you
 are choosing the clip length.** <br>
 
-<img src="./media/image23.png">
+![<img src="./media/image23.png" />](./media/image23.png) 
 
 Fig. 6. An example of a 224x224 tensor which contains the spectrogram of
 a Barred Owl song clip of 5 seconds in length and 0-4,000 Hz in
 frequency.
 
-#### Clip length
+### Clip length
 
 Clips do not need to be any specified length--how they look visually in
 a 224x224 pixel image will dictate what the appropriate length is. This
@@ -452,7 +455,8 @@ the appearance of the target sound.
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; c.
 
-<img src="./media/image15.png" width="300" height="200"> <img src="./media/image32.png" width="300" height="200"> <img src="./media/image11.png" width="300" height="200">
+![<img src="./media/image15.png" height="200" width="300"/>](./media/image15.png) 
+![<img src="./media/image11.png" height="200" width="300"/>](./media/image11.png)
 
 
 Fig. 7. A 4-second clip (a) versus a 20-second clip (b) versus a
@@ -462,7 +466,7 @@ from the songs of other birds while the 20-second song does not provide
 enough detail. The 4-second song is in the sweet spot for this species.
 All of these clips are displayed as 224x224 pixel tensors.
 
-#### Bandpass
+### Bandpass
 
 To **bandpass** means to trim the frequency range of the tensor (the
 up-down dimension as opposed to the left-right dimension for the clip
@@ -490,7 +494,8 @@ requires experimentation.
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image18.png" width="500" height="400"> <img src="./media/image2.png" width="500" height="400">
+![<img src="./media/image18.png" height="400" width="500"/>](./media/image18.png) 
+![<img src="./media/image2.png" height="400" width="500"/>](./media/image2.png)
 
 Fig. 8. Two tensors containing the same Northern Cardinal clip at
 different bandpass ranges (the cardinal is boxed in red). The first (a)
@@ -499,7 +504,7 @@ potentially causing a "distraction" so-to-speak. The second (b) is
 bandpassed closer to the target species song from 500-5,000 Hz and
 contains fewer background sounds.
 
-### Window samples and overlap samples
+## Window samples and overlap samples
 
 Other parameters can be modified to help strike the balance. **Window
 samples** is a parameter which has to do with how sound is transformed
@@ -516,11 +521,11 @@ different on spectrograms (see Fig. 10). **Overlap samples** should
 typically be ½ of the value of window samples.
 
 a\.<br>
-<img src="./media/image4.png">
+![<img src="./media/image4.png"/>](./media/image4.png)
 
 
 b\.<br>
-<img src="./media/image5.png">
+![<img src="./media/image5.png"/>](./media/image5.png)
 
 Fig. 9. An example of frequency modulation that is revealed by modifying
 the window_samples and overlap_samples parameters of the same 1 s clip.
@@ -532,7 +537,8 @@ clip length.
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image43.png" width="300" height="200"> <img src="./media/image37.png" width="300" height="200"> 
+![<img src="./media/image43.png" height="200" width="300"/>](./media/image43.png) 
+![<img src="./media/image37.png" height="200" width="300"/>](./media/image37.png)
 
 Fig. 10. Another example of how spectrogram parameters can drastically
 change the appearance of a sound on a spectrogram. This is the same
@@ -543,17 +549,17 @@ training data is to use software such as
 [Audacity](https://www.audacityteam.org/) (see Fig. 11).
 
 a\.
-<img src="./media/image10.png">
+![<img src="./media/image10.png"/>](./media/image10.png)
 
 b\.
-<img src="./media/image13.png">
+![<img src="./media/image13.png"/>](./media/image13.png)
 
 Fig. 11. Adjusting the spectrogram parameters in Audacity. Click the
 drop-down menu in the upper left corner of the audio panel, click
 "Spectrogram Settings...", and click the "Window size" dropdown menu.
 This also allows you to see some typical values for window size.
 
-### Step 4: Create labels
+## Step 4: Create labels
 
 To initiate training, the code which trains the model is provided with a
 **data frame** (a csv file stored in memory) that in turn links to the
@@ -612,7 +618,7 @@ be needed.
  | /Path/to/clip4.wav   |   0             |          0 		|	
   -----------------------------------------------------------------------
 
-### Step 5: Balance the training dataset
+## Step 5: Balance the training dataset
 
 A good training dataset requires "balance" to make an effective
 classifier. What balance means in this context is making a dataset be
@@ -699,7 +705,7 @@ Parameters used in creating clips such as the proportion of a
 vocalization that must be present to be considered a positive are not
 saved unless you make a record of them.
 
-## CNN Training
+# CNN Training
 
 Training a machine learning model is the process through which the
 algorithm learns to predict the correct class (or classes) for a given
@@ -726,19 +732,19 @@ from the labels on the validation dataset to improve itself, so each
 time we use it it acts as a fair assessment of the model (ie, the model
 can't memorize the answers to this assessment).
 
-### **Behind the scenes, what is a CNN and how does it "learn"?** 
+## **Behind the scenes, what is a CNN and how does it "learn"?** 
 
 While this section is not strictly necessary for understanding how to
 train a classifier, it may provide you with more context for why we make
 the decisions we do in training CNNs. It's a good idea to understand how
 your tool of choice works.
 
-#### Neural Networks
+### Neural Networks
 
 A neural network is a network of many nodes and connections between
 them, structured as a sequence of layers (see Fig. 12).
 
-<img src="./media/image33.png">
+![<img src="./media/image33.png"/>](./media/image33.png)
 
 Fig. 12. A schematic of the structure of a neural network.
 
@@ -754,7 +760,7 @@ entering a new node. For example, the bottom node of the first green
 ("hidden") layer receives the sum of inputs of the from the first layer
 multiplied by their respective weights (see Fig. 13).
 
-<img src="./media/image40.png">
+![<img src="./media/image33.png"/>](./media/image40.png)
 
 Fig. 13. Neural network schematic showing example inputs to one hidden
 layer.
@@ -771,7 +777,7 @@ zero. The goal of the algorithm is to adjust the weights (those black
 line connections in Fig. 12 and Fig. 13) so that for any input sample it
 consistently predicts the correct classes.
 
-#### From neural networks to CNNs
+### From neural networks to CNNs
 
 A convolutional neural network (CNN) is a specialized version of a
 neural network designed for 2-dimensional data like images, and has a
@@ -809,11 +815,12 @@ predict. (This is called a "fully connected layer").
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image21.png" width="500" height="200"> <img src="./media/image31.png" width="200" height="200">
+![<img src="./media/image21.png" height="200" width="500"/>](./media/image21.png) 
+![<img src="./media/image31.png" height="200" width="200"/>](./media/image31.png)
 
 Fig. 14. Example of how kernels work on images to generate predictions.
 
-### Batches and epochs
+## Batches and epochs
 
 As described at the start of this section, a CNN learns on batches of
 clips viewed many times. There will usually be multiple batches of clips
@@ -830,7 +837,7 @@ classes). Too low and it might not learn enough about the target
 sound(s). You may choose to investigate how much performance changes
 from epoch to epoch throughout the training process to make a decision.
 
-### Preprocessing
+## Preprocessing
 
 Preprocessing basically means what parameters are applied to create the
 tensors. You already saw some of these parameters in the previous
@@ -841,7 +848,7 @@ and ***overlay weights***, or the weight (e.g., 0.5) or random range of
 weights (e.g., 0.3-0.7) applied to the overlay when the overlay and
 underlying training image are averaged together.
 
-#### Data Augmentation
+### Data Augmentation
 
 In each epoch, the classifier does not see precisely the same image
 every time. Instead, to increase its ability to generalize the features
@@ -857,11 +864,13 @@ any overlays hop around between underlying training images.
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image6.png" width="500" height="400"> <img src="./media/image30.png" width="500" height="400">
+![<img src="./media/image6.png" height="500" width="400"/>](./media/image6.png) 
+![<img src="./media/image30.png" height="500" width="400"/>](./media/image30.png)
 
 c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-<img src="./media/image35.png" width="500" height="400"> <img src="./media/image12.png" width="500" height="400">
+![<img src="./media/image35.png" height="400" width="500"/>](./media/image35.png) 
+![<img src="./media/image12.png" height="400" width="500"/>](./media/image12.png)
 
 Fig. 15. The original tensor (a) versus the same tensor with default
 augmentation applied in three different epochs (b-d).
@@ -871,7 +880,7 @@ removing augmentations, or adding pre-built augmentations (such as
 overlays), but besides applying overlays, we generally do no not make
 changes to the default data augmentation.
 
-## Testing a CNN
+# Testing a CNN
 
 You should not simply trust that a final classifier is a good one.
 Often, first classifiers will not perform very well in a real-world
@@ -880,7 +889,7 @@ real-world setting, and then apply one of multiple methods of examining
 classifier performance, including calculating performance metrics or
 examining histograms.
 
-#### Assembling an Appropriate Test Set
+## Assembling an Appropriate Test Set
 
 Testing performance of a classifier really comes down to the **test
 set**. Like the **validation set**, the test set is used to assess the
@@ -924,7 +933,7 @@ annotated for the target species can be combined with other
 fully-annotated soundscapes that do not contain the target sounds to get
 a better picture of how the classifier performs on a variety of data.
 
-#### Precision and Recall
+## Precision and Recall
 
 One of the more universally-accepted ways of testing CNN performance is
 by examining ***precision*** and ***recall***. These can be hard metrics
@@ -961,7 +970,7 @@ the number of true positives out of the number of all clips that
 actually contain the target sound <ins>at that particular
 threshold <ins> (see Fig. 16).
 
-<img src="./media/image7.png" width="500" height="900">
+![<img src="./media/image7.png" height="900" width="500"/>](./media/image7.png) 
 
 Fig. 16. A visual demonstration of the meaning of precision and recall.
 Source:
@@ -982,11 +991,13 @@ good performance while 17c and 17d show very poor performance.
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image25.png" width="500" height="400"> <img src="./media/image42.png" width="500" height="400">
+![<img src="./media/image25.png" height="400" width="500"/>](./media/image25.png) 
+![<img src="./media/image42.png" height="400" width="500"/>](./media/image42.png)
 
 c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-<img src="./media/image28.png" width="500" height="400"> <img src="./media/image34.png" width="500" height="400">
+![<img src="./media/image28.png" height="400" width="500"/>](./media/image28.png) 
+![<img src="./media/image34.png" height="400" width="500"/>](./media/image34.png)
 
 Fig. 17. Examples of typical precision-recall curves (a and c) and a
 threshold versus precision and recall plots (b and d). All of these
@@ -995,7 +1006,7 @@ dataset. A and b are with respect to a test dataset that is very similar
 to the training data used to create the model. C and d pertain to test
 data from different domains.
 
-#### Score Histograms
+## Score Histograms
 
 Frequently, we have found ourselves favoring the use of histograms to
 display the distributions of true positive and true negative scores from
@@ -1016,11 +1027,13 @@ bird in question which was not well-represented in the training dataset.
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image14.png" width="500" height="400"> <img src="./media/image24.png" width="500" height="400">
+![<img src="./media/image14.png" height="400" width="500"/>](./media/image14.png) 
+![<img src="./media/image24.png" height="400" width="500"/>](./media/image24.png)
 
 c.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d.
 
-<img src="./media/image20.png" width="500" height="400"> <img src="./media/image36.png" width="500" height="400">
+![<img src="./media/image20.png" height="400" width="500"/>](./media/image20.png) 
+![<img src="./media/image36.png" height="400" width="500"/>](./media/image36.png)
 
 Fig. 18. Some example score histograms. The top row (a and b) are
 considered to be good classifier performance. There is overlap between
@@ -1034,7 +1047,7 @@ highest frequency. Also note that some of the true positives form a
 second distribution at the tail. After retraining in d, the score
 distribution is considered much more acceptable for this same test set.
 
-#### A case study: Great Horned Owl begging calls
+## A case study: Great Horned Owl begging calls
 
 We created a classifier to detect the begging calls of Great Horned Owls
 using Xeno-canto recordings and overlays from field audio data collected
@@ -1064,20 +1077,21 @@ For precision and recall on these two test datasets, see Fig. 16 above.
 
 a.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b.
 
-<img src="./media/image26.png" width="500" height="400"> <img src="./media/image39.png" width="500" height="400">
+![<img src="./media/image26.png" height="400" width="500"/>](./media/image26.png) 
+![<img src="./media/image39.png" height="400" width="500"/>](./media/image39.png)
 
 Fig. 19. Histograms of the true positives and true negatives scores from
 the same classifier on two different test datasets (a from Montana and b
 from the East Coast).
 
-## Further Steps
+# Further Steps
 
 So you've trained a classifier, tested its performance, and now you're
 wondering what to do next. Should I retrain based on performance on the
 test set or proceed? There's no right answer, but keep in mind, **the
 classifier does not need to be perfect, only useful.**
 
-### Retraining the classifier
+## Retraining the classifier
 
 While it is possible to load your previously trained classifier and
 proceed with additional training on new training data, we typically
@@ -1113,14 +1127,14 @@ e.  Include more positive training examples. Maybe the classifier simplydoesn't 
     &nbsp;&nbsp;&nbsp;&nbsp;than the first 60 seconds of Xeno-canto recordings in a two-class Barred Owl/Great Horned Owl classifier <br>
     &nbsp;&nbsp;&nbsp;&nbsp;increased performance despite already having the target 200 positive examples for each class.<br>
 
-## Additional Resources
+# Additional Resources
 
 Over time, this lab has amassed many resources to assist with training
 both internal and external to this lab including numerous annotated
 datasets and libraries of audio data. Below are some lists of these
 resources.
 
-### Sound libraries
+## Sound libraries
 
 -   [Xeno-canto](https://xeno-canto.org/): a free sound
     library focusing on bird sounds from species around the world. Has
