@@ -26,7 +26,9 @@ is my turf" versus "look out, hawk!" This fortunately makes the task of
 human classification of sounds relatively simple (in most cases but not
 all).
 
-![](./media/image41.png)
+
+<img src="https://github.com/kitzeslab/opensoundscape/blob/docs/docs/classifier_guide/media/image41.png" width="100" height="100">
+
 Fig. 1. A ~15 s spectrogram containing the songs of six bird species.
 Some examples of songs are boxed and the species that made them are
 displayed above. From left to right: Black-and-white Warbler, Kentucky
@@ -58,7 +60,8 @@ structure of simple sounds to classify them, which we often refer to as
 Tool") is one of these classifiers which can be used for animals such as
 certain frogs (see Fig. 2 below for an example). Another was created
 specifically to classify the accelerating pulses of Ruffed Grouse drums
-<a href="https://doi.org/10.1002/wsb.1395" target="_blank"> (Lapp *et al.* 2022 *Wildl.Soc. Bull.*  e1395) </a>
+<a href="https://doi.org/10.1002/wsb.1395" target="_blank"> (Lapp <em>et al.</em> 2022 <em>Wildl.Soc. Bull.</em>  e1395) </a>
+
 This document focuses on the training of CNNs, but be aware that signal
 processing algorithms are options for sound classification.
 
