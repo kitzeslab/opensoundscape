@@ -62,9 +62,7 @@ specifically to classify the accelerating pulses of Ruffed Grouse drums
 This document focuses on the training of CNNs, but be aware that signal
 processing algorithms are options for sound classification.
 
-![smiley](./media/image17.png){:height="36px" width="36px"}
-
-![./media/image17.png](./media/image17.png **=600x400**)
+![smiley](./media/image17.png)
 
 
 
