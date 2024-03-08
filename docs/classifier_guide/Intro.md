@@ -27,6 +27,13 @@ Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler. <a href="
 
 <span style="font-size: medium;">Kinds of classifiers</span>
 
+<span style="font-size: x-small;">x-small</span>
+
+<span style="font-size: small;">small</span>
+
+<span style="font-size: 1.5em;">This text will be 1.5 times the size of the default font.</span>
+
+
 Many different types of classifiers for sound exist, but we typically
 use something called a **Convolutional Neural Network**, or **"CNN"**
 for short. This is a type of classifier created using machine learning.
