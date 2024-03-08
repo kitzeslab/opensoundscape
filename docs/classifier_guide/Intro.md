@@ -1,5 +1,4 @@
-## How we use automated classification of sound
-
+# How we use automated classification of sound
 *Created by Lauren Chronister, Tessa Rhinehart, Sam Lapp, and Santiago Ruiz Guzman*
 
 The purpose of a **classifier** is to take some data and assign a
@@ -26,9 +25,7 @@ Some examples of songs are boxed and the species that made them are
 displayed above. From left to right: Black-and-white Warbler, Kentucky
 Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler. <a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank"> Source</a>
 
-
-        
-## Kinds of classifiers
+<span style="font-size: larger;">Kinds of classifiers</span>
 
 Many different types of classifiers for sound exist, but we typically
 use something called a **Convolutional Neural Network**, or **"CNN"**
