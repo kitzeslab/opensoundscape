@@ -62,7 +62,8 @@ specifically to classify the accelerating pulses of Ruffed Grouse drums
 This document focuses on the training of CNNs, but be aware that signal
 processing algorithms are options for sound classification.
 
-![](./media/image17.png) {:height="3.4in" width="6.5in"}
+<img src="./media/image17.png" width="6.5in" height="3.4in"/>
+
 Fig. 2. A spectrogram of a Great Plains toad call; a sound suitable for classification using RIBBIT.<br>
 
 Beyond this lab, you may see others use certain **clustering**
