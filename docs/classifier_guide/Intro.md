@@ -53,12 +53,12 @@ Imagine you're at the point of publication and you need a record of all of the d
 
 Here's a simple list to follow which can help keep you organized:
 
-1. **Use some form of versioning your files *consistently*.** We provide a couple of options here, but you can come up with your own plan of action.<br>
+1. **Use some form of versioning your files** ***consistently*** We provide a couple of options here, but you can come up with your own plan of action.<br>
 	i. **Slap a date stamp on everything.** <br>
 	ii. When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py). <br>
 	iii. You can automatically add datestamps in your code like such: <br>
 
-```python:
+<code>
 from datetime import date
 todays_date = date.today().strftime(‘%Y-%m-%d’)
 …
@@ -70,12 +70,13 @@ model.train(
 	validation_df = validation_data,
 	model_save = f”{path_to_saved_models}/{todays_date}_{project}”,
 	…
-        )
-```
+)
+</code>
 
-c. If you will be making multiple versions in the same day, use a timestamp as well.
 
-d. **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time,[Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
+	c. If you will be making multiple versions in the same day, use a timestamp as well.
+
+	d. **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time, [Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
 
 2. **Keep rigorous notes on *why* and *when* you do something.**
    - Just like keeping a notebook of experiments in a wet lab, you should take notes every time you sit down to work on a project.
