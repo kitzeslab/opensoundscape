@@ -53,12 +53,12 @@ Imagine you're at the point of publication and you need a record of all of the d
 
 Here's a simple list to follow which can help keep you organized:
 
-1. Use some form of versioning your files ***consistently*** We provide a couple of options here, but you can come up with your own plan of action.
+1. Use some form of versioning your files **consistently** We provide a couple of options here, but you can come up with your own plan of action.
 	a. **Slap a date stamp on everything.** 
 	b. When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py).
 	c. You can automatically add datestamps in your code like such: 
 
-<code>
+```
 from datetime import date
 todays_date = date.today().strftime(‘%Y-%m-%d’)
 …
@@ -71,21 +71,21 @@ model.train(
 	model_save = f”{path_to_saved_models}/{todays_date}_{project}”,
 	…
 	)
-</code>
+```
 
-	d. If you will be making multiple versions in the same day, use a timestamp as well.
+d. If you will be making multiple versions in the same day, use a timestamp as well.
 
-	e. **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time, [Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
+e. **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time, [Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
 
 2. **Keep rigorous notes on *why* and *when* you do something.**
-   a. Just like keeping a notebook of experiments in a wet lab, you should take notes every time you sit down to work on a project.
-   b. You might, for instance, be trying to improve the performance of a classifier by adding in new overlays or negative training clips by using high-scoring negative clips from testing. Keeping record of why and how many you add in will help you keep track of the methods you used later on.
-   c. Some of us use note taking apps such as [Workflowy](https://workflowy.com/) while others keep pen-and-paper journals. Other approaches include using a Google Document or a Jupyter Notebook. Choose the method that works best for you and encourages you to keep notes.
+   - Just like keeping a notebook of experiments in a wet lab, you should take notes every time you sit down to work on a project.
+   - You might, for instance, be trying to improve the performance of a classifier by adding in new overlays or negative training clips by using high-scoring negative clips from testing. Keeping record of why and how many you add in will help you keep track of the methods you used later on.
+   - Some of us use note taking apps such as [Workflowy](https://workflowy.com/) while others keep pen-and-paper journals. Other approaches include using a Google Document or a Jupyter Notebook. Choose the method that works best for you and encourages you to keep notes.
 
 
 3.  **Create readme.txt files where you keep your training scripts, data, and model files.**
-   a. Readme's are great for reminding yourself what you were doing with a project or any other people who might be jumping on the project as well.
-   b. A simple readme is just a log of what you were doing and why (similar to your notes but probably more succinct).It might look like this but can take on a different format:
+   - Readme's are great for reminding yourself what you were doing with a project or any other people who might be jumping on the project as well.
+   - A simple readme is just a log of what you were doing and why (similar to your notes but probably more succinct).It might look like this but can take on a different format:
 
 ```
 This readme was created for the {X project code} on {Y date} by {Z user}. Training scripts can be found in {A directory}, labels and
