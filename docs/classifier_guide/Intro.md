@@ -388,7 +388,7 @@ We then tested the classifier on this Montana test set and found it to be extrem
 
 For precision and recall on these two test datasets, see Fig. 16 above.
 
-![](./media/F22.png)
+![](./media/F13A.png)
 
 Fig. 19. Histograms of the true positives and true negatives scores from the same classifier on two different test datasets (a from Montana and b from the East Coast).
 
