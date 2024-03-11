@@ -1,7 +1,7 @@
 # Introduction to training classifiers
 *Created by Lauren Chronister, Tessa Rhinehart, Sam Lapp, and Santiago Ruiz Guzman*
 
-This document is intended to serve as an introduction to the classifier training workflow and considerations that need to be made before diving in rather than a programming how-to. For more detailed instructions on ***how*** to use OpenSoundscape, see the <a href="http://opensoundscape.org/en/latest/" target="_blank"> documentation</a>.
+This document is intended to serve as an introduction to the classifier training workflow and considerations that need to be made before diving in rather than a programming how-to. For more detailed instructions on **how** to use OpenSoundscape, see the <a href="http://opensoundscape.org/en/latest/" target="_blank"> documentation</a>.
 
 
 # How we use automated classification of sound
@@ -10,7 +10,7 @@ The purpose of a **classifier** is to take some data and assign a "class" to it.
 In the example shown in Fig. 1, six different bird species can all be seen on a "spectrogram," or an image of a sound track which displays sound in terms of timing (x-axis), pitch (y-axis), and relative loudness (darker parts are louder). Note how different each of the boxed sounds looks compared to all the others. Animals in nature which produce sound are usually trying to send messages to other members of their own species. To do this, they must be identifiable from other sounds around them, and it must be clear whether they're saying something like "this is my turf" versus "look out, hawk!" This fortunately makes the task of human classification of sounds relatively simple (in most cases but not all).
 
 ![](./media/image41.png)
-Fig. 1. A ~15 s spectrogram containing the songs of six bird species. Some examples of songs are boxed and the species that made them are displayed above. From left to right: Black-and-white Warbler, Kentucky Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler.<a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank">Source</a>.
+Fig. 1. A ~15 s spectrogram containing the songs of six bird species. Some examples of songs are boxed and the species that made them are displayed above. From left to right: Black-and-white Warbler, Kentucky Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler.<a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank"> Source</a>.
 
 ## Kinds of classifiers 
 Many different types of classifiers for sound exist, but we typically use something called a **Convolutional Neural Network**, or **"CNN"** for short. This is a type of classifier created using machine learning. This type of classifier uses spectrograms to assign a score to sound clips based on how confident it is that a sound clip belongs in one of the classes it has been trained to recognize. CNNs can have any number of desired classes which can range from all the vocalizations produced by a bird species, to specific vocalizations of a bird species, to sounds such as gunshots. Fig. 1 could represent all of the classes in an example CNN.
@@ -54,9 +54,9 @@ Imagine you're at the point of publication and you need a record of all of the d
 Here's a simple list to follow which can help keep you organized:
 
 1. **Use some form of versioning your files *consistently*.** We provide a couple of options here, but you can come up with your own plan of action.<br>
-	a. **Slap a date stamp on everything.** <br>
-		i. When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py). <br>
-		ii. You can automatically add datestamps in your code like such: <br>
+	i. **Slap a date stamp on everything.** <br>
+	ii. When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py). <br>
+	iii. You can automatically add datestamps in your code like such: <br>
 
 ```python:
 from datetime import date
@@ -72,24 +72,20 @@ model.train(
 	…
         )
 ```
-<ul>
-	<ul>
-	c. If you will be making multiple versions in the same day, use a timestamp as well.
-	</ul>
-</ul>
-<ul>
 
-- **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time,[Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
-</ul>
+c. If you will be making multiple versions in the same day, use a timestamp as well.
+
+d. **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time,[Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
 
 2. **Keep rigorous notes on *why* and *when* you do something.**
    - Just like keeping a notebook of experiments in a wet lab, you should take notes every time you sit down to work on a project.
    - You might, for instance, be trying to improve the performance of a classifier by adding in new overlays or negative training clips by using high-scoring negative clips from testing. Keeping record of why and how many you add in will help you keep track of the methods you used later on.
    - Some of us use note taking apps such as [Workflowy](https://workflowy.com/) while others keep pen-and-paper journals. Other approaches include using a Google Document or a Jupyter Notebook. Choose the method that works best for you and encourages you to keep notes.
 
+
 3.  **Create readme.txt files where you keep your training scripts, data, and model files.**
-   -Readme's are great for reminding yourself what you were doing with a project or any other people who might be jumping on the project as well.
-   -A simple readme is just a log of what you were doing and why (similar to your notes but probably more succinct).It might look like this but can take on a different format:
+   - Readme's are great for reminding yourself what you were doing with a project or any other people who might be jumping on the project as well.
+   - A simple readme is just a log of what you were doing and why (similar to your notes but probably more succinct).It might look like this but can take on a different format:
 
 ```
 This readme was created for the {X project code} on {Y date} by {Z user}. Training scripts can be found in {A directory}, labels and
@@ -102,9 +98,8 @@ these high-scoring confusion sounds to the overlays from {X labels file}. I trai
 ```
 
 4.  **Make final products "read only"**
-<ul>
-   a.  When you create something that you might potentially use in the future - for instance, a trained CNN classifier or a set of labeled data, you should give it a unique name (including a version number if it might be updated in the future: for example, "song8_cerw_cnn_v1-0.model") and make the file "read only" on your computer. This ensures you (or someone else) can't accidentally change the contents.
-</ul>
+     When you create something that you might potentially use in the future - for instance, a trained CNN classifier or a set of labeled data, you should give it a unique name (including a version number if it might be updated in the future: for example, "song8_cerw_cnn_v1-0.model") and make the file "read only" on your computer. This ensures you (or someone else) can't accidentally change the contents.
+
 
 **A final note:**
 If you are interested in learning more about how to make your work more reproducible, check out The Practice of [Reproducible Research](http://www.practicereproducibleresearch.org/).    
@@ -147,9 +142,9 @@ than it really does.
 
 If targeted recordings are not representative of the field data I will be later predicting on, why use it at all? Why not just use field data? Targeted recordings paired with field data overlays might actually be advantageous in at least some situations.
 
-   a.You're interested in a sound that's hard to find examples of. You might be wasting hours of time just trying to search for it in field data  whereas you know with high certainty that it will be in recordings labeled with it from sound libraries.<br>
-   b.You're interested in a sound that's highly variable and may vary with geographic location. You may not have field data from a variety of geographic locations, but there's a high chance sound libraries will.<br>
-   c.If you use just field recordings, you won't be able to use the overlaying process described above to create more variation in your dataset. You could put overlays on field recordings, but you run the risk of actually making a training set that is *less* representative of the prediction set. For instance, if already quiet clips get overlays the sound of interest may be totally obscured, or they become busier with background noise than actual field recordings.<br>
+   - You're interested in a sound that's hard to find examples of. You might be wasting hours of time just trying to search for it in field data  whereas you know with high certainty that it will be in recordings labeled with it from sound libraries.<br>
+   - You're interested in a sound that's highly variable and may vary with geographic location. You may not have field data from a variety of geographic locations, but there's a high chance sound libraries will.<br>
+   - If you use just field recordings, you won't be able to use the overlaying process described above to create more variation in your dataset. You could put overlays on field recordings, but you run the risk of actually making a training set that is *less* representative of the prediction set. For instance, if already quiet clips get overlays the sound of interest may be totally obscured, or they become busier with background noise than actual field recordings.<br>
 
 If field data still makes sense, proceed by gathering recordings with as much variability as you can find in the target sounds. A process by which you randomly draw clips to mark as a presence or absence for each class is the most ideal case, but you can also target recordings from areas or times when you know the subject of a class in the CNN will be there (e.g., you have point count data from the same location).
 
