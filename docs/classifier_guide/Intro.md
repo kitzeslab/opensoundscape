@@ -98,8 +98,8 @@ both Chestnut-sided Warbler type 1 song and Chestnut-sided Warbler type
 2 song (see Fig. 3 below). These two song types would present as
 different classes for the CNN to classify audio clips into.
 
-a.          								b.
 
+a. &emsp; &emsp; &emsp; &emsp; &emsp; &emsp; b.
 ![](./media/F23.png)
 
 c.          								d.
