@@ -53,7 +53,7 @@ Imagine you're at the point of publication and you need a record of all of the d
 
 Here's a simple list to follow which can help keep you organized:
 
-1. Use some form of versioning your files ***consistently*** We provide a couple of options here, but you can come up with your own plan of action.
+a. Use some form of versioning your files **consistently** We provide a couple of options here, but you can come up with your own plan of action.
    - **Slap a date stamp on everything.** 
    - When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py).
    - You can automatically add datestamps in your code like such: 
@@ -77,13 +77,13 @@ model.train(
 
    - **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time, [Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
 
-2. **Keep rigorous notes on *why* and *when* you do something.**
+b. **Keep rigorous notes on *why* and *when* you do something.**
    - Just like keeping a notebook of experiments in a wet lab, you should take notes every time you sit down to work on a project.
    - You might, for instance, be trying to improve the performance of a classifier by adding in new overlays or negative training clips by using high-scoring negative clips from testing. Keeping record of why and how many you add in will help you keep track of the methods you used later on.
    - Some of us use note taking apps such as [Workflowy](https://workflowy.com/) while others keep pen-and-paper journals. Other approaches include using a Google Document or a Jupyter Notebook. Choose the method that works best for you and encourages you to keep notes.
 
 
-3.  **Create readme.txt files where you keep your training scripts, data, and model files.**
+c.  **Create readme.txt files where you keep your training scripts, data, and model files.**
    - Readme's are great for reminding yourself what you were doing with a project or any other people who might be jumping on the project as well.
    - A simple readme is just a log of what you were doing and why (similar to your notes but probably more succinct).It might look like this but can take on a different format:
 
@@ -97,7 +97,7 @@ training clips in {B directory}, and models in {C directory}.
 these high-scoring confusion sounds to the overlays from {X labels file}. I trained a new version of the model.
 ```
 
-4.  **Make final products "read only"**
+d.  **Make final products "read only"**
      When you create something that you might potentially use in the future - for instance, a trained CNN classifier or a set of labeled data, you should give it a unique name (including a version number if it might be updated in the future: for example, "song8_cerw_cnn_v1-0.model") and make the file "read only" on your computer. This ensures you (or someone else) can't accidentally change the contents.
 
 
@@ -116,7 +116,7 @@ Training data can be thought of as **negatives** and **positives** for each spec
 
 Most typically, training data (in this lab) come in two mutually-exclusive formats:
 
-1)  **Targeted recordings** from sound libraries such as [Xeno-canto](https://xeno-canto.org/) or [Macaulay Library](https://www.macaulaylibrary.org/) paired with field data that **<ins>does not<ins>** include the sound classes.
+1)  **Targeted recordings** from sound libraries such as [Xeno-canto](https://xeno-canto.org/) or [Macaulay Library](https://www.macaulaylibrary.org/) paired with field data that **does not** include the sound classes.
 
 2)  **Field data** containing the sound classes recorded by autonomous recorders.
 
@@ -311,7 +311,7 @@ We have typically used 20-100 epochs as our standard for training models, but th
 
 ## Preprocessing
 
-Preprocessing basically means what parameters are applied to create the tensors. You already saw some of these parameters in the previous section such as **bandpass range**, **window samples**, and **overlap samples**. During training is where these parameters actually come into effect. Also part of preprocessing are ***overlays*** and ***overlay weights***, or the weight (e.g., 0.5) or random range of weights (e.g., 0.3-0.7) applied to the overlay when the overlay and underlying training image are averaged together.
+Preprocessing basically means what parameters are applied to create the tensors. You already saw some of these parameters in the previous section such as **bandpass range**, **window samples**, and **overlap samples**. During training is where these parameters actually come into effect. Also part of preprocessing are **overlays** and **overlay weights**, or the weight (e.g., 0.5) or random range of weights (e.g., 0.3-0.7) applied to the overlay when the overlay and underlying training image are averaged together.
 
 ### Data Augmentation
 
