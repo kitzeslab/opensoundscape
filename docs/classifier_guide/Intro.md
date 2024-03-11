@@ -1,161 +1,63 @@
 # Introduction to training classifiers
 *Created by Lauren Chronister, Tessa Rhinehart, Sam Lapp, and Santiago Ruiz Guzman*
 
-This document is intended to serve as an introduction to the classifier 
-training workflow and considerations that need to be made before diving in 
-rather than a programming how-to. For more detailed instructions on 
-***how*** to use OpenSoundscape, see the <a href="http://opensoundscape.org/en/latest/" target="_blank"> documentation</a>
+This document is intended to serve as an introduction to the classifier training workflow and considerations that need to be made before diving in rather than a programming how-to. For more detailed instructions on ***how*** to use OpenSoundscape, see the <a href="http://opensoundscape.org/en/latest/" target="_blank"> documentation</a>.
 
 
 # How we use automated classification of sound
-The purpose of a **classifier** is to take some data and assign a
-"class" to it. Let's say you have some audio data that you recorded in
-the field. You're trying to find some particular "classes" of sound:
-like a particular bird species's call, the noise of a chainsaw, or a
-chorus of frogs.
+The purpose of a **classifier** is to take some data and assign a "class" to it. Let's say you have some audio data that you recorded in the field. You're trying to find some particular "classes" of sound: like a particular bird species's call, the noise of a chainsaw, or a chorus of frogs.
 
-In the example shown in Fig. 1, six different bird species can all be
-seen on a "spectrogram," or an image of a sound track which displays
-sound in terms of timing (x-axis), pitch (y-axis), and relative loudness
-(darker parts are louder). Note how different each of the boxed sounds
-looks compared to all the others. Animals in nature which produce sound
-are usually trying to send messages to other members of their own
-species. To do this, they must be identifiable from other sounds around
-them, and it must be clear whether they're saying something like "this
-is my turf" versus "look out, hawk!" This fortunately makes the task of
-human classification of sounds relatively simple (in most cases but not
-all).
+In the example shown in Fig. 1, six different bird species can all be seen on a "spectrogram," or an image of a sound track which displays sound in terms of timing (x-axis), pitch (y-axis), and relative loudness (darker parts are louder). Note how different each of the boxed sounds looks compared to all the others. Animals in nature which produce sound are usually trying to send messages to other members of their own species. To do this, they must be identifiable from other sounds around them, and it must be clear whether they're saying something like "this is my turf" versus "look out, hawk!" This fortunately makes the task of human classification of sounds relatively simple (in most cases but not all).
 
 ![](./media/image41.png)
-Fig. 1. A ~15 s spectrogram containing the songs of six bird species.
-Some examples of songs are boxed and the species that made them are
-displayed above. From left to right: Black-and-white Warbler, Kentucky
-Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler. <a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank"> Source</a>
+Fig. 1. A ~15 s spectrogram containing the songs of six bird species. Some examples of songs are boxed and the species that made them are displayed above. From left to right: Black-and-white Warbler, Kentucky Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler. <a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank"> Source</a> .
 
 ## Kinds of classifiers 
-Many different types of classifiers for sound exist, but we typically
-use something called a **Convolutional Neural Network**, or **"CNN"**
-for short. This is a type of classifier created using machine learning.
-This type of classifier uses spectrograms to assign a score to sound
-clips based on how confident it is that a sound clip belongs in one of
-the classes it has been trained to recognize. CNNs can have any number
-of desired classes which can range from all the vocalizations produced
-by a bird species, to specific vocalizations of a bird species, to
-sounds such as gunshots. Fig. 1 could represent all of the classes in an
-example CNN.
+Many different types of classifiers for sound exist, but we typically use something called a **Convolutional Neural Network**, or **"CNN"** for short. This is a type of classifier created using machine learning. This type of classifier uses spectrograms to assign a score to sound clips based on how confident it is that a sound clip belongs in one of the classes it has been trained to recognize. CNNs can have any number of desired classes which can range from all the vocalizations produced by a bird species, to specific vocalizations of a bird species, to sounds such as gunshots. Fig. 1 could represent all of the classes in an example CNN.
 
-CNNs are not the only solution, nor the best solution to sound
-classification in every case. CNNs work best when a sound is relatively
-complex like the songs of most songbirds and when sounds are highly
-variable or inconsistent. Some animal sounds are much more like simple,
-repeated pulses which are highly consistent but could be mistaken for
-other environmental sounds by a naive observer. For such purposes, this
-lab has also developed other classifiers which rely on the periodic
-structure of simple sounds to classify them, which we often refer to as
-**signal processing** algorithms.
-[**RIBBIT**](http://opensoundscape.org/en/latest/tutorials/RIBBIT_pulse_rate_demo.html)
-(which stands for "Repeat-Interval Based Bioacoustic Identification
-Tool") is one of these classifiers which can be used for animals such as
-certain frogs (see Fig. 2 below for an example). Another was created
-specifically to classify the accelerating pulses of Ruffed Grouse drums
-<a href="https://doi.org/10.1002/wsb.1395" target="_blank"> (Lapp <em>et al.</em> 2022 <em>Wildl.Soc. Bull.</em>  e1395) </a>
-
-This document focuses on the training of CNNs, but be aware that signal
-processing algorithms are options for sound classification.
+CNNs are not the only solution, nor the best solution to sound classification in every case. CNNs work best when a sound is relatively complex like the songs of most songbirds and when sounds are highly variable or inconsistent. Some animal sounds are much more like simple, repeated pulses which are highly consistent but could be mistaken for other environmental sounds by a naive observer. For such purposes, this lab has also developed other classifiers which rely on the periodic structure of simple sounds to classify them, which we often refer to as **signal processing** algorithms. [RIBBIT](http://opensoundscape.org/en/latest/tutorials/RIBBIT_pulse_rate_demo.html) (which stands for "Repeat-Interval Based Bioacoustic Identification Tool") is one of these classifiers which can be used for animals such as certain frogs (see Fig. 2 below for an example). Another was created specifically to classify the accelerating pulses of Ruffed Grouse drums <a href="https://doi.org/10.1002/wsb.1395" target="_blank"> (Lapp <em>et al.</em> 2022 <em>Wildl.Soc. Bull.</em>  e1395)</a>. This document focuses on the training of CNNs, but be aware that signal processing algorithms are options for sound classification.
 
 ![](./media/image17.png)
 Fig. 2. A spectrogram of a Great Plains toad call; a sound suitable for classification using RIBBIT.<br>
 
-Beyond this lab, you may see others use certain **clustering**
-algorithms as classifiers such as that available from Wildlife Acoustics
-through
-[Kaleidoscope](https://www.wildlifeacoustics.com/products/kaleidoscope/cluster-analysis).
-These work by grouping together similar sounds for further review.
-Others may use **template matching** algorithms such as the one
-available in
-[RavenPro](https://ravensoundsoftware.com/wp-content/uploads/2017/11/Raven14UsersManual.pdf)
-which slides a template spectrogram over audio data to score how well
-the audio matches the template.
+Beyond this lab, you may see others use certain **clustering** algorithms as classifiers such as that available from Wildlife Acoustics through [Kaleidoscope](https://www.wildlifeacoustics.com/products/kaleidoscope/cluster-analysis). These work by grouping together similar sounds for further review. Others may use **template matching** algorithms such as the one available in [RavenPro](https://ravensoundsoftware.com/wp-content/uploads/2017/11/Raven14UsersManual.pdf) which slides a template spectrogram over audio data to score how well the audio matches the template.
 
 ## CNN classification problems
-The following are some examples of the types of questions we have asked
-in this lab and CNN classifiers we have or could create to answer them.
+The following are some examples of the types of questions we have asked in this lab and CNN classifiers we have or could create to answer them.
 
 ### Example 1: Warbler song types
-Many warbler species such as the Chestnut-sided Warbler have been known
-to begin their breeding season singing predominantly a "type 1" song and
-switch to predominantly singing a "type 2" song after they have found a
-mate <a href="https://doi.org/10.1139/z89-065" target="_blank"> (Kroodsma *et al.* 1987 *Can. J. Zool.*  67(2):447-456). </a> Could we
-use the switch between type 1 and type 2 songs to say something about
-where and when female Chestnut-sided Warblers choose to pair with males?
-It seems biologically plausible that females might choose to mate with
-males that have better territories for supporting broods. This might
-lead to a pattern of earlier switches from type 1 to type 2 song in
-higher-quality habitat.
+Many warbler species such as the Chestnut-sided Warbler have been known to begin their breeding season singing predominantly a "type 1" song and switch to predominantly singing a "type 2" song after they have found a mate <a href="https://doi.org/10.1139/z89-065" target="_blank"> (Kroodsma *et al.* 1987 *Can. J. Zool.*  67(2):447-456). </a> Could we use the switch between type 1 and type 2 songs to say something about where and when female Chestnut-sided Warblers choose to pair with males? It seems biologically plausible that females might choose to mate with males that have better territories for supporting broods. This might lead to a pattern of earlier switches from type 1 to type 2 song in higher-quality habitat.
 
-To help answer this question, we would need a CNN which can identify
-both Chestnut-sided Warbler type 1 song and Chestnut-sided Warbler type
-2 song (see Fig. 3 below). These two song types would present as
-different classes for the CNN to classify audio clips into.
+To help answer this question, we would need a CNN which can identify both Chestnut-sided Warbler type 1 song and Chestnut-sided Warbler type 2 song (see Fig. 3 below). These two song types would present as different classes for the CNN to classify audio clips into.
 
 ![](./media/F1A.png)
 
-Fig. 3. Examples of Chestnut-sided Warbler songs. On the top row (a and
-b) are type 1, and on the bottom row (c and d) are type 2.
+Fig. 3. Examples of Chestnut-sided Warbler songs. On the top row (a and b) are type 1, and on the bottom row (c and d) are type 2.
 
 ### Example 2: Declining forest birds
 
-Many forest bird species across Pennsylvania are undergoing declines due
-to changes in forest composition and structure as forests in
-Pennsylvania age. Experimental treatments of forest stands are being
-conducted to determine if these treatments can help restore populations
-of declining birds. Do forest treatments help Wood Thrush, Cerulean
-Warbler, and Golden-winged Warbler in Pennsylvania?
+Many forest bird species across Pennsylvania are undergoing declines due to changes in forest composition and structure as forests in Pennsylvania age. Experimental treatments of forest stands are being conducted to determine if these treatments can help restore populations of declining birds. Do forest treatments help Wood Thrush, Cerulean Warbler, and Golden-winged Warbler in Pennsylvania?
 
-This problem seems simple enough but one added complication is that each
-of these target species has a neighbor with a similar song (i.e., a
-**confusion species**). For the Wood Thrush, its confusion species is
-the Hermit Thrush. The Cerulean Warbler and the Golden-winged Warbler
-have the far more common Black-throated Blue Warbler and Blue-winged
-Warbler, respectively, as their confusion species.
+This problem seems simple enough but one added complication is that each of these target species has a neighbor with a similar song (i.e., a **confusion species**). For the Wood Thrush, its confusion species is the Hermit Thrush. The Cerulean Warbler and the Golden-winged Warbler have the far more common Black-throated Blue Warbler and Blue-winged Warbler, respectively, as their confusion species.
 
-So to answer this question while minimizing interference by the presence
-of confusion species, we need a CNN which can classify both the three
-target species and their set of three confusion species. Each of these
-six species would present as a different class for the CNN to classify
-audio clips into.
+So to answer this question while minimizing interference by the presence of confusion species, we need a CNN which can classify both the three target species and their set of three confusion species. Each of these six species would present as a different class for the CNN to classify audio clips into.
 
 # Organization
-Example 2: Declining forest birds
+
 <u>Organization is key to reproducibility</u>
 
-This can't be said enough. Training a CNN is an iterative process. As
-you improve previous classifiers, you will end up with different
-versions of classifiers with different training parameters and different
-training data.
+This can't be said enough. Training a CNN is an iterative process. As you improve previous classifiers, you will end up with different versions of classifiers with different training parameters and different training data.
 
-Imagine you're at the point of publication and you need a record of all
-of the data sources you used to train your final classifier. Along the
-way, you added additional clips of your study species to the training
-data for the classifier to improve its performance. Some of these clips
-made it into the final classifier while others did not. Unfortunately,
-it's been too long since you trained it and you've forgotten which data
-you trained your final model with. You didn't keep a record of the clips
-you used and now you have to piece together how you made the model. This
-could be a problem for anyone who wishes to use your procedures to
-reproduce how you made your classifier in the future. Avoiding the
-mistake of poor record-keeping along the way can save you time and
-frustration.
+Imagine you're at the point of publication and you need a record of all of the data sources you used to train your final classifier. Along the way, you added additional clips of your study species to the training data for the classifier to improve its performance. Some of these clips made it into the final classifier while others did not. Unfortunately, it's been too long since you trained it and you've forgotten which data you trained your final model with. You didn't keep a record of the clips you used and now you have to piece together how you made the model. This could be a problem for anyone who wishes to use your procedures to reproduce how you made your classifier in the future. Avoiding the mistake of poor record-keeping along the way can save you time and frustration.
 
 Here's a simple list to follow which can help keep you organized:
 
-1.  **Use some form of versioning your files *consistently*.** We
-    provide a couple of options here, but you can come up with your own
-    plan of action.
+1. **Use some form of versioning your files *consistently*.** We provide a couple of options here, but you can come up with your own plan of action.
+   - **Slap a date stamp on everything.**
+      1. When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py).
+      2. You can automatically add datestamps in your code like such:
 
-     a.  **Slap a date stamp on everything.**When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py). You can automatically add datestamps in your code like such:
-
-```
+```python:
 from datetime import date
 todays_date = date.today().strftime(‘%Y-%m-%d’)
 …
@@ -167,24 +69,28 @@ model.train(
 	validation_df = validation_data,
 	model_save = f”{path_to_saved_models}/{todays_date}_{project}”,
 	…
-	)
+        )
 ```
+<ul>
+	<ul>
+	c. If you will be making multiple versions in the same day, use a timestamp as well.
+	</ul>
+</ul>
+<ul>
 
-If you will be making multiple versions in the same day, use a timestamp as well.
+- **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time,[Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
+</ul>
 
-b.  **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time.
-[Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin wrote on how to use it.<br>
+2. **Keep rigorous notes on *why* and *when* you do something.**
+   - Just like keeping a notebook of experiments in a wet lab, you should take notes every time you sit down to work on a project.
+   - You might, for instance, be trying to improve the performance of a classifier by adding in new overlays or negative training clips by using high-scoring negative clips from testing. Keeping record of why and how many you add in will help you keep track of the methods you used later on.
+   - Some of us use note taking apps such as [Workflowy](https://workflowy.com/) while others keep pen-and-paper journals. Other approaches include using a Google Document or a Jupyter Notebook. Choose the method that works best for you and encourages you to keep notes.
 
-2.  **Keep rigorous notes on *why* and *when* you do something.** <br>
-a.   Just like keeping a notebook of experiments in a wet lab, you should take notes every time you sit down to work on a project.<br>
-b.  You might, for instance, be trying to improve the performance of a classifier by adding in new overlays or negative training clips by using high-scoring negative clips from testing. Keeping record of why and how many you add in will help you keep track of the methods you used later on.<br>
-c.  Some of us use note taking apps such as [Workflowy](https://workflowy.com/) while others keep pen-and-paper journals. Other approaches include using a Google Document or a Jupyter Notebook. Choose the method that works best for you and encourages you to keep notes.<br>
+3.  **Create readme.txt files where you keep your training scripts, data, and model files.**
+   -Readme's are great for reminding yourself what you were doing with a project or any other people who might be jumping on the project as well.
+   -A simple readme is just a log of what you were doing and why (similar to your notes but probably more succinct).It might look like this but can take on a different format:
 
-3.  **Create readme.txt files where you keep your training scripts, data, and model files.** <br>
-a.  Readme's are great for reminding yourself what you were doing with a project or any other people who might be jumping on the project as well.<br>
-b.  A simple readme is just a log of what you were doing and why (similar to your notes but probably more succinct).It might look like this but can take on a different format:
-
-
+```
 This readme was created for the {X project code} on {Y date} by {Z user}. Training scripts can be found in {A directory}, labels and
 training clips in {B directory}, and models in {C directory}.
 
@@ -192,41 +98,27 @@ training clips in {B directory}, and models in {C directory}.
 
 2022-10-05: After testing the model, I found it was not performing well on the target sound because of a confusion sound, so I added 100 of
 these high-scoring confusion sounds to the overlays from {X labels file}. I trained a new version of the model.
+```
 
-
-4.  **Make final products "read only"**<br>
-    a.  When you create something that you might potentially use in the
-        future - for instance, a trained CNN classifier or a set of
-        labeled data, you should give it a unique name (including a
-        version number if it might be updated in the future: for
-        example, "song8_cerw_cnn_v1-0.model") and make the file "read
-        only" on your computer. This ensures you (or someone else) can't accidentally change the contents.<br>
-    
+4.  **Make final products "read only"**
+<ul>
+   a.  When you create something that you might potentially use in the future - for instance, a trained CNN classifier or a set of labeled data, you should give it a unique name (including a version number if it might be updated in the future: for example, "song8_cerw_cnn_v1-0.model") and make the file "read only" on your computer. This ensures you (or someone else) can't accidentally change the contents.
+</ul>
 
 **A final note:**
-
-If you are interested in learning more about how to make your work more reproducible, check out The Practice of [Reproducible
-Research](http://www.practicereproducibleresearch.org/), copies of which are also hanging out around the lab.
+If you are interested in learning more about how to make your work more reproducible, check out The Practice of [Reproducible Research](http://www.practicereproducibleresearch.org/).    
 
 # Creating a Training Dataset
 
-**This and the following sections pertain only to the training of CNNs;
-other types of classifiers are created in other ways.**
+**This and the following sections pertain only to the training of CNNs; other types of classifiers are created in other ways.**
 
-Creation of a training dataset is the least straight-forward and often
-most tedious part of the process. Thus, this section occupies the most
-space. Creating an appropriate dataset which can teach a CNN what you
-want it to learn requires a lot of thought and sometimes
-troubleshooting.
+Creation of a training dataset is the least straight-forward and often most tedious part of the process. Thus, this section occupies the most space. Creating an appropriate dataset which can teach a CNN what you want it to learn requires a lot of thought and sometimes troubleshooting.
 
-Training data can be thought of as **negatives** and **positives** for
-each specific class. A negative is simply a clip that is not an example
-of a class. A positive is a clip that is an example of a class.
+Training data can be thought of as **negatives** and **positives** for each specific class. A negative is simply a clip that is not an example of a class. A positive is a clip that is an example of a class.
 
 ## Step 1: Decide on sources of training data
 
-Most typically, training data (in this lab) come in two
-mutually-exclusive formats:
+Most typically, training data (in this lab) come in two mutually-exclusive formats:
 
 1)  **Targeted recordings** from sound libraries such as
     [Xeno-canto](https://xeno-canto.org/) or [Macaulay
