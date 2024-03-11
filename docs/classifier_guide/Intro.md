@@ -10,7 +10,7 @@ The purpose of a **classifier** is to take some data and assign a "class" to it.
 In the example shown in Fig. 1, six different bird species can all be seen on a "spectrogram," or an image of a sound track which displays sound in terms of timing (x-axis), pitch (y-axis), and relative loudness (darker parts are louder). Note how different each of the boxed sounds looks compared to all the others. Animals in nature which produce sound are usually trying to send messages to other members of their own species. To do this, they must be identifiable from other sounds around them, and it must be clear whether they're saying something like "this is my turf" versus "look out, hawk!" This fortunately makes the task of human classification of sounds relatively simple (in most cases but not all).
 
 ![](./media/image41.png)
-Fig. 1. A ~15 s spectrogram containing the songs of six bird species. Some examples of songs are boxed and the species that made them are displayed above. From left to right: Black-and-white Warbler, Kentucky Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler. <a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank"> Source</a> .
+Fig. 1. A ~15 s spectrogram containing the songs of six bird species. Some examples of songs are boxed and the species that made them are displayed above. From left to right: Black-and-white Warbler, Kentucky Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler.<a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank">Source</a>.
 
 ## Kinds of classifiers 
 Many different types of classifiers for sound exist, but we typically use something called a **Convolutional Neural Network**, or **"CNN"** for short. This is a type of classifier created using machine learning. This type of classifier uses spectrograms to assign a score to sound clips based on how confident it is that a sound clip belongs in one of the classes it has been trained to recognize. CNNs can have any number of desired classes which can range from all the vocalizations produced by a bird species, to specific vocalizations of a bird species, to sounds such as gunshots. Fig. 1 could represent all of the classes in an example CNN.
@@ -27,7 +27,7 @@ Beyond this lab, you may see others use certain **clustering** algorithms as cla
 The following are some examples of the types of questions we have asked in this lab and CNN classifiers we have or could create to answer them.
 
 ### Example 1: Warbler song types
-Many warbler species such as the Chestnut-sided Warbler have been known to begin their breeding season singing predominantly a "type 1" song and switch to predominantly singing a "type 2" song after they have found a mate <a href="https://doi.org/10.1139/z89-065" target="_blank"> (Kroodsma *et al.* 1987 *Can. J. Zool.*  67(2):447-456). </a> Could we use the switch between type 1 and type 2 songs to say something about where and when female Chestnut-sided Warblers choose to pair with males? It seems biologically plausible that females might choose to mate with males that have better territories for supporting broods. This might lead to a pattern of earlier switches from type 1 to type 2 song in higher-quality habitat.
+Many warbler species such as the Chestnut-sided Warbler have been known to begin their breeding season singing predominantly a "type 1" song and switch to predominantly singing a "type 2" song after they have found a mate <a href="https://doi.org/10.1139/z89-065" target="_blank"> (Kroodsma <em>et al.</em> 1987 <em>Can. J. Zool.</em>  67(2):447-456). </a> Could we use the switch between type 1 and type 2 songs to say something about where and when female Chestnut-sided Warblers choose to pair with males? It seems biologically plausible that females might choose to mate with males that have better territories for supporting broods. This might lead to a pattern of earlier switches from type 1 to type 2 song in higher-quality habitat.
 
 To help answer this question, we would need a CNN which can identify both Chestnut-sided Warbler type 1 song and Chestnut-sided Warbler type 2 song (see Fig. 3 below). These two song types would present as different classes for the CNN to classify audio clips into.
 
@@ -54,9 +54,9 @@ Imagine you're at the point of publication and you need a record of all of the d
 Here's a simple list to follow which can help keep you organized:
 
 1. **Use some form of versioning your files *consistently*.** We provide a couple of options here, but you can come up with your own plan of action.
-   - **Slap a date stamp on everything.**
-      1. When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py).
-      2. You can automatically add datestamps in your code like such:
+   a. **Slap a date stamp on everything.**
+      i. When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py).
+      ii. You can automatically add datestamps in your code like such:
 
 ```python:
 from datetime import date
