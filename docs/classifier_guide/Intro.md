@@ -53,10 +53,10 @@ Imagine you're at the point of publication and you need a record of all of the d
 
 Here's a simple list to follow which can help keep you organized:
 
-1. **Use some form of versioning your files *consistently*.** We provide a couple of options here, but you can come up with your own plan of action.
-   a. **Slap a date stamp on everything.**
-      i. When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py).
-      ii. You can automatically add datestamps in your code like such:
+1. **Use some form of versioning your files *consistently*.** We provide a couple of options here, but you can come up with your own plan of action.<br>
+	a. **Slap a date stamp on everything.** <br>
+		i. When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py). <br>
+		ii. You can automatically add datestamps in your code like such: <br>
 
 ```python:
 from datetime import date
