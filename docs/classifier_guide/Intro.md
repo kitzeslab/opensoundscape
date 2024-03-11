@@ -53,10 +53,10 @@ Imagine you're at the point of publication and you need a record of all of the d
 
 Here's a simple list to follow which can help keep you organized:
 
-1. Use some form of versioning your files **consistently** We provide a couple of options here, but you can come up with your own plan of action.
-	a. **Slap a date stamp on everything.** 
-	b. When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py).
-	c. You can automatically add datestamps in your code like such: 
+1. Use some form of versioning your files ***consistently*** We provide a couple of options here, but you can come up with your own plan of action.
+   - **Slap a date stamp on everything.** 
+   - When you create new versions of training scripts, training datasets, etc. add a datestamp to them and save a new copy so you know which version they are (e.g., 2022-10-01_train_model.py -\> 2022-10 05_train_model.py).
+   - You can automatically add datestamps in your code like such: 
 
 ```
 from datetime import date
@@ -73,9 +73,9 @@ model.train(
 	)
 ```
 
-d. If you will be making multiple versions in the same day, use a timestamp as well.
+   - If you will be making multiple versions in the same day, use a timestamp as well.
 
-e. **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time, [Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
+   - **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time, [Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
 
 2. **Keep rigorous notes on *why* and *when* you do something.**
    - Just like keeping a notebook of experiments in a wet lab, you should take notes every time you sit down to work on a project.
@@ -87,7 +87,7 @@ e. **Use git versioning.** This is a little more advanced, but it can help you k
    - Readme's are great for reminding yourself what you were doing with a project or any other people who might be jumping on the project as well.
    - A simple readme is just a log of what you were doing and why (similar to your notes but probably more succinct).It might look like this but can take on a different format:
 
-```
+```markdown
 This readme was created for the {X project code} on {Y date} by {Z user}. Training scripts can be found in {A directory}, labels and
 training clips in {B directory}, and models in {C directory}.
 
@@ -116,20 +116,15 @@ Training data can be thought of as **negatives** and **positives** for each spec
 
 Most typically, training data (in this lab) come in two mutually-exclusive formats:
 
-1)  **Targeted recordings** from sound libraries such as
-    [Xeno-canto](https://xeno-canto.org/) or [Macaulay
-    Library](https://www.macaulaylibrary.org/) paired with
-    field data that **<ins>does not<ins>** include the sound
-    classes.
+1)  **Targeted recordings** from sound libraries such as [Xeno-canto](https://xeno-canto.org/) or [Macaulay Library](https://www.macaulaylibrary.org/) paired with field data that **<ins>does not<ins>** include the sound classes.
 
-2)  **Field data** containing the sound classes recorded by autonomous
-    recorders.
+2)  **Field data** containing the sound classes recorded by autonomous recorders.
 
 ### Targeted Recordings with Field Data Overlays
 
-A mix of targeted recordings (i.e., directional recordings of a certain species frequently created using a parabolic microphone) and field data (i.e., non-directional recordings of no particular sound frequently created using **automated recording units**, or **ARUs**) is the most common source of training data we have been using to train CNNs. Field data are used as ***overlays***. Imagine taking a translucent image and putting it on top of another image--the one on top is the overlay. Generally, we use overlays when we think the data for a class will not be representative of the recordings we want the classifier to predict on which are field data. Often, targeted recordings from sound libraries will be louder than what we see in field data and contain fewer background sounds.
+A mix of targeted recordings (i.e., directional recordings of a certain species frequently created using a parabolic microphone) and field data (i.e., non-directional recordings of no particular sound frequently created using **automated recording units**, or **ARUs**) is the most common source of training data we have been using to train CNNs. Field data are used as **overlays**. Imagine taking a translucent image and putting it on top of another image--the one on top is the overlay. Generally, we use overlays when we think the data for a class will not be representative of the recordings we want the classifier to predict on which are field data. Often, targeted recordings from sound libraries will be louder than what we see in field data and contain fewer background sounds.
 
-The idea here is that you start with a set of targeted recordings which contains whatever the species of interest is. These are split into clips, some of which will contain the sound class(es) (Fig. 4a) and some will not (Fig. 4b). You also have a separate set of field data overlays which **<ins>do not<ins>** contain the sound class(es) (Fig. 4c). During the CNN training process, you "overlay" these field data clips on top of your sound class clips. This actually creates composite images that are averages of the two types of clips (so technically neither is really overlaid on top of the other; Fig. 4d). The classifier will (hopefully) learn that sounds contained in the overlays are not the subject of a class and that the sound classes can vary in loudness and context.
+The idea here is that you start with a set of targeted recordings which contains whatever the species of interest is. These are split into clips, some of which will contain the sound class(es) (Fig. 4a) and some will not (Fig. 4b). You also have a separate set of field data overlays which **do not<** contain the sound class(es) (Fig. 4c). During the CNN training process, you "overlay" these field data clips on top of your sound class clips. This actually creates composite images that are averages of the two types of clips (so technically neither is really overlaid on top of the other; Fig. 4d). The classifier will (hopefully) learn that sounds contained in the overlays are not the subject of a class and that the sound classes can vary in loudness and context.
 
 ![](./media/F2A.png)
 
@@ -180,7 +175,7 @@ Sometimes when a bird sounds like a lot of other things in its environment, it c
 
 As mentioned previously, the classifiers we use only interact with audio data in the form of spectrograms. As such, it's important to make decisions about audio parameters by exploring how spectrograms of the audio look. Specifically, the classifier sees 224x224 pixel images called **tensors** (see Fig. 6). This size is a default and may be modified to be larger at the cost of prediction speed.
 
-**While this section deals with the topic of spectrogram parameters, the parameters you choose are mostly not implemented until the training phase. The only parameter you act on at this point is choosing the clip length because** **<ins> you will need to generate a csv of clip start and end times for training.<ins>** **We highlight here other important visual parameters because these are vital to consider at the same time as you are choosing the clip length.** <br>
+**While this section deals with the topic of spectrogram parameters, the parameters you choose are mostly not implemented until the training phase. The only parameter you act on at this point is choosing the clip length because you will need to generate a csv of clip start and end times for training.We highlight here other important visual parameters because these are vital to consider at the same time as you are choosing the clip length.**
 
 ![](./media/F5.png)
 
@@ -260,7 +255,7 @@ A good training dataset requires "balance" to make an effective classifier. What
 
 We have found that it's a general rule of thumb that to train a decent classifier, we need at minimum 200 positive examples of each target species. Usually, we will use only the first 60 seconds of each Xeno-canto file to get these because using every positive example from a Xeno-canto file may yield datasets that are very biased towards longer files. This may make a classifier learn that it's supposed to be looking more specifically for sounds that match those of a long Xeno-canto file rather than a general pattern that the sound takes on. This same idea might apply if training using field data all from one location and/or time. Sometimes it may be necessary to use entire files if examples are very scarce, but this type of imbalance should be carefully considered.
 
-Sometimes after annotation for classifiers with multiple target species, we find that there's a large difference in the number of positive clips available from one target species to the next. It's often best to try and balance the number of positive clips for different species lest a classifier learn one better than the other. We have two options for this: ***upsampling*** the species with fewer positives (duplicating some of the positives randomly) or ***downsampling*** the species with more positives (leaving out some of the positives randomly). By upsampling, you can retain the variability in clips from the species with more clips, but duplication of clips from the species with fewer could mean that the classifier learns that duplicated clips are more representative of what sound it's supposed to ID than ones that are not duplicated (a problem similar to the one highlighted in the previous paragraph). By downsampling, you lose some of the variability in clips from the species with more positives, but you don't run the risk described previously. Some combination of upsampling and downsampling could also be performed. Opensoundscape includes a function for [resampling clips](http://opensoundscape.org/en/latest/api/modules.html?highlight=resample#opensoundscape.data_selection.resample).
+Sometimes after annotation for classifiers with multiple target species, we find that there's a large difference in the number of positive clips available from one target species to the next. It's often best to try and balance the number of positive clips for different species lest a classifier learn one better than the other. We have two options for this: **upsampling** the species with fewer positives (duplicating some of the positives randomly) or **downsampling** the species with more positives (leaving out some of the positives randomly). By upsampling, you can retain the variability in clips from the species with more clips, but duplication of clips from the species with fewer could mean that the classifier learns that duplicated clips are more representative of what sound it's supposed to ID than ones that are not duplicated (a problem similar to the one highlighted in the previous paragraph). By downsampling, you lose some of the variability in clips from the species with more positives, but you don't run the risk described previously. Some combination of upsampling and downsampling could also be performed. Opensoundscape includes a function for [resampling clips](http://opensoundscape.org/en/latest/api/modules.html?highlight=resample#opensoundscape.data_selection.resample).
 
 When annotating targeted recordings, inevitably there will be portions of the recordings that do not contain the target species when the recordings are converted to shorter clips. These are frequently going to be primarily silence as recordists may use parabolic microphones that exclude background noise, or they may only upload polished recordings in which background noise is minimized. If we keep all of these negatives, we run the risk of the classifier learning that the sound it needs to identify is any sound that isn't silence. Therefore, we usually only keep a small subset of these--something like 20% of the total number of negative clips used might be appropriate.
 
@@ -276,7 +271,7 @@ Training a classifier requires separate **training** and **validation** datasets
 
 Training a machine learning model is the process through which the algorithm learns to predict the correct class (or classes) for a given input sample. In our case, we might want a CNN to predict the correct bird species present (classes) in a 5-second audio clip (sample). The training data we have prepared is what the algorithm will "study" to learn how to predict the correct labels for a sample. The process that the algorithm uses to "study" and learn from the training data is called training (or fitting) the model.
 
-The strategy the CNN uses to learn from the data is similar to how you might study for a spelling or history test with flashcards: it looks at the sample, makes its best guess at the labels, then checks if it was correct and learns from its mistakes. The CNN learns best by seeing "batches" of samples, for instance, a set of 128 samples, rather than one at a time. Each sample is a ***tensor*** (array of numbers) created from the spectrogram, and a batch is just a stack of samples. Similar to when you study for your spelling test, the algorithm will need to study the entire set of samples multiple times; each run through all of the training samples is called an "epoch". At the end of an "epoch", we usually test how much the model has learned by having it predict the labels on the ***validation dataset*.** We never let the model learn from the labels on the validation dataset to improve itself, so each time we use it it acts as a fair assessment of the model (ie, the model can't memorize the answers to this assessment).
+The strategy the CNN uses to learn from the data is similar to how you might study for a spelling or history test with flashcards: it looks at the sample, makes its best guess at the labels, then checks if it was correct and learns from its mistakes. The CNN learns best by seeing "batches" of samples, for instance, a set of 128 samples, rather than one at a time. Each sample is a **tensor** (array of numbers) created from the spectrogram, and a batch is just a stack of samples. Similar to when you study for your spelling test, the algorithm will need to study the entire set of samples multiple times; each run through all of the training samples is called an "epoch". At the end of an "epoch", we usually test how much the model has learned by having it predict the labels on the **validation dataset**. We never let the model learn from the labels on the validation dataset to improve itself, so each time we use it it acts as a fair assessment of the model (ie, the model can't memorize the answers to this assessment).
 
 ## **Behind the scenes, what is a CNN and how does it "learn"?** 
 
@@ -316,7 +311,7 @@ We have typically used 20-100 epochs as our standard for training models, but th
 
 ## Preprocessing
 
-Preprocessing basically means what parameters are applied to create the tensors. You already saw some of these parameters in the previous section such as ***bandpass range***, ***window samples***, and ***overlap samples***. During training is where these parameters actually come into effect. Also part of preprocessing are ***overlays*** and ***overlay weights***, or the weight (e.g., 0.5) or random range of weights (e.g., 0.3-0.7) applied to the overlay when the overlay and underlying training image are averaged together.
+Preprocessing basically means what parameters are applied to create the tensors. You already saw some of these parameters in the previous section such as **bandpass range**, **window samples**, and **overlap samples**. During training is where these parameters actually come into effect. Also part of preprocessing are ***overlays*** and ***overlay weights***, or the weight (e.g., 0.5) or random range of weights (e.g., 0.3-0.7) applied to the overlay when the overlay and underlying training image are averaged together.
 
 ### Data Augmentation
 
@@ -332,7 +327,7 @@ The augmentation performed to the training data can be changed by removing augme
 
 # Testing a CNN
 
-You should not simply trust that a final classifier is a good one. Often, first classifiers will not perform very well in a real-world setting. Thus, you first have to assemble a test set that mimics the real-world setting, and then apply one of multiple methods of examining classifier performance, including calculating performance metrics or examining histograms.
+**You should not simply trust that a final classifier is a good one. Often, first classifiers will not perform very well in a real-world setting. Thus, you first have to assemble a test set that mimics the real-world setting, and then apply one of multiple methods of examining classifier performance, including calculating performance metrics or examining histograms.**
 
 ## Assembling an Appropriate Test Set
 
@@ -354,9 +349,9 @@ Preferably, a test set should include several dozen positive examples of a targe
 
 ## Precision and Recall
 
-One of the more universally-accepted ways of testing CNN performance isby examining ***precision*** and ***recall***. These can be hard metrics to remember and get straight.
+One of the more universally-accepted ways of testing CNN performance isby examining **precision** and **recall**. These can be hard metrics to remember and get straight.
 
-First though, let's talk about ***score thresholds***. The score threshold is a value above which you consider all clips to be positive for the target species/sound and below which you consider them all to be negative. Of course, unless your classifier perfectly identifies sounds, there will be errors in the form of false positives and false negatives. Some of the clips above the threshold will be ***false positives*** which do not actually contain the target sound. Likewise, some of the clips below the threshold will likely be ***false negatives***, which actually do contain the target sound. In contrast, correctly-identified sounds at a given threshold are referred to as ***true positives*** and ***true negatives*** (see Table 3).
+First though, let's talk about **score thresholds**. The score threshold is a value above which you consider all clips to be positive for the target species/sound and below which you consider them all to be negative. Of course, unless your classifier perfectly identifies sounds, there will be errors in the form of false positives and false negatives. Some of the clips above the threshold will be **false positives** which do not actually contain the target sound. Likewise, some of the clips below the threshold will likely be **false negatives**, which actually do contain the target sound. In contrast, correctly-identified sounds at a given threshold are referred to as **true positives** and **true negatives** (see Table 3).
 
 Table 3. Demonstration of true and false positives and negatives. Columns are the true state of a sound in a clip while rows are the predicted state of a sound in a clip.
 
@@ -365,7 +360,7 @@ Table 3. Demonstration of true and false positives and negatives. Columns are th
 | Predicted present   |    True positive     |     False positive |
 | Predicted absent    |   False negative     |     True negative  |
 
-When you select a threshold, you can use the labeled dataset to determine the classifier's performance at that threshold. ***Precision*** is the number of true positives out of the number of all positives  at that particular threshold. ***Recall*** is the number of true positives out of the number of all clips that actually contain the target sound <ins> at that particular threshold <ins> (see Fig. 16).
+When you select a threshold, you can use the labeled dataset to determine the classifier's performance at that threshold. **Precision** is the number of true positives out of the number of all positives  at that particular threshold. **Recall** is the number of true positives out of the number of all clips that actually contain the target sound <ins> at that particular threshold <ins> (see Fig. 16).
 
 ![](./media/F17.png)
 
