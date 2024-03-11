@@ -77,7 +77,7 @@ model.train(
 
    - **Use git versioning.** This is a little more advanced, but it can help you keep a record of changes you may have made to files over time, [Here's an intro](http://datasci.kitzes.com/lessons/git/) Justin Kitzes wrote on how to use it.
 
-b. **Keep rigorous notes on *why* and *when* you do something.**
+b. **Keep rigorous notes on why and when you do something.**
    - Just like keeping a notebook of experiments in a wet lab, you should take notes every time you sit down to work on a project.
    - You might, for instance, be trying to improve the performance of a classifier by adding in new overlays or negative training clips by using high-scoring negative clips from testing. Keeping record of why and how many you add in will help you keep track of the methods you used later on.
    - Some of us use note taking apps such as [Workflowy](https://workflowy.com/) while others keep pen-and-paper journals. Other approaches include using a Google Document or a Jupyter Notebook. Choose the method that works best for you and encourages you to keep notes.
