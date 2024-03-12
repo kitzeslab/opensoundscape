@@ -116,9 +116,9 @@ Training data can be thought of as **negatives** and **positives** for each spec
 
 Most typically, training data (in this lab) come in two mutually-exclusive formats:
 
-1)  **Targeted recordings** from sound libraries such as [Xeno-canto](https://xeno-canto.org/) or [Macaulay Library](https://www.macaulaylibrary.org/) paired with field data that **does not** include the sound classes.
+1)  **Targeted recordings** from sound libraries such as [Xeno-canto](https://xeno-canto.org/), [Macaulay Library](https://www.macaulaylibrary.org/), or [WildTrax](https://wildtrax.ca) paired with field data that **does not** include the sound classes. 
 
-2)  **Field data** containing the sound classes recorded by autonomous recorders.
+2)  **Field data** containing the sound classes recorded by autonomous recorders. Many published annotated datasets include autonomously recorded sounds; for a list of annotated bird datasets, see [here](https://docs.google.com/spreadsheets/d/1KrmCB0vvSK7V3znJfycO-eOMZJKP2F-Ih6neRYPz1Xc/edit#gid=629410210).
 
 ### Targeted Recordings with Field Data Overlays
 
@@ -414,30 +414,6 @@ e.  Include more positive training examples. Maybe the classifier simplydoesn't 
 
 # Additional Resources
 
-Over time, this lab has amassed many resources to assist with training both internal and external to this lab including numerous annotated datasets and libraries of audio data. Below are some lists of these resources.
-
-## Sound libraries
-
--   [Xeno-canto](https://xeno-canto.org/): a free sound
-    library focusing on bird sounds from species around the world. Has
-    mammal sounds and now Orthoptera as well.
-
-    -   Licenses are typically free-use but double check them.
-
-    -   In-house copy of global birds downloaded in 2021 is stored at
-        snowy:
-
-    -   Verify that the foreground species is actually there; users are
-        pretty good but sometimes wrong.
-
--   [Macaulay Library](https://www.macaulaylibrary.org/):
-    a sound library focusing on birds and run by the Cornell Laboratory
-    of Ornithology.
-
-    -   In-house copy stored at?
-
-    -   Must contact managers directly for copies of audio files.
- 
--   [Bioacoustics Resources: A list curated by the Kitzes Lab](https://docs.google.com/document/d/10APGahxU_GJewO8mkN2wzG0y-LHw3p_TAcYJDdHAQmg/edit#heading=h.mwbyo5325flj)
+For additional information, please see this list of [Bioacoustics Resources](https://docs.google.com/document/d/10APGahxU_GJewO8mkN2wzG0y-LHw3p_TAcYJDdHAQmg/edit#heading=h.mwbyo5325flj) curated by the Kitzes Lab.
 
 
