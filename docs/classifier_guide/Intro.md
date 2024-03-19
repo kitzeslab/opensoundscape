@@ -323,7 +323,7 @@ By default, images are augmented in a couple ways: horizontal and vertical gray 
 
 Fig. 15. The original tensor (a) versus the same tensor with default augmentation applied in three different epochs (b-d).
 
-The augmentation performed to the training data can be changed by removing augmentations, or adding pre-built augmentations (such as overlays), but besides applying overlays, we generally do no not make changes to the default data augmentation.
+The augmentation performed to the training data can be changed by removing augmentations, or adding pre-built augmentations (such as overlays), but besides applying overlays, we generally do not make changes to the default data augmentation.
 
 # Testing a CNN
 
@@ -339,7 +339,7 @@ Acquiring said recordings can be tough. Some potential options you could try are
 
 a.  From fully-annotated soundscapes. A list of some of these that are available to use is at the [bottom of the document](#additional-resources).Preferably, a fully annotated soundscape would be produced from randomly sampling all  audio data available in a larger dataset. Keep in mind, using overlays from these data will specifically increase performance on them, especially if you do not exclude clips you used as overlays.
 
-b.  From cards where point-counters found the species of interest. These may still be a chore to skim through for the target species, but this might be the best bet for rare species that you are unlikely to encounter while listening to random data. Aim also to get examplesfrom more than one site as individuals may vary in their vocalizations.
+b.  From cards where point-counters found the species of interest. These may still be a chore to skim through for the target species, but this might be the best bet for rare species that you are unlikely to encounter while listening to random data. Aim also to get examples from more than one site as individuals may vary in their vocalizations.
 
 c.  By predicting on a whole field dataset. You can listen to the high-scoring clips from the set and find some that contain the species of interest. However, note that this may introduce  biases to your test dataset, as it will only turn up recordings that the classifier already scored relatively highly.
 
@@ -349,7 +349,7 @@ Preferably, a test set should include several dozen positive examples of a targe
 
 ## Precision and Recall
 
-One of the more universally-accepted ways of testing CNN performance isby examining **precision** and **recall**. These can be hard metrics to remember and get straight.
+One of the more universally-accepted ways of testing CNN performance is by examining **precision** and **recall**. These can be hard metrics to remember and get straight.
 
 First though, let's talk about **score thresholds**. The score threshold is a value above which you consider all clips to be positive for the target species/sound and below which you consider them all to be negative. Of course, unless your classifier perfectly identifies sounds, there will be errors in the form of false positives and false negatives. Some of the clips above the threshold will be **false positives** which do not actually contain the target sound. Likewise, some of the clips below the threshold will likely be **false negatives**, which actually do contain the target sound. In contrast, correctly-identified sounds at a given threshold are referred to as **true positives** and **true negatives** (see Table 3).
 
@@ -366,7 +366,7 @@ When you select a threshold, you can use the labeled dataset to determine the cl
 
 Fig. 16. A visual demonstration of the meaning of precision and recall.Source: [https://en.wikipedia.org/wiki/Precision_and_recall](https://en.wikipedia.org/wiki/Precision_and_recall)
 
-Often, these are displayed as "PR curves" where recall is plotted against precision by varying the threshold used (see Fig. 17a and Fig. 17c). However, PR curves don't usually indicate which combination of precision and recall corresponds to which threshold. Therefore, it can be easier to interpret as a plot of separate precision and recall lines against threshold, because this can help you see which numerical choice of threshold results in a particular combination of precision and recall (see Fig. 17b and Fig. 17d). There's no simple answer for what a good precision-recall curve looks like because you may prioritize one or the other depending on the project, but generally if you can get \>0.7 precision *and* recall, this is a good sign. Fig. 17a and 17b show very good performance while 17c and 17d show very poor performance.
+Often, these are displayed as "PR curves" where recall is plotted against precision by varying the threshold used (see Fig. 17a and Fig. 17c). However, PR curves don't usually indicate which combination of precision and recall corresponds to which threshold. Therefore, it can be easier to interpret as a plot of separate precision and recall lines against threshold, because this can help you see which numerical choice of threshold results in a particular combination of precision and recall (see Fig. 17b and Fig. 17d). There's no simple answer for what a good precision-recall curve looks like because you may prioritize one or the other depending on the project, but generally if you can get >0.7 precision *and* recall, this is a good sign. Fig. 17a and 17b show very good performance while 17c and 17d show very poor performance.
 
 ![](./media/F11A.png)
 
