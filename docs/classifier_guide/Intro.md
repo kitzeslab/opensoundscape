@@ -378,7 +378,7 @@ Frequently, we have found ourselves favoring the use of histograms to display th
 
 ![](./media/F12A.png)
 
-Fig. 18. Some example score histograms. The top row (a and b) are considered to be good classifier performance. There is overlap between the true positives (blue) and the true negatives (orange), but that's not something that will ever be realistically eliminated. At the bottom (c and d) is a comparison of the same classifier, retrained usingdifferent clips/parameters to classify Barred Owls. Performance in c wasn't great with the true positives occurring at highest frequency at about the same score threshold where true negatives were occurring at highest frequency. Also note that some of the true positives form a second distribution at the tail. After retraining in d, the score distribution is considered much more acceptable for this same test set.
+Fig. 18. Some example score histograms. The top row (a and b) are considered to be good classifier performance. There is overlap between the true positives (blue) and the true negatives (orange), but that's not something that will ever be realistically eliminated. At the bottom (c and d) is a comparison of the same classifier, retrained using different clips/parameters to classify Barred Owls. Performance in c wasn't great with the true positives occurring at highest frequency at about the same score threshold where true negatives were occurring at highest frequency. Also note that some of the true positives form a second distribution at the tail. After retraining in d, the score distribution is considered much more acceptable for this same test set.
 
 ## A case study: Great Horned Owl begging calls
 
