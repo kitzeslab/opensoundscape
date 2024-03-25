@@ -1,6 +1,8 @@
 OpenSoundscape
 ==============
 
+`![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white <https://github.com/kitzeslab/opensoundscape>`
+
 OpenSoundscape (OPSO) is free and open source Python utility library analyzing bioacoustic data. 
 
 OpenSoundscape includes utilities which can be strung together to create data analysis pipelines, including functions to:
@@ -12,9 +14,6 @@ OpenSoundscape includes utilities which can be strung together to create data an
 * detect periodic vocalizations with RIBBIT
 * load and manipulate Raven annotations
 * estimate the location of sound sources from synchronized recordings
-
-
-OpenSoundscape's source code can be found on `GitHub <https://github.com/kitzeslab/opensoundscape>`__ and its documentation can be found on `OpenSoundscape.org <https://opensoundscape.org>`__.
 
 
 Table of Contents
