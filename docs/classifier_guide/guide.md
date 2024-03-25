@@ -10,7 +10,7 @@ The purpose of a **classifier** is to take some data and assign a "class" to it.
 In the example shown in Fig. 1, six different bird species can all be seen on a "spectrogram," or an image of a sound track which displays sound in terms of timing (x-axis), pitch (y-axis), and relative loudness (darker parts are louder). Note how different each of the boxed sounds looks compared to all the others. Animals in nature which produce sound are usually trying to send messages to other members of their own species. To do this, they must be identifiable from other sounds around them, and it must be clear whether they're saying something like "this is my turf" versus "look out, hawk!" This fortunately makes the task of human classification of sounds relatively simple (in most cases but not all).
 
 ![](./media/image41.png)
-Fig. 1. A ~15 s spectrogram containing the songs of six bird species. Some examples of songs are boxed and the species that made them are displayed above. From left to right: Black-and-white Warbler, Kentucky Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler.<a href="https://www.markdownguide.org](https://docs.google.com/presentation/d/1vLECcAX1Mmch1FftEMVxAry27LteIPsUyAfBjnlLJb4/edit#slide=id.g13d44f3eea1_0_44" target="_blank"> Source</a>.
+Fig. 1. A ~15 s spectrogram containing the songs of six bird species. Some examples of songs are boxed and the species that made them are displayed above. From left to right: Black-and-white Warbler, Kentucky Warbler, Wood Thrush, Ovenbird, American Redstart, and Hooded Warbler.<a href="https://www.aba.org/wp-content/uploads/2020/04/Birding_20-2_11-Birdsong-ext.pdf" target="_blank"> Source</a>.
 
 ## Kinds of classifiers 
 Many different types of classifiers for sound exist, but we typically use something called a **Convolutional Neural Network**, or **"CNN"** for short. This is a type of classifier created using machine learning. This type of classifier uses spectrograms to assign a score to sound clips based on how confident it is that a sound clip belongs in one of the classes it has been trained to recognize. CNNs can have any number of desired classes which can range from all the vocalizations produced by a bird species, to specific vocalizations of a bird species, to sounds such as gunshots. Fig. 1 could represent all of the classes in an example CNN.
@@ -104,7 +104,7 @@ d.  **Make final products "read only"**
 **A final note:**
 If you are interested in learning more about how to make your work more reproducible, check out The Practice of [Reproducible Research](http://www.practicereproducibleresearch.org/).    
 
-# Create a training dataset
+# Creating a training dataset
 
 **This and the following sections pertain only to the training of CNNs; other types of classifiers are created in other ways.**
 
@@ -364,7 +364,7 @@ When you select a threshold, you can use the labeled dataset to determine the cl
 
 ![](./media/F17.png)
 
-Fig. 16. A visual demonstration of the meaning of precision and recall.Source: [https://en.wikipedia.org/wiki/Precision_and_recall](https://en.wikipedia.org/wiki/Precision_and_recall)
+Fig. 16. A visual demonstration of the meaning of precision and recall. Source: [https://en.wikipedia.org/wiki/Precision_and_recall](https://en.wikipedia.org/wiki/Precision_and_recall)
 
 Often, these are displayed as "PR curves" where recall is plotted against precision by varying the threshold used (see Fig. 17a and Fig. 17c). However, PR curves don't usually indicate which combination of precision and recall corresponds to which threshold. Therefore, it can be easier to interpret as a plot of separate precision and recall lines against threshold, because this can help you see which numerical choice of threshold results in a particular combination of precision and recall (see Fig. 17b and Fig. 17d). There's no simple answer for what a good precision-recall curve looks like because you may prioritize one or the other depending on the project, but generally if you can get >0.7 precision *and* recall, this is a good sign. Fig. 17a and 17b show very good performance while 17c and 17d show very poor performance.
 
@@ -412,7 +412,7 @@ d.  Add another class to the classifier containing a confusion species. This may
 
 e.  Include more positive training examples. Maybe the classifier simplydoesn't have enough to work off of. Including the first 120 rather than the first 60 seconds of Xeno-canto recordings in a two-class Barred Owl/Great Horned Owl classifier increased performance despite already having the target 200 positive examples for each class.<br>
 
-# Additional Resources
+# Additional resources
 
 For additional information, please see this list of [Bioacoustics Resources](https://docs.google.com/document/d/10APGahxU_GJewO8mkN2wzG0y-LHw3p_TAcYJDdHAQmg/edit#heading=h.mwbyo5325flj) curated by the Kitzes Lab.
 
