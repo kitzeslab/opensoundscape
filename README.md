@@ -1,3 +1,5 @@
+# OpenSoundscape
+
 [![CI Status](https://github.com/kitzeslab/opensoundscape/workflows/CI/badge.svg)](https://github.com/kitzeslab/opensoundscape/actions?query=workflow%3ACI)
 [![Documentation Status](https://readthedocs.org/projects/opensoundscape/badge/?version=latest)](http://opensoundscape.org/en/latest/?badge=latest)
 
@@ -14,7 +16,7 @@ OpenSoundscape includes utilities which can be strung together to create data an
 * estimate the location of sound sources from synchronized recordings
 
 
-OpenSoundscape's source code can be found on [GitHub] (https://github.com/kitzeslab/opensoundscape) and its documentation can be found on [OpenSoundscape.org](https://opensoundscape.org).
+OpenSoundscape's documentation can be found on [OpenSoundscape.org](https://opensoundscape.org).
 
 ## Show me the code!
 
