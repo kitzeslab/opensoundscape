@@ -201,7 +201,7 @@ In a Black-billed Cuckoo classifier, a close-cropped bandpass range worked excee
 
 Fig. 8. Two tensors containing the same Northern Cardinal clip at different bandpass ranges (the cardinal is boxed in red). The first (a) has a bandpass range of 0-11,000 Hz which shows more background sound potentially causing a "distraction" so-to-speak. The second (b) is bandpassed closer to the target species song from 500-5,000 Hz and contains fewer background sounds.
 
-## Window samples and overlap samples
+### Window samples and overlap samples
 
 Other parameters can be modified to help strike the balance. **Window samples** is a parameter which has to do with how sound is transformed into a spectrogram image. This transformation strikes its own balance between the level of detail visualized in time and the level of detail visualized in frequency. Higher values for window samples (e.g., 1024) will yield spectrograms with more frequency and less time resolution. Lower values for window samples (e.g., 256) will yield spectrograms with more time and less frequency resolution. Lowering window samples may reveal features such as **frequency modulation** (rapid up and down shifts in frequency) that are otherwise unapparent (see Fig. 9). Changing the window samples may also make the same call look very different on spectrograms (see Fig. 10). **Overlap samples** should typically be ½ of the value of window samples.
 
