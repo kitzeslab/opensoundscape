@@ -4,7 +4,7 @@
 This document is intended to serve as an introduction to the classifier training workflow and considerations that need to be made before diving in rather than a programming how-to. For more detailed instructions on **how** to use OpenSoundscape, see the <a href="http://opensoundscape.org/en/latest/" target="_blank"> documentation</a>.
 
 
-# How we use automated classification of sound
+# Uses of automated sound classification
 The purpose of a **classifier** is to take some data and assign a "class" to it. Let's say you have some audio data that you recorded in the field. You're trying to find some particular "classes" of sound: like a particular bird species's call, the noise of a chainsaw, or a chorus of frogs.
 
 In the example shown in Fig. 1, six different bird species can all be seen on a "spectrogram," or an image of a sound track which displays sound in terms of timing (x-axis), pitch (y-axis), and relative loudness (darker parts are louder). Note how different each of the boxed sounds looks compared to all the others. Animals in nature which produce sound are usually trying to send messages to other members of their own species. To do this, they must be identifiable from other sounds around them, and it must be clear whether they're saying something like "this is my turf" versus "look out, hawk!" This fortunately makes the task of human classification of sounds relatively simple (in most cases but not all).
@@ -104,7 +104,7 @@ d.  **Make final products "read only"**
 **A final note:**
 If you are interested in learning more about how to make your work more reproducible, check out The Practice of [Reproducible Research](http://www.practicereproducibleresearch.org/).    
 
-# Creating a Training Dataset
+# Create a training dataset
 
 **This and the following sections pertain only to the training of CNNs; other types of classifiers are created in other ways.**
 
@@ -120,7 +120,7 @@ Most typically, training data (in this lab) come in two mutually-exclusive forma
 
 2)  **Field data** containing the sound classes recorded by autonomous recorders. Many published annotated datasets include autonomously recorded sounds; for a list of annotated bird datasets, see [here](https://docs.google.com/spreadsheets/d/1KrmCB0vvSK7V3znJfycO-eOMZJKP2F-Ih6neRYPz1Xc/edit#gid=629410210).
 
-### Targeted Recordings with Field Data Overlays
+### Targeted recordings with field data overlays
 
 A mix of targeted recordings (i.e., directional recordings of a certain species frequently created using a parabolic microphone) and field data (i.e., non-directional recordings of no particular sound frequently created using **automated recording units**, or **ARUs**) is the most common source of training data we have been using to train CNNs. Field data are used as **overlays**. Imagine taking a translucent image and putting it on top of another image--the one on top is the overlay. Generally, we use overlays when we think the data for a class will not be representative of the recordings we want the classifier to predict on which are field data. Often, targeted recordings from sound libraries will be louder than what we see in field data and contain fewer background sounds.
 
@@ -133,7 +133,7 @@ Fig. 4. Targeted training data clips sourced from Xeno-canto and field data over
 One easy source of overlays are pre-annotated datasets such as the "[PNRE dataset](https://doi.org/10.1002/ecy.3329)" or the "[Ithaca dataset](https://zenodo.org/record/7050014#.Y4-Lx-zMLuU)" because you already know exactly what these datasets contain making it easy to exclude clips that may contain your target species. The caveat is that you should not use a dataset you used for overlays as a test set for your classifier because the classifier has learned that those clips do not contain the target making it seem like it has better performance
 than it really does.
 
-### Field Data
+### Field data
 
 If targeted recordings are not representative of the field data I will be later predicting on, why use it at all? Why not just use field data? Targeted recordings paired with field data overlays might actually be advantageous in at least some situations.
 
@@ -267,7 +267,7 @@ Training a classifier requires separate **training** and **validation** datasets
 
 **Always save your final labels as one versioned csv file.** This enables you to know precisely which data you used in training and can help you re-create a classifier in the event that it's lost. **Also, keep a record of how you create your training data and overlays.** Parameters used in creating clips such as the proportion of a vocalization that must be present to be considered a positive are not saved unless you make a record of them.
 
-# CNN Training
+# CNN training
 
 Training a machine learning model is the process through which the algorithm learns to predict the correct class (or classes) for a given input sample. In our case, we might want a CNN to predict the correct bird species present (classes) in a 5-second audio clip (sample). The training data we have prepared is what the algorithm will "study" to learn how to predict the correct labels for a sample. The process that the algorithm uses to "study" and learn from the training data is called training (or fitting) the model.
 
@@ -277,7 +277,7 @@ The strategy the CNN uses to learn from the data is similar to how you might stu
 
 While this section is not strictly necessary for understanding how to train a classifier, it may provide you with more context for why we make the decisions we do in training CNNs. It's a good idea to understand how your tool of choice works.
 
-### Neural Networks
+### Neural networks
 
 A neural network is a network of many nodes and connections between them, structured as a sequence of layers (see Fig. 12).
 
@@ -313,7 +313,7 @@ We have typically used 20-100 epochs as our standard for training models, but th
 
 Preprocessing basically means what parameters are applied to create the tensors. You already saw some of these parameters in the previous section such as **bandpass range**, **window samples**, and **overlap samples**. During training is where these parameters actually come into effect. Also part of preprocessing are **overlays** and **overlay weights**, or the weight (e.g., 0.5) or random range of weights (e.g., 0.3-0.7) applied to the overlay when the overlay and underlying training image are averaged together.
 
-### Data Augmentation
+### Data augmentation
 
 In each epoch, the classifier does not see precisely the same image every time. Instead, to increase its ability to generalize the features of the image that it's learning, it gets a modified, or "augmented" version of the image which differs a bit each epoch. The parameters used in augmentation of the image are also part of the preprocessor. Overlays are considered part of augmentation.
 
@@ -329,7 +329,7 @@ The augmentation performed to the training data can be changed by removing augme
 
 **You should not simply trust that a final classifier is a good one. Often, first classifiers will not perform very well in a real-world setting. Thus, you first have to assemble a test set that mimics the real-world setting, and then apply one of multiple methods of examining classifier performance, including calculating performance metrics or examining histograms.**
 
-## Assembling an Appropriate Test Set
+## Assembling an appropriate test set
 
 Testing performance of a classifier really comes down to the **test set**. Like the **validation set**, the test set is used to assess the performance of a classifier. Unlike the validation set, you predict on the test set separately outside of model training. Unlike the validation set, the test set is not used to decide during training which version of the classifier is the best one. That's not to say the clips in the test set and the validation set are mutually exclusive, however. These terms simply describe where and when you are predicting on a set of clips.
 
@@ -347,7 +347,7 @@ d.  Using a clustering algorithm to find when/where the sounds you want are occu
 
 Preferably, a test set should include several dozen positive examples of a target sound but even a handful can give you an idea of score separation between true positives and true negatives. Field data annotated for the target species can be combined with other fully-annotated soundscapes that do not contain the target sounds to get a better picture of how the classifier performs on a variety of data.
 
-## Precision and Recall
+## Precision and recall
 
 One of the more universally-accepted ways of testing CNN performance is by examining **precision** and **recall**. These can be hard metrics to remember and get straight.
 
@@ -372,7 +372,7 @@ Often, these are displayed as "PR curves" where recall is plotted against precis
 
 Fig. 17. Examples of typical precision-recall curves (a and c) and a threshold versus precision and recall plots (b and d). All of these plots pertain to the very same model--the only difference is the test dataset. A and b are with respect to a test dataset that is very similar to the training data used to create the model. C and d pertain to test data from different domains.
 
-## Score Histograms
+## Score histograms
 
 Frequently, we have found ourselves favoring the use of histograms to display the distributions of true positive and true negative scores from test sets. These provide an easily interpretable way to see how well the classifier differentiates positive and negative clips. They may also provide clues as to how a classifier performs on variations of the target sound or potential confusion sounds (i.e., sounds which are similar to the target sound and may be confused with it). The greater the separation between the true positives and the true negatives, the better the classifier is doing (see Fig. 18). Each plot in Fig. 18 has some issues, but we were generally satisfied with the performance of the classifiers in Fig. 18a, 18b, and 18d. Fig. 18a and Fig 18b both show left skews in the true positives. This may have been caused by partial vocalizations in the test set clips which were marked as true positives. Fig. 18c below shows an example of a bimodal histogram. In this instance, it was caused by another type of vocalization produced by the bird in question which was not well-represented in the training dataset.
 
@@ -392,7 +392,7 @@ For precision and recall on these two test datasets, see Fig. 16 above.
 
 Fig. 19. Histograms of the true positives and true negatives scores from the same classifier on two different test datasets (a from Montana and b from the East Coast).
 
-# Further Steps
+# Further steps
 
 So you've trained a classifier, tested its performance, and now you're wondering what to do next. Should I retrain based on performance on the test set or proceed? There's no right answer, but keep in mind, **the classifier does not need to be perfect, only useful.**
 

@@ -110,7 +110,7 @@ Suggested citation:
    :hidden:
    :caption: Classifiers 101
 
-   classifier_guide/Intro.md
+   classifier_guide/guide.md
    classifier_guide/why_classify
    classifier_guide/data_organization
    classifier_guide/create_training_dataset
