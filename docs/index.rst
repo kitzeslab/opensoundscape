@@ -1,7 +1,8 @@
 OpenSoundscape
 ==============
 
-`![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white <https://github.com/kitzeslab/opensoundscape>`
+.. image:: https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white
+   :target: https://github.com/kitzeslab/opensoundscape
 
 OpenSoundscape (OPSO) is free and open source Python utility library analyzing bioacoustic data. 
 
