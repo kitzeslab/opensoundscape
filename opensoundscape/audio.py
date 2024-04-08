@@ -587,41 +587,42 @@ class Audio:
     def extend_to(self, duration):
         """Extend audio file to desired duration by adding silence to the end
 
-        If duration is less than the Audio's .duration, the Audio object is trimmed.
+        If `duration` is less than or equal to the Audio's self.duration, the Audio remains unchanged.
+
         Otherwise, silence is added to the end of the Audio object to achieve the desired
-        duration.
+        `duration`.
 
         Args:
-            duration: the final duration in seconds of the audio object
+            duration: the minimum final duration in seconds of the audio object
 
         Returns:
             a new Audio object of the desired duration
         """
 
-        target_n_samples = round(duration * self.sample_rate)
+        minimum_n_samples = round(duration * self.sample_rate)
         current_n_samples = len(self.samples)
 
-        if target_n_samples > current_n_samples:
+        if minimum_n_samples <= current_n_samples:
+            return self._spawn()
+
+        else:
             # add 0's to the end of the sample array
             new_samples = np.pad(
-                self.samples, pad_width=(0, target_n_samples - current_n_samples)
+                self.samples, pad_width=(0, minimum_n_samples - current_n_samples)
             )
-        elif target_n_samples < current_n_samples:
-            # trim to desired samples (similar to self.trim())
-            new_samples = self.samples[0:target_n_samples]
 
-        # update metadata to reflect new duration
-        if self.metadata is None:
-            metadata = None
-        else:
-            metadata = self.metadata.copy()
-            if "duration" in metadata:
-                metadata["duration"] = len(new_samples) / self.sample_rate
+            # update metadata to reflect new duration
+            if self.metadata is None:
+                metadata = None
+            else:
+                metadata = self.metadata.copy()
+                if "duration" in metadata:
+                    metadata["duration"] = len(new_samples) / self.sample_rate
 
-        return self._spawn(
-            samples=new_samples,
-            metadata=metadata,
-        )
+            return self._spawn(
+                samples=new_samples,
+                metadata=metadata,
+            )
 
     def extend_by(self, duration):
         """Extend audio file by adding `duration` seconds of silence to the end
