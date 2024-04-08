@@ -523,12 +523,23 @@ def test_extend_to_correct_metadata(silence_10s_mp3_str):
 
 
 def test_extend_to_shorter_duration(silence_10s_mp3_str):
-    # extending 10s to 6s should simply trim the audio
+    # extending 10s to 6s should retain 10s
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     a2 = audio.extend_to(6)
-    assert math.isclose(a2.duration, 6)
+    assert math.isclose(a2.duration, 10)
     # duration in metadata should be updated:
-    assert math.isclose(a2.metadata["duration"], 6)
+    assert math.isclose(a2.metadata["duration"], 10)
+    # other metadata should be retained:
+    assert a2.metadata["subtype"] == audio.metadata["subtype"]
+
+
+def test_extend_to_correct_duration_ok(silence_10s_mp3_str):
+    # extending 10s to 10 shouldn't raise error (#972)
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    a2 = audio.extend_to(10)
+    assert math.isclose(a2.duration, 10)
+    # duration in metadata should be updated:
+    assert math.isclose(a2.metadata["duration"], 10)
     # other metadata should be retained:
     assert a2.metadata["subtype"] == audio.metadata["subtype"]
 
