@@ -9,6 +9,8 @@ import pytz
 import soundfile
 import librosa
 from matplotlib.colors import LinearSegmentedColormap
+import torch
+import random
 
 
 class GetDurationError(ValueError):
@@ -329,3 +331,20 @@ def generate_opacity_colormaps(
         colormaps.append(cmap)
 
     return colormaps
+
+
+def set_seed(seed, verbose=True):
+    """Set random state across different libraries for reproducibility
+
+    Args:
+        seed (int): Number to fix random number generators to a specific start.
+        verbose (bool, optional): Print set seed. Defaults to True.
+    """
+    if verbose:
+        print(f"Random state set with seed {seed}")
+
+    torch.backends.cudnn.deterministic = True
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
