@@ -1,4 +1,5 @@
 """Preprocessor classes: tools for preparing and augmenting audio samples"""
+
 from pathlib import Path
 import pandas as pd
 import copy
@@ -201,13 +202,7 @@ class BasePreprocessor:
             ), "if passing tuple, first element must be str or pathlib.Path"
             sample = AudioSample(path, start_time=start, duration=self.sample_duration)
         elif isinstance(sample, pd.Series):
-            # .name should contain (path, start_time, end_time)
-            # note: end is not used, uses start_time self.sample_duration
-            path, start, _ = sample.name
-            assert isinstance(
-                path, (str, Path)
-            ), "if passing a series, series.name must contain (path, start_time, end_time)"
-            sample = AudioSample(path, start_time=start, duration=self.sample_duration)
+            sample = AudioSample.from_series(sample)
         else:
             assert isinstance(sample, AudioSample), (
                 "sample must be AudioSample, tuple of (path, start_time), "
@@ -297,11 +292,13 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 ##  augmentations ##
                 # Overlay is a version of "mixup" that draws samples from a user-specified dataframe
                 # and overlays them on the current sample
-                "overlay": Overlay(
-                    is_augmentation=True, overlay_df=overlay_df, update_labels=False
-                )
-                if overlay_df is not None
-                else None,
+                "overlay": (
+                    Overlay(
+                        is_augmentation=True, overlay_df=overlay_df, update_labels=False
+                    )
+                    if overlay_df is not None
+                    else None
+                ),
                 # add vertical (time) and horizontal (frequency) masking bars
                 "time_mask": Action(actions.time_mask, is_augmentation=True),
                 "frequency_mask": Action(actions.frequency_mask, is_augmentation=True),
