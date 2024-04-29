@@ -253,7 +253,7 @@ class BoxedAnnotations:
 
                 all_file_dfs.append(df)
             else:
-                warnings.warn(f'{raven_file} has zero rows.')
+                warnings.warn(f"{raven_file} has zero rows.")
 
         # we drop the original index from the Raven annotations when we combine tables
         # if the dataframes have different columns, we fill missing columns with nan values
