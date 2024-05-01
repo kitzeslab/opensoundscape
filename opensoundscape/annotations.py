@@ -157,7 +157,7 @@ class BoxedAnnotations:
             (the .df attribute is a dataframe containing each annotation)
         """
         all_file_dfs = []
-
+        
         # mapping of Raven file columns to standard opensoundscape names
         # key: Raven file; value: opensoundscape name
         column_mapping_dict = {
@@ -168,7 +168,16 @@ class BoxedAnnotations:
         }
         # update defaults with any user-specified mappings
         column_mapping_dict.update(column_mapping_dict or {})
-
+        
+        
+        standard_columns = [
+            "annotation_file",
+            "start_time",
+            "end_time",
+            "low_f",
+            "high_f",
+        ]
+        
         if audio_files is not None:
             assert len(audio_files) == len(
                 raven_files
@@ -220,15 +229,7 @@ class BoxedAnnotations:
 
                 # add column containing the raven file path
                 df["annotation_file"] = raven_file
-
-                # remove undesired columns
-                standard_columns = [
-                    "annotation_file",
-                    "start_time",
-                    "end_time",
-                    "low_f",
-                    "high_f",
-                ]
+                
                 if annotation_column_idx is not None:
                     standard_columns.append("annotation")
                 if hasattr(keep_extra_columns, "__iter__"):
@@ -254,17 +255,21 @@ class BoxedAnnotations:
                 all_file_dfs.append(df)
             else:
                 warnings.warn(f"{raven_file} has zero rows.")
-
-        # we drop the original index from the Raven annotations when we combine tables
-        # if the dataframes have different columns, we fill missing columns with nan values
-        # and keep all unique columns
-        all_annotations = pd.concat(all_file_dfs).reset_index(drop=True)
-
+        
+        if len(all_file_dfs) > 0:
+            # we drop the original index from the Raven annotations when we combine tables
+            # if the dataframes have different columns, we fill missing columns with nan values
+            # and keep all unique columns
+            all_annotations_df = pd.concat(all_file_dfs).reset_index(drop=True)
+        
+        else:
+            all_annotations_df=pd.DataFrame(columns=["annotation", "start_time", "end_time"])
+        
         return cls(
-            df=all_annotations,
-            annotation_files=raven_files,
-            audio_files=audio_files,
-        )
+                df=all_annotations_df,
+                annotation_files=raven_files,
+                audio_files=audio_files,
+            )
 
     def to_raven_files(self, save_dir, audio_files=None):  # TODO implement to_csv
         """save annotations to a Raven-compatible tab-separated text files
