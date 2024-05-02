@@ -2,6 +2,7 @@
 
 For tutorials, see notebooks on opensoundscape.org
 """
+
 from pathlib import Path
 import warnings
 import copy
@@ -925,9 +926,9 @@ class CNN(BaseClassifier):
                     validation_df,
                     batch_size=batch_size,
                     num_workers=num_workers,
-                    activation_layer="softmax_and_logit"
-                    if self.single_target
-                    else None,
+                    activation_layer=(
+                        "softmax_and_logit" if self.single_target else None
+                    ),
                     split_files_into_clips=False,
                 )  # returns a dataframe matching validation_df
                 validation_targets = validation_df.values
