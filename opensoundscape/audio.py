@@ -732,17 +732,20 @@ class Audio:
 
         # Compute the fft (fast fourier transform) of the selected clip
         N = len(self.samples)
-        fft = scipy.fft.fft(self.samples)
+        fft = scipy.fft.rfft(self.samples)
+        fft = np.abs(fft)  # get the magnitude of the fft
 
         # create the frequencies corresponding to fft bins
-        freq = scipy.fft.fftfreq(N, d=1 / self.sample_rate)
+        freq = scipy.fft.rfftfreq(N, d=1 / self.sample_rate)
 
-        # remove negative frequencies and scale magnitude by 2.0/N:
-        fft = 2.0 / N * fft[0 : int(N / 2)]
-        frequencies = freq[0 : int(N / 2)]
-        fft = np.abs(fft)
+        # scale magnitude by 2.0/N,
+        # except for the DC and sr/2 (Nyquist frequency) components
+        fft *= 2.0 / N
+        fft[0] *= 0.5
+        if N % 2 == 0:
+            fft[-1] *= 0.5
 
-        return fft, frequencies
+        return fft, freq
 
     def normalize(self, peak_level=None, peak_dBFS=None):
         """Return audio object with normalized waveform
