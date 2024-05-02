@@ -38,6 +38,7 @@ from aru_metadata_parser.utils import load_metadata
 import opensoundscape
 from opensoundscape.utils import generate_clip_times_df
 from opensoundscape.signal_processing import tdoa
+from opensoundscape.utils import cast_np_to_native
 
 DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
 
@@ -354,6 +355,8 @@ class Audio:
 
             # if the offset > 0, we need to update the timestamp
             if "recording_start_time" in metadata and offset > 0:
+                # timedelta doesn't like np types, fix issue #928
+                offset = cast_np_to_native(offset)
                 metadata["recording_start_time"] += datetime.timedelta(seconds=offset)
 
         return cls(samples, sr, resample_type=resample_type, metadata=metadata)
@@ -533,9 +536,10 @@ class Audio:
         else:
             metadata = self.metadata.copy()
             if "recording_start_time" in metadata:
-                metadata["recording_start_time"] += datetime.timedelta(
-                    seconds=start_sample / self.sample_rate
-                )
+                # timedelta doesn't like np types, fix issue #928
+                seconds = start_sample / self.sample_rate
+                seconds = cast_np_to_native(seconds)
+                metadata["recording_start_time"] += datetime.timedelta(seconds=seconds)
 
             if "duration" in metadata:
                 metadata["duration"] = len(samples_trimmed) / self.sample_rate

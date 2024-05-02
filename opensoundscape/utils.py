@@ -206,6 +206,15 @@ def generate_clip_times_df(
     return pd.DataFrame({"start_time": starts, "end_time": ends}).drop_duplicates()
 
 
+def cast_np_to_native(x):
+    # timedelta doesn't like np types, fix issue #928
+    if isinstance(x, np.integer):
+        return int(x)
+    elif isinstance(x, np.floating):
+        return float(x)
+    return x
+
+
 def make_clip_df(
     files,
     clip_duration,
