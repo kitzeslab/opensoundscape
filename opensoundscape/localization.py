@@ -1,4 +1,5 @@
 """Tools for localizing audio events from synchronized recording arrays"""
+
 import warnings
 import numpy as np
 import datetime
@@ -29,7 +30,7 @@ class SpatialEvent:
         duration=None,
         class_name=None,
         bandpass_range=None,
-        cc_threshold=None,
+        cc_threshold=0,
         cc_filter=None,
         speed_of_sound=SPEED_OF_SOUND,
     ):
@@ -237,41 +238,43 @@ class SpatialEvent:
         receiver_files = np.array(
             self.receiver_files
         )  # needs to be np array to access using a boolean mask
-        if self.cc_threshold is not None:
-            tdoas = tdoas[self.cc_maxs > self.cc_threshold]
-            locations = locations[self.cc_maxs > self.cc_threshold]
-            receiver_files = receiver_files[
-                self.cc_maxs > self.cc_threshold
-            ]  # fails is receiver_files is not a np.array
 
-        # assert there are enough receivers remaining to localize the event
-        if len(tdoas) < self.min_n_receivers - 1:
+        # apply the cc_threshold filter
+        # only keep receivers that have a cc_max above the cc_threshold
+        tdoas = tdoas[self.cc_maxs > self.cc_threshold]
+        locations = locations[self.cc_maxs > self.cc_threshold]
+        receiver_files = receiver_files[
+            self.cc_maxs > self.cc_threshold
+        ]  # fails if receiver_files is not a np.array
+
+        # If there aren't enough receivers, don't attempt localization.
+        if len(tdoas) < self.min_n_receivers:
             self.location_estimate = None
             self.receivers_used_for_localization = None
             self.distance_residuals = None
             self.residual_rms = None
-            return None
-
+            return self.location_estimate
         # Store which receivers were used for localization. The location is estimated only from these.
         self.receivers_used_for_localization = receiver_files
 
-        # Estimate location from receiver locations and relative Times of Arrival
+        # Estimate location from receiver locations and time differences of arrival
         self.location_estimate = localize(
             receiver_locations=locations,
             tdoas=tdoas,
             algorithm=localization_algorithm,
         )
 
-        # Store the distance residuals (only for the receivers used) as an attribute
-        self.distance_residuals = calculate_tdoa_residuals(
-            receiver_locations=locations,
-            tdoas=tdoas,
-            location_estimate=self.location_estimate,
-            speed_of_sound=self.speed_of_sound,
-        )
+        if self.location_estimate is not None:
+            # Store the distance residuals (only for the receivers used) as an attribute
+            self.distance_residuals = calculate_tdoa_residuals(
+                receiver_locations=locations,
+                tdoas=tdoas,
+                location_estimate=self.location_estimate,
+                speed_of_sound=self.speed_of_sound,
+            )
 
-        # Calculate root mean square of distance residuals and store as attribute
-        self.residual_rms = np.sqrt(np.mean(self.distance_residuals**2))
+            # Calculate root mean square of distance residuals and store as attribute
+            self.residual_rms = np.sqrt(np.mean(self.distance_residuals**2))
 
         return self.location_estimate
 
@@ -761,7 +764,7 @@ def travel_time(source, receiver, speed_of_sound):
 
 def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND):
     """
-    Perform TDOA localization on a sound event.
+    Perform TDOA localization on a sound event. If there are not enough receivers to localize the event, return None.
     Args:
         receiver_locations: a list of [x,y,z] locations for each receiver
             locations should be in meters, e.g., the UTM coordinate system.
@@ -773,6 +776,13 @@ def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND
     Returns:
         The estimated source location in meters.
     """
+    # check that there are enough receivers to localize the event
+    ndim = len(receiver_locations[0])
+    if len(receiver_locations) < ndim + 1:
+        warnings.warn(
+            f"Only {len(receiver_locations)} receivers. Need at least {ndim+1} to localize in {ndim} dimensions."
+        )
+        return None
     if algorithm == "soundfinder":
         estimate = soundfinder_localize(receiver_locations, tdoas, speed_of_sound)
     elif algorithm == "gillette":
