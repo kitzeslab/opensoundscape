@@ -169,7 +169,7 @@ class AudioTrim(Action):
         self.action_fn(sample, **dict(self.params, **kwargs))
 
 
-def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
+def trim_audio(sample, extend=True, random_trim=False, tol=1e-10):
     """trim audio clips (Audio -> Audio)
 
     Trims an audio file to desired length

@@ -1,4 +1,5 @@
 """Class for holding information on a single sample"""
+
 import copy
 from pathlib import Path
 import torch
@@ -70,7 +71,7 @@ class AudioSample(Sample):
             return list(self.labels[self.labels == 1].index)
 
     @classmethod
-    def from_series(cls, labels_series):
+    def from_series(cls, labels_series, rounding_precision=10):
         """initialize AudioSample from a pandas Series (optionally containing labels)
 
         - if series name (dataframe index) is tuple, extracts ['file','start_time','end_time']
@@ -83,9 +84,12 @@ class AudioSample(Sample):
         Creates an AudioSample object.
 
         Args:
-            labels: a pd.Series with name = file path or ['file','start_time','end_time']
+            labels_series: a pd.Series with name = file path or ['file','start_time','end_time']
                 and index as classes with 0/1 values as labels. Labels can have no values
                 (just a name) if sample does not have labels.
+            rounding_precision: rounds duration to this many decimals
+                to avoid floating point precision errors. Pass `None` for no rounding.
+                Default: 10 decimal places
         """
         if type(labels_series.name) == tuple:
             # if the dataframe has a multi-index, it should be (file,start_time,end_time)
@@ -100,9 +104,12 @@ class AudioSample(Sample):
             start_time = None
             end_time = None
 
-        # calcualte duration if start, end given
+        # calculate duration if start, end given
         if end_time is not None and start_time is not None:
             duration = end_time - start_time
+            # avoid annoying floating point precision errors, round
+            if rounding_precision is not None:
+                duration = round(duration, rounding_precision)
         else:
             duration = None
 
