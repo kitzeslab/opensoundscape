@@ -8,6 +8,7 @@ or augmented sample, which may or may not be the same type as the original.
 See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
+
 import random
 import warnings
 import numpy as np
@@ -506,7 +507,7 @@ class Overlay(Action):
 
         self.returns_labels = True
 
-        overlay_df = kwargs["overlay_df"]
+        overlay_df = kwargs["overlay_df"].copy()  # copy to avoid modifying original
         overlay_df = overlay_df[~overlay_df.index.duplicated()]  # remove duplicates
 
         # warn the user if using "different" as overlay_class
