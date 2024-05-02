@@ -3,6 +3,7 @@
 import copy
 from pathlib import Path
 import torch
+import numpy as np
 
 
 class Sample:
@@ -150,5 +151,5 @@ def collate_audio_samples_to_dict(samples):
     """
     return {
         "samples": torch.stack([s.data for s in samples]),
-        "labels": torch.Tensor([s.labels.iloc[0] for s in samples]),
+        "labels": torch.Tensor(np.vstack([s.labels.values for s in samples])),
     }
