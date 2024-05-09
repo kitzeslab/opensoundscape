@@ -233,7 +233,12 @@ class BaseClassifier(torch.nn.Module):
 
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
-        pred_scores = self.__call__(dataloader, wandb_session, progress_bar)
+        # TODO: allow arbitrary **kwargs to be passed to __call__?
+        pred_scores = self.__call__(
+            dataloader=dataloader,
+            wandb_session=wandb_session,
+            progress_bar=progress_bar,
+        )
 
         ### Apply activation layer ### #TODO: test speed vs. doing it in __call__ on batches
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
