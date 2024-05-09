@@ -83,6 +83,13 @@ class BaseClassifier(torch.nn.Module):
         ### metrics ###
         self.prediction_threshold = 0.5  # used for threshold-specific metrics
 
+        ### network device ###
+        # automatically gpu (default is 'cuda:0') if available
+        # can set after init, eg model.device='cuda:1'
+        # network and samples are moved to device during training/inference
+        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu'), torch.device('mps') etc
+        self.device = _gpu_if_available()
+
     def _log(self, message, level=1):
         txt = str(message)
         if self.logging_level >= level and self.log_file is not None:
@@ -485,13 +492,6 @@ class CNN(BaseClassifier):
                 )
             self.architecture_name = str(type(architecture))
         self.network = architecture
-
-        ### network device ###
-        # automatically gpu (default is 'cuda:0') if available
-        # can override after init, eg model.device='cuda:1'
-        # network and samples are moved to gpu during training/inference
-        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu'), torch.device('mps') etc
-        self.device = _gpu_if_available()
 
         ### sample loading/preprocessing ###
         # preprocessor will have attributes .sample_duration (seconds)
@@ -1401,6 +1401,19 @@ class CNN(BaseClassifier):
         # return list of AudioSamples containing .cam attributes
         return generated_samples
 
+    @property
+    def device(self):
+        return self._device
+    
+    @device.setter
+    def device(self, device):
+        """
+        Set the device to use in train/predict, casting strings to torch.device datatype
+
+        Args: 
+            device: a torch.device object or str such as 'cuda:0', 'mps', 'cpu'
+        """
+        self._device = torch.device(device)
 
 def use_resample_loss(
     model, train_df
