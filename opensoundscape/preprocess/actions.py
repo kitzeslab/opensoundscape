@@ -59,7 +59,11 @@ class BaseAction:
             f"unexpected arguments: {unmatched_args}. "
             f"The valid arguments and current values are: \n{self.params}"
         )
-        self.params.update(pd.Series(kwargs, dtype=object))
+        # Series.update ignores nan/None values, so we use dictionary.update method
+        new_params = dict(self.params)
+        new_params.update(kwargs)
+        self.params = pd.Series(new_params, dtype=object)
+        # self.params.update(pd.Series(kwargs, dtype=object))
 
     def get(self, arg):
         return self.params[arg]
@@ -159,7 +163,7 @@ class AudioTrim(Action):
     """Action to trim/extend audio to desired length
 
     Args:
-        see actions.trim_audio
+        see actions.audio_trim()
     """
 
     def __init__(self, **kwargs):
@@ -169,61 +173,69 @@ class AudioTrim(Action):
         self.action_fn(sample, **dict(self.params, **kwargs))
 
 
-def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
-    """trim audio clips (Audio -> Audio)
+def trim_audio(sample, target_duration, extend=True, random_trim=False, tol=1e-6):
+    """trim audio clips from t=0 or random position (Audio -> Audio)
 
-    Trims an audio file to desired length
+    Trims an audio file to desired length.
+
     Allows audio to be trimmed from start or from a random time
-    Optionally extends audio shorter than clip_length with silence
+
+    Optionally extends audio shorter than clip_length to sample.duration by
+    appending silence.
 
     Args:
         sample: AudioSample with .data=Audio object, .duration as sample duration
+        target_duration: length of resulting clip in seconds. If None,
+            no trimming is performed.
         extend: if True, clips shorter than sample.duration are
-            extended with silence to required length
+            extended with silence to required length [Default: True]
         random_trim: if True, chooses a random segment of length sample.duration
             from the input audio. If False, the file is trimmed from 0 seconds
-            to sample.duration seconds.
-        tol: tolerance for considering a clip to be of the correct length (sec)
+            to sample.duration seconds. [Default: False]
+        tol: tolerance for considering a clip to be long enough (sec),
+            when raising an error for short clips [Default: 1e-6]
 
-    Returns:
-        trimmed audio
+    Effects:
+        Updates the sample's .data, .start_time, and .duration attributes
     """
+
+    if target_duration is None:
+        return
+
     audio = sample.data
 
     if len(audio.samples) == 0:
         raise ValueError("recieved zero-length audio")
 
-    if sample.target_duration is not None:
-        if audio.duration + tol <= sample.target_duration:
-            # input audio is not as long as desired length
-            if extend:  # extend clip sith silence
-                audio = audio.extend_to(sample.target_duration)
-            else:
-                raise ValueError(
-                    f"the length of the original file ({audio.duration} "
-                    f"sec) was less than the length to extract "
-                    f"({sample.target_duration} sec). To extend short "
-                    f"clips, use extend=True"
-                )
-        if random_trim:
-            # uniformly randomly choose clip time from full audio
-            extra_time = audio.duration - sample.target_duration
-            start_time = np.random.uniform() * extra_time
-        else:
-            start_time = 0
+    # input audio is not as long as desired length
+    if extend:  # extend clip sith silence
+        audio = audio.extend_to(target_duration)
+    else:
+        if audio.duration + tol < target_duration:
+            raise ValueError(
+                f"the length of the original file ({audio.duration} "
+                f"sec) was less than the length to extract "
+                f"({target_duration} sec). To extend short "
+                f"clips, use extend=True"
+            )
+    if random_trim:
+        # uniformly randomly choose clip time from full audio
+        # such that a full-length clip can be extracted
+        extra_time = audio.duration - target_duration
+        start_time = np.random.uniform() * extra_time
+    else:
+        start_time = 0
 
-        end_time = start_time + sample.target_duration
-        audio = audio.trim(start_time, end_time)
+    end_time = start_time + target_duration
+    audio = audio.trim(start_time, end_time)
 
-        # update the sample
-        sample.data = audio
-        if sample.start_time is None:
-            sample.start_time = start_time
-        else:
-            sample.start_time += start_time
-        sample.duration = sample.target_duration
-
-    return sample
+    # update the sample in-place
+    sample.data = audio
+    if sample.start_time is None:
+        sample.start_time = start_time
+    else:
+        sample.start_time += start_time
+    sample.duration = target_duration
 
 
 class SpectrogramToTensor(Action):

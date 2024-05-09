@@ -196,6 +196,7 @@ class BasePreprocessor:
         """
         # handle paths or pd.Series as input for `sample`
         if isinstance(sample, tuple):
+            # assume duration should be self.sample_duration
             path, start = sample
             assert isinstance(
                 path, (str, Path)
@@ -277,9 +278,16 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 # references AudioSample attributes: start_time and duration
                 "load_audio": AudioClipLoader(),
                 # if we are augmenting and get a long file, take a random trim from it
-                "random_trim_audio": AudioTrim(is_augmentation=True, random_trim=True),
+                "random_trim_audio": AudioTrim(
+                    target_duration=sample_duration,
+                    is_augmentation=True,
+                    random_trim=True,
+                ),
                 # otherwise, we expect to get the correct duration. no random trim
-                "trim_audio": AudioTrim(),  # trim or extend (w/silence) clips to correct length
+                # trim or extend (w/silence) clips to correct length
+                "trim_audio": AudioTrim(
+                    target_duration=sample_duration, random_trim=False
+                ),
                 # convert Audio object to Spectrogram
                 "to_spec": Action(Spectrogram.from_audio),
                 # bandpass to 0-11.025 kHz (to ensure all outputs have same scale in y-axis)
