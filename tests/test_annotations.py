@@ -302,8 +302,10 @@ def test_one_hot_clip_labels_overlap(boxed_annotations):
 
 
 def test_convert_labels(boxed_annotations):
-    boxed_annotations = boxed_annotations.convert_labels({"a": "c"})
-    assert set(boxed_annotations.df["annotation"]) == {"b", "c", None}
+    boxed_annotations1 = boxed_annotations.convert_labels({"a": "c"})
+    assert set(boxed_annotations1.df["annotation"]) == {"b", "c", None}
+    # should retain properties, issue #916
+    assert boxed_annotations1.audio_files == boxed_annotations.audio_files
 
 
 def test_convert_labels_df(boxed_annotations):

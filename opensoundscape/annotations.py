@@ -799,7 +799,7 @@ class BoxedAnnotations:
             for k in df["annotation"]
         ]
 
-        return BoxedAnnotations(df)
+        return self._spawn(df=df)
 
 
 def diff(base_annotations, comparison_annotations):
