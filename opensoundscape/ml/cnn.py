@@ -120,6 +120,7 @@ class BaseClassifier(torch.nn.Module):
                 - a dataframe with index containing audio paths, OR
                 - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
+                - a single file path (str or pathlib.Path)
             batch_size:
                 Number of files to load simultaneously [default: 1]
             num_workers:
@@ -180,6 +181,9 @@ class BaseClassifier(torch.nn.Module):
             for that sample will be np.nan
 
         """
+        # for convenience, convert str/pathlib.Path to list
+        if isinstance(samples, (str, Path)):
+            samples = [samples]
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.inference_dataloader_cls(
