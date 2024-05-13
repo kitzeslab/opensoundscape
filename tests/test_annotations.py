@@ -525,6 +525,14 @@ def test_warn_if_file_wont_get_raven_output(raven_file, saved_raven_file):
 def test_assert_audio_files_annotation_files_match():
     with pytest.raises(AssertionError):
         BoxedAnnotations.from_raven_files(["path"], ["a", "b"])
+=======
+        BoxedAnnotations.from_raven_files(["path"], ["a","b"])
+
+
+def test_assert_audio_files_annotation_files_empty():
+    with pytest.raises(AssertionError):
+        BoxedAnnotations.from_raven_files([], [])
+>>>>>>> develop
 
 
 def test_from_raven_files(raven_file):
