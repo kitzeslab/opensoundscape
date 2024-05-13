@@ -163,16 +163,27 @@ class BoxedAnnotations:
         if isinstance(raven_files, (str, Path)):
             raven_files = [raven_files]
         else:
+            assert len(raven_files)>0, "raven_files must be a non-empty list or iterable"
             assert isinstance(
                 raven_files[0], (str, Path)
             ), f"raven_files must be an iterable of string or pathlib.Path, or a single string or pathlib.Path. Got type: {type(raven_files)}"
+            
         if isinstance(audio_files, (str, Path)):
             audio_files = [audio_files]
-        elif audio_files is not None:
-            assert isinstance(
-                audio_files[0], (str, Path)
-            ), f"audio_files must be an iterable of string or pathlib.Path, or a single string or pathlib.Path. Got type: {type(audio_files)}"
+        else:
+            if audio_files is not None:
+                assert isinstance(
+                    audio_files[0], (str, Path)
+                ), f"audio_files must be an iterable of string or pathlib.Path, or a single string or pathlib.Path. Got type: {type(audio_files)}"
 
+        if audio_files is not None:
+            assert len(audio_files) == len(
+                raven_files
+            ), """
+            `audio_files` and `raven_files` lists must have one-to-one correspondence,
+            but their lengths did not match.
+            """
+                    
         all_file_dfs = []
 
         # mapping of Raven file columns to standard opensoundscape names
@@ -186,13 +197,6 @@ class BoxedAnnotations:
         # update defaults with any user-specified mappings
         column_mapping_dict.update(column_mapping_dict or {})
 
-        if audio_files is not None:
-            assert len(audio_files) == len(
-                raven_files
-            ), """
-            `audio_files` and `raven_files` lists must have one-to-one correspondence,
-            but their lengths did not match.
-            """
         for i, raven_file in enumerate(raven_files):
             df = pd.read_csv(raven_file, delimiter="\t")
             if annotation_column_name is not None:
