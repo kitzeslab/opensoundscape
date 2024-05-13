@@ -302,8 +302,10 @@ def test_one_hot_clip_labels_overlap(boxed_annotations):
 
 
 def test_convert_labels(boxed_annotations):
-    boxed_annotations = boxed_annotations.convert_labels({"a": "c"})
-    assert set(boxed_annotations.df["annotation"]) == {"b", "c", None}
+    boxed_annotations1 = boxed_annotations.convert_labels({"a": "c"})
+    assert set(boxed_annotations1.df["annotation"]) == {"b", "c", None}
+    # should retain properties, issue #916
+    assert boxed_annotations1.audio_files == boxed_annotations.audio_files
 
 
 def test_convert_labels_df(boxed_annotations):
@@ -523,3 +525,33 @@ def test_warn_if_file_wont_get_raven_output(raven_file, saved_raven_file):
 def test_assert_audio_files_annotation_files_match():
     with pytest.raises(AssertionError):
         BoxedAnnotations.from_raven_files(["path"], [])
+
+
+def test_from_raven_files(raven_file):
+    ba = BoxedAnnotations.from_raven_files([raven_file], ["path1"])
+    assert ba.annotation_files[0] == raven_file
+
+
+def test_from_raven_files_pathlib(raven_file):
+    ba = BoxedAnnotations.from_raven_files([Path(raven_file)], [Path("path1")])
+    assert str(ba.annotation_files[0]) == raven_file
+
+
+def test_from_raven_files_one_path(raven_file):
+    """now works passing str or Path rather than list"""
+    ba = BoxedAnnotations.from_raven_files(raven_file, ["path1"])
+    assert ba.annotation_files[0] == raven_file
+    assert len(ba.annotation_files) == 1
+    ba = BoxedAnnotations.from_raven_files(Path(raven_file), ["path1"])
+    assert str(ba.annotation_files[0]) == raven_file
+    assert len(ba.annotation_files) == 1
+
+
+def test_from_raven_files_one_audio_file(raven_file):
+    """now works passing str or Path rather than list"""
+    ba = BoxedAnnotations.from_raven_files(raven_file, "path1")
+    assert ba.audio_files[0] == "path1"
+    assert len(ba.audio_files) == 1
+    ba = BoxedAnnotations.from_raven_files(Path(raven_file), Path("path1"))
+    assert str(ba.audio_files[0]) == "path1"
+    assert len(ba.audio_files) == 1

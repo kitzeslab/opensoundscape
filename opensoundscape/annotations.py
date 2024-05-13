@@ -3,6 +3,7 @@
 includes BoxedAnnotations class and utilities to combine or "diff" annotations,
 etc.
 """
+
 from pathlib import Path
 import itertools
 import pandas as pd
@@ -115,9 +116,10 @@ class BoxedAnnotations:
         """load annotations from Raven .txt files
 
         Args:
-            raven_files: list of raven .txt file paths (as str or pathlib.Path)
+            raven_files: list or iterable of raven .txt file paths (as str or pathlib.Path),
+                or a single file path (str or pathlib.Path). Eg ['path1.txt','path2.txt']
             audio_files: (list) optionally specify audio files corresponding to each
-                raven file (length should match raven_files)
+                raven file (length should match raven_files) Eg ['path1.txt','path2.txt']
                 - if None (default), .one_hot_clip_labels() will not be able to
                 check the duration of each audio file, and will raise an error
                 unless `full_duration` is passed as an argument
@@ -127,7 +129,7 @@ class BoxedAnnotations:
                 - pass `None` to load the raven file without explicitly
                 assigning a column as the annotation column. The resulting
                 object's `.df` will have an `annotation` column with nan values!
-                NOTE: If `annotatino_column_name` is passed, this argument is ignored.
+                NOTE: If `annotation_column_name` is passed, this argument is ignored.
             annotation_column_name: (str) name of the column containing annotations
                 - default: None will use annotation-column_idx to find the annotation column
                 - if not None, this value overrides annotation_column_idx, and the column with
@@ -156,6 +158,21 @@ class BoxedAnnotations:
             BoxedAnnotations object containing annotations from the Raven files
             (the .df attribute is a dataframe containing each annotation)
         """
+        # check input type of raven_files and audio_files
+        # if a single path is passed, convert to list
+        if isinstance(raven_files, (str, Path)):
+            raven_files = [raven_files]
+        else:
+            assert isinstance(
+                raven_files[0], (str, Path)
+            ), f"raven_files must be an iterable of string or pathlib.Path, or a single string or pathlib.Path. Got type: {type(raven_files)}"
+        if isinstance(audio_files, (str, Path)):
+            audio_files = [audio_files]
+        elif audio_files is not None:
+            assert isinstance(
+                audio_files[0], (str, Path)
+            ), f"audio_files must be an iterable of string or pathlib.Path, or a single string or pathlib.Path. Got type: {type(audio_files)}"
+
         all_file_dfs = []
 
         # mapping of Raven file columns to standard opensoundscape names
@@ -200,7 +217,7 @@ class BoxedAnnotations:
                         df.columns[annotation_column_idx - 1]: "annotation",
                     }
                 )
-            else:  # None was passed to annotatino_column_idx
+            else:  # None was passed to annotation_column_idx
                 # we'll create an empty `annotation` column
                 df["annotation"] = np.nan
 
@@ -782,7 +799,7 @@ class BoxedAnnotations:
             for k in df["annotation"]
         ]
 
-        return BoxedAnnotations(df)
+        return self._spawn(df=df)
 
 
 def diff(base_annotations, comparison_annotations):

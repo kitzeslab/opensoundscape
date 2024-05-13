@@ -3,6 +3,7 @@
 import copy
 from pathlib import Path
 import torch
+import numpy as np
 
 
 class Sample:
@@ -136,12 +137,12 @@ class AudioSample(Sample):
 
 # TODO: move this to dataloaders.py? or preprocessing.utils?
 def collate_audio_samples_to_dict(samples):
-    """generate batched tensors of data and labels (in a dictionary)
-
+    """
+    generate batched tensors of data and labels (in a dictionary).
     returns collated samples: a dictionary with keys "samples" and "labels"
 
     assumes that s.data is a Tensor and s.labels is a list/array
-    for each sample S
+    for each sample S, and that every sample has labels for the same classes.
 
     Args:
 
@@ -156,5 +157,5 @@ def collate_audio_samples_to_dict(samples):
     """
     return {
         "samples": torch.stack([s.data for s in samples]),
-        "labels": torch.Tensor([s.labels for s in samples]),
+        "labels": torch.Tensor(np.vstack([s.labels.values for s in samples])),
     }
