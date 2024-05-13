@@ -163,11 +163,13 @@ class BoxedAnnotations:
         if isinstance(raven_files, (str, Path)):
             raven_files = [raven_files]
         else:
-            assert len(raven_files)>0, "raven_files must be a non-empty list or iterable"
+            assert (
+                len(raven_files) > 0
+            ), "raven_files must be a non-empty list or iterable"
             assert isinstance(
                 raven_files[0], (str, Path)
             ), f"raven_files must be an iterable of string or pathlib.Path, or a single string or pathlib.Path. Got type: {type(raven_files)}"
-            
+
         if isinstance(audio_files, (str, Path)):
             audio_files = [audio_files]
         else:
@@ -183,7 +185,7 @@ class BoxedAnnotations:
             `audio_files` and `raven_files` lists must have one-to-one correspondence,
             but their lengths did not match.
             """
-                    
+
         all_file_dfs = []
 
         # mapping of Raven file columns to standard opensoundscape names
