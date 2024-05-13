@@ -192,6 +192,22 @@ def test_normalize(veryshort_wav_audio):
     )
 
 
+def test_normalize_default(veryshort_wav_audio):
+    assert math.isclose(
+        max(abs(veryshort_wav_audio.normalize().samples)),
+        1.0,
+        abs_tol=1e-4,
+    )
+
+
+def test_normalize_dBFS(veryshort_wav_audio):
+    assert math.isclose(
+        max(abs(veryshort_wav_audio.normalize(peak_dBFS=-3).samples)),
+        0.707946,
+        abs_tol=1e-4,
+    )
+
+
 def test_apply_gain():
     a = Audio([1, -1, 0], sample_rate=10).apply_gain(dB=-20)
     assert math.isclose(a.samples.max(), 0.1, abs_tol=1e-6)
@@ -360,6 +376,12 @@ def test_load_metadata(veryshort_wav_str):
     assert a.metadata["samplerate"] == 44100
 
 
+def test_load_metadata_int_offset(metadata_wav_str):
+    # addresses issue #928
+    Audio.from_file(metadata_wav_str, offset=np.int32(3), duration=0.1)
+    Audio.from_file(metadata_wav_str, offset=np.float32(3), duration=0.1)
+
+
 # currently don't know how to create a file with bad / no metadata
 # def test_load_metadata_warning(path_with_no_metadata):
 #     with pytest.raises(UserWarning)
@@ -399,6 +421,22 @@ def test_trim_from_negative_time(silence_10s_mp3_str):
     """correct behavior is to trim from time zero"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(-1, 5)
     assert math.isclose(audio.duration, 5, abs_tol=1e-5)
+
+
+def test_trim_samples(silence_10s_mp3_str):
+    """correct behavior is to trim from time zero"""
+    audio = Audio.from_file(silence_10s_mp3_str)
+    assert len(audio.trim_samples(0, 10).samples) == 10
+
+    assert len(audio.trim_samples(200, 210).samples) == 10
+
+    assert len(audio.trim_samples(-10, 10).samples) == 10
+
+    assert len(audio.trim_samples(10, 10).samples) == 0
+
+    with pytest.raises(AssertionError):
+        # cannot pass start index > end index
+        audio.trim_samples(20, 10)
 
 
 def test_trim_past_end_of_clip(silence_10s_mp3_str):
@@ -471,19 +509,75 @@ def test_resample_classmethod_vs_instancemethod(silence_10s_mp3_str):
     npt.assert_array_almost_equal(a1.samples, a2.samples, decimal=5)
 
 
-def test_extend_length_is_correct(silence_10s_mp3_str):
+def test_extend_to_length_is_correct(silence_10s_mp3_str):
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     duration = audio.duration
     for _ in range(100):
         extend_length = random.uniform(duration, duration * 10)
         assert math.isclose(
-            audio.extend(extend_length).duration, extend_length, abs_tol=1e-4
+            audio.extend_to(extend_length).duration, extend_length, abs_tol=1e-4
         )
+
+
+def test_extend_to_correct_metadata(silence_10s_mp3_str):
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    a2 = audio.extend_to(12)
+    # duration in metadata should be updated:
+    assert math.isclose(a2.metadata["duration"], 12)
+    # other metadata should be retained:
+    assert a2.metadata["subtype"] == audio.metadata["subtype"]
+
+
+def test_extend_to_shorter_duration(silence_10s_mp3_str):
+    # extending 10s to 6s should retain 10s
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    a2 = audio.extend_to(6)
+    assert math.isclose(a2.duration, 10)
+    # duration in metadata should be updated:
+    assert math.isclose(a2.metadata["duration"], 10)
+    # other metadata should be retained:
+    assert a2.metadata["subtype"] == audio.metadata["subtype"]
+
+
+def test_extend_to_correct_duration_ok(silence_10s_mp3_str):
+    # extending 10s to 10 shouldn't raise error (#972)
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    a2 = audio.extend_to(10)
+    assert math.isclose(a2.duration, 10)
+    # duration in metadata should be updated:
+    assert math.isclose(a2.metadata["duration"], 10)
+    # other metadata should be retained:
+    assert a2.metadata["subtype"] == audio.metadata["subtype"]
+
+
+def test_extend_by(silence_10s_mp3_str):
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    a2 = audio.extend_by(1)
+    assert math.isclose(a2.duration, 11)
+
+    # duration in metadata should be updated:
+    assert math.isclose(a2.metadata["duration"], 11)
+    # other metadata should be retained:
+    assert a2.metadata["subtype"] == audio.metadata["subtype"]
+
+    # doesn't allow negative extend_by(duration)
+    with pytest.raises(AssertionError):
+        a2.extend_by(-1)
 
 
 def test_bandpass(silence_10s_mp3_str):
     s = Audio.from_file(silence_10s_mp3_str)
     assert isinstance(s.bandpass(1, 100, 9), Audio)
+
+
+def test_lowpass(silence_10s_mp3_str):
+    s = Audio.from_file(silence_10s_mp3_str)
+    assert isinstance(s.lowpass(100, 9), Audio)
+
+
+def test_highpass(silence_10s_mp3_str):
+    s = Audio.from_file(silence_10s_mp3_str)
+    assert isinstance(s.highpass(100, 9), Audio)
 
 
 def test_bandpass_sample_rate_10000(silence_10s_mp3_str):
@@ -714,11 +808,11 @@ def test_loop(veryshort_wav_audio):
     assert math.isclose(a3.metadata["duration"], 1.0, abs_tol=1e-5)
 
 
-def test_extend(veryshort_wav_audio):
-    a = veryshort_wav_audio.extend(length=1)
+def test_extend_to_with_short(veryshort_wav_audio):
+    a = veryshort_wav_audio.extend_to(duration=1)
     assert math.isclose(a.duration, 1.0, abs_tol=1e-5)
     assert math.isclose(a.metadata["duration"], 1.0, abs_tol=1e-5)
-    # samples should be zero
+    # added samples should be zero
     assert math.isclose(0.0, np.max(a.samples[-100:]), abs_tol=1e-7)
 
 
@@ -806,3 +900,12 @@ def test_estimate_delay_return_cc_max(veryshort_audio):
         ccmax, sum(section_used.samples * section_used.samples), abs_tol=1e-5
     )
     assert math.isclose(delay, 0, abs_tol=1e-6)
+
+
+def test_from_url_multichannel_to_mono():
+    """note: test will fail if the file is removed from xeno-canto
+    or is inaccessible at this url
+
+    downloads a 2-channel audio file and sums to 1, ensuring resolution of #837
+    """
+    Audio.from_url("https://xeno-canto.org/830406/download")

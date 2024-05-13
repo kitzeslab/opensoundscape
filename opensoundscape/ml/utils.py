@@ -4,31 +4,10 @@ import pandas as pd
 import numpy as np
 import torch
 import torch.nn.functional as F
-
+import pytorch_grad_cam
+import tqdm
 
 from opensoundscape.ml.sampling import ClassAwareSampler
-
-
-class BaseModule(torch.nn.Module):
-    """
-    Base class for a pytorch model pipeline class.
-
-    All child classes should define load, save, etc
-    """
-
-    name = None
-
-    def setup_net(self):
-        pass
-
-    def setup_critera(self):
-        pass
-
-    def save(self, out_path):
-        pass
-
-    def update_best(self):
-        pass
 
 
 def cas_dataloader(dataset, batch_size, num_workers):
@@ -118,13 +97,21 @@ def apply_activation_layer(x, activation_layer=None):
             - 'softmax_and_logit': apply softmax then logit transform
     Returns:
         values with activation layer applied
+        Note: if x is None, returns None
+
+    Note: casts x to float before applying softmax, since torch's
+    softmax implementation doesn't support int or Long type
 
     """
+    if x is None:
+        return None
+
+    x = torch.tensor(x)
     if activation_layer is None:  # scores [-inf,inf]
         pass
     elif activation_layer == "softmax":
         # "softmax" activation: preds across all classes sum to 1
-        x = F.softmax(x, dim=1)
+        x = F.softmax(x.float(), dim=1)
     elif activation_layer == "sigmoid":
         # map [-inf,inf] to [0,1]
         x = torch.sigmoid(x)
@@ -142,3 +129,89 @@ def apply_activation_layer(x, activation_layer=None):
         raise ValueError(f"invalid option for activation_layer: {activation_layer}")
 
     return x
+
+
+# override pytorch_grad_cam's score cam class because it has a bug
+# with device mismatch of upsampled (cpu) vs input_tensor (may be mps, cuda, etc)
+class ScoreCAM(pytorch_grad_cam.base_cam.BaseCAM):
+    def __init__(self, model, target_layers, use_cuda=False, reshape_transform=None):
+        super(ScoreCAM, self).__init__(
+            model,
+            target_layers,
+            use_cuda,
+            reshape_transform=reshape_transform,
+            uses_gradients=False,
+        )
+
+    def get_cam_weights(self, input_tensor, target_layer, targets, activations, grads):
+        with torch.no_grad():
+            upsample = torch.nn.UpsamplingBilinear2d(size=input_tensor.shape[-2:])
+            activation_tensor = torch.from_numpy(activations)
+            if self.cuda:
+                activation_tensor = activation_tensor.cuda()
+
+            upsampled = upsample(activation_tensor)
+
+            maxs = upsampled.view(upsampled.size(0), upsampled.size(1), -1).max(dim=-1)[
+                0
+            ]
+            mins = upsampled.view(upsampled.size(0), upsampled.size(1), -1).min(dim=-1)[
+                0
+            ]
+
+            maxs, mins = maxs[:, :, None, None], mins[:, :, None, None]
+            upsampled = (upsampled - mins) / (maxs - mins)
+
+            upsampled = upsampled.to(input_tensor.device)
+            input_tensors = input_tensor[:, None, :, :] * upsampled[:, :, None, :, :]
+
+            if hasattr(self, "batch_size"):
+                BATCH_SIZE = self.batch_size
+            else:
+                BATCH_SIZE = 16
+
+            scores = []
+            for target, tensor in zip(targets, input_tensors):
+                for i in tqdm.tqdm(range(0, tensor.size(0), BATCH_SIZE)):
+                    batch = tensor[i : i + BATCH_SIZE, :]
+                    outputs = [target(o).cpu().item() for o in self.model(batch)]
+                    scores.extend(outputs)
+            scores = torch.Tensor(scores)
+            scores = scores.view(activations.shape[0], activations.shape[1])
+            weights = torch.nn.Softmax(dim=-1)(scores).numpy()
+            return weights
+
+
+def collate_audio_samples_to_tensors(batch):
+    """
+    takes a list of AudioSample objects, returns batched tensors
+
+    use this collate function with DataLoader if you want to use AudioFileDataset (or AudioSplittingDataset)
+    but want the traditional output of PyTorch Dataloaders (returns two tensors:
+        the first is a tensor of the data with dim 0 as batch dimension,
+        the second is a tensor of the labels with dim 0 as batch dimension)
+
+    Args:
+        batch: a list of AudioSample objects
+
+    Returns:
+        (Tensor of stacked AudioSample.data, Tensor of stacked AudioSample.label.values)
+
+    Example usage:
+    ```
+        from opensoundscape import AudioFileDataset, SpectrogramPreprocessor
+
+        preprocessor = SpectrogramPreprocessor(sample_duration=2,height=224,width=224)
+        audio_dataset = AudioFileDataset(label_df,preprocessor)
+
+        train_dataloader = DataLoader(
+            audio_dataset,
+            batch_size=64,
+            shuffle=True,
+            collate_fn = collate_audio_samples_to_tensors
+        )
+    ```
+    """
+    tensors = torch.stack([i.data for i in batch])
+    labels = torch.tensor([i.labels.tolist() for i in batch])
+    return tensors, labels

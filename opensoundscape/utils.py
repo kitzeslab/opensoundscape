@@ -8,6 +8,9 @@ import pandas as pd
 import pytz
 import soundfile
 import librosa
+from matplotlib.colors import LinearSegmentedColormap
+import torch
+import random
 
 
 class GetDurationError(ValueError):
@@ -203,6 +206,15 @@ def generate_clip_times_df(
     return pd.DataFrame({"start_time": starts, "end_time": ends}).drop_duplicates()
 
 
+def cast_np_to_native(x):
+    # timedelta doesn't like np types, fix issue #928
+    if isinstance(x, np.integer):
+        return int(x)
+    elif isinstance(x, np.floating):
+        return float(x)
+    return x
+
+
 def make_clip_df(
     files,
     clip_duration,
@@ -313,3 +325,35 @@ def make_clip_df(
         return clip_df, invalid_samples
     else:
         return clip_df
+
+
+def generate_opacity_colormaps(
+    colors=["#067bc2", "#43a43d", "#ecc30b", "#f37748", "#d56062"]
+):
+    """Create a colormap for each color from transparent to opaque"""
+    colormaps = []
+
+    for color in colors:
+        cmap = LinearSegmentedColormap.from_list(
+            "custom_cmap", [(0, 0, 0, 0), color], N=256
+        )
+        colormaps.append(cmap)
+
+    return colormaps
+
+
+def set_seed(seed, verbose=True):
+    """Set random state across different libraries for reproducibility
+
+    Args:
+        seed (int): Number to fix random number generators to a specific start.
+        verbose (bool, optional): Print set seed. Defaults to True.
+    """
+    if verbose:
+        print(f"Random state set with seed {seed}")
+
+    torch.backends.cudnn.deterministic = True
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)

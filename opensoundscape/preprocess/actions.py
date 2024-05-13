@@ -8,6 +8,7 @@ or augmented sample, which may or may not be the same type as the original.
 See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
+
 import random
 import warnings
 import numpy as np
@@ -19,6 +20,7 @@ from opensoundscape.audio import Audio, mix
 from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 from opensoundscape.sample import AudioSample
+from opensoundscape.spectrogram import Spectrogram
 
 
 class BaseAction:
@@ -195,7 +197,7 @@ def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
         if audio.duration + tol <= sample.target_duration:
             # input audio is not as long as desired length
             if extend:  # extend clip sith silence
-                audio = audio.extend(sample.target_duration)
+                audio = audio.extend_to(sample.target_duration)
             else:
                 raise ValueError(
                     f"the length of the original file ({audio.duration} "
@@ -224,34 +226,26 @@ def trim_audio(sample, extend=True, random_trim=False, tol=1e-5):
     return sample
 
 
-class SpectrogramToTensor(BaseAction):
+class SpectrogramToTensor(Action):
     """Action to create Tesnsor of desired shape from Spectrogram
 
     calls .to_image on sample.data, which should be type Spectrogram
 
-    exposes `invert` argument in self.params
+    **kwargs are passed to Spectrogram.to_image()
+
     """
 
-    def __init__(
-        self,
-        colormap=None,
-        invert=False,
-    ):
-        super(SpectrogramToTensor, self).__init__()
-        self.params["colormap"] = colormap
-        self.params["invert"] = invert
+    def __init__(self, fn=Spectrogram.to_image, is_augmentation=False, **kwargs):
+        kwargs.update(dict(return_type="torch"))  # return a tensor, not PIL.Image
+        super(SpectrogramToTensor, self).__init__(fn, is_augmentation, **kwargs)
 
-    def go(self, sample):
+    def go(self, sample, **kwargs):
         """converts sample.data from Spectrogram to Tensor"""
         # sample.data must be Spectrogram object
-        # sample should have attribute target_shape [h,w,channels]
-        sample.data = sample.data.to_image(
-            shape=sample.target_shape[0:2],
-            channels=sample.target_shape[2],
-            return_type="torch",
-            colormap=self.params["colormap"],
-            invert=self.params["invert"],
-        )
+        # sample should have attributes: height, width, channels
+        # use info from sample for desired shape and n channels
+        kwargs.update(shape=[sample.height, sample.width], channels=sample.channels)
+        sample.data = self.action_fn(sample.data, **dict(self.params, **kwargs))
 
 
 def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
@@ -475,19 +469,36 @@ def tensor_add_noise(tensor, std=1):
     return tensor + noise
 
 
+def always_true(x):
+    return True
+
+
 class Overlay(Action):
     """Action Class for augmentation that overlays samples on eachother
 
-    Required Args:
+    Overlay is a flavor of "mixup" augmentation, where two samples are
+    overlayed on top of eachother. The samples are blended with a weighted
+    average, where the weight may be chosen randomly from a range of values.
+
+    In this implementation, the overlayed samples are chosen from a dataframe
+    of audio files and labels. The dataframe must have the audio file paths as
+    the index, and the labels as columns. The labels are used to choose
+    overlayed samples based on an "overlay_class" argument.
+
+    Args:
         overlay_df: dataframe of audio files (index) and labels to use for overlay
         update_labels (bool): if True, labels of sample are updated to include
             labels of overlayed sample
+        criterion_fn: function that takes AudioSample and returns True or False
+            - if True, perform overlay
+            - if False, do not perform overlay
+            Default is `always_true`, perform overlay on all samples
 
-    See overlay() for other arguments and default values.
+        See overlay() for **kwargs and default values
+
     """
 
     def __init__(self, is_augmentation=True, **kwargs):
-
         super(Overlay, self).__init__(
             overlay,
             is_augmentation=is_augmentation,
@@ -496,7 +507,7 @@ class Overlay(Action):
 
         self.returns_labels = True
 
-        overlay_df = kwargs["overlay_df"]
+        overlay_df = kwargs["overlay_df"].copy()  # copy to avoid modifying original
         overlay_df = overlay_df[~overlay_df.index.duplicated()]  # remove duplicates
 
         # warn the user if using "different" as overlay_class
@@ -519,7 +530,9 @@ class Overlay(Action):
 
     def go(self, sample, **kwargs):
         self.action_fn(
-            sample, overlay_df=self.overlay_df, **dict(self.params, **kwargs)
+            sample,
+            overlay_df=self.overlay_df,
+            **dict(self.params, **kwargs),
         )
 
 
@@ -531,12 +544,16 @@ def overlay(
     overlay_prob=1,
     max_overlay_num=1,
     overlay_weight=0.5,
+    criterion_fn=always_true,
 ):
     """iteratively overlay 2d samples on top of eachother
 
     Overlays (blends) image-like samples from overlay_df on top of
     the sample with probability `overlay_prob` until stopping condition.
     If necessary, trims overlay audio to the length of the input audio.
+
+    Optionally provide `criterion_fn` which takes sample and returns True/False
+    to determine whether to perform overlay on this sample.
 
     Overlays can be used in a few general ways:
         1. a separate df where any file can be overlayed (overlay_class=None)
@@ -553,7 +570,7 @@ def overlay(
 
         update_labels: if True, add overlayed sample's labels to original sample
         overlay_class: how to choose files from overlay_df to overlay
-            Options [default: "different"]:
+            Options [default: None]:
             None - Randomly select any file from overlay_df
             "different" - Select a random file from overlay_df containing none
                 of the classes this file contains
@@ -566,11 +583,29 @@ def overlay(
         overlay_weight: a float > 0 and < 1, or a list of 2 floats [min, max]
             between which the weight will be randomly chosen. e.g. [0.1,0.7]
             An overlay_weight <0.5 means more emphasis on original sample.
+        criterion_fn: function that takes AudioSample and returns True or False
+            - if True, perform overlay
+            - if False, do not perform overlay
+            Default is `always_true`, perform overlay on all samples
 
     Returns:
         overlayed sample, (possibly updated) labels
 
+
+    Example:
+        check if sample is from a xeno canto file (has "XC" in name),
+        and only perform overlay on xeno canto files
+        ```
+        def is_xc(audio_sample):
+            return "XC" in Path(audio_sample.source).stem
+        s=overlay(s, overlay_df, False, criterion_fn=is_xc)
+        ```
     """
+
+    # Use the criterion_fn to determine if we should perform overlay on this sample
+    if not criterion_fn(sample):
+        return sample  # no overlay, just return the original sample
+
     ##  INPUT VALIDATION ##
     assert (
         overlay_class in ["different", None] or overlay_class in overlay_df.columns
@@ -605,7 +640,7 @@ def overlay(
                 overlay_df[overlay_class].sum() > 0
             ), "overlay_df did not contain positive labels for overlay_class"
 
-    if len(overlay_df.columns) > 0:
+    if len(overlay_df.columns) > 0 and sample.labels is not None:
         assert list(overlay_df.columns) == list(
             sample.labels.index
         ), "overlay_df mast have same columns as sample's _labels or no columns"
@@ -617,9 +652,7 @@ def overlay(
     overlays_performed = 0
 
     while overlay_prob > np.random.uniform() and overlays_performed < max_overlay_num:
-
         try:
-
             # lets pick a sample based on rules
             if overlay_class is None:
                 # choose any file from the overlay_df
@@ -647,7 +680,7 @@ def overlay(
 
                 if not good_choice:  # tried max_attempts samples, none worked
                     raise ValueError(
-                        "No samples found with non-overlapping labels after 100 random draws"
+                        f"No samples found with non-overlapping labels after {max_attempts} random draws"
                     )
 
                 overlay_path = overlay_df.index[candidate_idx]
@@ -661,6 +694,7 @@ def overlay(
 
             # now we have picked a file to overlay (overlay_path)
             # we also know its labels, if we need them
+            # TODO: this will be slow with large index but fast with numeric index, reset_index() somewhere
             overlay_sample = AudioSample.from_series(overlay_df.loc[overlay_path])
 
             # now we need to run the pipeline to do everything up until the Overlay step
@@ -672,6 +706,13 @@ def overlay(
             overlay_sample = sample.preprocessor.forward(
                 overlay_sample, break_on_type=Overlay
             )
+
+            # the overlay_sample may have a different shape than the original sample
+            # force them into the same shape so we can overlay
+            if overlay_sample.data.shape != sample.data.shape:
+                overlay_sample.data = torchvision.transforms.Resize(
+                    sample.data.shape[1:]
+                )(overlay_sample.data)
 
             # now we blend the two tensors together with a weighted average
             # Select weight of overlay; <0.5 means more emphasis on original sample

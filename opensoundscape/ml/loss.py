@@ -7,10 +7,14 @@ import torch.nn.functional as F
 
 class BCEWithLogitsLoss_hot(nn.BCEWithLogitsLoss):
     """use pytorch's nn.BCEWithLogitsLoss for one-hot labels
-    by simply converting y from long to float"""
+    by simply converting y from long to float
 
-    def __init__(self):
-        super(BCEWithLogitsLoss_hot, self).__init__()
+    Args:
+        **kwargs: passed to nn.BCEWithLogitsLoss
+    """
+
+    def __init__(self, **kwargs):
+        super(BCEWithLogitsLoss_hot, self).__init__(**kwargs)
 
     def forward(self, x, target):
         target = target.float()
@@ -22,10 +26,13 @@ class CrossEntropyLoss_hot(nn.CrossEntropyLoss):
     by converting labels from 1-hot to integer labels
 
     throws a ValueError if labels are not one-hot
+
+    Args:
+        **kwargs: passed to nn.CrossEntropyLoss
     """
 
-    def __init__(self):
-        super(CrossEntropyLoss_hot, self).__init__()
+    def __init__(self, **kwargs):
+        super(CrossEntropyLoss_hot, self).__init__(**kwargs)
 
     def forward(self, x, target):
         if not (target.sum(1).all() and target.sum(1).max() == 1):
@@ -151,7 +158,6 @@ class ResampleLoss(nn.Module):
         # avg_factor=None,
         reduction_override=None,
     ):
-
         assert reduction_override in (None, "none", "mean", "sum")
 
         reduction = reduction_override if reduction_override else self.reduction

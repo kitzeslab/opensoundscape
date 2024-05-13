@@ -29,6 +29,7 @@ import numpy as np
 import scipy
 
 import librosa
+import librosa.core.audio
 import soundfile
 import IPython.display
 from aru_metadata_parser.parse import parse_audiomoth_metadata
@@ -37,6 +38,7 @@ from aru_metadata_parser.utils import load_metadata
 import opensoundscape
 from opensoundscape.utils import generate_clip_times_df
 from opensoundscape.signal_processing import tdoa
+from opensoundscape.utils import cast_np_to_native
 
 DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
 
@@ -353,6 +355,8 @@ class Audio:
 
             # if the offset > 0, we need to update the timestamp
             if "recording_start_time" in metadata and offset > 0:
+                # timedelta doesn't like np types, fix issue #928
+                offset = cast_np_to_native(offset)
                 metadata["recording_start_time"] += datetime.timedelta(seconds=offset)
 
         return cls(samples, sr, resample_type=resample_type, metadata=metadata)
@@ -407,7 +411,10 @@ class Audio:
         samples, original_sample_rate = soundfile.read(
             io.BytesIO(urllib.request.urlopen(url).read())
         )
-        samples = samples.mean(1)  # sum to mono
+
+        # sum to mono, if multiple channels
+        samples = librosa.core.audio.to_mono(samples.transpose())
+
         if sample_rate is not None and sample_rate != original_sample_rate:
             samples = librosa.resample(
                 samples,
@@ -486,9 +493,41 @@ class Audio:
 
         Returns:
             a new Audio object containing samples from start_time to end_time
+            - metadata is updated to reflect new start time and duration
+
+        see also: trim_samples() to trim using sample positions instead of times
         """
         start_sample = max(0, self._get_sample_index(start_time))
         end_sample = self._get_sample_index(end_time)
+        return self.trim_samples(start_sample, end_sample)
+
+    def trim_samples(self, start_sample, end_sample):
+        """Trim Audio object by sample indices
+
+        resulting sample array contains self.samples[start_sample:end_sample]
+
+        If start_sample is less than zero, output starts from sample 0
+        If end_sample is beyond the end of the sample, trims to end of sample
+
+        Args:
+            start_sample: sample index for start of extracted clip, inclusive
+            end_sample: sample index for end of extracted clip, exlusive
+
+        Returns:
+            a new Audio object containing samples from start_sample to end_sample
+            - metadata is updated to reflect new start time and duration
+
+        see also: trim() to trim using time in seconds instead of sample positions
+        """
+        assert (
+            end_sample >= start_sample
+        ), f"end_sample ({end_sample}) must be >= start_sample ({start_sample})"
+
+        start_sample = max(0, start_sample)
+
+        # list slicing is exclusive of the end index but inclusive of the start index
+        # if end_sample is beyond the end of the sample, does not raise error just
+        # includes all samples to the end
         samples_trimmed = self.samples[start_sample:end_sample]
 
         # update metadata with new start time and duration
@@ -497,9 +536,10 @@ class Audio:
         else:
             metadata = self.metadata.copy()
             if "recording_start_time" in metadata:
-                metadata["recording_start_time"] += datetime.timedelta(
-                    seconds=start_time
-                )
+                # timedelta doesn't like np types, fix issue #928
+                seconds = start_sample / self.sample_rate
+                seconds = cast_np_to_native(seconds)
+                metadata["recording_start_time"] += datetime.timedelta(seconds=seconds)
 
             if "duration" in metadata:
                 metadata["duration"] = len(samples_trimmed) / self.sample_rate
@@ -548,33 +588,70 @@ class Audio:
             metadata=metadata,
         )
 
-    def extend(self, length):
-        """Extend audio file by adding silence to the end
+    def extend_to(self, duration):
+        """Extend audio file to desired duration by adding silence to the end
+
+        If `duration` is less than or equal to the Audio's self.duration, the Audio remains unchanged.
+
+        Otherwise, silence is added to the end of the Audio object to achieve the desired
+        `duration`.
 
         Args:
-            length: the final duration in seconds of the extended audio object
+            duration: the minimum final duration in seconds of the audio object
 
         Returns:
             a new Audio object of the desired duration
         """
 
-        total_samples_needed = round(length * self.sample_rate)
-        samples_extended = np.pad(
-            self.samples, pad_width=(0, total_samples_needed - len(self.samples))
-        )
+        minimum_n_samples = round(duration * self.sample_rate)
+        current_n_samples = len(self.samples)
 
-        # update metadata to reflect new duration
-        if self.metadata is None:
-            metadata = None
+        if minimum_n_samples <= current_n_samples:
+            return self._spawn()
+
         else:
-            metadata = self.metadata.copy()
-            if "duration" in metadata:
-                metadata["duration"] = len(samples_extended) / self.sample_rate
+            # add 0's to the end of the sample array
+            new_samples = np.pad(
+                self.samples, pad_width=(0, minimum_n_samples - current_n_samples)
+            )
 
-        return self._spawn(
-            samples=samples_extended,
-            metadata=metadata,
-        )
+            # update metadata to reflect new duration
+            if self.metadata is None:
+                metadata = None
+            else:
+                metadata = self.metadata.copy()
+                if "duration" in metadata:
+                    metadata["duration"] = len(new_samples) / self.sample_rate
+
+            return self._spawn(
+                samples=new_samples,
+                metadata=metadata,
+            )
+
+    def extend_by(self, duration):
+        """Extend audio file by adding `duration` seconds of silence to the end
+
+        Args:
+            duration: the final duration in seconds of the audio object
+
+        Returns:
+            a new Audio object with silence added to the end
+        """
+        assert duration >= 0, f"`duration` to extend by must be >=0, got {duration}"
+
+        # create desired duration of silent audio and concatenate to the end
+        silence = Audio.silence(duration=duration, sample_rate=self.sample_rate)
+        new_audio = concat([self, silence])
+
+        # add metadata and update to reflect new duration
+        if self.metadata is None:
+            new_audio.metadata = None
+        else:
+            new_audio.metadata = self.metadata.copy()
+            if "duration" in new_audio.metadata:
+                new_audio.metadata["duration"] = new_audio.duration
+
+        return new_audio
 
     def bandpass(self, low_f, high_f, order):
         """Bandpass audio signal with a butterworth filter
@@ -599,6 +676,54 @@ class Audio:
         )
         return self._spawn(samples=filtered_samples)
 
+    def lowpass(self, cutoff_f, order):
+        """Low-pass audio signal with a butterworth filter
+
+        Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
+
+        Removes high frequencies above cuttof_f and preserves low frequencies
+
+        Args:
+            cutoff_f: cutoff frequency (-3 dB)  in Hz of lowpass filter
+            order: butterworth filter order (integer) ~= steepness of cutoff
+        """
+
+        if cutoff_f <= 0:
+            raise ValueError("cutoff_f must be greater than zero")
+
+        if cutoff_f >= self.sample_rate / 2:
+            raise ValueError("cutoff_f must be less than sample_rate/2")
+
+        filtered_samples = lowpass_filter(
+            self.samples, cutoff_f, self.sample_rate, order=order
+        )
+
+        return self._spawn(samples=filtered_samples)
+
+    def highpass(self, cutoff_f, order):
+        """High-pass audio signal with a butterworth filter
+
+        Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
+
+        Removes low frequencies below cutoff_f and preserves high frequencies
+
+        Args:
+            cutoff_f: cutoff frequency (-3 dB)  in Hz of high-pass filter
+            order: butterworth filter order (integer) ~= steepness of cutoff
+        """
+
+        if cutoff_f <= 0:
+            raise ValueError("cutoff_f must be greater than zero")
+
+        if cutoff_f >= self.sample_rate / 2:
+            raise ValueError("cutoff_f must be less than sample_rate/2")
+
+        filtered_samples = highpass_filter(
+            self.samples, cutoff_f, self.sample_rate, order=order
+        )
+
+        return self._spawn(samples=filtered_samples)
+
     def spectrum(self):
         """Create frequency spectrum from an Audio object using fft
 
@@ -611,17 +736,20 @@ class Audio:
 
         # Compute the fft (fast fourier transform) of the selected clip
         N = len(self.samples)
-        fft = scipy.fft.fft(self.samples)
+        fft = scipy.fft.rfft(self.samples)
+        fft = np.abs(fft)  # get the magnitude of the fft
 
         # create the frequencies corresponding to fft bins
-        freq = scipy.fft.fftfreq(N, d=1 / self.sample_rate)
+        freq = scipy.fft.rfftfreq(N, d=1 / self.sample_rate)
 
-        # remove negative frequencies and scale magnitude by 2.0/N:
-        fft = 2.0 / N * fft[0 : int(N / 2)]
-        frequencies = freq[0 : int(N / 2)]
-        fft = np.abs(fft)
+        # scale magnitude by 2.0/N,
+        # except for the DC and sr/2 (Nyquist frequency) components
+        fft *= 2.0 / N
+        fft[0] *= 0.5
+        if N % 2 == 0:
+            fft[-1] *= 0.5
 
-        return fft, frequencies
+        return fft, freq
 
     def normalize(self, peak_level=None, peak_dBFS=None):
         """Return audio object with normalized waveform
@@ -647,7 +775,7 @@ class Audio:
             raise ValueError("Must not specify both peak_level and peak_dBFS")
 
         if peak_level is None and peak_dBFS is None:
-            peak_level = 0
+            peak_level = 1.0
         elif peak_dBFS is not None:
             if peak_dBFS > 0:
                 warnings.warn("user requested decibels Full Scale >0 !")
@@ -791,7 +919,7 @@ class Audio:
 
             # Extend the final clip if necessary
             if end > duration and final_clip == "extend":
-                audio_clip = audio_clip.extend(clip_duration)
+                audio_clip = audio_clip.extend_to(clip_duration)
 
             # Add clip to list of clips
             clips[idx] = audio_clip
@@ -1098,7 +1226,7 @@ def mix(
 
         # pad or truncate to correct length
         if audio.duration < duration:
-            audio = audio.extend(duration)
+            audio = audio.extend_to(duration)
         elif audio.duration > duration:
             audio = audio.trim(0, duration)
 
@@ -1123,12 +1251,11 @@ def estimate_delay(
     skip_ref_bandpass=False,
 ):
     """
-    Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal. The audio objects must be time-synchronized
+    Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal. The audio objects must be time-synchronized.
+    For example, if audio is delayed by 1 second compared to reference_audio, then estimate_delay(audio, reference_audio, max_delay) will return 1.0.
 
-    Optionally bandpass audio signals to a frequency range
-
-    For example, if audio is delayed by 1 second compared to reference_audio,
-    result is 1.0.
+    NOTE: Only the central portion of the signal (between start + max_delay and end - max_delay) is used for cross-correlation. This is to avoid edge effects.
+    This means estimate_delay(primary_audio, reference_audio, max_delay) is not necessarily == estimate_delay(reference_audio, primary_audio, max_delay
 
     Args:
         primary_audio: audio object containing the signal of interest
@@ -1343,29 +1470,8 @@ def _write_metadata(metadata, metadata_format, path):
                 s.__setattr__(field, value)
 
 
-def butter_bandpass(low_f, high_f, sample_rate, order=9):
-    """generate coefficients for bandpass_filter()
-
-    Args:
-        low_f: low frequency of butterworth bandpass filter
-        high_f: high frequency of butterworth bandpass filter
-        sample_rate: audio sample rate
-        order=9: order of butterworth filter
-
-    Returns:
-        set of coefficients used in sosfiltfilt()
-    """
-    nyq = 0.5 * sample_rate
-    low = low_f / nyq
-    high = high_f / nyq
-    sos = scipy.signal.butter(
-        order, [low, high], analog=False, btype="band", output="sos"
-    )
-    return sos
-
-
-def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
-    """perform a butterworth bandpass filter on a discrete time signal
+def lowpass_filter(signal, cutoff_f, sample_rate, order=9):
+    """perform a butterworth lowpass filter on a discrete time signal
     using scipy.signal's butter and sosfiltfilt (phase-preserving filtering)
 
     Args:
@@ -1378,7 +1484,51 @@ def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
     Returns:
         filtered time signal
     """
-    sos = butter_bandpass(low_f, high_f, sample_rate, order=order)
+    nyq = 0.5 * sample_rate
+    cut = cutoff_f / nyq
+    sos = scipy.signal.butter(order, cut, analog=False, btype="lowpass", output="sos")
+    return scipy.signal.sosfiltfilt(sos, signal)
+
+
+def highpass_filter(signal, cutoff_f, sample_rate, order=9):
+    """perform a butterworth highpass filter on a discrete time signal
+    using scipy.signal's butter and sosfiltfilt (phase-preserving filtering)
+
+    Args:
+        signal: discrete time signal (audio samples, list of float)
+        cutoff_f: -3db point for highpass filter (Hz)
+        sample_rate: samples per second (Hz)
+        order: higher values -> steeper dropoff [default: 9]
+
+    Returns:
+        filtered time signal
+    """
+    nyq = 0.5 * sample_rate
+    cut = cutoff_f / nyq
+    sos = scipy.signal.butter(order, cut, analog=False, btype="highpass", output="sos")
+    return scipy.signal.sosfiltfilt(sos, signal)
+
+
+def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
+    """perform a butterworth bandpass filter on a discrete time signal
+    using scipy.signal's butter and sosfiltfilt (phase-preserving filtering)
+
+    Args:
+        signal: discrete time signal (audio samples, list of float)
+        low_f: -3db point for highpass filter (Hz)
+        high_f: -3db point for highpass filter (Hz)
+        sample_rate: samples per second (Hz)
+        order: higher values -> steeper dropoff [default: 9]
+
+    Returns:
+        filtered time signal
+    """
+    nyq = 0.5 * sample_rate
+    low = low_f / nyq
+    high = high_f / nyq
+    sos = scipy.signal.butter(
+        order, [low, high], analog=False, btype="band", output="sos"
+    )
     return scipy.signal.sosfiltfilt(sos, signal)
 
 

@@ -49,7 +49,9 @@ def test_ribbit(gpt_path):
     audio = Audio.from_file(gpt_path, sample_rate=22050).trim(0, 16)
 
     spec = Spectrogram.from_audio(
-        audio, window_samples=512, overlap_samples=256, decibel_limits=(-100, -20)
+        audio,
+        window_samples=512,
+        overlap_samples=256,
     )
 
     df = ribbit.ribbit(
@@ -70,7 +72,9 @@ def test_ribbit(gpt_path):
 def test_ribbit_short_audio(veryshort_wav_str):
     audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
     spec = Spectrogram.from_audio(
-        audio, window_samples=512, overlap_samples=256, decibel_limits=(-100, -20)
+        audio,
+        window_samples=512,
+        overlap_samples=256,
     )
 
     df = ribbit.ribbit(
@@ -89,9 +93,7 @@ def test_ribbit_short_audio(veryshort_wav_str):
 def test_ribbit_high_spec_overlap(gpt_path):
     """spec params should not effect number of clips in results"""
     audio = Audio.from_file(gpt_path, sample_rate=22050).trim(0, 16)
-    spec = Spectrogram.from_audio(
-        audio, window_samples=512, overlap_samples=500, decibel_limits=(-100, -20)
-    )
+    spec = Spectrogram.from_audio(audio, window_samples=512, overlap_samples=500)
 
     df = ribbit.ribbit(
         spec,
@@ -110,9 +112,7 @@ def test_ribbit_high_spec_overlap(gpt_path):
 def test_ribbit_with_clip_overlap(gpt_path):
     audio = Audio.from_file(gpt_path, sample_rate=22050).trim(0, 16)
 
-    spec = Spectrogram.from_audio(
-        audio, window_samples=512, overlap_samples=256, decibel_limits=(-100, -20)
-    )
+    spec = Spectrogram.from_audio(audio, window_samples=512, overlap_samples=256)
 
     df = ribbit.ribbit(
         spec,

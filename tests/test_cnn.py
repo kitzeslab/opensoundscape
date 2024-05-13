@@ -8,6 +8,7 @@ import shutil
 
 import warnings
 
+import opensoundscape
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.loss import ResampleLoss
@@ -100,7 +101,7 @@ def test_train_multi_target(train_df):
 
 def test_train_resample_loss(train_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
-    cnn.use_resample_loss(model)
+    cnn.use_resample_loss(model, train_df=train_df)
     model.train(
         train_df,
         train_df,
@@ -211,6 +212,15 @@ def test_prediction_overlap(test_df):
     scores = model.predict(test_df, overlap_fraction=0.5)
 
     assert len(scores) == 3
+
+
+def test_predict_on_one_file(test_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=10)
+    p = test_df.index.values[0]
+    scores = model.predict(p)
+    assert len(scores) == 1
+    scores = model.predict(Path(p))
+    assert len(scores) == 1
 
 
 def test_multi_target_prediction(train_df, test_df):
@@ -359,13 +369,12 @@ def test_save_load_and_train_model_resample_loss(train_df):
     classes = [0, 1]
 
     m = cnn.CNN(arch, classes, 1.0)
-    cnn.use_resample_loss(m)
+    cnn.use_resample_loss(m, train_df)
     m.save("tests/models/saved1.model")
     m2 = cnn.load_model("tests/models/saved1.model")
     assert m2.classes == classes
     assert type(m2) == cnn.CNN
-
-    assert m2.loss_cls == ResampleLoss
+    assert isinstance(m2.loss_fn, ResampleLoss)
 
     # make sure it still trains ok after reloading w/resample loss
     m2.train(
@@ -496,7 +505,7 @@ def test_generate_cams_methods(test_df):
     methods_dict = {
         "gradcam": pytorch_grad_cam.GradCAM,
         "hirescam": pytorch_grad_cam.HiResCAM,
-        "scorecam": pytorch_grad_cam.ScoreCAM,
+        "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
         "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
         "ablationcam": pytorch_grad_cam.AblationCAM,
         "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -524,3 +533,50 @@ def test_generate_cams_target_layers(test_df):
     _ = model.generate_cams(
         test_df, target_layers=[model.network.layer3, model.network.layer4]
     )
+
+
+def test_train_with_posixpath(train_df):
+    """test that train works with pathlib.Path objects"""
+    from pathlib import Path
+
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+
+    # turn the file paths into Path objects.
+    posix_paths = [Path(p) for p in train_df.index]
+
+    # change the index of train_df to be the Path objects
+    train_df.index = posix_paths
+
+    model.train(
+        train_df,
+        train_df,
+        save_path=Path("tests/models"),
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+
+    shutil.rmtree("tests/models/")
+
+
+def test_predict_posixpath_missing_files(missing_file_df, test_df):
+    """Test that predict works with pathlib.Path objects"""
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+
+    missing_file_df.index = [Path(p) for p in missing_file_df.index]
+    test_df.index = [Path(p) for p in test_df.index]
+    with pytest.raises(IndexError):
+        # if all samples are invalid, will give IndexError
+        model.predict(missing_file_df)
+
+    scores, invalid_samples = model.predict(
+        pd.concat([missing_file_df, test_df.head(1)]), return_invalid_samples=True
+    )
+    assert (
+        len(scores) == 3
+    )  # should have one row with nan values for the invalid sample
+    isnan = lambda x: x != x
+    assert np.all([isnan(score) for score in scores.iloc[0].values])
+    assert len(invalid_samples) == 1
+    assert missing_file_df.index.values[0] in invalid_samples

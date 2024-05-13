@@ -19,6 +19,10 @@ Annotations
 .. automodule:: opensoundscape.annotations
  :members:
 
+Bioacoustics Model Zoo Wrappers
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: opensoundscape.ml.bioacoustics_model_zoo
+  :members:
  
 Machine Learning utils
 ^^^^^^^^^^^^^^^^^^^^^^
