@@ -1404,16 +1404,17 @@ class CNN(BaseClassifier):
     @property
     def device(self):
         return self._device
-    
+
     @device.setter
     def device(self, device):
         """
         Set the device to use in train/predict, casting strings to torch.device datatype
 
-        Args: 
+        Args:
             device: a torch.device object or str such as 'cuda:0', 'mps', 'cpu'
         """
         self._device = torch.device(device)
+
 
 def use_resample_loss(
     model, train_df
