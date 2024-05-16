@@ -146,7 +146,9 @@ class BasePreprocessor:
                 if type(action) == break_on_type or k == break_on_key:
                     if trace:
                         # saved "output" of this step informs user pipeline was stopped
-                        sample.trace.loc[k] = f"## Pipeline terminated ## {sample.trace[k]}"
+                        sample.trace.loc[
+                            k
+                        ] = f"## Pipeline terminated ## {sample.trace[k]}"
                     break
                 if action.bypass:
                     continue
