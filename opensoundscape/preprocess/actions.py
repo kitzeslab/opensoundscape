@@ -8,6 +8,7 @@ or augmented sample, which may or may not be the same type as the original.
 See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
+
 import random
 import warnings
 import numpy as np
@@ -506,7 +507,7 @@ class Overlay(Action):
 
         self.returns_labels = True
 
-        overlay_df = kwargs["overlay_df"]
+        overlay_df = kwargs["overlay_df"].copy()  # copy to avoid modifying original
         overlay_df = overlay_df[~overlay_df.index.duplicated()]  # remove duplicates
 
         # warn the user if using "different" as overlay_class
@@ -569,7 +570,7 @@ def overlay(
 
         update_labels: if True, add overlayed sample's labels to original sample
         overlay_class: how to choose files from overlay_df to overlay
-            Options [default: "different"]:
+            Options [default: None]:
             None - Randomly select any file from overlay_df
             "different" - Select a random file from overlay_df containing none
                 of the classes this file contains
@@ -693,6 +694,7 @@ def overlay(
 
             # now we have picked a file to overlay (overlay_path)
             # we also know its labels, if we need them
+            # TODO: this will be slow with large index but fast with numeric index, reset_index() somewhere
             overlay_sample = AudioSample.from_series(overlay_df.loc[overlay_path])
 
             # now we need to run the pipeline to do everything up until the Overlay step

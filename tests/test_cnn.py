@@ -214,6 +214,15 @@ def test_prediction_overlap(test_df):
     assert len(scores) == 3
 
 
+def test_predict_on_one_file(test_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=10)
+    p = test_df.index.values[0]
+    scores = model.predict(p)
+    assert len(scores) == 1
+    scores = model.predict(Path(p))
+    assert len(scores) == 1
+
+
 def test_multi_target_prediction(train_df, test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     scores = model.predict(test_df)
