@@ -1,4 +1,5 @@
 """Utilties for .ml"""
+
 import warnings
 import pandas as pd
 import numpy as np
@@ -215,3 +216,17 @@ def collate_audio_samples_to_tensors(batch):
     tensors = torch.stack([i.data for i in batch])
     labels = torch.tensor([i.labels.tolist() for i in batch])
     return tensors, labels
+
+
+def check_labels(label_df, classes):
+    class_err = """
+            Train and validation datasets must have same classes
+            and class order as model object. Consider using
+            `train_df=train_df[cnn.classes]` or `cnn.classes=train_df.columns` 
+            before training.
+            """
+    assert list(classes) == list(label_df.columns), class_err
+
+    assert (
+        label_df.max(axis=None) <= 1 and label_df.min(axis=None) >= 0
+    ), "Labels must in range [0,1], but found values outside range"
