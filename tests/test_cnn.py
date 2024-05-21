@@ -461,9 +461,8 @@ def test_predict_raise_errors(short_file_df, onemin_wav_df):
     )  # use 2 files. 1 file wrong is manually caught and userwarning raised
     model = cnn.CNN("resnet18", classes=["class"], sample_duration=30)
     model.preprocessor.pipeline.bandpass.bypass = False  # ensure bandpass happens
-    model.preprocessor.pipeline.bandpass.params[
-        "low"
-    ] = 1  # add a bad param. this should be min_f
+    # add a bad param. this should be min_f
+    model.preprocessor.pipeline.bandpass.params["low"] = 1
 
     with pytest.raises(PreprocessingError):
         model.predict(files_df, raise_errors=True)
