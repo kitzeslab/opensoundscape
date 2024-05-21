@@ -43,6 +43,8 @@ from opensoundscape.metrics import (
     multi_target_metrics,
 )
 
+import warnings
+
 
 class BaseClassifier(torch.nn.Module):
     """
@@ -105,7 +107,10 @@ class BaseClassifier(torch.nn.Module):
         num_workers=0,
         activation_layer=None,
         split_files_into_clips=True,
-        overlap_fraction=0,
+        clip_overlap=None,
+        clip_overlap_fraction=None,
+        clip_step=None,
+        overlap_fraction=None,
         final_clip=None,
         bypass_augmentations=True,
         invalid_samples_log=None,
@@ -145,10 +150,9 @@ class BaseClassifier(torch.nn.Module):
             split_files_into_clips:
                 If True, internally splits and predicts on clips from longer audio files
                 Otherwise, assumes each row of `samples` corresponds to one complete sample
-            overlap_fraction: fraction of overlap between consecutive clips when
-                predicting on clips of longer audio files. For instance, 0.5
-                gives 50% overlap between consecutive clips.
-            final_clip: see `opensoundscape.utils.generate_clip_times_df`
+            clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+                see `opensoundscape.utils.generate_clip_times_df`
+            overlap_fraction: deprecated alias for clip_overlap_fraction
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
             invalid_samples_log: if not None, samples that failed to preprocess
@@ -188,7 +192,7 @@ class BaseClassifier(torch.nn.Module):
             for that sample will be np.nan
 
         """
-        # for convenience, convert str/pathlib.Path to list
+        # for convenience, convert str/pathlib.Path to list of length 1
         if isinstance(samples, (str, Path)):
             samples = [samples]
 
@@ -198,6 +202,9 @@ class BaseClassifier(torch.nn.Module):
             self.preprocessor,
             split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
+            clip_overlap=clip_overlap,
+            clip_overlap_fraction=clip_overlap_fraction,
+            clip_step=clip_step,
             final_clip=final_clip,
             bypass_augmentations=bypass_augmentations,
             batch_size=batch_size,
@@ -577,7 +584,7 @@ class CNN(BaseClassifier):
             train_df,
             self.preprocessor,
             split_files_into_clips=True,
-            overlap_fraction=0,
+            clip_overlap=0,
             final_clip=None,
             bypass_augmentations=False,
             batch_size=batch_size,

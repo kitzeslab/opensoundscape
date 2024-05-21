@@ -580,3 +580,19 @@ def test_predict_posixpath_missing_files(missing_file_df, test_df):
     assert np.all([isnan(score) for score in scores.iloc[0].values])
     assert len(invalid_samples) == 1
     assert missing_file_df.index.values[0] in invalid_samples
+
+
+def test_predict_overlap_fraction_deprecated(test_df):
+    """
+    should give deprecation error if clip_overlap_fraction is passed.
+
+    Future version will remove this argument in favor of clip_overlap_fraction
+
+    also, should raise AssertionError if both args are passed (over-specified)
+    """
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    with pytest.warns(DeprecationWarning):
+        scores = model.predict(test_df, overlap_fraction=0.5)
+        assert len(scores) == 3
+    with pytest.raises(AssertionError):
+        model.predict(test_df, overlap_fraction=0.5, clip_overlap_fraction=0.5)
