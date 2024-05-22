@@ -20,7 +20,7 @@ from tqdm.autonotebook import tqdm
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
-from opensoundscape.ml.utils import apply_activation_layer
+from opensoundscape.ml.utils import apply_activation_layer, check_labels
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.ml.loss import (
     BCEWithLogitsLoss_hot,
@@ -371,7 +371,15 @@ class BaseClassifier(torch.nn.Module):
             scores: continuous values in 0/1 for each sample and class
             logging_offset: modify verbosity - for example, -1 will reduce
                 the amount of printing/logging by 1 level
+
+        Raises:
+            AssertionError: if targets are outside of range [0,1]
         """
+
+        # check for invalid label values
+        assert (
+            targets.max(axis=None) <= 1 and targets.min(axis=None) >= 0
+        ), "Labels must in range [0,1], but found values outside range"
 
         # remove all samples with NaN for a prediction
         targets = targets[~np.isnan(scores).any(axis=1), :]
@@ -808,9 +816,9 @@ class CNN(BaseClassifier):
             `train_df=train_df[cnn.classes]` or `cnn.classes=train_df.columns` 
             before training.
             """
-        assert list(self.classes) == list(train_df.columns), class_err
+        check_labels(train_df, self.classes)
         if validation_df is not None:
-            assert list(self.classes) == list(validation_df.columns), class_err
+            check_labels(validation_df, self.classes)
 
         # Validation: warn user if no validation set
         if validation_df is None:
