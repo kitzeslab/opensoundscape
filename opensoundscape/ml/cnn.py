@@ -231,12 +231,10 @@ class BaseClassifier(torch.nn.Module):
             # Log a table of preprocessed samples to wandb
             wandb_session.log(
                 {
-                    "Samples": {
-                        "Peprocessed_samples": wandb_table(
-                            dataloader.dataset.dataset,
-                            self.wandb_logging["n_preview_samples"],
-                        )
-                    }
+                    "Peprocessed_samples": wandb_table(
+                        dataloader.dataset.dataset,
+                        self.wandb_logging["n_preview_samples"],
+                    )
                 }
             )
 
@@ -283,11 +281,8 @@ class BaseClassifier(torch.nn.Module):
                     classes_to_extract=[c],
                     drop_labels=True,
                     gradcam_model=self if self.wandb_logging["gradcam"] else None,
-                    raise_exceptions=True,  # TODO back to false when done debugging
                 )
-                wandb_session.log(
-                    {"Samples": {f"Top_scoring_{c.replace(' ','_')}": table}}
-                )
+                wandb_session.log({f"Top_scoring_{c.replace(' ','_')}": table})
 
         if return_invalid_samples:
             return score_df, invalid_samples
@@ -854,28 +849,26 @@ class CNN(BaseClassifier):
             # log tables of preprocessed samples
             wandb_session.log(
                 {
-                    "Samples": {
-                        "training_samples": wandb_table(
-                            AudioFileDataset(
-                                train_df, self.preprocessor, bypass_augmentations=False
-                            ),
-                            self.wandb_logging["n_preview_samples"],
+                    "training_samples": wandb_table(
+                        AudioFileDataset(
+                            train_df, self.preprocessor, bypass_augmentations=False
                         ),
-                        "training_samples_no_aug": wandb_table(
-                            AudioFileDataset(
-                                train_df, self.preprocessor, bypass_augmentations=True
-                            ),
-                            self.wandb_logging["n_preview_samples"],
+                        self.wandb_logging["n_preview_samples"],
+                    ),
+                    "training_samples_no_aug": wandb_table(
+                        AudioFileDataset(
+                            train_df, self.preprocessor, bypass_augmentations=True
                         ),
-                        "validation_samples": wandb_table(
-                            AudioFileDataset(
-                                validation_df,
-                                self.preprocessor,
-                                bypass_augmentations=True,
-                            ),
-                            self.wandb_logging["n_preview_samples"],
+                        self.wandb_logging["n_preview_samples"],
+                    ),
+                    "validation_samples": wandb_table(
+                        AudioFileDataset(
+                            validation_df,
+                            self.preprocessor,
+                            bypass_augmentations=True,
                         ),
-                    }
+                        self.wandb_logging["n_preview_samples"],
+                    ),
                 }
             )
 
