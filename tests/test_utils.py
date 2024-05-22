@@ -134,6 +134,48 @@ def test_generate_clip_times_df_overlap():
     assert clip_df.iloc[1]["start_time"] == 2.5
     assert clip_df.iloc[1]["end_time"] == 7.5
 
+    clip_df = utils.generate_clip_times_df(
+        full_duration=10, clip_duration=5, clip_overlap_fraction=0.5
+    )
+    assert clip_df.shape[0] == 3
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 5.0
+    assert clip_df.iloc[1]["start_time"] == 2.5
+    assert clip_df.iloc[1]["end_time"] == 7.5
+
+    clip_df = utils.generate_clip_times_df(
+        full_duration=10, clip_duration=5, clip_step=2.5
+    )
+    assert clip_df.shape[0] == 3
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 5.0
+    assert clip_df.iloc[1]["start_time"] == 2.5
+    assert clip_df.iloc[1]["end_time"] == 7.5
+
+
+def test_generate_clip_times_df_overlap_raises_overspecified():
+    with pytest.raises(ValueError):
+        utils.generate_clip_times_df(
+            full_duration=10,
+            clip_duration=5,
+            clip_overlap=2.5,
+            clip_overlap_fraction=0.5,
+        )
+    with pytest.raises(ValueError):
+        utils.generate_clip_times_df(
+            full_duration=10,
+            clip_duration=5,
+            clip_overlap=2.5,
+            clip_step=0.5,
+        )
+    with pytest.raises(ValueError):
+        utils.generate_clip_times_df(
+            full_duration=10,
+            clip_duration=5,
+            clip_overlap_fraction=0.5,
+            clip_step=0.5,
+        )
+
 
 def test_make_clip_df(silence_10s_mp3_str):
     """many corner cases / alternatives are tested for audio.split()
