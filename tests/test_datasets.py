@@ -219,7 +219,7 @@ def test_audio_splitting_dataset(dataset_df, pre):
 
 
 def test_audio_splitting_dataset_overlap(dataset_df, pre):
-    dataset = AudioSplittingDataset(dataset_df, pre, overlap_fraction=0.5)
+    dataset = AudioSplittingDataset(dataset_df, pre, clip_overlap_fraction=0.5)
     assert len(dataset) == 18
 
     # load a sample

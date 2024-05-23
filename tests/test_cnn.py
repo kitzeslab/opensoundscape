@@ -402,6 +402,21 @@ def test_prediction_warns_different_classes(train_df):
         assert "classes" in all_warnings
 
 
+def test_train_raises_wrong_class_list(train_df):
+    model = cnn.CNN("resnet18", classes=["different"], sample_duration=5.0)
+    with pytest.raises(AssertionError):
+        # raises AssertionError bc test_df columns != model.classes
+        model.train(train_df)
+
+
+def test_train_raises_labels_outside_range(train_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    train_df.iat[0, 0] = 2
+    with pytest.raises(AssertionError):
+        # raises AssertionError bc values outside [0,1] not allowed
+        model.train(train_df)
+
+
 def test_prediction_returns_consistent_values(train_df):
     model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)
     a = model.predict(train_df)
@@ -425,6 +440,15 @@ def test_eval(train_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
     scores = model.predict(train_df, split_files_into_clips=False)
     model.eval(train_df.values, scores.values)
+
+
+def test_eval_raises_bad_labels(train_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
+    scores = model.predict(train_df, split_files_into_clips=False)
+    train_df.iat[0, 0] = 2
+    with pytest.raises(AssertionError):
+        # raises AssertionError bc values outside [0,1] not allowed
+        model.eval(train_df.values, scores.values)
 
 
 def test_split_resnet_feat_clf(train_df):
@@ -461,9 +485,8 @@ def test_predict_raise_errors(short_file_df, onemin_wav_df):
     )  # use 2 files. 1 file wrong is manually caught and userwarning raised
     model = cnn.CNN("resnet18", classes=["class"], sample_duration=30)
     model.preprocessor.pipeline.bandpass.bypass = False  # ensure bandpass happens
-    model.preprocessor.pipeline.bandpass.params[
-        "low"
-    ] = 1  # add a bad param. this should be min_f
+    # add a bad param. this should be min_f
+    model.preprocessor.pipeline.bandpass.params["low"] = 1
 
     with pytest.raises(PreprocessingError):
         model.predict(files_df, raise_errors=True)
@@ -580,3 +603,19 @@ def test_predict_posixpath_missing_files(missing_file_df, test_df):
     assert np.all([isnan(score) for score in scores.iloc[0].values])
     assert len(invalid_samples) == 1
     assert missing_file_df.index.values[0] in invalid_samples
+
+
+def test_predict_overlap_fraction_deprecated(test_df):
+    """
+    should give deprecation error if clip_overlap_fraction is passed.
+
+    Future version will remove this argument in favor of clip_overlap_fraction
+
+    also, should raise AssertionError if both args are passed (over-specified)
+    """
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    with pytest.warns(DeprecationWarning):
+        scores = model.predict(test_df, overlap_fraction=0.5)
+        assert len(scores) == 3
+    with pytest.raises(AssertionError):
+        model.predict(test_df, overlap_fraction=0.5, clip_overlap_fraction=0.5)
