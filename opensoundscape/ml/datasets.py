@@ -1,4 +1,5 @@
 """Preprocessors: pd.Series child with an action sequence & forward method"""
+
 import warnings
 import copy
 from pathlib import Path

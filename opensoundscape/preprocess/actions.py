@@ -163,7 +163,7 @@ class AudioTrim(Action):
     """Action to trim/extend audio to desired length
 
     Args:
-        see actions.audio_trim()
+        see actions.trim_audio()
     """
 
     def __init__(self, **kwargs):
