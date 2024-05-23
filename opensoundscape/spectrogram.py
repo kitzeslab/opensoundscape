@@ -416,7 +416,9 @@ class Spectrogram:
             times=self.times[lowest_index : highest_index + 1],
         )
 
-    def plot(self, inline=True, fname=None, show_colorbar=False, range=(-100, -20)):
+    def plot(
+        self, inline=True, fname=None, show_colorbar=False, range=(-100, -20), kHz=False
+    ):
         """Plot the spectrogram with matplotlib.pyplot
 
         Args:
@@ -425,19 +427,23 @@ class Spectrogram:
             show_colorbar: include image legend colorbar from pyplot
             range: tuple of (min,max) values of .spectrogram to map to the lowest/highest
                 pixel values. Values outside this range will be clipped to the min/max values
+            kHz: bool [default:False] if True, y axis is plotted in units of kHz rather than Hz
         """
         norm = matplotlib.colors.Normalize(vmin=range[0], vmax=range[1])
+
+        # if user specifies kHz=True, use kHz units rather than Hz on y axis
+        y = self.frequencies / 1000 if kHz else self.frequencies
         plt.pcolormesh(
             self.times,
-            self.frequencies,
+            y,
             self.spectrogram,
             shading="auto",
             cmap="Greys",
             norm=norm,
         )
 
-        plt.xlabel("time (sec)")
-        plt.ylabel("frequency (Hz)")
+        plt.xlabel("Time (sec)")
+        plt.ylabel(f"Frequency ({'kHz' if kHz else 'Hz'})")
         if show_colorbar:
             plt.colorbar()
 
