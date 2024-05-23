@@ -132,7 +132,7 @@ class BasePreprocessor:
         # create AudioSample from input path
         sample = self._generate_sample(sample)
         if trace:
-            sample.trace = pd.Series(index=self.pipeline.index)
+            sample.trace = pd.Series(index=self.pipeline.index, dtype=str)
 
         if profile:
             sample.runtime = pd.Series(index=self.pipeline.index)
@@ -146,13 +146,15 @@ class BasePreprocessor:
                 if type(action) == break_on_type or k == break_on_key:
                     if trace:
                         # saved "output" of this step informs user pipeline was stopped
-                        sample.trace[k] = f"## Pipeline terminated ## {sample.trace[k]}"
+                        sample.trace.loc[
+                            k
+                        ] = f"## Pipeline terminated ## {sample.trace[k]}"
                     break
                 if action.bypass:
                     continue
                 if action.is_augmentation and bypass_augmentations:
                     if trace:
-                        sample.trace[k] = f"## Bypassed ## {sample.trace[k]}"
+                        sample.trace.loc[k] = f"## Bypassed ## {sample.trace[k]}"
                     continue
 
                 # perform the action (modifies the AudioSample in-place)
