@@ -15,7 +15,10 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         samples,
         preprocessor,
         split_files_into_clips=True,
-        overlap_fraction=0,
+        clip_overlap=None,
+        clip_overlap_fraction=None,
+        clip_step=None,
+        overlap_fraction=None,
         final_clip=None,
         bypass_augmentations=True,
         raise_errors=False,
@@ -43,11 +46,9 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             preprocessor: preprocessor object, eg AudioPreprocessor or SpectrogramPreprocessor
             split_files_into_clips=True: use AudioSplittingDataset to automatically split
                 audio files into appropriate-lengthed clips
-            overlap_fraction: overlap fraction between consecutive clips, ignroed if
-                split_files_into_clips is False [default: 0]
-            final_clip: how to handle the final incomplete clip in a file
-                options:['extend','remainder','full',None] [default: None]
-                see opensoundscape.utils.generate_clip_times_df for details
+            clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+                see `opensoundscape.utils.generate_clip_times_df`
+            overlap_fraction: deprecated alias for clip_overlap_fraction
             bypass_augmentations: if True, don't apply any augmentations [default: True]
             raise_errors: if True, raise errors during preprocessing [default: False]
             collate_fn: function to collate samples into batches [default: identity]
@@ -62,6 +63,16 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             "(a) list or np.array of files, or DataFrame with (b) file as Index or "
             "(c) (file,start_time,end_time) as MultiIndex"
         )
+
+        if overlap_fraction is not None:
+            warnings.warn(
+                "`overlap_fraction` argument is deprecated. Use `clip_overlap_fraction` instead.",
+                DeprecationWarning,
+            )
+            assert (
+                clip_overlap_fraction is None
+            ), "Cannot specify both overlap_fraction and clip_overlap_fraction"
+            clip_overlap_fraction = overlap_fraction
 
         # validate that file paths are correctly placed in the input index or list
         if len(samples) > 0:
@@ -92,7 +103,9 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             dataset = AudioSplittingDataset(
                 samples=samples,
                 preprocessor=preprocessor,
-                overlap_fraction=overlap_fraction,
+                clip_overlap=clip_overlap,
+                clip_overlap_fraction=clip_overlap_fraction,
+                clip_step=clip_step,
                 final_clip=final_clip,
             )
         else:  # c3 samples is list of files and

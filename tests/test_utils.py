@@ -3,6 +3,9 @@ import pytest
 import pandas as pd
 import pytz
 import datetime
+import torch
+import random
+from opensoundscape.ml import cnn, cnn_architectures
 
 from opensoundscape import utils
 
@@ -131,6 +134,48 @@ def test_generate_clip_times_df_overlap():
     assert clip_df.iloc[1]["start_time"] == 2.5
     assert clip_df.iloc[1]["end_time"] == 7.5
 
+    clip_df = utils.generate_clip_times_df(
+        full_duration=10, clip_duration=5, clip_overlap_fraction=0.5
+    )
+    assert clip_df.shape[0] == 3
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 5.0
+    assert clip_df.iloc[1]["start_time"] == 2.5
+    assert clip_df.iloc[1]["end_time"] == 7.5
+
+    clip_df = utils.generate_clip_times_df(
+        full_duration=10, clip_duration=5, clip_step=2.5
+    )
+    assert clip_df.shape[0] == 3
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 5.0
+    assert clip_df.iloc[1]["start_time"] == 2.5
+    assert clip_df.iloc[1]["end_time"] == 7.5
+
+
+def test_generate_clip_times_df_overlap_raises_overspecified():
+    with pytest.raises(ValueError):
+        utils.generate_clip_times_df(
+            full_duration=10,
+            clip_duration=5,
+            clip_overlap=2.5,
+            clip_overlap_fraction=0.5,
+        )
+    with pytest.raises(ValueError):
+        utils.generate_clip_times_df(
+            full_duration=10,
+            clip_duration=5,
+            clip_overlap=2.5,
+            clip_step=0.5,
+        )
+    with pytest.raises(ValueError):
+        utils.generate_clip_times_df(
+            full_duration=10,
+            clip_duration=5,
+            clip_overlap_fraction=0.5,
+            clip_step=0.5,
+        )
+
 
 def test_make_clip_df(silence_10s_mp3_str):
     """many corner cases / alternatives are tested for audio.split()
@@ -168,3 +213,72 @@ def test_make_clip_df_from_label_df(silence_10s_mp3_str, metadata_wav_str):
     # should copy labels for each file to all clips of that file
     # duplicate file should have labels from _first_ occurrence in label_df
     assert np.array_equal(clip_df["a"].values, [0, 0, 0, 0, 2, 2])
+
+
+# The @pytest.mark.parametrize decorator loops trough each value in list when running pytest.
+# If you add --verbose, it also prints if it passed for each value in the list for each function
+# that takes it as input.
+
+# For all utils.set_seed() tests, assert that results are determistic for the the same seed AND
+# for different seeds, in a tensor/array at least one element is different.
+
+
+@pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
+def test_torch_rand(input):
+    utils.set_seed(input)
+    tr1 = torch.rand(100)
+
+    utils.set_seed(input)
+    tr2 = torch.rand(100)
+
+    utils.set_seed(input + 1)
+    tr3 = torch.rand(100)
+
+    assert all(tr1 == tr2) & any(tr1 != tr3)
+
+
+@pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
+def test_numpy_random_rand(input):
+    utils.set_seed(input)
+    nr1 = np.random.rand(100)
+
+    utils.set_seed(input)
+    nr2 = np.random.rand(100)
+
+    utils.set_seed(input + 1)
+    nr3 = np.random.rand(100)
+
+    assert all(nr1 == nr2) & any(nr1 != nr3)
+
+
+@pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
+def test_radom_sample(input):
+    list1000 = list(range(1, 1000))
+
+    utils.set_seed(input)
+    rs1 = random.sample(list1000, 100)
+
+    utils.set_seed(input)
+    rs2 = random.sample(list1000, 100)
+
+    utils.set_seed(input + 1)
+    rs3 = random.sample(list1000, 100)
+
+    assert (rs1 == rs2) & (rs1 != rs3)
+
+
+@pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
+def test_cnn(input):
+    utils.set_seed(input)
+    model_resnet1 = cnn_architectures.resnet18(num_classes=10, weights=None)
+    lw1 = model_resnet1.layer1[0].conv1.weight
+
+    utils.set_seed(input)
+    model_resnet2 = cnn_architectures.resnet18(num_classes=10, weights=None)
+    lw2 = model_resnet2.layer1[0].conv1.weight
+
+    utils.set_seed(input + 1)
+    model_resnet3 = cnn_architectures.resnet18(num_classes=10, weights=None)
+    lw3 = model_resnet3.layer1[0].conv1.weight
+
+    assert torch.all(lw1 == lw2) & torch.any(lw1 != lw3)

@@ -88,44 +88,40 @@ def test_audio_clip_loader_clip(sample_clip):
 
 
 def test_action_trim(sample_audio):
-    action = actions.AudioTrim()
-    sample_audio.target_duration = 1.0
+    action = actions.AudioTrim(target_duration=1)
+    sample_audio.target_duration = 2  # should be ignored
     action.go(sample_audio)
     assert math.isclose(sample_audio.data.duration, 1.0, abs_tol=1e-4)
 
 
 def test_action_random_trim(sample_audio):
     sample2 = copy.deepcopy(sample_audio)
-    action = actions.AudioTrim(random_trim=True)
-    original_duration = sample_audio.data.duration
-    sample_audio.target_duration = sample2.target_duration = 0.01
+    action = actions.AudioTrim(target_duration=0.001, random_trim=True)
     action.go(sample_audio)
     action.go(sample2)
-    assert math.isclose(sample_audio.data.duration, 0.01, abs_tol=1e-4)
+    assert math.isclose(sample_audio.data.duration, 0.001, abs_tol=1e-4)
     # random trim should result in 2 different samples
+    assert not math.isclose(sample_audio.start_time, sample2.start_time, abs_tol=1e-9)
     assert not np.array_equal(sample_audio.data.samples, sample2.data.samples)
 
 
-def test_audio_trimmer_default(sample_audio):
-    """should not trim if no extra args"""
-    action = actions.AudioTrim()
-    sample_audio.target_duration = None
+def test_audio_trimmer_duration_None(sample_audio):
+    """should not trim if target_duration=None"""
+    action = actions.AudioTrim(target_duration=None)
     action.go(sample_audio)
     assert math.isclose(sample_audio.data.duration, 0.142086167800, abs_tol=1e-4)
 
 
 def test_audio_trimmer_raises_error_on_short_clip(sample_audio):
-    action = actions.AudioTrim()
-    sample_audio.target_duration = 10
+    action = actions.AudioTrim(target_duration=10, extend=False)
     with pytest.raises(ValueError):
-        action.go(sample_audio, extend=False)
+        action.go(sample_audio)
 
 
 def test_audio_trimmer_extend_short_clip(sample_audio):
-    action = actions.AudioTrim()
-    sample_audio.target_duration = 1
+    action = actions.AudioTrim(target_duration=10)
     action.go(sample_audio)  # extend=True is default
-    assert math.isclose(sample_audio.data.duration, 1.0, abs_tol=1e-4)
+    assert math.isclose(sample_audio.data.duration, 10, abs_tol=1e-4)
 
 
 def test_audio_random_gain(sample_audio):

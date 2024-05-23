@@ -41,6 +41,14 @@ def test_interrupt_get_item(preprocessor, sample):
     assert audio.samples.shape == (44100 * 10,)
 
 
+def test_profile(preprocessor, sample):
+    """sample should have .runtime attribute with index matching preprocessor.pipeline, and float values"""
+    sample = preprocessor.forward(sample, profile=True)
+    # should report the time to load the audio
+    assert sample.runtime[preprocessor.pipeline.index.values[0]] > 0
+    assert (sample.runtime.index == preprocessor.pipeline.index).all()
+
+
 def test_audio_resample(preprocessor, sample):
     """should retain original sample rate"""
     preprocessor.pipeline.load_audio.set(sample_rate=16000)
