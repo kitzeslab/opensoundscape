@@ -640,13 +640,12 @@ class BoxedAnnotations:
     def one_hot_clip_labels(
         self,
         clip_duration,
-        clip_overlap,
         min_label_overlap,
         min_label_fraction=1,
         full_duration=None,
         class_subset=None,
-        final_clip=None,
         audio_files=None,
+        **kwargs,
     ):
         """Generate one-hot labels for clips of fixed duration
 
@@ -656,7 +655,6 @@ class BoxedAnnotations:
 
         Args:
             clip_duration (float):  The duration in seconds of the clips
-            clip_overlap (float):   The overlap of the clips in seconds [default: 0]
             min_label_overlap: minimum duration (seconds) of annotation within the
                 time interval for it to count as a label. Note that any annotation
                 of length less than this value will be discarded.
@@ -677,19 +675,10 @@ class BoxedAnnotations:
                 of `audio` for each row of self.df
             class_subset: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
-            final_clip (str): Behavior if final_clip is less than clip_duration
-                seconds long. By default, discards remaining time if less than
-                clip_duration seconds long [default: None].
-                Options:
-                - None: Discard the remainder (do not make a clip)
-                - "extend": Extend the final clip beyond full_duration to reach
-                    clip_duration length
-                - "remainder": Use only remainder of full_duration
-                    (final clip will be shorter than clip_duration)
-                - "full": Increase overlap with previous clip to yield a
-                    clip with clip_duration length
             audio_files: list of audio file paths (as str or pathlib.Path)
                 to create clips for. If None, uses self.audio_files. [default: None]
+            **kwargs (such as overlap_fraction, final_clip) are passed to
+                opensoundscape.utils.generate_clip_times_df() via make_clip_df()
         Returns:
             dataframe with index ['file','start_time','end_time'] and columns=classes
         """
@@ -718,9 +707,8 @@ class BoxedAnnotations:
                 clip_df = make_clip_df(
                     files=[f for f in audio_files if f == f],  # remove NaN if present
                     clip_duration=clip_duration,
-                    clip_overlap=clip_overlap,
-                    final_clip=final_clip,
                     raise_exceptions=True,  # raise exceptions from librosa.duration(f)
+                    **kwargs,
                 )
             except GetDurationError as exc:
                 raise GetDurationError(
@@ -733,10 +721,7 @@ class BoxedAnnotations:
         else:  # use fixed full_duration for all files
             # make a clip df, will be re-used for each file
             clip_df_template = generate_clip_times_df(
-                full_duration=full_duration,
-                clip_duration=clip_duration,
-                clip_overlap=clip_overlap,
-                final_clip=final_clip,
+                full_duration=full_duration, clip_duration=clip_duration, **kwargs
             )
             # make a clip df for all files
             clip_df = pd.concat([clip_df_template] * len(audio_files))

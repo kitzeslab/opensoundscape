@@ -873,41 +873,24 @@ class Audio:
             else:  # we can write metadata for WAV and AIFF
                 _write_metadata(self.metadata, metadata_format, path)
 
-    def split(self, clip_duration, clip_overlap=0, final_clip=None):
+    def split(self, clip_duration, **kwargs):
         """Split Audio into even-lengthed clips
 
         The Audio object is split into clips of a specified duration and overlap
 
         Args:
             clip_duration (float):  The duration in seconds of the clips
-            clip_overlap (float):   The overlap of the clips in seconds [default: 0]
-            final_clip (str):       Behavior if final_clip is less than clip_duration
-                seconds long. By default, discards remaining audio if less than
-                clip_duration seconds long [default: None].
-                Options:
-                - None: Discard the remainder (do not make a clip)
-                - "extend": Extend the final clip with silence to reach
-                    clip_duration length
-                - "remainder": Use only remainder of Audio (final clip will be
-                    shorter than clip_duration)
-                - "full": Increase overlap with previous clip to yield a clip with
-                    clip_duration length
+            **kwargs (such as clip_overlap_fraction, final_clip) are passed to
+                opensoundscape.utils.generate_clip_times_df()
+                - extends last Audio object if user passes final_clip == "extend"
         Returns:
             - audio_clips: list of audio objects
             - dataframe w/columns for start_time and end_time of each clip
         """
-        if not final_clip in ["remainder", "full", "extend", None]:
-            raise ValueError(
-                f"final_clip must be 'remainder', 'full', 'extend',"
-                f"or None. Got {final_clip}."
-            )
 
         duration = self.duration
         clip_df = generate_clip_times_df(
-            full_duration=duration,
-            clip_duration=clip_duration,
-            clip_overlap=clip_overlap,
-            final_clip=final_clip,
+            full_duration=duration, clip_duration=clip_duration, **kwargs
         )
 
         clips = [None] * len(clip_df)
@@ -918,8 +901,9 @@ class Audio:
             audio_clip = self.trim(start, end)
 
             # Extend the final clip if necessary
-            if end > duration and final_clip == "extend":
-                audio_clip = audio_clip.extend_to(clip_duration)
+            if "final_clip" in kwargs.keys():
+                if end > duration and kwargs["final_clip"] == "extend":
+                    audio_clip = audio_clip.extend_to(clip_duration)
 
             # Add clip to list of clips
             clips[idx] = audio_clip
@@ -927,8 +911,7 @@ class Audio:
         if len(clips) == 0:
             warnings.warn(
                 f"Given Audio object with duration of `{duration}` "
-                f"seconds and `clip_duration={clip_duration}` but "
-                f" `final_clip={final_clip}` produces no clips. "
+                f"seconds and `clip_duration={clip_duration}`, produces no clips. "
                 f"Returning empty list."
             )
 

@@ -20,7 +20,7 @@ from tqdm.autonotebook import tqdm
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
-from opensoundscape.ml.utils import apply_activation_layer
+from opensoundscape.ml.utils import apply_activation_layer, check_labels
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.ml.loss import (
     BCEWithLogitsLoss_hot,
@@ -42,6 +42,8 @@ from opensoundscape.metrics import (
     single_target_metrics,
     multi_target_metrics,
 )
+
+import warnings
 
 
 class BaseClassifier(torch.nn.Module):
@@ -105,7 +107,10 @@ class BaseClassifier(torch.nn.Module):
         num_workers=0,
         activation_layer=None,
         split_files_into_clips=True,
-        overlap_fraction=0,
+        clip_overlap=None,
+        clip_overlap_fraction=None,
+        clip_step=None,
+        overlap_fraction=None,
         final_clip=None,
         bypass_augmentations=True,
         invalid_samples_log=None,
@@ -145,10 +150,9 @@ class BaseClassifier(torch.nn.Module):
             split_files_into_clips:
                 If True, internally splits and predicts on clips from longer audio files
                 Otherwise, assumes each row of `samples` corresponds to one complete sample
-            overlap_fraction: fraction of overlap between consecutive clips when
-                predicting on clips of longer audio files. For instance, 0.5
-                gives 50% overlap between consecutive clips.
-            final_clip: see `opensoundscape.utils.generate_clip_times_df`
+            clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+                see `opensoundscape.utils.generate_clip_times_df`
+            overlap_fraction: deprecated alias for clip_overlap_fraction
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
             invalid_samples_log: if not None, samples that failed to preprocess
@@ -188,7 +192,7 @@ class BaseClassifier(torch.nn.Module):
             for that sample will be np.nan
 
         """
-        # for convenience, convert str/pathlib.Path to list
+        # for convenience, convert str/pathlib.Path to list of length 1
         if isinstance(samples, (str, Path)):
             samples = [samples]
 
@@ -198,6 +202,9 @@ class BaseClassifier(torch.nn.Module):
             self.preprocessor,
             split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
+            clip_overlap=clip_overlap,
+            clip_overlap_fraction=clip_overlap_fraction,
+            clip_step=clip_step,
             final_clip=final_clip,
             bypass_augmentations=bypass_augmentations,
             batch_size=batch_size,
@@ -231,7 +238,7 @@ class BaseClassifier(torch.nn.Module):
             # Log a table of preprocessed samples to wandb
             wandb_session.log(
                 {
-                    "Samples / Preprocessed samples": wandb_table(
+                    "Peprocessed_samples": wandb_table(
                         dataloader.dataset.dataset,
                         self.wandb_logging["n_preview_samples"],
                     )
@@ -281,9 +288,8 @@ class BaseClassifier(torch.nn.Module):
                     classes_to_extract=[c],
                     drop_labels=True,
                     gradcam_model=self if self.wandb_logging["gradcam"] else None,
-                    raise_exceptions=True,  # TODO back to false when done debugging
                 )
-                wandb_session.log({f"Samples / Top scoring [{c}]": table})
+                wandb_session.log({f"Top_scoring_{c.replace(' ','_')}": table})
 
         if return_invalid_samples:
             return score_df, invalid_samples
@@ -365,7 +371,15 @@ class BaseClassifier(torch.nn.Module):
             scores: continuous values in 0/1 for each sample and class
             logging_offset: modify verbosity - for example, -1 will reduce
                 the amount of printing/logging by 1 level
+
+        Raises:
+            AssertionError: if targets are outside of range [0,1]
         """
+
+        # check for invalid label values
+        assert (
+            targets.max(axis=None) <= 1 and targets.min(axis=None) >= 0
+        ), "Labels must in range [0,1], but found values outside range"
 
         # remove all samples with NaN for a prediction
         targets = targets[~np.isnan(scores).any(axis=1), :]
@@ -577,7 +591,7 @@ class CNN(BaseClassifier):
             train_df,
             self.preprocessor,
             split_files_into_clips=True,
-            overlap_fraction=0,
+            clip_overlap=0,
             final_clip=None,
             bypass_augmentations=False,
             batch_size=batch_size,
@@ -802,9 +816,9 @@ class CNN(BaseClassifier):
             `train_df=train_df[cnn.classes]` or `cnn.classes=train_df.columns` 
             before training.
             """
-        assert list(self.classes) == list(train_df.columns), class_err
+        check_labels(train_df, self.classes)
         if validation_df is not None:
-            assert list(self.classes) == list(validation_df.columns), class_err
+            check_labels(validation_df, self.classes)
 
         # Validation: warn user if no validation set
         if validation_df is None:
@@ -850,21 +864,23 @@ class CNN(BaseClassifier):
             # log tables of preprocessed samples
             wandb_session.log(
                 {
-                    "Samples / training samples": wandb_table(
+                    "training_samples": wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=False
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
-                    "Samples / training samples no aug": wandb_table(
+                    "training_samples_no_aug": wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=True
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
-                    "Samples / validation samples": wandb_table(
+                    "validation_samples": wandb_table(
                         AudioFileDataset(
-                            validation_df, self.preprocessor, bypass_augmentations=True
+                            validation_df,
+                            self.preprocessor,
+                            bypass_augmentations=True,
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
