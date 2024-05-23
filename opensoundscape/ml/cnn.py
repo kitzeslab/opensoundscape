@@ -481,9 +481,9 @@ class CNN(BaseClassifier):
                 len(classes), num_channels=num_channels
             )
         else:
-            assert issubclass(
-                type(architecture), torch.nn.Module
-            ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
+            assert isinstance(
+                architecture, torch.nn.Module
+            ), "architecture must be a string or an instance of (a subclass of) torch.nn.Module"
             if num_channels != 3:
                 warnings.warn(
                     f"Make sure your architecture expects the number of channels in "
