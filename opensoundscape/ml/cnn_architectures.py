@@ -514,6 +514,8 @@ def efficientnet_b0(
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
 
+    return architecture_ft
+
 
 @register_arch
 def efficientnet_b4(
@@ -556,6 +558,8 @@ def efficientnet_b4(
 
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
+
+    return architecture_ft
 
 
 def change_conv2d_channels(
