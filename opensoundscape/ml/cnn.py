@@ -243,35 +243,47 @@ class Lightning(L.LightningModule):
         Effects:
             logs metrics and loss to the current logger
         """
+        # TODO: revisit choosing correct device, when lightning doesnt get it right
         batch_tensors, batch_labels = collate_audio_samples(samples)
-        batch_size = len(batch_labels)
+        batch_tensors = batch_tensors.to(self.device)
+        batch_labels = batch_labels.to(self.device)
 
-        # compute and log loss
+        batch_size = len(batch_tensors)
         logits = self.network(batch_tensors)
         loss = self.loss_fn(logits, batch_labels)
         self.log(
-            "train_loss",
+            f"train_loss",
             loss,
             on_step=True,
             on_epoch=True,
-            batch_size=batch_size,
+            batch_size=len(batch_tensors),
         )
 
         # compute and log any metrics in self.torch_metrics
+        # TODO: consider using validation set names rather than integer index
+        # (would have to store a set of names for the validation set)
         batch_metrics = {
-            f"train_{name}": metric(logits.detach(), batch_labels.detach().int())
+            f"train_{name}": metric.to(self.device)(
+                logits.detach(), batch_labels.detach().int()
+            ).cpu()
             for name, metric in self.torch_metrics.items()
         }
-        self.log_dict(batch_metrics, on_epoch=True, on_step=True, batch_size=batch_size)
+        self.log_dict(
+            batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
+        )
+        # when on_epoch=True, compute() is called to reset the metric at epoch end
 
         return loss
 
-    def forward(self, batch):
+    def forward(self, samples):
         """standard Lightning method defining action to take on each batch for inference
 
         typically returns logits (raw, untransformed model outputs)
         """
-        batch_tensors, batch_labels = collate_audio_samples(batch)
+        batch_tensors, batch_labels = collate_audio_samples(samples)
+        batch_tensors = batch_tensors.to(self.device)
+        batch_labels = batch_labels.to(self.device)
+
         return self.model(batch_tensors, batch_labels)
 
     # def predict_step(self, batch): #runs forward() if we don't override default
@@ -316,6 +328,9 @@ class Lightning(L.LightningModule):
 
     def validation_step(self, samples, batch_idx, dataloader_idx=0):
         batch_tensors, batch_labels = collate_audio_samples(samples)
+        batch_tensors = batch_tensors.to(self.device)
+        batch_labels = batch_labels.to(self.device)
+
         batch_size = len(batch_tensors)
         logits = self.network(batch_tensors)
         loss = self.loss_fn(logits, batch_labels)
@@ -331,9 +346,9 @@ class Lightning(L.LightningModule):
         # TODO: consider using validation set names rather than integer index
         # (would have to store a set of names for the validation set)
         batch_metrics = {
-            f"val{dataloader_idx}_{name}": metric(
+            f"val{dataloader_idx}_{name}": metric.to(self.device)(
                 logits.detach(), batch_labels.detach().int()
-            )
+            ).cpu()
             for name, metric in self.torch_metrics.items()
         }
         self.log_dict(
@@ -618,13 +633,14 @@ class Lightning(L.LightningModule):
         else:
             return generated_samples
 
-    # previously used in eval(): #TODO add this validation where relevant
+    # previously used in eval(): #TODO add this validation where
+    # maybe using at_train_start hook
     # # check for invalid label values
     # assert (
     #     targets.max(axis=None) <= 1 and targets.min(axis=None) >= 0
     # ), "Labels must in range [0,1], but found values outside range"
 
-    # # remove all samples with NaN for a prediction
+    # # remove all samples with NaN for a prediction before evaluating
     # targets = targets[~np.isnan(scores).any(axis=1), :]
     # scores = scores[~np.isnan(scores).any(axis=1), :]
 
@@ -660,7 +676,7 @@ class Lightning(L.LightningModule):
         )
 
     def _generate_wandb_config(self):
-        # TODO: this is done automatically by self.
+        # TODO: log hparams in lightning style
         # create a dictinoary of parameters to save for this run
         wandb_config = dict(
             architecture=self.architecture_name,
@@ -866,7 +882,7 @@ class Lightning(L.LightningModule):
         checkpoint_callback = ModelCheckpoint(
             dirpath=save_path,
             save_top_k=1,
-            monitor="val_loss" if validation_df is not None else "train_loss",
+            monitor="val0_loss" if validation_df is not None else "train_loss",
         )
         if "callbacks" in kwargs:
             kwargs["callbacks"].append(checkpoint_callback)
