@@ -21,7 +21,8 @@ from .preprocess import preprocessors, actions
 # expose some classes at the top level
 from .audio import Audio
 from .spectrogram import Spectrogram, MelSpectrogram
-from .ml.cnn import CNN, load_model
+
+from .ml.cnn import Lightning
 from .ml.datasets import AudioFileDataset, AudioSplittingDataset
 from .preprocess.actions import Action
 from .preprocess.preprocessors import SpectrogramPreprocessor, AudioPreprocessor

@@ -153,3 +153,23 @@ def collate_audio_samples_to_dict(samples):
         "samples": torch.stack([s.data for s in samples]),
         "labels": torch.Tensor(np.vstack([s.labels.values for s in samples])),
     }
+
+
+def collate_audio_samples(samples):
+    """
+    generate batched tensors of data and labels from list of AudioSample
+
+    assumes that s.data is a Tensor and s.labels is a list/array
+    for each item in samples, and that every sample has labels for the same classes.
+
+    Args:
+        samples: iterable of AudioSample objects (or other objects
+            with attributes .data as Tensor and .labels as list/array)
+
+    Returns:
+        (samples, labels) tensors of shape (batch_size, *) & (batch_size, n_classes)
+    """
+    return (
+        torch.stack([s.data for s in samples]),
+        torch.Tensor(np.vstack([s.labels.values for s in samples])),
+    )
