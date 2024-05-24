@@ -1,7 +1,11 @@
 import pytest
+import math
 import numpy as np
 import pandas as pd
-from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
+from opensoundscape.preprocess.preprocessors import (
+    SpectrogramPreprocessor,
+    AudioPreprocessor,
+)
 from opensoundscape.preprocess.utils import PreprocessingError
 import warnings
 from opensoundscape.audio import Audio
@@ -21,6 +25,11 @@ def short_sample():
 @pytest.fixture()
 def preprocessor():
     return SpectrogramPreprocessor(2.0)
+
+
+@pytest.fixture()
+def audiopreprocessor():
+    return AudioPreprocessor(2.0, sample_rate=22050)
 
 
 def test_repr(preprocessor):
@@ -91,6 +100,28 @@ def test_trace_on(preprocessor, sample):
 def test_trace_output(preprocessor, sample):
     sample = preprocessor.forward(sample, trace=True)
     assert isinstance(sample.trace["load_audio"], Audio)
+
+
+def test_audiopreprocessor(audiopreprocessor, sample):
+    """should retain original sample rate"""
+    s = audiopreprocessor.forward(sample).data
+    assert type(s) == Audio
+    assert math.isclose(s.duration, 2.0, abs_tol=1e-9)
+    assert s.sample_rate == 22050
+
+
+def test_audiopreprocessor_extend(audiopreprocessor, short_sample):
+    """should retain original sample rate"""
+    s = audiopreprocessor.forward(short_sample).data
+    assert type(s) == Audio
+    assert math.isclose(s.duration, 2.0, abs_tol=1e-9)
+    assert s.sample_rate == 22050
+
+    # when trim_audio.extend is False, should raise an error
+    # if the input is too short
+    audiopreprocessor.pipeline.trim_audio.set(extend=False)
+    with pytest.raises(PreprocessingError):
+        s = audiopreprocessor.forward(short_sample).data
 
 
 # several specific scenarios are tested using DataSets in test_datasets.py
