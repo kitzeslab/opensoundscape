@@ -519,6 +519,28 @@ def test_generate_cams_num_workers(test_df):
     _ = model.generate_cams(test_df, num_workers=2)
 
 
+def test_generate_cams_scorecam_devices(test_df):
+    """In pytorch_grad_cam <1.5.0 scorecam had device mismatch"""
+
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    import pytorch_grad_cam
+
+    _ = model.generate_cams(
+        test_df,
+        method=pytorch_grad_cam.ScoreCAM,
+    )
+
+    # very slow on cpu - but can uncomment to check
+    # model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    # model.device = "cpu"
+    # import pytorch_grad_cam
+
+    # _ = model.generate_cams(
+    #     test_df,
+    #     method=pytorch_grad_cam.ScoreCAM,
+    # )
+
+
 def test_generate_cams_methods(test_df):
     """test each supported method both by passing class and string name"""
 
@@ -528,7 +550,7 @@ def test_generate_cams_methods(test_df):
     methods_dict = {
         "gradcam": pytorch_grad_cam.GradCAM,
         "hirescam": pytorch_grad_cam.HiResCAM,
-        "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
+        "scorecam": pytorch_grad_cam.ScoreCAM,
         "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
         "ablationcam": pytorch_grad_cam.AblationCAM,
         "xgradcam": pytorch_grad_cam.XGradCAM,
