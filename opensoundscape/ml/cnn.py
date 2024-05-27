@@ -146,13 +146,11 @@ class Lightning(L.LightningModule):
 
         # to use a custom DataLoader or Sampler, change these attributes
         # to the custom class (init must take same arguments)
+        # or override .train_dataloader(), .predict_dataloader()
         self.train_dataloader_cls = SafeAudioDataloader
         self.inference_dataloader_cls = SafeAudioDataloader
 
         ### architecture ###
-        # a pytorch Module such as Resnet18 or a custom object
-        # for convenience, also allows user to provide string matching
-        # a key from cnn_architectures.ARCH_DICT
         num_channels = sample_shape[2]
         if type(architecture) == str:
             assert architecture in cnn_architectures.list_architectures(), (
@@ -175,6 +173,12 @@ class Lightning(L.LightningModule):
                 )
             self.architecture_name = str(type(architecture))
         self.network = architecture
+        """a pytorch Module such as Resnet18 or a custom object
+
+        for convenience, __init__ also allows user to provide string matching
+        a key from opensoundscape.ml.cnn_architectures.ARCH_DICT.
+        List options: `opensoundscape.ml.cnn_architectures.list_architectures()`
+        """
 
         ### sample loading/preprocessing ###
         # preprocessor will have attributes .sample_duration (seconds)
@@ -185,6 +189,25 @@ class Lightning(L.LightningModule):
             width=sample_shape[1],
             channels=sample_shape[2],
         )
+        """an instance of BasePreprocessor or subclass that preprocesses audio samples
+
+        The preprocessor contains .pipline, and ordered set of Actions to run
+        
+        The pipeline be modified by adding or removing actions, and by modifying parameters:
+        ```python
+            my_obj.preprocessor.remove_action(')
+        ```
+
+        Or, preprocessor can be replaced with a different or custom preprocessor, for instance:
+        ```python
+        from opensoundscape.preprocess import AudioPreprocessor
+        my_obj.preprocessor = AudioPreprocessor(
+            sample_duration=5, 
+            sample_rate=22050
+        )
+        ```
+
+        """
 
         ### loss function ###
         if self.single_target:  # use cross entropy loss by default
@@ -231,9 +254,9 @@ class Lightning(L.LightningModule):
                 "T_max": n_epochs,
                 "eta_min": 1e-7,
                 "last_epoch":self.current_epoch-1
-            }
+        }
         ```
-        }"""
+        """
 
     def training_step(self, samples, batch_idx):
         """a standard Lightning method used within the training loop, acting on each batch
@@ -366,7 +389,7 @@ class Lightning(L.LightningModule):
     # y_hat = model(x)
     # hyperparameters passed to init are saved and reloaded
     # resume training
-    # model = LitModel()
+    # model = MyLitModel()
     # trainer = Trainer()
     # # automatically restores model, epoch, step, LR schedulers, etc...
     # trainer.fit(model, ckpt_path="some/path/to/my_checkpoint.ckpt")
@@ -479,9 +502,8 @@ class Lightning(L.LightningModule):
             samples = [samples]
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.inference_dataloader_cls(
+        dataloader = self.predict_dataloader(
             samples=samples,
-            preprocessor=self.preprocessor,
             split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
             clip_overlap=clip_overlap,
@@ -529,7 +551,6 @@ class Lightning(L.LightningModule):
         # iterate dataloader and run inference (forward pass) to generate scores
         pred_scores = self.__call__(
             dataloader=dataloader,
-            wandb_session=wandb_session,
             **lightning_trainer_kwargs,
         )  # TODO: add test for kwargs
 
@@ -633,7 +654,7 @@ class Lightning(L.LightningModule):
         else:
             return generated_samples
 
-    # previously used in eval(): #TODO add this validation where
+    # previously used in eval(): #TODO add this validation
     # maybe using at_train_start hook
     # # check for invalid label values
     # assert (
@@ -644,8 +665,8 @@ class Lightning(L.LightningModule):
     # targets = targets[~np.isnan(scores).any(axis=1), :]
     # scores = scores[~np.isnan(scores).any(axis=1), :]
 
-    def _init_train_dataloader(self, train_df, batch_size, num_workers, raise_errors):
-        """Prepare network for training on train_df
+    def train_dataloader(self, train_df, batch_size, num_workers, raise_errors):
+        """generate dataloader for training
 
         Args:
             batch_size: number of training files to load/process before
@@ -673,6 +694,18 @@ class Lightning(L.LightningModule):
             shuffle=True,  # SHUFFLE SAMPLES because we are training
             # use pin_memory=True when loading files on CPU and training on GPU
             pin_memory=False if self.device == torch.device("cpu") else True,
+        )
+
+    def predict_dataloader(self, samples, **kwargs):
+        """generate dataloader for inference"""
+
+        return self.inference_dataloader_cls(
+            samples,
+            self.preprocessor,
+            collate_fn=identity,
+            shuffle=False,
+            pin_memory=False if self.device == torch.device("cpu") else True,
+            **kwargs,
         )
 
     def _generate_wandb_config(self):
@@ -708,7 +741,6 @@ class Lightning(L.LightningModule):
 
         return wandb_config
 
-    # TODO: device mismatch errors when not using cpu as accelerator
     def train_me(  # train() is used as the set_training_mode operation :/
         self,
         train_df,
@@ -865,16 +897,22 @@ class Lightning(L.LightningModule):
             )
 
         # Set Up DataLoaders
-        dataloader = self._init_train_dataloader(
-            train_df, batch_size, num_workers, raise_errors
-        )
-        # TODO: enable multiple validation sets
-        val_loaders = self.inference_dataloader_cls(
-            samples=validation_df,
-            preprocessor=self.preprocessor,
+        train_dataloader = self.train_dataloader(
+            train_df=train_df,
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
+        )
+        # TODO: enable multiple validation sets
+        val_loader = self.predict_dataloader(
+            samples=validation_df,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            raise_errors=raise_errors,
+            split_files_into_clips=True,
+            clip_overlap=0,
+            final_clip=None,
+            bypass_augmentations=True,
         )
 
         # keep best epoch using a callback
@@ -891,20 +929,22 @@ class Lightning(L.LightningModule):
 
         # Train
         trainer = L.Trainer(**kwargs)
-        trainer.fit(self, dataloader, val_loaders)  # , ckpt_path=save_path)
+        trainer.fit(self, train_dataloader, val_loader)  # , ckpt_path=save_path)
         self._log("Training complete")
-        self._log(
-            f"Best model with score {checkpoint_callback.best_model_score:.3f} is saved to {checkpoint_callback.best_model_path}"
-        )
-        # TODO: turn of automatic logging of gradients and parameters as default
+        if checkpoint_callback.best_model_score is not None:
+            self._log(
+                f"Best model with score {checkpoint_callback.best_model_score:.3f} is saved to {checkpoint_callback.best_model_path}"
+            )
 
         # warn the user if there were invalid samples (samples that failed to preprocess)
-        invalid_samples = dataloader.dataset.report(log=invalid_samples_log)
+        invalid_samples = train_dataloader.dataset.report(log=invalid_samples_log)
         self._log(
             f"{len(invalid_samples)} of {len(train_df)} total training "
             f"samples failed to preprocess",
             level=1,
         )
+
+        return trainer
 
     # TODO: figure out saving and loading of checkpoints and model objects
     # def save(self, path, save_train_loader=False, save_hooks=False):
@@ -1169,7 +1209,7 @@ class Lightning(L.LightningModule):
             "gradcamelementwise": pytorch_grad_cam.GradCAMElementWise,
         }
         if isinstance(method, str) and method in methods_dict:
-            # get cam clsas based on string name and create instance
+            # get cam class based on string name and create instance
             cam = methods_dict[method](model=self.network, target_layers=target_layers)
         elif method is None:
             cam = None

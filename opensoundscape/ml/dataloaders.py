@@ -23,6 +23,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         raise_errors=False,
         collate_fn=identity,
         **kwargs,
+        # TODO: persistent_workers=True?
     ):
         """Create DataLoader for inference, wrapping a SafeDataset
 
