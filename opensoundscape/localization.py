@@ -772,7 +772,7 @@ def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND
             The times should be in seconds.
         speed_of_sound: speed of sound in m/s
         algorithm: the algorithm to use for localization
-            Options: 'soundfinder', 'gillette'
+            Options: 'soundfinder', 'gillette', 'least_squares'
     Returns:
         The estimated source location in meters.
     """
@@ -787,11 +787,23 @@ def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND
         estimate = soundfinder_localize(receiver_locations, tdoas, speed_of_sound)
     elif algorithm == "gillette":
         estimate = gillette_localize(receiver_locations, tdoas, speed_of_sound)
+    elif algorithm == "least_squares":
+        estimate = least_squares_localize(receiver_locations, tdoas, speed_of_sound)
     else:
         raise ValueError(
-            f"Unknown algorithm: {algorithm}. Implemented for 'soundfinder' and 'gillette'"
+            f"Unknown algorithm: {algorithm}. Implemented for 'soundfinder', 'gillette' and 'least_squares'."
         )
     return estimate
+
+
+def least_squares_localize(
+    receiver_locations, arrival_times, speed_of_sound=SPEED_OF_SOUND
+):
+    """
+    Use an optimization algorithm to perform TDOA localization on a sound event.
+    """
+    # TODO: implement least squares localization
+    raise NotImplementedError
 
 
 def soundfinder_localize(
