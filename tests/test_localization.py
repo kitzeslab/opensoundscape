@@ -163,6 +163,25 @@ def test_soundfinder_nopseudo():
     )
 
 
+def test_least_squares_optimize():
+    receiver_locations = np.array(
+        [[0, 0, 10], [0, 20, 1], [20, 20, -1], [20, 0, 0.1], [10, 10, 0], [5, 5, 5]]
+    )
+    sound_source = np.array([10, 12, 2])
+    speed_of_sound = 343
+    time_of_flight = (
+        np.linalg.norm(receiver_locations - sound_source, axis=1) / speed_of_sound
+    )
+
+    # localize with each receiver as reference:
+    for ref_index in range(len(time_of_flight)):
+        tdoas = time_of_flight - time_of_flight[ref_index]
+
+        estimated_pos = localization.least_squares_localize(receiver_locations, tdoas)
+
+        assert np.allclose(estimated_pos, sound_source, atol=2.5)
+
+
 def test_localization_pipeline(file_coords_csv, predictions_csv):
     file_coords = pd.read_csv(file_coords_csv, index_col=0)
     preds = pd.read_csv(predictions_csv, index_col=[0, 1, 2])
