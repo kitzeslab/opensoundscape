@@ -5,11 +5,6 @@ For tutorials, see notebooks on opensoundscape.org
 
 from pathlib import Path
 import warnings
-import copy
-import os
-import types
-import yaml
-
 import numpy as np
 import pandas as pd
 
@@ -18,23 +13,13 @@ import torch.nn.functional as F
 import wandb
 from tqdm.autonotebook import tqdm
 
-from torchmetrics.classification import (
-    MultilabelAveragePrecision,
-    MultilabelAUROC,
-    MulticlassAveragePrecision,
-    MulticlassAUROC,
-)
-
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
 from opensoundscape.ml.utils import apply_activation_layer, check_labels
-from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
-from opensoundscape.ml.loss import (
-    BCEWithLogitsLoss_hot,
-    CrossEntropyLoss_hot,
-    ResampleLoss,
+from opensoundscape.preprocess.preprocessors import (
+    SpectrogramPreprocessor,
+    BasePreprocessor,
 )
-from opensoundscape.ml.dataloaders import SafeAudioDataloader
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.sample import collate_audio_samples
@@ -46,9 +31,9 @@ import pytorch_grad_cam
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from lightning.pytorch.callbacks import ModelCheckpoint
 
-from opensoundscape.metrics import (
-    single_target_metrics,
-    multi_target_metrics,
+from opensoundscape.ml.lightning import (
+    SpectrogramLightningModule,
+    OpenSoundscapeLightningModule,
 )
 
 import warnings
@@ -56,21 +41,21 @@ import warnings
 import lightning as L
 
 
-class Lightning(L.LightningModule):
-    def __init__(
-        self,
-        classes,
-        single_target=False,
-        architecture=None,
-        sample_shape=(224, 224, 3),
-        preprocessor_class=SpectrogramPreprocessor,
-        sample_duration=5,
-    ):
-        super(Lightning, self).__init__()
-        self.name = "Lightning"
-        self.classes = classes
+class Classifier:
+    """class for training and predicting on audio samples using Pytorch Lighning classification models"""
 
-        # TODO: set up logging of hyperparameters to arbitary logger
+    lightning_module_cls = OpenSoundscapeLightningModule
+
+    def __init__(self, model):
+
+        self.model = model  # should have .classes list
+        self.opensoundscape_version = opensoundscape.__version__
+        self.lighting_module_cls = type(model)
+
+        # Logging settings
+        self.log_file = None  # specify a path to save output to a text file
+        self.logging_level = 1  # 0 for nothing, 1,2,3 for increasing logged info
+        self.verbose = 1  # 0 for nothing, 1,2,3 for increasing printed output
 
         ### Logging settings for wandb ###
         self.wandb_logging = dict(
@@ -85,319 +70,157 @@ class Lightning(L.LightningModule):
             log_graph=False,
         )
 
-        self.log_file = None  # specify a path to save output to a text file
-        self.logging_level = 1  # 0 for nothing, 1,2,3 for increasing logged info
-        self.verbose = 1  # 0 for nothing, 1,2,3 for increasing printed output
+    def save(self, path, save_hooks=False, weights_only=False):
+        """save model with weights using torch.save()
 
-        # model characteristics
-        # self.current_epoch = 0
-        self.classes = classes
-        self.single_target = single_target  # if True: predict only class w max score
-        self.opensoundscape_version = opensoundscape.__version__
-        self.scheduler = None
+        load from saved file with torch.load(path) or cnn.load_model(path)
 
-        # metrics
-        # setting finite # thresholds makes metrics approximations but much faster
-        # user can add/remove metrics as desired. These metrics are a good starting point
-        # for single and multi-target classification
-        if self.single_target:
-            self.torch_metrics = {
-                "map": MulticlassAveragePrecision(
-                    len(self.classes), validate_args=False, thresholds=50
-                ),
-                # "class_ap": MulticlassAveragePrecision(
-                #     len(self.classes),
-                #     validate_args=False,
-                #     average=None,
-                #     thresholds=50,
-                # ),
-                # TODO: .log() doesn't allow logging lists of values - how should we log per-class metrics?
-                "auroc": MulticlassAUROC(
-                    len(self.classes),
-                    validate_args=False,
-                    thresholds=50,
-                    average="macro",
-                ),
-                # "class_auroc": MulticlassAUROC(
-                #     len(self.classes), validate_args=False, thresholds=50, average=None
-                # ),
-            }
-        else:
-            self.torch_metrics = {
-                "map": MultilabelAveragePrecision(
-                    len(self.classes), validate_args=False, thresholds=50
-                ),
-                # "class_ap": MultilabelAveragePrecision(
-                #     len(self.classes),
-                #     validate_args=False,
-                #     average=None,
-                #     thresholds=50,
-                # ),
-                "auroc": MultilabelAUROC(
-                    len(self.classes),
-                    validate_args=False,
-                    thresholds=50,
-                    average="macro",
-                ),
-                # "class_auroc": MultilabelAUROC(
-                #     len(self.classes), validate_args=False, thresholds=50, average=None
-                # ),
-            }
+        Note: saving and loading model objects across OpenSoundscape versions
+        will not work properly. Instead, use .save_torch_dict and .load_torch_dict
+        (but note that customizations to preprocessing, training params, etc will
+        not be retained using those functions).
 
-        # to use a custom DataLoader or Sampler, change these attributes
-        # to the custom class (init must take same arguments)
-        # or override .train_dataloader(), .predict_dataloader()
-        self.train_dataloader_cls = SafeAudioDataloader
-        self.inference_dataloader_cls = SafeAudioDataloader
+        For maximum flexibilty in further use, save the model with both .save() and
+        .save_torch_dict()
 
-        ### architecture ###
-        num_channels = sample_shape[2]
-        if type(architecture) == str:
-            assert architecture in cnn_architectures.list_architectures(), (
-                f"architecture must be a pytorch model object or string matching "
-                f"one of cnn_architectures.list_architectures() options. Got {architecture}"
-            )
-            self.architecture_name = architecture
-            architecture = cnn_architectures.ARCH_DICT[architecture](
-                len(classes), num_channels=num_channels
-            )
-        else:
-            assert issubclass(
-                type(architecture), torch.nn.Module
-            ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
-            if num_channels != 3:
+        Args:
+            path: file path for saved model object
+            save_hooks: retain forward and backward hooks on modules
+                [default: False] Note: True can cause issues when using
+                wandb.watch()
+        """
+        import os
+        import copy
+        from pathlib import Path
+
+        os.makedirs(Path(path).parent, exist_ok=True)
+
+        # save a pickled model object; will not work across opso versions
+        model_copy = copy.deepcopy(self.model)
+
+        if not save_hooks:
+            # remove all forward and backward hooks on network.modules()
+            from collections import OrderedDict
+
+            for m in model_copy.network.modules():
+                m._forward_hooks = OrderedDict()
+                m._backward_hooks = OrderedDict()
+
+        t = L.Trainer()
+        t.strategy.connect(model=model_copy)
+        t.save_checkpoint(path, weights_only=weights_only)
+
+    @classmethod
+    def load(cls, path, **kwargs):
+        """load model from saved file using torch.load()
+
+        Args:
+            path: file path for saved model object
+            **kwargs passed to LightningModule.load_from_checkpoint()
+
+        Returns:
+            Classifier object
+        """
+        try:
+            model = cls.lightning_module_cls.load_from_checkpoint(path, **kwargs)
+
+            # warn the user if loaded model's opso version doesn't match the current one
+            if model.opensoundscape_version != opensoundscape.__version__:
                 warnings.warn(
-                    f"Make sure your architecture expects the number of channels in "
-                    f"your input samples ({num_channels}). "
-                    f"Pytorch architectures expect 3 channels by default."
+                    f"This model was saved with an earlier version of opensoundscape "
+                    f"({model.opensoundscape_version}) and will not work properly in "
+                    f"the current opensoundscape version ({opensoundscape.__version__}). "
+                    f"To use models across package versions use .save_torch_dict and "
+                    f".load_torch_dict"
                 )
-            self.architecture_name = str(type(architecture))
-        self.network = architecture
-        """a pytorch Module such as Resnet18 or a custom object
+            return cls(model=model)
 
-        for convenience, __init__ also allows user to provide string matching
-        a key from opensoundscape.ml.cnn_architectures.ARCH_DICT.
-        List options: `opensoundscape.ml.cnn_architectures.list_architectures()`
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                """
+                This model file could not be loaded in this version of
+                OpenSoundscape. You may need to load the model with the version
+                of OpenSoundscape that created it and torch.save() the
+                model.network.state_dict(), then load the weights with model.load_weights
+                in the current OpenSoundscape version (where model is a new instance of the
+                opensoundscape.CNN class). If you do this, make sure to
+                re-create any specific preprocessing steps that were used in the
+                original model. See the `Predict with pre-trained CNN` tutorial for details.
+                """
+            ) from e
+
+    def _generate_wandb_config(self):
+        # TODO: log hparams in lightning style
+        # create a dictionary of parameters to save for this run
+        wandb_config = dict(
+            sample_duration=self.model.preprocessor.sample_duration,
+            cuda_device_count=torch.cuda.device_count(),
+            mps_available=torch.backends.mps.is_available(),
+            opensoundscape_version=self.opensoundscape_version,
+        )
+        if "weight_decay" in self.model.optimizer_params:
+            wandb_config["l2_regularization"] = self.model.optimizer_params[
+                "weight_decay"
+            ]
+        else:
+            wandb_config["l2_regularization"] = "n/a"
+
+        if "lr" in self.model.optimizer_params:
+            wandb_config["learning_rate"] = self.model.optimizer_params["lr"]
+        else:
+            wandb_config["learning_rate"] = "n/a"
+
+        try:
+            wandb_config["sample_shape"] = [
+                self.model.preprocessor.height,
+                self.model.preprocessor.width,
+                self.model.preprocessor.channels,
+            ]
+        except:
+            wandb_config["sample_shape"] = "n/a"
+
+        try:
+            wandb_config["architecture"] = self.model.architecture_name
+        except:
+            wandb_config["architecture"] = f"unknown"
+
+        wandb_config["model_class"] = type(self.model)
+
+        try:
+            wandb_config["classes"] = self.model.classes
+        except:
+            pass
+
+        try:
+            wandb_config["single_target"] = self.model.single_target
+        except:
+            pass
+
+        # should it update the dict with self.model._generate_config or something?
+
+        return wandb_config
+
+    def __call__(self, dataloader, **kwargs):
+        """run inference on a dataloader
+
+        Args:
+            dataloader: DataLoader object that returns batches of AudioSamples
+                e.g. SafeAudioDataLoader
+            **kwargs: any additional arguments to pass to lightning.Trainer init
         """
+        trainer = L.Trainer(**kwargs)
+        pred_scores = torch.cat(trainer.predict(self.model, dataloader))
 
-        ### sample loading/preprocessing ###
-        # preprocessor will have attributes .sample_duration (seconds)
-        # and height, width, channels for output shape
-        self.preprocessor = preprocessor_class(
-            sample_duration=sample_duration,
-            height=sample_shape[0],
-            width=sample_shape[1],
-            channels=sample_shape[2],
-        )
-        """an instance of BasePreprocessor or subclass that preprocesses audio samples
+        if len(pred_scores) > 0:
+            pred_scores = np.array(pred_scores)
+            # replace scores with nan for samples that failed in preprocessing
+            # (we predicted on substitute-samples rather than
+            # skipping the samples that failed preprocessing)
+            pred_scores[dataloader.dataset._invalid_indices, :] = np.nan
+        else:
+            pred_scores = None
 
-        The preprocessor contains .pipline, and ordered set of Actions to run
-        
-        The pipeline be modified by adding or removing actions, and by modifying parameters:
-        ```python
-            my_obj.preprocessor.remove_action(')
-        ```
-
-        Or, preprocessor can be replaced with a different or custom preprocessor, for instance:
-        ```python
-        from opensoundscape.preprocess import AudioPreprocessor
-        my_obj.preprocessor = AudioPreprocessor(
-            sample_duration=5, 
-            sample_rate=22050
-        )
-        ```
-
-        """
-
-        ### loss function ###
-        if self.single_target:  # use cross entropy loss by default
-            self.loss_fn = CrossEntropyLoss_hot()
-        else:  # for multi-target, use binary cross entropy
-            self.loss_fn = BCEWithLogitsLoss_hot()
-
-        self.optimizer_params = {
-            "class": torch.optim.SGD,
-            "kwargs": {
-                "lr": 0.01,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-        }
-        """optimizer settings: dictionary with "class" and "kwargs" to class.__init__
-        
-        for example, to use Adam optimizer set:
-        ```python
-        my_instance.optimizer_params = {
-            "class": torch.optim.Adam,
-            "kwargs": {
-                "lr": 0.001,
-                "weight_decay": 0.0005,
-            },
-        }
-        ```
-        """
-
-        self.lr_scheduler_params = {
-            "class": torch.optim.lr_scheduler.StepLR,
-            "kwargs": {
-                "step_size": 10,
-                "gamma": 0.7,
-            },
-        }
-        """learning rate schedule: dictionary with "class" and "kwargs" to class.__init__
-        
-        for example, to use Cosine Annealing, set:
-        ```python
-        self.scheduler_params = {
-            "class": torch.optim.lr_scheduler.CosineAnnealingLR,
-            "kwargs":{
-                "T_max": n_epochs,
-                "eta_min": 1e-7,
-                "last_epoch":self.current_epoch-1
-        }
-        ```
-        """
-
-    def training_step(self, samples, batch_idx):
-        """a standard Lightning method used within the training loop, acting on each batch
-
-        returns loss
-
-        Effects:
-            logs metrics and loss to the current logger
-        """
-        # TODO: revisit choosing correct device, when lightning doesnt get it right
-        batch_tensors, batch_labels = collate_audio_samples(samples)
-        batch_tensors = batch_tensors.to(self.device)
-        batch_labels = batch_labels.to(self.device)
-
-        batch_size = len(batch_tensors)
-        logits = self.network(batch_tensors)
-        loss = self.loss_fn(logits, batch_labels)
-        self.log(
-            f"train_loss",
-            loss,
-            on_step=True,
-            on_epoch=True,
-            batch_size=len(batch_tensors),
-        )
-
-        # compute and log any metrics in self.torch_metrics
-        # TODO: consider using validation set names rather than integer index
-        # (would have to store a set of names for the validation set)
-        batch_metrics = {
-            f"train_{name}": metric.to(self.device)(
-                logits.detach(), batch_labels.detach().int()
-            ).cpu()
-            for name, metric in self.torch_metrics.items()
-        }
-        self.log_dict(
-            batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
-        )
-        # when on_epoch=True, compute() is called to reset the metric at epoch end
-
-        return loss
-
-    def forward(self, samples):
-        """standard Lightning method defining action to take on each batch for inference
-
-        typically returns logits (raw, untransformed model outputs)
-        """
-        batch_tensors, batch_labels = collate_audio_samples(samples)
-        batch_tensors = batch_tensors.to(self.device)
-        batch_labels = batch_labels.to(self.device)
-
-        return self.model(batch_tensors, batch_labels)
-
-    # def predict_step(self, batch): #runs forward() if we don't override default
-
-    def configure_optimizers(self):
-        """standard Lightning method to initialize an optimizer and learning rate scheduler
-
-        Lightning uses this function at the start of training
-
-        Here, we initialize the optimizer and lr_scheduler using the parameters
-        self.optimizer_params and self.scheduler_params, which are dictionaries with a key
-        "class" and a key "kwargs" (containing a dictionary of keyword arguments to initialize
-        the class with). We initialize the class with the kwargs and the appropriate
-        first argument: optimizer=opt_cls(self.parameters(), **opt_kwargs) and
-        scheduler=scheduler_cls(optimizer, **scheduler_kwargs)
-
-        You can also override this method and write one that returns
-        {"optimizer": optimizer, "lr_scheduler": scheduler}
-
-        Documentation:
-        https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.core.LightningModule.html#lightning.pytorch.core.LightningModule.configure_optimizers
-
-        Uses the attributes:
-        - self.optimizer_params: dictionary with "class" key such as torch.optim.Adam,
-            and "kwargs", dict of keyword args for class's init
-        - self.scheduler_params: dictionary with "class" key such as
-            torch.optim.lr_scheduler.StepLR, and and "kwargs", dict of keyword args for class's init
-        """
-
-        # self.optimizer_params dictionary has "class" and "kwargs" keys
-        # copy the kwargs dict to avoid modifying the original values
-        optimizer = self.optimizer_params["class"](
-            self.network.parameters(), **self.optimizer_params["kwargs"].copy()
-        )
-
-        # self.scheduler_params dictionary has "class" key and kwargs for init
-        scheduler = self.lr_scheduler_params["class"](
-            optimizer, **self.lr_scheduler_params["kwargs"].copy()
-        )
-
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
-
-    def validation_step(self, samples, batch_idx, dataloader_idx=0):
-        batch_tensors, batch_labels = collate_audio_samples(samples)
-        batch_tensors = batch_tensors.to(self.device)
-        batch_labels = batch_labels.to(self.device)
-
-        batch_size = len(batch_tensors)
-        logits = self.network(batch_tensors)
-        loss = self.loss_fn(logits, batch_labels)
-        self.log(
-            f"val{dataloader_idx}_loss",
-            loss,
-            on_step=False,
-            on_epoch=True,
-            batch_size=len(batch_tensors),
-        )
-
-        # compute and log any metrics in self.torch_metrics
-        # TODO: consider using validation set names rather than integer index
-        # (would have to store a set of names for the validation set)
-        batch_metrics = {
-            f"val{dataloader_idx}_{name}": metric.to(self.device)(
-                logits.detach(), batch_labels.detach().int()
-            ).cpu()
-            for name, metric in self.torch_metrics.items()
-        }
-        self.log_dict(
-            batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
-        )
-        # when on_epoch=True, compute() is called to reset the metric at epoch end
-
-        return loss
-
-    # reloading models from checkpoints:
-    # model = MyLightningModule.load_from_checkpoint("/path/to/checkpoint.ckpt") # can override hyperparams
-    # # disable randomness, dropout, etc...
-    # model.eval()
-    # # predict with the model
-    # y_hat = model(x)
-    # hyperparameters passed to init are saved and reloaded
-    # resume training
-    # model = MyLitModel()
-    # trainer = Trainer()
-    # # automatically restores model, epoch, step, LR schedulers, etc...
-    # trainer.fit(model, ckpt_path="some/path/to/my_checkpoint.ckpt")
-    # can also call trainer.validate()
-
-    # self.save_hyperparameters() create .hparams dictionary?
-    # load:
-    # model = MyClass.load_from_checkpoint(PATH, override_hparam=new_value)
+        return pred_scores
 
     def predict(
         self,
@@ -469,7 +292,7 @@ class Lightning(L.LightningModule):
             lightning_trainer_kwargs: dictionary of keyword args to pass to __call__,
                 which are then passed to lightning.Trainer.__init__
                 see Trainer documentation for options. Default [None] passes no kwargs
-            dataloader_kwargs: dictionary of keyword args to inference_dataloader_cls.__init__
+            dataloader_kwargs: dictionary of keyword args to self.model.predict_dataloader()
 
         Returns:
             df of post-activation_layer scores
@@ -502,7 +325,7 @@ class Lightning(L.LightningModule):
             samples = [samples]
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(
+        dataloader = self.model.predict_dataloader(
             samples=samples,
             split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
@@ -518,9 +341,9 @@ class Lightning(L.LightningModule):
         )  # TODO: add test for kwargs
 
         # check for matching class list
-        if len(dataloader.dataset.dataset.classes) > 0 and list(self.classes) != list(
-            dataloader.dataset.dataset.classes
-        ):
+        if len(dataloader.dataset.dataset.classes) > 0 and list(
+            self.model.classes
+        ) != list(dataloader.dataset.dataset.classes):
             warnings.warn(
                 "The columns of input samples df differ from `model.classes`."
             )
@@ -549,17 +372,20 @@ class Lightning(L.LightningModule):
 
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
+        # TODO: add test for kwargs
         pred_scores = self.__call__(
             dataloader=dataloader,
             **lightning_trainer_kwargs,
-        )  # TODO: add test for kwargs
+        )
 
         ### Apply activation layer ### #TODO: test speed vs. doing it in __call__ on batches
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
 
         # return DataFrame with same index/columns as prediction_dataset's df
         df_index = dataloader.dataset.dataset.label_df.index
-        score_df = pd.DataFrame(index=df_index, data=pred_scores, columns=self.classes)
+        score_df = pd.DataFrame(
+            index=df_index, data=pred_scores, columns=self.model.classes
+        )
 
         # warn the user if there were invalid samples (failed to preprocess)
         # and log them to a file
@@ -569,7 +395,7 @@ class Lightning(L.LightningModule):
         if wandb_session is not None:
             classes_to_log = self.wandb_logging["top_samples_classes"]
             if classes_to_log is None:  # pick the first few classes if none specified
-                classes_to_log = self.classes
+                classes_to_log = self.model.classes
                 if len(classes_to_log) > 5:  # don't accidentally log hundreds of tables
                     classes_to_log = classes_to_log[0:5]
 
@@ -580,7 +406,7 @@ class Lightning(L.LightningModule):
                 # note: the "labels" of these samples are actually prediction scores
                 dataset = AudioFileDataset(
                     samples=top_samples,
-                    preprocessor=self.preprocessor,
+                    preprocessor=self.model.preprocessor,
                     bypass_augmentations=True,
                 )
                 table = wandb_table(
@@ -596,152 +422,7 @@ class Lightning(L.LightningModule):
         else:
             return score_df
 
-    def generate_samples(
-        self,
-        samples,
-        invalid_samples_log=None,
-        return_invalid_samples=False,
-        **kwargs,
-    ):
-        """
-        Generate AudioSample objects. Input options same as .predict()
-
-        Args:
-            samples: (same as CNN.predict())
-                the files to generate predictions for. Can be:
-                - a dataframe with index containing audio paths, OR
-                - a dataframe with multi-index (file, start_time, end_time), OR
-                - a list (or np.ndarray) of audio file paths
-            see .predict() documentation for other args
-            **kwargs: any arguments to inference_dataloader_cls.__init__
-                (default class is SafeAudioDataloader)
-
-        Returns:
-            a list of AudioSample objects
-            - if return_invalid_samples is True, returns second value: list of paths to
-            samples that failed to preprocess
-
-        Example:
-        ```
-        from opensoundscappe.preprocess.utils import show_tensor_grid
-        samples = generate_samples(['/path/file1.wav','/path/file2.wav'])
-        tensors = [s.data for s in samples]
-        show_tensor_grid(tensors,columns=3)
-        ```
-        """
-
-        # create dataloader to generate batches of AudioSamples
-        dataloader = self.inference_dataloader_cls(
-            samples=samples, preprocessor=self.preprocessor, **kwargs
-        )
-
-        # move model to device
-        try:
-            self.network.to(self.device)
-            self.network.eval()
-        except AttributeError:
-            raise  # not a PyTorch model object?
-
-        # generate samples in batches
-        generated_samples = []
-        for batch in dataloader:
-            generated_samples.extend(batch)
-        # get & log list of any samples that failed to preprocess
-        invalid_samples = dataloader.dataset.report(log=invalid_samples_log)
-
-        if return_invalid_samples:
-            return generated_samples, invalid_samples
-        else:
-            return generated_samples
-
-    # previously used in eval(): #TODO add this validation
-    # maybe using at_train_start hook
-    # # check for invalid label values
-    # assert (
-    #     targets.max(axis=None) <= 1 and targets.min(axis=None) >= 0
-    # ), "Labels must in range [0,1], but found values outside range"
-
-    # # remove all samples with NaN for a prediction before evaluating
-    # targets = targets[~np.isnan(scores).any(axis=1), :]
-    # scores = scores[~np.isnan(scores).any(axis=1), :]
-
-    def train_dataloader(self, train_df, batch_size, num_workers, raise_errors):
-        """generate dataloader for training
-
-        Args:
-            batch_size: number of training files to load/process before
-                computing the loss function and running backpropagation
-            num_workers: parallelization (number of cores or cpus)
-            raise_errors: if True, raise errors when loading samples
-                if False, skip samples that throw errors
-        """
-
-        ######################
-        # Dataloader setup #
-        ######################
-        # train_loader samples batches of images + labels from training set
-        return self.train_dataloader_cls(
-            train_df,
-            self.preprocessor,
-            split_files_into_clips=True,
-            clip_overlap=0,
-            final_clip=None,
-            bypass_augmentations=False,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            raise_errors=raise_errors,
-            collate_fn=identity,
-            shuffle=True,  # SHUFFLE SAMPLES because we are training
-            # use pin_memory=True when loading files on CPU and training on GPU
-            pin_memory=False if self.device == torch.device("cpu") else True,
-        )
-
-    def predict_dataloader(self, samples, **kwargs):
-        """generate dataloader for inference"""
-
-        return self.inference_dataloader_cls(
-            samples,
-            self.preprocessor,
-            collate_fn=identity,
-            shuffle=False,
-            pin_memory=False if self.device == torch.device("cpu") else True,
-            **kwargs,
-        )
-
-    def _generate_wandb_config(self):
-        # TODO: log hparams in lightning style
-        # create a dictinoary of parameters to save for this run
-        wandb_config = dict(
-            architecture=self.architecture_name,
-            sample_duration=self.preprocessor.sample_duration,
-            cuda_device_count=torch.cuda.device_count(),
-            mps_available=torch.backends.mps.is_available(),
-            classes=self.classes,
-            single_target=self.single_target,
-            opensoundscape_version=self.opensoundscape_version,
-        )
-        if "weight_decay" in self.optimizer_params:
-            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
-        else:
-            wandb_config["l2_regularization"] = "n/a"
-
-        if "lr" in self.optimizer_params:
-            wandb_config["learning_rate"] = self.optimizer_params["lr"]
-        else:
-            wandb_config["learning_rate"] = "n/a"
-
-        try:
-            wandb_config["sample_shape"] = [
-                self.preprocessor.height,
-                self.preprocessor.width,
-                self.preprocessor.channels,
-            ]
-        except:
-            wandb_config["sample_shape"] = "n/a"
-
-        return wandb_config
-
-    def train_me(  # train() is used as the set_training_mode operation :/
+    def train(
         self,
         train_df,
         validation_df=None,
@@ -752,6 +433,7 @@ class Lightning(L.LightningModule):
         invalid_samples_log="./invalid_training_samples.log",
         raise_errors=False,
         wandb_session=None,  # can also pass logger = kwarg with any Lightning logger
+        checkpoint_path=None,
         **kwargs,
         # save_interval=1,  # save weights every n epochs # now use Lightning Trainer()
         # log_interval=10,  # print metrics every n batches #now use log_every_n_steps
@@ -826,9 +508,9 @@ class Lightning(L.LightningModule):
         kwargs["default_root_dir"] = save_path
 
         ### Input Validation ###
-        check_labels(train_df, self.classes)
+        check_labels(train_df, self.model.classes)
         if validation_df is not None:
-            check_labels(validation_df, self.classes)
+            check_labels(validation_df, self.model.classes)
 
         # Validation: warn user if no validation set
         if validation_df is None:
@@ -875,20 +557,22 @@ class Lightning(L.LightningModule):
                 {
                     "training_samples": wandb_table(
                         AudioFileDataset(
-                            train_df, self.preprocessor, bypass_augmentations=False
+                            train_df,
+                            self.model.preprocessor,
+                            bypass_augmentations=False,
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
                     "training_samples_no_aug": wandb_table(
                         AudioFileDataset(
-                            train_df, self.preprocessor, bypass_augmentations=True
+                            train_df, self.model.preprocessor, bypass_augmentations=True
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
                     "validation_samples": wandb_table(
                         AudioFileDataset(
                             validation_df,
-                            self.preprocessor,
+                            self.model.preprocessor,
                             bypass_augmentations=True,
                         ),
                         self.wandb_logging["n_preview_samples"],
@@ -897,14 +581,14 @@ class Lightning(L.LightningModule):
             )
 
         # Set Up DataLoaders
-        train_dataloader = self.train_dataloader(
-            train_df=train_df,
+        train_dataloader = self.model.train_dataloader(
+            samples=train_df,
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
         )
         # TODO: enable multiple validation sets
-        val_loader = self.predict_dataloader(
+        val_loader = self.model.predict_dataloader(
             samples=validation_df,
             batch_size=batch_size,
             num_workers=num_workers,
@@ -929,7 +613,9 @@ class Lightning(L.LightningModule):
 
         # Train
         trainer = L.Trainer(**kwargs)
-        trainer.fit(self, train_dataloader, val_loader)  # , ckpt_path=save_path)
+
+        # if checkpoint_path is provided, resumes training from training state of checkpoint path
+        trainer.fit(self.model, train_dataloader, val_loader, ckpt_path=checkpoint_path)
         self._log("Training complete")
         if checkpoint_callback.best_model_score is not None:
             self._log(
@@ -946,171 +632,69 @@ class Lightning(L.LightningModule):
 
         return trainer
 
-    # TODO: figure out saving and loading of checkpoints and model objects
-    # def save(self, path, save_train_loader=False, save_hooks=False):
-    #     """save model with weights using torch.save()
-
-    #     load from saved file with torch.load(path) or cnn.load_model(path)
-
-    #     Note: saving and loading model objects across OpenSoundscape versions
-    #     will not work properly. Instead, use .save_torch_dict and .load_torch_dict
-    #     (but note that customizations to preprocessing, training params, etc will
-    #     not be retained using those functions).
-
-    #     For maximum flexibilty in further use, save the model with both .save() and
-    #     .save_torch_dict()
-
-    #     Args:
-    #         path: file path for saved model object
-    #         save_train_loader: retrain .train_loader in saved object
-    #             [default: False]
-    #         save_hooks: retain forward and backward hooks on modules
-    #             [default: False] Note: True can cause issues when using
-    #             wandb.watch()
-    #     """
-    #     os.makedirs(Path(path).parent, exist_ok=True)
-
-    #     # save a pickled model object; will not work across opso versions
-    #     model_copy = copy.deepcopy(self)
-
-    #     if not save_train_loader:
-    #         try:
-    #             delattr(model_copy, "train_loader")
-    #         except AttributeError:
-    #             pass
-
-    #     if not save_hooks:
-    #         # remove all forward and backward hooks on network.modules()
-    #         from collections import OrderedDict
-
-    #         for m in model_copy.network.modules():
-    #             m._forward_hooks = OrderedDict()
-    #             m._backward_hooks = OrderedDict()
-
-    #     torch.save(model_copy, path)
-
-    # def save_torch_dict(self, path):
-    #     """save model to file for use in other opso versions
-
-    #      WARNING: this does not save any preprocessing or augmentation
-    #         settings or parameters, or other attributes such as the training
-    #         parameters or loss function. It only saves architecture, weights,
-    #         classes, sample shape, sample duration, and single_target.
-
-    #     To save the entire pickled model object (recover all parameters and
-    #     settings), use model.save() instead. Note that models saved with
-    #     model.save() will not work across different versions of OpenSoundscape.
-
-    #     To recreate the model after saving with this function, use CNN.from_torch_dict(path)
-
-    #     Args:
-    #         path: file path for saved model object
-
-    #     Effects:
-    #         saves a file using torch.save() containing model weights and other information
-    #     """
-
-    #     # warn the user if the achirecture can't be re-created from the
-    #     # string name (self.architecture_name)
-    #     if not self.architecture_name in cnn_architectures.list_architectures():
-    #         warnings.warn(
-    #             f"""\n The value of `self.architecture_name` ({self.architecture_name})
-    #                 is not an architecture that can be generated in OpenSoundscape. Using
-    #                 CNN.from_torch_dict on the saved file will cause an error. To fix this,
-    #                 you can use .save() instead of .save_torch_model, or change
-    #                 `self.architecture_name` to one of the architecture name strings listed by
-    #                 opensoundscape.ml.cnn_architectures.list_architectures()
-    #                 if this architecture is supported."""
-    #         )
-
-    #     os.makedirs(Path(path).parent, exist_ok=True)
-
-    #     # save just the basics, loses preprocessing/other settings
-    #     torch.save(
-    #         {
-    #             "weights": self.network.state_dict(),
-    #             "classes": self.classes,
-    #             "architecture": self.architecture_name,
-    #             "sample_duration": self.preprocessor.sample_duration,
-    #             "single_target": self.single_target,
-    #             "sample_shape": [
-    #                 self.preprocessor.height,
-    #                 self.preprocessor.width,
-    #                 self.preprocessor.channels,
-    #             ],
-    #         },
-    #         path,
-    #     )
-
-    # @classmethod
-    # def from_torch_dict(cls, path):
-    #     """load a model saved using CNN.save_torch_dict()
-
-    #     Args:
-    #         path: path to file saved using CNN.save_torch_dict()
-
-    #     Returns:
-    #         new CNN instance
-
-    #     Note: if you used .save() instead of .save_torch_dict(), load
-    #     the model using cnn.load_model(). Note that the model object will not load properly
-    #     across different versions of OpenSoundscape. To save and load models across
-    #     different versions of OpenSoundscape, use .save_torch_dict(), but note that
-    #     preprocessing and other customized settings will not be retained.
-    #     """
-    #     model_dict = torch.load(path)
-    #     state_dict = model_dict.pop("weights")
-    #     model = cls(**model_dict)
-    #     model.network.load_state_dict(state_dict)
-    #     return model
-
-    # def save_weights(self, path):
-    #     """save just the weights of the network
-
-    #     This allows the saved weights to be used more flexibly than model.save()
-    #     which will pickle the entire object. The weights are saved in a pickled
-    #     dictionary using torch.save(self.network.state_dict())
-
-    #     Args:
-    #         path: location to save weights file
-    #     """
-    #     torch.save(self.network.state_dict(), path)
-
-    # def load_weights(self, path, strict=True):
-    #     """load network weights state dict from a file
-
-    #     For instance, load weights saved with .save_weights()
-    #     in-place operation
-
-    #     Args:
-    #         path: file path with saved weights
-    #         strict: (bool) see torch.load()
-    #     """
-    #     self.network.load_state_dict(torch.load(path), strict=strict)
-
-    def __call__(self, dataloader, **kwargs):
-        """run inference
+    def generate_samples(
+        self,
+        samples,
+        invalid_samples_log=None,
+        return_invalid_samples=False,
+        **kwargs,
+    ):
+        """
+        Generate AudioSample objects. Input options same as .predict()
 
         Args:
-            dataloader: DataLoader object that returns batches of AudioSamples
-                e.g. SafeAudioDataLoader
-            **kwargs: any additional arguments to pass to lightning.Trainer init
+            samples: (same as CNN.predict())
+                the files to generate predictions for. Can be:
+                - a dataframe with index containing audio paths, OR
+                - a dataframe with multi-index (file, start_time, end_time), OR
+                - a list (or np.ndarray) of audio file paths
+            see .predict() documentation for other args
+            **kwargs: any arguments to self.model.predict_dataloader()
+                which are typically passed to initialization of a DataLoader class
+
+        Returns:
+            a list of AudioSample objects
+            - if return_invalid_samples is True, returns second value: list of paths to
+            samples that failed to preprocess
+
+        Example:
+        ```
+        from opensoundscappe.preprocess.utils import show_tensor_grid
+        samples = generate_samples(['/path/file1.wav','/path/file2.wav'])
+        tensors = [s.data for s in samples]
+        show_tensor_grid(tensors,columns=3)
+        ```
         """
-        trainer = L.Trainer(**kwargs)
-        pred_scores = trainer.predict(self, dataloader)
 
-        # aggregate across all batches
-        if len(pred_scores) > 0:
-            pred_scores = np.array(pred_scores)
-            # replace scores with nan for samples that failed in preprocessing
-            # (we predicted on substitute-samples rather than
-            # skipping the samples that failed preprocessing)
-            pred_scores[dataloader.dataset._invalid_indices, :] = np.nan
+        # create dataloader to generate batches of AudioSamples
+        dataloader = self.model.predict_dataloader(samples=samples, **kwargs)
+
+        # move model to device
+        self.model.network.to(self.device)  # TODO: move self.model with .to()?
+        self.model.network.eval()  # TODO:  simply run self.model.eval()?
+
+        # generate samples in batches
+        generated_samples = []
+        for batch in dataloader:
+            generated_samples.extend(batch)
+        # get & log list of any samples that failed to preprocess
+        invalid_samples = dataloader.dataset.report(log=invalid_samples_log)
+
+        if return_invalid_samples:
+            return generated_samples, invalid_samples
         else:
-            pred_scores = None
+            return generated_samples
 
-        return pred_scores
+    def _log(self, message, level=1):
+        txt = str(message)
+        if self.logging_level >= level and self.log_file is not None:
+            with open(self.log_file, "a") as logfile:
+                logfile.write(txt + "\n")
+        if self.verbose >= level:
+            print(txt)
 
+    # TODO: should we use some Lightning here? similar to predict, but different _step implementation
+    # check recommended way to make graddcams in Lightning
     def generate_cams(
         self,
         samples,
@@ -1174,8 +758,8 @@ class Lightning(L.LightningModule):
 
         if classes is not None:  # check that classes are in model.classes
             assert np.all(
-                [c in self.classes for c in classes]
-            ), "`classes` must be in self.classes"
+                [c in self.model.classes for c in classes]
+            ), "`classes` must be in self.model.classes"
 
         # if target_layer is None, attempt to retrieve default target layers of network
         if target_layers is None:
@@ -1189,7 +773,7 @@ class Lightning(L.LightningModule):
         else:  # check that target_layers are modules of self.network
             for tl in target_layers:
                 assert (
-                    tl in self.network.modules()
+                    tl in self.model.network.modules()
                 ), "target_layers must be in self.network.modules(), but {tl} is not."
 
         ## INITIALIZE CAMS AND DATALOADER ##
@@ -1210,12 +794,14 @@ class Lightning(L.LightningModule):
         }
         if isinstance(method, str) and method in methods_dict:
             # get cam class based on string name and create instance
-            cam = methods_dict[method](model=self.network, target_layers=target_layers)
+            cam = methods_dict[method](
+                model=self.model.network, target_layers=target_layers
+            )
         elif method is None:
             cam = None
         elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
             # generate instance of cam from class
-            cam = method(model=self.network, target_layers=target_layers)
+            cam = method(model=self.model.network, target_layers=target_layers)
         else:
             raise ValueError(
                 f"`method` {method} not supported. "
@@ -1226,18 +812,19 @@ class Lightning(L.LightningModule):
         # initialize guided back propagation object
         if guided_backprop:
             gb_model = pytorch_grad_cam.GuidedBackpropReLUModel(
-                model=self.network, use_cuda=False
+                model=self.model.network, use_cuda=False
             )  # TODO cuda usage - expose? use model setting?
 
-        # create dataloader to generate batches of AudioSamples
-        dataloader = self.inference_dataloader_cls(
-            samples, self.preprocessor, shuffle=False, **kwargs
+        # create dataloader to preprocess samples
+        # specifying collate_fn=identity returns list of AudioSamples
+        dataloader = self.model.predict_dataloader(
+            samples, collate_fn=identity, **kwargs
         )
 
         # move model to device
         # TODO: choose cuda or not in pytorch_grad_cam methods
-        # self.network.to(self.device)
-        # self.network.eval()
+        # self.model.network.to(self.model.device)
+        # self.model.network.eval()
 
         ## GENERATE SAMPLES ##
 
@@ -1255,13 +842,13 @@ class Lightning(L.LightningModule):
             batch_tensors.requires_grad = False
 
             # generate logits with forward pass
-            logits = self.network(batch_tensors)
+            logits = self.model.network(batch_tensors)
 
             # generate class activation maps using cam object
             def target(class_name):
                 """helper for pytorch_grad_cam class syntax"""
-                # first get integet position of class name in self.classes
-                class_idx = list(self.classes).index(class_name)
+                # first get integet position of class name in self.model.classes
+                class_idx = list(self.model.classes).index(class_name)
                 # then create list of class required by pytorch_grad_cam
                 return [ClassifierOutputTarget(class_idx)]
 
@@ -1278,7 +865,7 @@ class Lightning(L.LightningModule):
             for i, sample in enumerate(samples):
                 # add the scores (logits) from the network to AudioSample as dictionary
                 sample.scores = dict(
-                    zip(self.classes, logits[i].detach().cpu().numpy())
+                    zip(self.model.classes, logits[i].detach().cpu().numpy())
                 )
 
                 # add the cams as a dictionary keyed by class
@@ -1302,7 +889,7 @@ class Lightning(L.LightningModule):
                     if classes is None:  # defaults to highest scoring class
                         gbp_maps = pd.Series({None: gb_model(t.detach())})
                     else:  # one for each class
-                        cls_list = list(self.classes)
+                        cls_list = list(self.model.classes)
                         gbp_maps = pd.Series(
                             {
                                 c: gb_model(
@@ -1334,13 +921,35 @@ class Lightning(L.LightningModule):
         # return list of AudioSamples containing .cam attributes
         return generated_samples
 
-    def _log(self, message, level=1):
-        txt = str(message)
-        if self.logging_level >= level and self.log_file is not None:
-            with open(self.log_file, "a") as logfile:
-                logfile.write(txt + "\n")
-        if self.verbose >= level:
-            print(txt)
+
+class SpectrogramCNN(Classifier):
+    lightning_module_cls = SpectrogramLightningModule
+
+    def __init__(self, model):
+        super().__init__(model)
+        self.name = "SpectrogramCNN"
+        self.lighting_module_cls = type(model)
+
+    @classmethod
+    def from_arch(
+        cls,
+        architecture,
+        classes,
+        sample_duration,
+        sample_shape=[224, 224, 1],
+        single_target=False,
+    ):
+
+        model = SpectrogramLightningModule(
+            architecture=architecture,
+            classes=classes,
+            single_target=single_target,
+            channels=sample_shape[2],
+            sample_duration=sample_duration,
+            sample_shape=[224, 224, 1],
+        )
+
+        return cls(model=model)
 
 
 # class BaseClassifier(torch.nn.Module):

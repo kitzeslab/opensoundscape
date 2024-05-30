@@ -51,7 +51,10 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             overlap_fraction: deprecated alias for clip_overlap_fraction
             bypass_augmentations: if True, don't apply any augmentations [default: True]
             raise_errors: if True, raise errors during preprocessing [default: False]
-            collate_fn: function to collate samples into batches [default: identity]
+            collate_fn: function to collate list of AudioSample objects into batches
+                [default: idenitty] returns list of AudioSample objects,
+                use collate_fn=opensoundscape.sample.collate_audio_samples to return
+                a tuple of (data, labels) tensors
             **kwargs: any arguments to torch.utils.data.DataLoader
 
         Returns:
@@ -64,9 +67,21 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             "(c) (file,start_time,end_time) as MultiIndex"
         )
 
+        # TODO: setting these attributes seems to be necessary when using Lightning,
+        # even though we don't need them as attributes in the DataLoader
+        # this could be confusing because user should not modify dl.preprocessor,
+        # it is used to initialize self.dataset only
+        self.samples = samples
+        """do not override or modify this attribute, as it will have no effect"""
+        self.preprocessor = preprocessor
+        """do not override or modify this attribute, as it will have no effect"""
+
+        # remove `dataset` kwarg possibly passed from Lightning
+        kwargs.pop("dataset", None)
+
         if overlap_fraction is not None:
             warnings.warn(
-                "`overlap_fraction` argument is deprecated. Use `clip_overlap_fraction` instead.",
+                "`overlap_fraction` argument is deprecated and will be removed in a future version. Use `clip_overlap_fraction` instead.",
                 DeprecationWarning,
             )
             assert (
