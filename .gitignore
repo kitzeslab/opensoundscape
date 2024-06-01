@@ -9,3 +9,4 @@ doc/_build/
 docs/tutorials/woodcock_labeled_data
 .vscode
 docs/tutorials/wandb
+docs/tutorials/annotated_data
