@@ -10,3 +10,4 @@ docs/tutorials/woodcock_labeled_data
 .vscode
 docs/tutorials/wandb
 untracked/
+docs/tutorials/annotated_data
