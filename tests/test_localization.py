@@ -190,7 +190,7 @@ def test_localization_pipeline(file_coords_csv, predictions_csv):
         detections=preds,
         min_n_receivers=4,
         max_receiver_dist=100,
-        localization_algorithm="gillette",
+        localization_algorithm="least_squares",
         return_unlocalized=True,
     )
     # the audio files were generated according to the "true" event location:
