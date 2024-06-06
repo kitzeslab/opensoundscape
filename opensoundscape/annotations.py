@@ -44,8 +44,18 @@ class BoxedAnnotations:
     __slots__ = (
         "df",
         "annotation_files",
-        "audio_files",
+        "audio_files"
     )
+    _required_cols = ["annotation", "start_time", "end_time"]
+    _standard_cols = [
+            "audio_file",
+            "annotation_file",
+            "annotation",
+            "start_time",
+            "end_time",
+            "low_f",
+            "high_f",
+        ]
 
     def __init__(self, df, annotation_files=None, audio_files=None):
         """
@@ -76,24 +86,15 @@ class BoxedAnnotations:
         self.annotation_files = annotation_files
         self.audio_files = audio_files
 
-        standard_cols = [
-            "audio_file",
-            "annotation_file",
-            "annotation",
-            "start_time",
-            "end_time",
-            "low_f",
-            "high_f",
-        ]
-        required_cols = ["annotation", "start_time", "end_time"]
-        for col in required_cols:
+        
+        for col in self._required_cols:
             assert col in df.columns, (
-                f"df columns must include all of these: {str(required_cols)}\n"
+                f"df columns must include all of these: {str(self._required_cols)}\n"
                 f"columns in df: {list(df.columns)}"
             )
         # re-order columns
         # keep any extras from input df and add any missing standard columns
-        ordered_cols = standard_cols + list(set(df.columns) - set(standard_cols))
+        ordered_cols = self._standard_cols + list(set(df.columns) - set(self._standard_cols))
         self.df = df.reindex(columns=ordered_cols)
 
     def __repr__(self):
@@ -263,7 +264,7 @@ class BoxedAnnotations:
 
         else:
             all_annotations_df = pd.DataFrame(
-                columns=["annotation", "start_time", "end_time"]
+                columns = cls._required_cols
             )
 
         return cls(
