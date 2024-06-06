@@ -186,74 +186,74 @@ class BoxedAnnotations:
             """
         for i, raven_file in enumerate(raven_files):
             df = pd.read_csv(raven_file, delimiter="\t")
-            if not df.empty:
-                if annotation_column_name is not None:
-                    # annotation_column_name argument takes precedence over
-                    # annotation_column_idx. If it is passed, we use it and ignore
-                    # annotation_column_idx!
-                    if annotation_column_name in list(df.columns):
-                        df = df.rename(
-                            columns={
-                                annotation_column_name: "annotation",
-                            }
-                        )
-                    else:
-                        # to be flexible, we'll give nan values if the column is missing
-                        df["annotation"] = np.nan
-
-                elif annotation_column_idx is not None:
-                    # use the column number to specify which column contains annotations
-                    # first column is 1, second is 2, etc (default: 8th column)
+            if df.empty:
+                warnings.warn(f"{raven_file} has zero rows.")
+                continue
+            if annotation_column_name is not None:
+                # annotation_column_name argument takes precedence over
+                # annotation_column_idx. If it is passed, we use it and ignore
+                # annotation_column_idx!
+                if annotation_column_name in list(df.columns):
                     df = df.rename(
                         columns={
-                            df.columns[annotation_column_idx - 1]: "annotation",
+                            annotation_column_name: "annotation",
                         }
                     )
-                else:  # None was passed to annotatino_column_idx
-                    # we'll create an empty `annotation` column
+                else:
+                    # to be flexible, we'll give nan values if the column is missing
                     df["annotation"] = np.nan
 
-                # rename Raven columns to standard opensoundscape names
-                try:
-                    df = df.rename(
-                        columns=column_mapping_dict,
-                        errors="raise",
-                    )
-                except KeyError as e:
-                    raise KeyError(
-                        "Raven file is missing a required column. "
-                        "Raven files must have columns matching the following names: "
-                        f"{column_mapping_dict.keys()}"
-                    ) from e
+            elif annotation_column_idx is not None:
+                # use the column number to specify which column contains annotations
+                # first column is 1, second is 2, etc (default: 8th column)
+                df = df.rename(
+                    columns={
+                        df.columns[annotation_column_idx - 1]: "annotation",
+                    }
+                )
+            else:  # None was passed to annotatino_column_idx
+                # we'll create an empty `annotation` column
+                df["annotation"] = np.nan
+                
+            # rename Raven columns to standard opensoundscape names
+            try:
+                df = df.rename(
+                    columns=column_mapping_dict,
+                    errors="raise",
+                )
+            except KeyError as e:
+                raise KeyError(
+                    "Raven file is missing a required column. "
+                    "Raven files must have columns matching the following names: "
+                    f"{column_mapping_dict.keys()}"
+                ) from e
 
-                # add column containing the raven file path
-                df["annotation_file"] = raven_file
+            # add column containing the raven file path
+            df["annotation_file"] = raven_file
 
-                if annotation_column_idx is not None:
-                    standard_columns.append("annotation")
-                if hasattr(keep_extra_columns, "__iter__"):
-                    # keep the desired columns
-                    # if values in keep_extra_columns are missing, fill with nan
-                    df = df.reindex(
-                        columns=standard_columns + list(keep_extra_columns),
-                        fill_value=np.nan,
-                    )
-                elif not keep_extra_columns:
-                    # only keep required columns
-                    df = df.reindex(columns=standard_columns)
-                else:
-                    # keep all columns
-                    pass
-
-                # add audio file column
-                if audio_files is not None:
-                    df["audio_file"] = audio_files[i]
-                else:
-                    df["audio_file"] = np.nan
-
-                all_file_dfs.append(df)
+            if annotation_column_idx is not None:
+                standard_columns.append("annotation")
+            if hasattr(keep_extra_columns, "__iter__"):
+                # keep the desired columns
+                # if values in keep_extra_columns are missing, fill with nan
+                df = df.reindex(
+                    columns=standard_columns + list(keep_extra_columns),
+                    fill_value=np.nan,
+                )
+            elif not keep_extra_columns:
+                # only keep required columns
+                df = df.reindex(columns=standard_columns)
             else:
-                warnings.warn(f"{raven_file} has zero rows.")
+                # keep all columns
+                pass
+
+            # add audio file column
+            if audio_files is not None:
+                df["audio_file"] = audio_files[i]
+            else:
+                df["audio_file"] = np.nan
+
+            all_file_dfs.append(df)
 
         if len(all_file_dfs) > 0:
             # we drop the original index from the Raven annotations when we combine tables
