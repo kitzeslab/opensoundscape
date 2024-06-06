@@ -611,7 +611,26 @@ class BoxedAnnotations:
         # the clip_df should have ['file','start_time','end_time'] as the index
         clip_df[classes] = float("nan")  # add columns for each class
 
-        for file, start, end in clip_df.index:
+        for class_name in classes:
+            # set all the values to 0 for clip_df. We will add the 1s in the next step
+            clip_df[class_name] = 0
+            # get just the annotations for this class
+            class_df = df[df["annotation"] == class_name]
+            for _, row in class_df.iterrows():
+                annotation_start = row["start_time"]
+                annotation_end = row["end_time"]
+                # find the overlapping rows
+                idxs = find_overlapping_idxs_in_clip_df(
+                    annotation_start,
+                    annotation_end,
+                    clip_df,
+                    min_label_overlap,
+                    min_label_fraction,
+                )
+                if idxs is not None:
+                    clip_df.loc[idxs, class_name] = 1
+        all_files = clip_df.index.get_level_values(0).unique()
+        for file in all_files:
             if not file == file:  # file is NaN, get corresponding rows
                 file_df = df[df["audio_file"].isnull()]
             else:  # subset annotations to this file
@@ -623,17 +642,6 @@ class BoxedAnnotations:
                     f"No annotations matched the file {file}. All "
                     "clip labels will be zero for this file."
                 )
-
-            # add clip labels for this row of clip dataframe
-            # TODO: this could be what's slow, maybe concat will be much faster
-            clip_df.loc[(file, start, end), :] = one_hot_labels_on_time_interval(
-                file_df,
-                start_time=start,
-                end_time=end,
-                min_label_overlap=min_label_overlap,
-                min_label_fraction=min_label_fraction,
-                class_subset=classes,
-            )
 
         return clip_df
 
@@ -804,79 +812,6 @@ def diff(base_annotations, comparison_annotations):
     raise NotImplementedError
 
 
-def one_hot_labels_on_time_interval(
-    df, class_subset, start_time, end_time, min_label_overlap, min_label_fraction=None
-):
-    """generate a dictionary of one-hot labels for given time-interval
-
-    Each class is labeled 1 if any annotation overlaps sufficiently with the
-    time interval. Otherwise the class is labeled 0.
-
-    Args:
-        df: DataFrame with columns 'start_time', 'end_time' and 'annotation'
-        classes: list of classes for one-hot labels. If None, classes will
-            be all unique values of self.df['annotation']
-        start_time: beginning of time interval (seconds)
-        end_time: end of time interval (seconds)
-        min_label_overlap: minimum duration (seconds) of annotation within the
-            time interval for it to count as a label. Note that any annotation
-            of length less than this value will be discarded.
-            We recommend a value of 0.25 for typical bird songs, or shorter
-            values for very short-duration events such as chip calls or
-            nocturnal flight calls.
-        min_label_fraction: [default: None] if >= this fraction of an annotation
-            overlaps with the time window, it counts as a label regardless of
-            its duration. Note that *if either* of the two
-            criterea (overlap and fraction) is met, the label is 1.
-            if None (default), the criterion is not used (only min_label_overlap
-            is used). A value of 0.5 would ensure that all annotations result
-            in at least one clip being labeled 1 (if no gaps between clips).
-
-    Returns:
-        dictionary of {class:label 0/1} for all classes
-    """
-    # create a copy of the dataframe to avoid modifying the original
-    df = df.copy()
-
-    # calculate amount of overlap of each clip with this time window
-    df["overlap"] = [
-        overlap([start_time, end_time], [t0, t1])
-        for t0, t1 in zip(df["start_time"], df["end_time"])
-    ]
-
-    # discard annotations that do not overlap with the time window
-    df = df[df["overlap"] > 0].reset_index()
-
-    # calculate the fraction of each annotation that overlaps with this time window
-    df["overlap_fraction"] = [
-        overlap_fraction([t0, t1], [start_time, end_time])
-        for t0, t1 in zip(df["start_time"], df["end_time"])
-    ]
-
-    one_hot_labels = [0] * len(class_subset)
-    for i, c in enumerate(class_subset):
-        # subset annotations to those of this class
-        df_cls = df[df["annotation"] == c]
-
-        if len(df_cls) == 0:
-            continue  # no annotations, leave it as zero
-
-        # add label=1 if any annotation overlaps with the clip by >= min_overlap
-        if max(df_cls.overlap) >= min_label_overlap:
-            one_hot_labels[i] = 1
-
-        elif (  # add label=1 if annotation's overlap exceeds minimum fraction
-            min_label_fraction is not None
-            and max(df_cls.overlap_fraction) >= min_label_fraction
-        ):
-            one_hot_labels[i] = 1
-        else:  # otherwise, we leave the label as 0
-            pass
-
-    # return a dictionary mapping classes to 0/1 labels
-    return {c: l for c, l in zip(class_subset, one_hot_labels)}
-
-
 def categorical_to_one_hot(labels, class_subset=None):
     """transform multi-target categorical labels (list of lists) to one-hot array
 
@@ -914,3 +849,61 @@ def one_hot_to_categorical(one_hot, classes):
     """
     classes = np.array(classes)
     return [list(classes[np.array(row).astype(bool)]) for row in one_hot]
+
+
+def find_overlapping_idxs_in_clip_df(
+    annotation_start,
+    annotation_end,
+    clip_df,
+    min_label_overlap,
+    min_label_fraction=None,
+):
+    """
+    Finds the (file, start_time, end_time) index values for the rows in the clip_df that overlap with the annotation_start and annotation_end
+    Args:
+        annotation_start: start time of the annotation
+        annotation_end: end time of the annotation
+        clip_df: dataframe with multi-index ['file', 'start_time', 'end_time']
+        min_label_overlap: minimum duration (seconds) of annotation within the
+    Returns:
+        [(file, start_time, end_time)]) Multi-index values for the rows in the clip_df that overlap with the annotation_start and annotation_end
+    """
+    # drop the index so multi-index can be accessed by column names
+    clip_df = clip_df.reset_index()
+    # ignore all rows that start after the annotation ends
+    clip_df = clip_df.loc[clip_df["start_time"] < annotation_end]
+    # and all rows that end before the annotation starts
+    clip_df = clip_df.loc[clip_df["end_time"] > annotation_start]
+
+    # don't calculate overlaps if there are no overlapping rows
+    if clip_df.empty:
+        return None
+    # now for each row, calculate the overlap
+    clip_df["overlap"] = clip_df.apply(
+        lambda row: overlap(
+            [annotation_start, annotation_end], [row["start_time"], row["end_time"]]
+        ),
+        axis=1,
+    )
+
+    # discard annotations that do not overlap with the time window
+    clip_df = clip_df[clip_df["overlap"] > 0]
+
+    # calculate the fraction of each annotation that overlaps with this time window
+    clip_df["overlap_fraction"] = clip_df.apply(
+        lambda row: overlap_fraction(
+            [row["start_time"], row["end_time"]], [annotation_start, annotation_end]
+        ),
+        axis=1,
+    )
+
+    if min_label_overlap is not None:
+        clip_df = clip_df[clip_df["overlap"] >= min_label_overlap]
+    if min_label_fraction is not None:
+        clip_df = clip_df[clip_df["overlap_fraction"] >= min_label_fraction]
+
+    # return the indices of the overlapping rows
+    if clip_df.empty:
+        return None
+    clip_df.set_index(["file", "start_time", "end_time"], inplace=True)
+    return clip_df.index
