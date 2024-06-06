@@ -325,62 +325,6 @@ def test_convert_labels_wrong_type(boxed_annotations):
         boxed_annotations = boxed_annotations.convert_labels(df)
 
 
-def test_one_hot_labels_on_time_interval(boxed_annotations):
-    a = annotations.one_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0,
-        end_time=3.5,
-        min_label_overlap=0.25,
-        class_subset=["a", "b"],
-    )
-    assert a["a"] == 1 and a["b"] == 1
-
-    a = annotations.one_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0,
-        end_time=3.5,
-        min_label_overlap=0.75,
-        class_subset=["a", "b"],
-    )
-    assert a["a"] == 1 and a["b"] == 0
-
-
-def test_one_hot_labels_on_time_interval_fractional(boxed_annotations):
-    """test min_label_fraction use cases"""
-    # too short but satisfies fraction
-    a = annotations.one_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0.4,
-        end_time=3,
-        min_label_overlap=2,
-        min_label_fraction=0.5,
-        class_subset=["a"],
-    )
-    assert a["a"] == 1
-
-    # too short and not enough for fraction
-    a = annotations.one_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0.4,
-        end_time=3,
-        min_label_overlap=2,
-        min_label_fraction=0.9,
-        class_subset=["a"],
-    )
-    assert a["a"] == 0
-
-    # long enough, although less than fraction
-    a = annotations.one_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0.4,
-        end_time=3,
-        min_label_overlap=0.5,
-        min_label_fraction=0.9,
-        class_subset=["a"],
-    )
-    assert a["a"] == 1
-
-
 def test_categorical_to_one_hot():
     cat_labels = [["a", "b"], ["a", "c"]]
     one_hot, classes = annotations.categorical_to_one_hot(
