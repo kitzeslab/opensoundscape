@@ -610,10 +610,11 @@ class BoxedAnnotations:
 
         # the clip_df should have ['file','start_time','end_time'] as the index
         clip_df[classes] = float("nan")  # add columns for each class
+        output_df = clip_df.copy()
 
         for class_name in classes:
             # set all the values to 0 for clip_df. We will add the 1s in the next step
-            clip_df[class_name] = 0
+            output_df[class_name] = 0
             # get just the annotations for this class
             class_df = df[df["annotation"] == class_name]
             for _, row in class_df.iterrows():
@@ -628,7 +629,7 @@ class BoxedAnnotations:
                     min_label_fraction,
                 )
                 if idxs is not None:
-                    clip_df.loc[idxs, class_name] = 1
+                    output_df.loc[idxs, class_name] = 1
         all_files = clip_df.index.get_level_values(0).unique()
         for file in all_files:
             if not file == file:  # file is NaN, get corresponding rows
@@ -643,13 +644,13 @@ class BoxedAnnotations:
                     "clip labels will be zero for this file."
                 )
 
-        return clip_df
+        return output_df
 
     def one_hot_clip_labels(
         self,
         clip_duration,
         min_label_overlap,
-        min_label_fraction=1,
+        min_label_fraction=None,
         full_duration=None,
         class_subset=None,
         audio_files=None,
@@ -868,20 +869,21 @@ def find_overlapping_idxs_in_clip_df(
     Returns:
         [(file, start_time, end_time)]) Multi-index values for the rows in the clip_df that overlap with the annotation_start and annotation_end
     """
-    # drop the index so multi-index can be accessed by column names
-    clip_df = clip_df.reset_index()
-    # ignore all rows that start after the annotation ends
-    clip_df = clip_df.loc[clip_df["start_time"] < annotation_end]
-    # and all rows that end before the annotation starts
-    clip_df = clip_df.loc[clip_df["end_time"] > annotation_start]
-
+    # ignore all rows that start after the annotation ends. Start is level 1 of multi-index
+    clip_df = clip_df.loc[clip_df.index.get_level_values(1) < annotation_end]
+    # and all rows that end before the annotation starts. End is level 2 of multi-index
+    clip_df = clip_df.loc[clip_df.index.get_level_values(2) > annotation_start]
     # don't calculate overlaps if there are no overlapping rows
     if clip_df.empty:
         return None
     # now for each row, calculate the overlap
     clip_df["overlap"] = clip_df.apply(
         lambda row: overlap(
-            [annotation_start, annotation_end], [row["start_time"], row["end_time"]]
+            [annotation_start, annotation_end],
+            [
+                row.name[1],
+                row.name[2],
+            ],  # row.name is the multi-index. So row.name[1] is the start_time and row.name[2] is the end_time
         ),
         axis=1,
     )
@@ -892,7 +894,7 @@ def find_overlapping_idxs_in_clip_df(
     # calculate the fraction of each annotation that overlaps with this time window
     clip_df["overlap_fraction"] = clip_df.apply(
         lambda row: overlap_fraction(
-            [row["start_time"], row["end_time"]], [annotation_start, annotation_end]
+            [annotation_start, annotation_end], [row.name[1], row.name[2]]
         ),
         axis=1,
     )
@@ -905,5 +907,4 @@ def find_overlapping_idxs_in_clip_df(
     # return the indices of the overlapping rows
     if clip_df.empty:
         return None
-    clip_df.set_index(["file", "start_time", "end_time"], inplace=True)
     return clip_df.index
