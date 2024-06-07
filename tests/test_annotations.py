@@ -238,6 +238,22 @@ def test_one_hot_labels_like(boxed_annotations):
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
 
 
+def test_one_hot_labels_like_no_overlap(boxed_annotations):
+    # check it does not fail if no annotations overlap with any of the clip_df times
+    clip_df = pd.DataFrame.from_dict(
+        {
+            "audio_file": ["audio_file.wav"] * 2,
+            "start_time": [50, 60],  # after all the annotations
+            "end_time": [60, 70],
+        }
+    )
+    clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
+    labels = boxed_annotations.one_hot_labels_like(
+        clip_df, class_subset=["a"], min_label_overlap=0.25
+    )
+    assert np.array_equal(labels.values, np.array([[0, 0]]).transpose())
+
+
 def test_one_hot_labels_like_overlap(boxed_annotations):
     clip_df = generate_clip_times_df(3, clip_duration=1.0, clip_overlap=0.5)
     clip_df["audio_file"] = "audio_file.wav"

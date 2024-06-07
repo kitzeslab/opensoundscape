@@ -628,7 +628,7 @@ class BoxedAnnotations:
                     min_label_overlap,
                     min_label_fraction,
                 )
-                if idxs is not None:
+                if len(idxs) > 0:
                     output_df.loc[idxs, class_name] = 1
         all_files = clip_df.index.get_level_values(0).unique()
         for file in all_files:
@@ -867,7 +867,7 @@ def find_overlapping_idxs_in_clip_df(
         clip_df: dataframe with multi-index ['file', 'start_time', 'end_time']
         min_label_overlap: minimum duration (seconds) of annotation within the
     Returns:
-        [(file, start_time, end_time)]) Multi-index values for the rows in the clip_df that overlap with the annotation_start and annotation_end
+        [(file, start_time, end_time)]) Multi-index values for the rows in the clip_df that overlap with the annotation_start and annotation_end.
     """
     # ignore all rows that start after the annotation ends. Start is level 1 of multi-index
     clip_df = clip_df.loc[clip_df.index.get_level_values(1) < annotation_end]
