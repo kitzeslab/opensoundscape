@@ -873,38 +873,23 @@ def find_overlapping_idxs_in_clip_df(
     clip_df = clip_df.loc[clip_df.index.get_level_values(1) < annotation_end]
     # and all rows that end before the annotation starts. End is level 2 of multi-index
     clip_df = clip_df.loc[clip_df.index.get_level_values(2) > annotation_start]
-    # don't calculate overlaps if there are no overlapping rows
-    if clip_df.empty:
-        return None
-    # now for each row, calculate the overlap
-    clip_df["overlap"] = clip_df.apply(
-        lambda row: overlap(
-            [annotation_start, annotation_end],
-            [
-                row.name[1],
-                row.name[2],
-            ],  # row.name is the multi-index. So row.name[1] is the start_time and row.name[2] is the end_time
-        ),
-        axis=1,
-    )
+    # now for each time-window, calculate the overlaps
+    clip_df["overlap"] = [
+        overlap([annotation_start, annotation_end], [row[1], row[2]])
+        for row in clip_df.index
+    ]
 
     # discard annotations that do not overlap with the time window
     clip_df = clip_df[clip_df["overlap"] > 0]
 
     # calculate the fraction of each annotation that overlaps with this time window
-    clip_df["overlap_fraction"] = clip_df.apply(
-        lambda row: overlap_fraction(
-            [annotation_start, annotation_end], [row.name[1], row.name[2]]
-        ),
-        axis=1,
-    )
+    clip_df["overlap_fraction"] = [
+        overlap_fraction([annotation_start, annotation_end], [row[1], row[2]])
+        for row in clip_df.index
+    ]
 
     if min_label_overlap is not None:
         clip_df = clip_df[clip_df["overlap"] >= min_label_overlap]
     if min_label_fraction is not None:
         clip_df = clip_df[clip_df["overlap_fraction"] >= min_label_fraction]
-
-    # return the indices of the overlapping rows
-    if clip_df.empty:
-        return None
     return clip_df.index
