@@ -2,6 +2,7 @@
 
 For tutorials, see notebooks on opensoundscape.org
 """
+
 from pathlib import Path
 import warnings
 import copy
@@ -82,6 +83,13 @@ class BaseClassifier(torch.nn.Module):
         ### metrics ###
         self.prediction_threshold = 0.5  # used for threshold-specific metrics
 
+        ### network device ###
+        # automatically gpu (default is 'cuda:0') if available
+        # can set after init, eg model.device='cuda:1'
+        # network and samples are moved to device during training/inference
+        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu'), torch.device('mps') etc
+        self.device = _gpu_if_available()
+
     def _log(self, message, level=1):
         txt = str(message)
         if self.logging_level >= level and self.log_file is not None:
@@ -119,6 +127,7 @@ class BaseClassifier(torch.nn.Module):
                 - a dataframe with index containing audio paths, OR
                 - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
+                - a single file path (str or pathlib.Path)
             batch_size:
                 Number of files to load simultaneously [default: 1]
             num_workers:
@@ -179,6 +188,9 @@ class BaseClassifier(torch.nn.Module):
             for that sample will be np.nan
 
         """
+        # for convenience, convert str/pathlib.Path to list
+        if isinstance(samples, (str, Path)):
+            samples = [samples]
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.inference_dataloader_cls(
@@ -228,7 +240,12 @@ class BaseClassifier(torch.nn.Module):
 
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
-        pred_scores = self.__call__(dataloader, wandb_session, progress_bar)
+        # TODO: allow arbitrary **kwargs to be passed to __call__?
+        pred_scores = self.__call__(
+            dataloader=dataloader,
+            wandb_session=wandb_session,
+            progress_bar=progress_bar,
+        )
 
         ### Apply activation layer ### #TODO: test speed vs. doing it in __call__ on batches
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
@@ -464,9 +481,9 @@ class CNN(BaseClassifier):
                 len(classes), num_channels=num_channels
             )
         else:
-            assert issubclass(
-                type(architecture), torch.nn.Module
-            ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
+            assert isinstance(
+                architecture, torch.nn.Module
+            ), "architecture must be a string or an instance of (a subclass of) torch.nn.Module"
             if num_channels != 3:
                 warnings.warn(
                     f"Make sure your architecture expects the number of channels in "
@@ -475,13 +492,6 @@ class CNN(BaseClassifier):
                 )
             self.architecture_name = str(type(architecture))
         self.network = architecture
-
-        ### network device ###
-        # automatically gpu (default is 'cuda:0') if available
-        # can override after init, eg model.device='cuda:1'
-        # network and samples are moved to gpu during training/inference
-        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu'), torch.device('mps') etc
-        self.device = _gpu_if_available()
 
         ### sample loading/preprocessing ###
         # preprocessor will have attributes .sample_duration (seconds)
@@ -610,7 +620,7 @@ class CNN(BaseClassifier):
             batch_tensors = batch_data["samples"].to(self.device)
             batch_labels = batch_data["labels"].to(self.device)
             if len(self.classes) > 1:  # squeeze one dimension [1,2] -> [1,1]
-                batch_labels = batch_labels.squeeze(1)
+                batch_labels = batch_labels.squeeze(1)  # why is this here? #TODO
 
             ####################
             # Forward and loss #
@@ -653,12 +663,8 @@ class CNN(BaseClassifier):
 
                 # Log the Jaccard score and Hamming loss, and Loss function
                 epoch_loss_avg = np.mean(batch_loss)
-                self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
-
-                # Evaluate with model's eval function
-                tgts = batch_labels.int().detach().cpu().numpy()
-                scores = logits.int().detach().cpu().numpy()
-                self.eval(tgts, scores, logging_offset=-1)
+                self._log(f"\tEpoch Running Average Loss: {epoch_loss_avg:.3f}")
+                self._log(f"\tMost Recent Batch Loss: {batch_loss[-1]:.3f}")
 
         # update learning parameters each epoch
         self.scheduler.step()
@@ -925,9 +931,9 @@ class CNN(BaseClassifier):
                     validation_df,
                     batch_size=batch_size,
                     num_workers=num_workers,
-                    activation_layer="softmax_and_logit"
-                    if self.single_target
-                    else None,
+                    activation_layer=(
+                        "softmax_and_logit" if self.single_target else None
+                    ),
                     split_files_into_clips=False,
                 )  # returns a dataframe matching validation_df
                 validation_targets = validation_df.values
@@ -1193,7 +1199,7 @@ class CNN(BaseClassifier):
                 str can be any of the following:
                     "gradcam": pytorch_grad_cam.GradCAM,
                     "hirescam": pytorch_grad_cam.HiResCAM,
-                    "scorecam": opensoundscape.ml.utils.ScoreCAM, #pytorch_grad_cam.ScoreCAM,
+                    "scorecam": pytorch_grad_cam.ScoreCAM,
                     "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
                     "ablationcam": pytorch_grad_cam.AblationCAM,
                     "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1254,7 +1260,7 @@ class CNN(BaseClassifier):
         methods_dict = {
             "gradcam": pytorch_grad_cam.GradCAM,
             "hirescam": pytorch_grad_cam.HiResCAM,
-            "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
+            "scorecam": pytorch_grad_cam.ScoreCAM,
             "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
             "ablationcam": pytorch_grad_cam.AblationCAM,
             "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1267,11 +1273,13 @@ class CNN(BaseClassifier):
         if isinstance(method, str) and method in methods_dict:
             # get cam clsas based on string name and create instance
             cam = methods_dict[method](model=self.network, target_layers=target_layers)
+            cam.device = self.device
         elif method is None:
             cam = None
         elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
             # generate instance of cam from class
             cam = method(model=self.network, target_layers=target_layers)
+            cam.device = self.device
         else:
             raise ValueError(
                 f"`method` {method} not supported. "
@@ -1282,8 +1290,8 @@ class CNN(BaseClassifier):
         # initialize guided back propagation object
         if guided_backprop:
             gb_model = pytorch_grad_cam.GuidedBackpropReLUModel(
-                model=self.network, use_cuda=False
-            )  # TODO cuda usage - expose? use model setting?
+                model=self.network, device=self.device
+            )
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.inference_dataloader_cls(
@@ -1390,6 +1398,20 @@ class CNN(BaseClassifier):
 
         # return list of AudioSamples containing .cam attributes
         return generated_samples
+
+    @property
+    def device(self):
+        return self._device
+
+    @device.setter
+    def device(self, device):
+        """
+        Set the device to use in train/predict, casting strings to torch.device datatype
+
+        Args:
+            device: a torch.device object or str such as 'cuda:0', 'mps', 'cpu'
+        """
+        self._device = torch.device(device)
 
 
 def use_resample_loss(

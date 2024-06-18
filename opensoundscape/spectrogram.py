@@ -452,6 +452,8 @@ class Spectrogram:
             else:
                 plt.show()
 
+        plt.close()  # close the plot to avoid memory leaks
+
     def amplitude(self, freq_range=None):
         """create an amplitude vs time signal from spectrogram
 

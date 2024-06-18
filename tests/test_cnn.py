@@ -214,6 +214,15 @@ def test_prediction_overlap(test_df):
     assert len(scores) == 3
 
 
+def test_predict_on_one_file(test_df):
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=10)
+    p = test_df.index.values[0]
+    scores = model.predict(p)
+    assert len(scores) == 1
+    scores = model.predict(Path(p))
+    assert len(scores) == 1
+
+
 def test_multi_target_prediction(train_df, test_df):
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     scores = model.predict(test_df)
@@ -452,9 +461,8 @@ def test_predict_raise_errors(short_file_df, onemin_wav_df):
     )  # use 2 files. 1 file wrong is manually caught and userwarning raised
     model = cnn.CNN("resnet18", classes=["class"], sample_duration=30)
     model.preprocessor.pipeline.bandpass.bypass = False  # ensure bandpass happens
-    model.preprocessor.pipeline.bandpass.params[
-        "low"
-    ] = 1  # add a bad param. this should be min_f
+    # add a bad param. this should be min_f
+    model.preprocessor.pipeline.bandpass.params["low"] = 1
 
     with pytest.raises(PreprocessingError):
         model.predict(files_df, raise_errors=True)
@@ -487,6 +495,28 @@ def test_generate_cams_num_workers(test_df):
     _ = model.generate_cams(test_df, num_workers=2)
 
 
+def test_generate_cams_scorecam_devices(test_df):
+    """In pytorch_grad_cam <1.5.0 scorecam had device mismatch"""
+
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    import pytorch_grad_cam
+
+    _ = model.generate_cams(
+        test_df,
+        method=pytorch_grad_cam.ScoreCAM,
+    )
+
+    # very slow on cpu - but can uncomment to check
+    # model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    # model.device = "cpu"
+    # import pytorch_grad_cam
+
+    # _ = model.generate_cams(
+    #     test_df,
+    #     method=pytorch_grad_cam.ScoreCAM,
+    # )
+
+
 def test_generate_cams_methods(test_df):
     """test each supported method both by passing class and string name"""
 
@@ -496,7 +526,7 @@ def test_generate_cams_methods(test_df):
     methods_dict = {
         "gradcam": pytorch_grad_cam.GradCAM,
         "hirescam": pytorch_grad_cam.HiResCAM,
-        "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
+        "scorecam": pytorch_grad_cam.ScoreCAM,
         "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
         "ablationcam": pytorch_grad_cam.AblationCAM,
         "xgradcam": pytorch_grad_cam.XGradCAM,

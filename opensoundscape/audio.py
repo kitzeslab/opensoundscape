@@ -38,6 +38,7 @@ from aru_metadata_parser.utils import load_metadata
 import opensoundscape
 from opensoundscape.utils import generate_clip_times_df
 from opensoundscape.signal_processing import tdoa
+from opensoundscape.utils import cast_np_to_native
 
 DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
 
@@ -354,6 +355,8 @@ class Audio:
 
             # if the offset > 0, we need to update the timestamp
             if "recording_start_time" in metadata and offset > 0:
+                # timedelta doesn't like np types, fix issue #928
+                offset = cast_np_to_native(offset)
                 metadata["recording_start_time"] += datetime.timedelta(seconds=offset)
 
         return cls(samples, sr, resample_type=resample_type, metadata=metadata)
@@ -533,9 +536,10 @@ class Audio:
         else:
             metadata = self.metadata.copy()
             if "recording_start_time" in metadata:
-                metadata["recording_start_time"] += datetime.timedelta(
-                    seconds=start_sample / self.sample_rate
-                )
+                # timedelta doesn't like np types, fix issue #928
+                seconds = start_sample / self.sample_rate
+                seconds = cast_np_to_native(seconds)
+                metadata["recording_start_time"] += datetime.timedelta(seconds=seconds)
 
             if "duration" in metadata:
                 metadata["duration"] = len(samples_trimmed) / self.sample_rate
@@ -587,41 +591,42 @@ class Audio:
     def extend_to(self, duration):
         """Extend audio file to desired duration by adding silence to the end
 
-        If duration is less than the Audio's .duration, the Audio object is trimmed.
+        If `duration` is less than or equal to the Audio's self.duration, the Audio remains unchanged.
+
         Otherwise, silence is added to the end of the Audio object to achieve the desired
-        duration.
+        `duration`.
 
         Args:
-            duration: the final duration in seconds of the audio object
+            duration: the minimum final duration in seconds of the audio object
 
         Returns:
             a new Audio object of the desired duration
         """
 
-        target_n_samples = round(duration * self.sample_rate)
+        minimum_n_samples = round(duration * self.sample_rate)
         current_n_samples = len(self.samples)
 
-        if target_n_samples > current_n_samples:
+        if minimum_n_samples <= current_n_samples:
+            return self._spawn()
+
+        else:
             # add 0's to the end of the sample array
             new_samples = np.pad(
-                self.samples, pad_width=(0, target_n_samples - current_n_samples)
+                self.samples, pad_width=(0, minimum_n_samples - current_n_samples)
             )
-        elif target_n_samples < current_n_samples:
-            # trim to desired samples (similar to self.trim())
-            new_samples = self.samples[0:target_n_samples]
 
-        # update metadata to reflect new duration
-        if self.metadata is None:
-            metadata = None
-        else:
-            metadata = self.metadata.copy()
-            if "duration" in metadata:
-                metadata["duration"] = len(new_samples) / self.sample_rate
+            # update metadata to reflect new duration
+            if self.metadata is None:
+                metadata = None
+            else:
+                metadata = self.metadata.copy()
+                if "duration" in metadata:
+                    metadata["duration"] = len(new_samples) / self.sample_rate
 
-        return self._spawn(
-            samples=new_samples,
-            metadata=metadata,
-        )
+            return self._spawn(
+                samples=new_samples,
+                metadata=metadata,
+            )
 
     def extend_by(self, duration):
         """Extend audio file by adding `duration` seconds of silence to the end
@@ -731,17 +736,20 @@ class Audio:
 
         # Compute the fft (fast fourier transform) of the selected clip
         N = len(self.samples)
-        fft = scipy.fft.fft(self.samples)
+        fft = scipy.fft.rfft(self.samples)
+        fft = np.abs(fft)  # get the magnitude of the fft
 
         # create the frequencies corresponding to fft bins
-        freq = scipy.fft.fftfreq(N, d=1 / self.sample_rate)
+        freq = scipy.fft.rfftfreq(N, d=1 / self.sample_rate)
 
-        # remove negative frequencies and scale magnitude by 2.0/N:
-        fft = 2.0 / N * fft[0 : int(N / 2)]
-        frequencies = freq[0 : int(N / 2)]
-        fft = np.abs(fft)
+        # scale magnitude by 2.0/N,
+        # except for the DC and sr/2 (Nyquist frequency) components
+        fft *= 2.0 / N
+        fft[0] *= 0.5
+        if N % 2 == 0:
+            fft[-1] *= 0.5
 
-        return fft, frequencies
+        return fft, freq
 
     def normalize(self, peak_level=None, peak_dBFS=None):
         """Return audio object with normalized waveform
