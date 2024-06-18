@@ -207,6 +207,10 @@ def generate_clip_times_df(
 
 
 def cast_np_to_native(x):
+    """if the input is a numpy integer or floating type, cast to native Python int or float
+
+    otherwise, input is unaffected
+    """
     # timedelta doesn't like np types, fix issue #928
     if isinstance(x, np.integer):
         return int(x)

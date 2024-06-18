@@ -663,12 +663,8 @@ class CNN(BaseClassifier):
 
                 # Log the Jaccard score and Hamming loss, and Loss function
                 epoch_loss_avg = np.mean(batch_loss)
-                self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
-
-                # Evaluate with model's eval function
-                # tgts = batch_labels.detach().cpu().numpy()
-                # scores = logits.detach().cpu().numpy()
-                # self.eval(tgts, scores, logging_offset=-1)
+                self._log(f"\tEpoch Running Average Loss: {epoch_loss_avg:.3f}")
+                self._log(f"\tMost Recent Batch Loss: {batch_loss[-1]:.3f}")
 
         # update learning parameters each epoch
         self.scheduler.step()
