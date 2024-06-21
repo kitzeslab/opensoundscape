@@ -238,6 +238,22 @@ def test_one_hot_labels_like(boxed_annotations):
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
 
 
+def test_one_hot_labels_like_no_overlap(boxed_annotations):
+    # check it does not fail if no annotations overlap with any of the clip_df times
+    clip_df = pd.DataFrame.from_dict(
+        {
+            "audio_file": ["audio_file.wav"] * 2,
+            "start_time": [50, 60],  # after all the annotations
+            "end_time": [60, 70],
+        }
+    )
+    clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
+    labels = boxed_annotations.one_hot_labels_like(
+        clip_df, class_subset=["a"], min_label_overlap=0.25
+    )
+    assert np.array_equal(labels.values, np.array([[0, 0]]).transpose())
+
+
 def test_one_hot_labels_like_overlap(boxed_annotations):
     clip_df = generate_clip_times_df(3, clip_duration=1.0, clip_overlap=0.5)
     clip_df["audio_file"] = "audio_file.wav"
@@ -323,62 +339,6 @@ def test_convert_labels_wrong_type(boxed_annotations):
     df = [["a", "b", "c"], ["a", "b", "d"]]
     with pytest.raises(TypeError):
         boxed_annotations = boxed_annotations.convert_labels(df)
-
-
-def test_one_hot_labels_on_time_interval(boxed_annotations):
-    a = annotations.one_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0,
-        end_time=3.5,
-        min_label_overlap=0.25,
-        class_subset=["a", "b"],
-    )
-    assert a["a"] == 1 and a["b"] == 1
-
-    a = annotations.one_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0,
-        end_time=3.5,
-        min_label_overlap=0.75,
-        class_subset=["a", "b"],
-    )
-    assert a["a"] == 1 and a["b"] == 0
-
-
-def test_one_hot_labels_on_time_interval_fractional(boxed_annotations):
-    """test min_label_fraction use cases"""
-    # too short but satisfies fraction
-    a = annotations.one_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0.4,
-        end_time=3,
-        min_label_overlap=2,
-        min_label_fraction=0.5,
-        class_subset=["a"],
-    )
-    assert a["a"] == 1
-
-    # too short and not enough for fraction
-    a = annotations.one_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0.4,
-        end_time=3,
-        min_label_overlap=2,
-        min_label_fraction=0.9,
-        class_subset=["a"],
-    )
-    assert a["a"] == 0
-
-    # long enough, although less than fraction
-    a = annotations.one_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0.4,
-        end_time=3,
-        min_label_overlap=0.5,
-        min_label_fraction=0.9,
-        class_subset=["a"],
-    )
-    assert a["a"] == 1
 
 
 def test_categorical_to_one_hot():
@@ -560,3 +520,25 @@ def test_from_raven_files_one_audio_file(raven_file):
     ba = BoxedAnnotations.from_raven_files(Path(raven_file), Path("path1"))
     assert str(ba.audio_files[0]) == "path1"
     assert len(ba.audio_files) == 1
+
+
+def test_find_overlapping_idxs_in_clip_df(boxed_annotations):
+    clip_df = generate_clip_times_df(5, clip_duration=1.0, clip_overlap=0)
+    # make it a multi-index, with the first level being the audio file, second being start, third being end time
+    clip_df["audio_file"] = "audio_file.wav"
+    clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
+    # annotation overlaps with 1 time-window
+    idxs = annotations.find_overlapping_idxs_in_clip_df(
+        0, 1, clip_df, min_label_overlap=0.25
+    )
+    assert len(idxs) == 1
+    # annotation overlaps with 2 time-windows
+    idxs = annotations.find_overlapping_idxs_in_clip_df(
+        0, 1.3, clip_df, min_label_overlap=0.25
+    )
+    assert len(idxs) == 2
+    # annotation-overlaps with no time-windows
+    idxs = annotations.find_overlapping_idxs_in_clip_df(
+        1000, 1001, clip_df, min_label_overlap=0.25
+    )
+    assert len(idxs) == 0
