@@ -431,6 +431,9 @@ class BoxedAnnotations:
     def to_csv(self, path):
         """save annotation table as csv-formatted text file
 
+        Note: the .annotation_files and .audio_files attributes are not saved,
+        only .df is retained in the generated csv file
+
         Args:
             path: file path to save to
 
