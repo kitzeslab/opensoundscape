@@ -134,6 +134,48 @@ def test_generate_clip_times_df_overlap():
     assert clip_df.iloc[1]["start_time"] == 2.5
     assert clip_df.iloc[1]["end_time"] == 7.5
 
+    clip_df = utils.generate_clip_times_df(
+        full_duration=10, clip_duration=5, clip_overlap_fraction=0.5
+    )
+    assert clip_df.shape[0] == 3
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 5.0
+    assert clip_df.iloc[1]["start_time"] == 2.5
+    assert clip_df.iloc[1]["end_time"] == 7.5
+
+    clip_df = utils.generate_clip_times_df(
+        full_duration=10, clip_duration=5, clip_step=2.5
+    )
+    assert clip_df.shape[0] == 3
+    assert clip_df.iloc[0]["start_time"] == 0.0
+    assert clip_df.iloc[0]["end_time"] == 5.0
+    assert clip_df.iloc[1]["start_time"] == 2.5
+    assert clip_df.iloc[1]["end_time"] == 7.5
+
+
+def test_generate_clip_times_df_overlap_raises_overspecified():
+    with pytest.raises(ValueError):
+        utils.generate_clip_times_df(
+            full_duration=10,
+            clip_duration=5,
+            clip_overlap=2.5,
+            clip_overlap_fraction=0.5,
+        )
+    with pytest.raises(ValueError):
+        utils.generate_clip_times_df(
+            full_duration=10,
+            clip_duration=5,
+            clip_overlap=2.5,
+            clip_step=0.5,
+        )
+    with pytest.raises(ValueError):
+        utils.generate_clip_times_df(
+            full_duration=10,
+            clip_duration=5,
+            clip_overlap_fraction=0.5,
+            clip_step=0.5,
+        )
+
 
 def test_make_clip_df(silence_10s_mp3_str):
     """many corner cases / alternatives are tested for audio.split()
@@ -226,7 +268,8 @@ def test_radom_sample(input):
 
 
 @pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
-def test_cnn(input):
+def test_set_seed_results_in_deterministic_weights_cnn_init(input):
+    """initializing a CNN with random weights should be deterministic after running utils.set_seed()"""
     utils.set_seed(input)
     model_resnet1 = cnn_architectures.resnet18(num_classes=10, weights=None)
     lw1 = model_resnet1.layer1[0].conv1.weight
@@ -240,3 +283,12 @@ def test_cnn(input):
     lw3 = model_resnet3.layer1[0].conv1.weight
 
     assert torch.all(lw1 == lw2) & torch.any(lw1 != lw3)
+
+
+def test_cast_np_to_native():
+    """test that np int and float are cast to native, other types unaffected"""
+    assert isinstance(utils.cast_np_to_native(np.int32(1)), int)
+    assert isinstance(utils.cast_np_to_native(np.float32(1.0)), float)
+    # should not affect other dtypes
+    assert isinstance(utils.cast_np_to_native(True), bool)
+    assert isinstance(utils.cast_np_to_native("a"), str)

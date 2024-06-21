@@ -166,10 +166,11 @@ class AudioSplittingDataset(AudioFileDataset):
     automatically split longer files into clips (providing only the file paths).
 
     Args:
-        see AudioFileDataset and make_clip_df
+        samples and preprocessor are passed to AudioFileDataset.__init__
+        **kwargs are passed to opensoundscape.utils.make_clip_df
     """
 
-    def __init__(self, samples, preprocessor, overlap_fraction=0, final_clip=None):
+    def __init__(self, samples, preprocessor, **kwargs):
         super(AudioSplittingDataset, self).__init__(
             samples=samples, preprocessor=preprocessor
         )
@@ -182,7 +183,6 @@ class AudioSplittingDataset(AudioFileDataset):
         self.label_df, self.invalid_samples = make_clip_df(
             files=samples,
             clip_duration=preprocessor.sample_duration,
-            clip_overlap=overlap_fraction * preprocessor.sample_duration,
-            final_clip=final_clip,
             return_invalid_samples=True,
+            **kwargs,
         )

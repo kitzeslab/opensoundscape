@@ -15,7 +15,7 @@ def list_models():
     return torch.hub.list("kitzeslab/bioacoustics-model-zoo")
 
 
-def load(model):
+def load(model, **kwargs):
     """
     load a model from the [bioacoustics model zoo](https://github.com/kitzeslab/bioacoustics-model-zoo)
 
@@ -23,6 +23,7 @@ def load(model):
 
     Args:
         model: name of model to load, i.e. one listed by list_models()
+        **kwargs are passed to torch.hub.load()
 
     Returns:
         ready-to-use model object
@@ -36,4 +37,4 @@ def load(model):
     detailed instructions)
 
     """
-    return torch.hub.load("kitzeslab/bioacoustics-model-zoo", model)
+    return torch.hub.load("kitzeslab/bioacoustics-model-zoo", model, **kwargs)

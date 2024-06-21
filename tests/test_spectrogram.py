@@ -158,6 +158,12 @@ def test_plot_spectrogram():
     Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20)).plot()
 
 
+def test_plot_spectrogram_kHz():
+    Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20)).plot(
+        kHz=True
+    )
+
+
 def test_amplitude_spectrogram():
     Spectrogram(
         np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20)
