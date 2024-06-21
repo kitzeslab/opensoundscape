@@ -495,9 +495,9 @@ class CNN(BaseClassifier):
                 len(classes), num_channels=num_channels
             )
         else:
-            assert issubclass(
-                type(architecture), torch.nn.Module
-            ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
+            assert isinstance(
+                architecture, torch.nn.Module
+            ), "architecture must be a string or an instance of (a subclass of) torch.nn.Module"
             if num_channels != 3:
                 warnings.warn(
                     f"Make sure your architecture expects the number of channels in "
@@ -677,12 +677,8 @@ class CNN(BaseClassifier):
 
                 # Log the Jaccard score and Hamming loss, and Loss function
                 epoch_loss_avg = np.mean(batch_loss)
-                self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
-
-                # Evaluate with model's eval function
-                # tgts = batch_labels.detach().cpu().numpy()
-                # scores = logits.detach().cpu().numpy()
-                # self.eval(tgts, scores, logging_offset=-1)
+                self._log(f"\tEpoch Running Average Loss: {epoch_loss_avg:.3f}")
+                self._log(f"\tMost Recent Batch Loss: {batch_loss[-1]:.3f}")
 
         # update learning parameters each epoch
         self.scheduler.step()
@@ -1219,7 +1215,7 @@ class CNN(BaseClassifier):
                 str can be any of the following:
                     "gradcam": pytorch_grad_cam.GradCAM,
                     "hirescam": pytorch_grad_cam.HiResCAM,
-                    "scorecam": opensoundscape.ml.utils.ScoreCAM, #pytorch_grad_cam.ScoreCAM,
+                    "scorecam": pytorch_grad_cam.ScoreCAM,
                     "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
                     "ablationcam": pytorch_grad_cam.AblationCAM,
                     "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1280,7 +1276,7 @@ class CNN(BaseClassifier):
         methods_dict = {
             "gradcam": pytorch_grad_cam.GradCAM,
             "hirescam": pytorch_grad_cam.HiResCAM,
-            "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
+            "scorecam": pytorch_grad_cam.ScoreCAM,
             "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
             "ablationcam": pytorch_grad_cam.AblationCAM,
             "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1293,11 +1289,13 @@ class CNN(BaseClassifier):
         if isinstance(method, str) and method in methods_dict:
             # get cam clsas based on string name and create instance
             cam = methods_dict[method](model=self.network, target_layers=target_layers)
+            cam.device = self.device
         elif method is None:
             cam = None
         elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
             # generate instance of cam from class
             cam = method(model=self.network, target_layers=target_layers)
+            cam.device = self.device
         else:
             raise ValueError(
                 f"`method` {method} not supported. "
@@ -1308,8 +1306,8 @@ class CNN(BaseClassifier):
         # initialize guided back propagation object
         if guided_backprop:
             gb_model = pytorch_grad_cam.GuidedBackpropReLUModel(
-                model=self.network, use_cuda=False
-            )  # TODO cuda usage - expose? use model setting?
+                model=self.network, device=self.device
+            )
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.inference_dataloader_cls(

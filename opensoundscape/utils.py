@@ -199,6 +199,8 @@ def generate_clip_times_df(
     # Lists of start and end times for clips
     increment = clip_duration - clip_overlap
     starts = np.arange(0, full_duration, increment)
+    if rounding_precision is not None:
+        starts = starts.round(rounding_precision)
     ends = starts + clip_duration
 
     # Handle the final_clip
@@ -226,14 +228,14 @@ def generate_clip_times_df(
         # Keep the end values that extend beyond full_duration
         pass
 
-    if rounding_precision is not None:
-        starts = starts.round(rounding_precision)
-        ends = ends.round(rounding_precision)
-
     return pd.DataFrame({"start_time": starts, "end_time": ends}).drop_duplicates()
 
 
 def cast_np_to_native(x):
+    """if the input is a numpy integer or floating type, cast to native Python int or float
+
+    otherwise, input is unaffected
+    """
     # timedelta doesn't like np types, fix issue #928
     if isinstance(x, np.integer):
         return int(x)

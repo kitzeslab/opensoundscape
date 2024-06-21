@@ -63,7 +63,6 @@ class BaseAction:
         new_params = dict(self.params)
         new_params.update(kwargs)
         self.params = pd.Series(new_params, dtype=object)
-        # self.params.update(pd.Series(kwargs, dtype=object))
 
     def get(self, arg):
         return self.params[arg]
@@ -163,7 +162,7 @@ class AudioTrim(Action):
     """Action to trim/extend audio to desired length
 
     Args:
-        see actions.audio_trim()
+        see actions.trim_audio()
     """
 
     def __init__(self, **kwargs):
@@ -173,7 +172,7 @@ class AudioTrim(Action):
         self.action_fn(sample, **dict(self.params, **kwargs))
 
 
-def trim_audio(sample, target_duration, extend=True, random_trim=False, tol=1e-6):
+def trim_audio(sample, target_duration, extend=True, random_trim=False, tol=1e-10):
     """trim audio clips from t=0 or random position (Audio -> Audio)
 
     Trims an audio file to desired length.
