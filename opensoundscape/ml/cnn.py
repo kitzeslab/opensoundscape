@@ -20,7 +20,7 @@ from tqdm.autonotebook import tqdm
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
-from opensoundscape.ml.utils import apply_activation_layer
+from opensoundscape.ml.utils import apply_activation_layer, check_labels
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
 from opensoundscape.ml.loss import (
     BCEWithLogitsLoss_hot,
@@ -42,6 +42,8 @@ from opensoundscape.metrics import (
     single_target_metrics,
     multi_target_metrics,
 )
+
+import warnings
 
 
 class BaseClassifier(torch.nn.Module):
@@ -83,6 +85,13 @@ class BaseClassifier(torch.nn.Module):
         ### metrics ###
         self.prediction_threshold = 0.5  # used for threshold-specific metrics
 
+        ### network device ###
+        # automatically gpu (default is 'cuda:0') if available
+        # can set after init, eg model.device='cuda:1'
+        # network and samples are moved to device during training/inference
+        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu'), torch.device('mps') etc
+        self.device = _gpu_if_available()
+
     def _log(self, message, level=1):
         txt = str(message)
         if self.logging_level >= level and self.log_file is not None:
@@ -98,7 +107,10 @@ class BaseClassifier(torch.nn.Module):
         num_workers=0,
         activation_layer=None,
         split_files_into_clips=True,
-        overlap_fraction=0,
+        clip_overlap=None,
+        clip_overlap_fraction=None,
+        clip_step=None,
+        overlap_fraction=None,
         final_clip=None,
         bypass_augmentations=True,
         invalid_samples_log=None,
@@ -120,6 +132,7 @@ class BaseClassifier(torch.nn.Module):
                 - a dataframe with index containing audio paths, OR
                 - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
+                - a single file path (str or pathlib.Path)
             batch_size:
                 Number of files to load simultaneously [default: 1]
             num_workers:
@@ -137,10 +150,9 @@ class BaseClassifier(torch.nn.Module):
             split_files_into_clips:
                 If True, internally splits and predicts on clips from longer audio files
                 Otherwise, assumes each row of `samples` corresponds to one complete sample
-            overlap_fraction: fraction of overlap between consecutive clips when
-                predicting on clips of longer audio files. For instance, 0.5
-                gives 50% overlap between consecutive clips.
-            final_clip: see `opensoundscape.utils.generate_clip_times_df`
+            clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+                see `opensoundscape.utils.generate_clip_times_df`
+            overlap_fraction: deprecated alias for clip_overlap_fraction
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
             invalid_samples_log: if not None, samples that failed to preprocess
@@ -180,6 +192,9 @@ class BaseClassifier(torch.nn.Module):
             for that sample will be np.nan
 
         """
+        # for convenience, convert str/pathlib.Path to list of length 1
+        if isinstance(samples, (str, Path)):
+            samples = [samples]
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.inference_dataloader_cls(
@@ -187,6 +202,9 @@ class BaseClassifier(torch.nn.Module):
             self.preprocessor,
             split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
+            clip_overlap=clip_overlap,
+            clip_overlap_fraction=clip_overlap_fraction,
+            clip_step=clip_step,
             final_clip=final_clip,
             bypass_augmentations=bypass_augmentations,
             batch_size=batch_size,
@@ -220,7 +238,7 @@ class BaseClassifier(torch.nn.Module):
             # Log a table of preprocessed samples to wandb
             wandb_session.log(
                 {
-                    "Samples / Preprocessed samples": wandb_table(
+                    "Peprocessed_samples": wandb_table(
                         dataloader.dataset.dataset,
                         self.wandb_logging["n_preview_samples"],
                     )
@@ -229,7 +247,12 @@ class BaseClassifier(torch.nn.Module):
 
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
-        pred_scores = self.__call__(dataloader, wandb_session, progress_bar)
+        # TODO: allow arbitrary **kwargs to be passed to __call__?
+        pred_scores = self.__call__(
+            dataloader=dataloader,
+            wandb_session=wandb_session,
+            progress_bar=progress_bar,
+        )
 
         ### Apply activation layer ### #TODO: test speed vs. doing it in __call__ on batches
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
@@ -265,9 +288,8 @@ class BaseClassifier(torch.nn.Module):
                     classes_to_extract=[c],
                     drop_labels=True,
                     gradcam_model=self if self.wandb_logging["gradcam"] else None,
-                    raise_exceptions=True,  # TODO back to false when done debugging
                 )
-                wandb_session.log({f"Samples / Top scoring [{c}]": table})
+                wandb_session.log({f"Top_scoring_{c.replace(' ','_')}": table})
 
         if return_invalid_samples:
             return score_df, invalid_samples
@@ -349,7 +371,15 @@ class BaseClassifier(torch.nn.Module):
             scores: continuous values in 0/1 for each sample and class
             logging_offset: modify verbosity - for example, -1 will reduce
                 the amount of printing/logging by 1 level
+
+        Raises:
+            AssertionError: if targets are outside of range [0,1]
         """
+
+        # check for invalid label values
+        assert (
+            targets.max(axis=None) <= 1 and targets.min(axis=None) >= 0
+        ), "Labels must in range [0,1], but found values outside range"
 
         # remove all samples with NaN for a prediction
         targets = targets[~np.isnan(scores).any(axis=1), :]
@@ -465,9 +495,9 @@ class CNN(BaseClassifier):
                 len(classes), num_channels=num_channels
             )
         else:
-            assert issubclass(
-                type(architecture), torch.nn.Module
-            ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
+            assert isinstance(
+                architecture, torch.nn.Module
+            ), "architecture must be a string or an instance of (a subclass of) torch.nn.Module"
             if num_channels != 3:
                 warnings.warn(
                     f"Make sure your architecture expects the number of channels in "
@@ -476,13 +506,6 @@ class CNN(BaseClassifier):
                 )
             self.architecture_name = str(type(architecture))
         self.network = architecture
-
-        ### network device ###
-        # automatically gpu (default is 'cuda:0') if available
-        # can override after init, eg model.device='cuda:1'
-        # network and samples are moved to gpu during training/inference
-        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu'), torch.device('mps') etc
-        self.device = _gpu_if_available()
 
         ### sample loading/preprocessing ###
         # preprocessor will have attributes .sample_duration (seconds)
@@ -568,7 +591,7 @@ class CNN(BaseClassifier):
             train_df,
             self.preprocessor,
             split_files_into_clips=True,
-            overlap_fraction=0,
+            clip_overlap=0,
             final_clip=None,
             bypass_augmentations=False,
             batch_size=batch_size,
@@ -654,12 +677,8 @@ class CNN(BaseClassifier):
 
                 # Log the Jaccard score and Hamming loss, and Loss function
                 epoch_loss_avg = np.mean(batch_loss)
-                self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
-
-                # Evaluate with model's eval function
-                # tgts = batch_labels.detach().cpu().numpy()
-                # scores = logits.detach().cpu().numpy()
-                # self.eval(tgts, scores, logging_offset=-1)
+                self._log(f"\tEpoch Running Average Loss: {epoch_loss_avg:.3f}")
+                self._log(f"\tMost Recent Batch Loss: {batch_loss[-1]:.3f}")
 
         # update learning parameters each epoch
         self.scheduler.step()
@@ -793,9 +812,9 @@ class CNN(BaseClassifier):
             `train_df=train_df[cnn.classes]` or `cnn.classes=train_df.columns` 
             before training.
             """
-        assert list(self.classes) == list(train_df.columns), class_err
+        check_labels(train_df, self.classes)
         if validation_df is not None:
-            assert list(self.classes) == list(validation_df.columns), class_err
+            check_labels(validation_df, self.classes)
 
         # Validation: warn user if no validation set
         if validation_df is None:
@@ -841,21 +860,23 @@ class CNN(BaseClassifier):
             # log tables of preprocessed samples
             wandb_session.log(
                 {
-                    "Samples / training samples": wandb_table(
+                    "training_samples": wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=False
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
-                    "Samples / training samples no aug": wandb_table(
+                    "training_samples_no_aug": wandb_table(
                         AudioFileDataset(
                             train_df, self.preprocessor, bypass_augmentations=True
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
-                    "Samples / validation samples": wandb_table(
+                    "validation_samples": wandb_table(
                         AudioFileDataset(
-                            validation_df, self.preprocessor, bypass_augmentations=True
+                            validation_df,
+                            self.preprocessor,
+                            bypass_augmentations=True,
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
@@ -1194,7 +1215,7 @@ class CNN(BaseClassifier):
                 str can be any of the following:
                     "gradcam": pytorch_grad_cam.GradCAM,
                     "hirescam": pytorch_grad_cam.HiResCAM,
-                    "scorecam": opensoundscape.ml.utils.ScoreCAM, #pytorch_grad_cam.ScoreCAM,
+                    "scorecam": pytorch_grad_cam.ScoreCAM,
                     "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
                     "ablationcam": pytorch_grad_cam.AblationCAM,
                     "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1255,7 +1276,7 @@ class CNN(BaseClassifier):
         methods_dict = {
             "gradcam": pytorch_grad_cam.GradCAM,
             "hirescam": pytorch_grad_cam.HiResCAM,
-            "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
+            "scorecam": pytorch_grad_cam.ScoreCAM,
             "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
             "ablationcam": pytorch_grad_cam.AblationCAM,
             "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1268,11 +1289,13 @@ class CNN(BaseClassifier):
         if isinstance(method, str) and method in methods_dict:
             # get cam clsas based on string name and create instance
             cam = methods_dict[method](model=self.network, target_layers=target_layers)
+            cam.device = self.device
         elif method is None:
             cam = None
         elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
             # generate instance of cam from class
             cam = method(model=self.network, target_layers=target_layers)
+            cam.device = self.device
         else:
             raise ValueError(
                 f"`method` {method} not supported. "
@@ -1283,8 +1306,8 @@ class CNN(BaseClassifier):
         # initialize guided back propagation object
         if guided_backprop:
             gb_model = pytorch_grad_cam.GuidedBackpropReLUModel(
-                model=self.network, use_cuda=False
-            )  # TODO cuda usage - expose? use model setting?
+                model=self.network, device=self.device
+            )
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.inference_dataloader_cls(
@@ -1391,6 +1414,20 @@ class CNN(BaseClassifier):
 
         # return list of AudioSamples containing .cam attributes
         return generated_samples
+
+    @property
+    def device(self):
+        return self._device
+
+    @device.setter
+    def device(self, device):
+        """
+        Set the device to use in train/predict, casting strings to torch.device datatype
+
+        Args:
+            device: a torch.device object or str such as 'cuda:0', 'mps', 'cpu'
+        """
+        self._device = torch.device(device)
 
 
 def use_resample_loss(

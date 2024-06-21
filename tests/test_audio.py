@@ -376,6 +376,12 @@ def test_load_metadata(veryshort_wav_str):
     assert a.metadata["samplerate"] == 44100
 
 
+def test_load_metadata_int_offset(metadata_wav_str):
+    # addresses issue #928
+    Audio.from_file(metadata_wav_str, offset=np.int32(3), duration=0.1)
+    Audio.from_file(metadata_wav_str, offset=np.float32(3), duration=0.1)
+
+
 # currently don't know how to create a file with bad / no metadata
 # def test_load_metadata_warning(path_with_no_metadata):
 #     with pytest.raises(UserWarning)

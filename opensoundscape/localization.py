@@ -6,6 +6,7 @@ import datetime
 
 from opensoundscape.audio import Audio
 from opensoundscape import audio
+from opensoundscape.utils import cast_np_to_native
 from scipy.optimize import least_squares
 
 
@@ -640,8 +641,9 @@ class SynchronizedRecorderArray:
                         if self.start_timestamp is None:
                             start_timestamp = None
                         else:
+                            # timedelta doesn't like np types, fix issue #928
                             start_timestamp = self.start_timestamp + datetime.timedelta(
-                                seconds=time_i
+                                seconds=cast_np_to_native(time_i)
                             )
                         # create a SpatialEvent for this cluster of simultaneous detections
                         candidate_events.append(

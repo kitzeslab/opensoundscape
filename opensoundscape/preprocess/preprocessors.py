@@ -132,7 +132,7 @@ class BasePreprocessor:
         # create AudioSample from input path
         sample = self._generate_sample(sample)
         if trace:
-            sample.trace = pd.Series(index=self.pipeline.index)
+            sample.trace = pd.Series(index=self.pipeline.index, dtype=str)
 
         if profile:
             sample.runtime = pd.Series(index=self.pipeline.index)
@@ -146,13 +146,15 @@ class BasePreprocessor:
                 if type(action) == break_on_type or k == break_on_key:
                     if trace:
                         # saved "output" of this step informs user pipeline was stopped
-                        sample.trace[k] = f"## Pipeline terminated ## {sample.trace[k]}"
+                        sample.trace.loc[k] = (
+                            f"## Pipeline terminated ## {sample.trace[k]}"
+                        )
                     break
                 if action.bypass:
                     continue
                 if action.is_augmentation and bypass_augmentations:
                     if trace:
-                        sample.trace[k] = f"## Bypassed ## {sample.trace[k]}"
+                        sample.trace.loc[k] = f"## Bypassed ## {sample.trace[k]}"
                     continue
 
                 # perform the action (modifies the AudioSample in-place)
@@ -196,6 +198,7 @@ class BasePreprocessor:
         """
         # handle paths or pd.Series as input for `sample`
         if isinstance(sample, tuple):
+            # assume duration should be self.sample_duration
             path, start = sample
             assert isinstance(
                 path, (str, Path)
@@ -277,9 +280,16 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 # references AudioSample attributes: start_time and duration
                 "load_audio": AudioClipLoader(),
                 # if we are augmenting and get a long file, take a random trim from it
-                "random_trim_audio": AudioTrim(is_augmentation=True, random_trim=True),
+                "random_trim_audio": AudioTrim(
+                    target_duration=sample_duration,
+                    is_augmentation=True,
+                    random_trim=True,
+                ),
                 # otherwise, we expect to get the correct duration. no random trim
-                "trim_audio": AudioTrim(),  # trim or extend (w/silence) clips to correct length
+                # trim or extend (w/silence) clips to correct length
+                "trim_audio": AudioTrim(
+                    target_duration=sample_duration, random_trim=False
+                ),
                 # convert Audio object to Spectrogram
                 "to_spec": Action(Spectrogram.from_audio),
                 # bandpass to 0-11.025 kHz (to ensure all outputs have same scale in y-axis)
@@ -344,14 +354,21 @@ class AudioPreprocessor(BasePreprocessor):
         sample_duration:
             length in seconds of audio samples generated
         sample_rate: target sample rate. [default: None] does not resample
+        extend_short_clips: if True, clips shorter than sample_duration are extended
+            to sample_duration by adding silence.
     """
 
-    def __init__(self, sample_duration, sample_rate):
+    def __init__(self, sample_duration, sample_rate, extend_short_clips=True):
         super(AudioPreprocessor, self).__init__(sample_duration=sample_duration)
         self.pipeline = pd.Series(
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
                 "load_audio": AudioClipLoader(sample_rate=sample_rate),
+                # trim samples to correct length
+                # if extend_short_clips=True, extend short clips with silence
+                "trim_audio": AudioTrim(
+                    target_duration=sample_duration, extend=extend_short_clips
+                ),
             }
         )
