@@ -1,4 +1,4 @@
-Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	Species
+Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	Species	distance	type
 1	Spectrogram 1	1	1.897648165999982	4.110570810999974	1326.3	3266.5	WOTH
 2	Spectrogram 1	1	3.182493230999995	4.542066620999975	3030.8	6196.3	EATO
 3	Spectrogram 1	1	6.488027590999991	6.873722169000018	1145.0	2694.0	WOTH

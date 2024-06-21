@@ -42,11 +42,17 @@ class BoxedAnnotations:
     because it was annotated/reviewed.
     """
 
-    __slots__ = (
-        "df",
-        "annotation_files",
-        "audio_files",
-    )
+    __slots__ = ("df", "annotation_files", "audio_files")
+    _required_cols = ["annotation", "start_time", "end_time"]
+    _standard_cols = [
+        "audio_file",
+        "annotation_file",
+        "annotation",
+        "start_time",
+        "end_time",
+        "low_f",
+        "high_f",
+    ]
 
     def __init__(self, df, annotation_files=None, audio_files=None):
         """
@@ -77,24 +83,16 @@ class BoxedAnnotations:
         self.annotation_files = annotation_files
         self.audio_files = audio_files
 
-        standard_cols = [
-            "audio_file",
-            "annotation_file",
-            "annotation",
-            "start_time",
-            "end_time",
-            "low_f",
-            "high_f",
-        ]
-        required_cols = ["annotation", "start_time", "end_time"]
-        for col in required_cols:
+        for col in self._required_cols:
             assert col in df.columns, (
-                f"df columns must include all of these: {str(required_cols)}\n"
+                f"df columns must include all of these: {str(self._required_cols)}\n"
                 f"columns in df: {list(df.columns)}"
             )
         # re-order columns
         # keep any extras from input df and add any missing standard columns
-        ordered_cols = standard_cols + list(set(df.columns) - set(standard_cols))
+        ordered_cols = self._standard_cols + list(
+            set(df.columns) - set(self._standard_cols)
+        )
         self.df = df.reindex(columns=ordered_cols)
 
     def __repr__(self):
@@ -201,6 +199,9 @@ class BoxedAnnotations:
 
         for i, raven_file in enumerate(raven_files):
             df = pd.read_csv(raven_file, delimiter="\t")
+            if df.empty:
+                warnings.warn(f"{raven_file} has zero rows.")
+                continue
             if annotation_column_name is not None:
                 # annotation_column_name argument takes precedence over
                 # annotation_column_idx. If it is passed, we use it and ignore
@@ -243,45 +244,40 @@ class BoxedAnnotations:
             # add column containing the raven file path
             df["annotation_file"] = raven_file
 
-            # remove undesired columns
-            standard_columns = [
-                "annotation_file",
-                "start_time",
-                "end_time",
-                "low_f",
-                "high_f",
-            ]
-            if annotation_column_idx is not None:
-                standard_columns.append("annotation")
-            if hasattr(keep_extra_columns, "__iter__"):
-                # keep the desired columns
-                # if values in keep_extra_columns are missing, fill with nan
-                df = df.reindex(
-                    columns=standard_columns + list(keep_extra_columns),
-                    fill_value=np.nan,
-                )
-            elif not keep_extra_columns:
-                # only keep required columns
-                df = df.reindex(columns=standard_columns)
-            else:
-                # keep all columns
-                pass
-
             # add audio file column
             if audio_files is not None:
                 df["audio_file"] = audio_files[i]
             else:
                 df["audio_file"] = np.nan
 
+            # subset and re-order columns
+            if hasattr(keep_extra_columns, "__iter__"):
+                # keep the desired columns
+                # if values in keep_extra_columns are missing, fill with nan
+                df = df.reindex(
+                    columns=cls._standard_cols + list(keep_extra_columns),
+                    fill_value=np.nan,
+                )
+            elif not keep_extra_columns:
+                # only keep required columns
+                df = df.reindex(columns=cls._standard_cols)
+            else:
+                # keep all columns
+                pass
+
             all_file_dfs.append(df)
 
-        # we drop the original index from the Raven annotations when we combine tables
-        # if the dataframes have different columns, we fill missing columns with nan values
-        # and keep all unique columns
-        all_annotations = pd.concat(all_file_dfs).reset_index(drop=True)
+        if len(all_file_dfs) > 0:
+            # we drop the original index from the Raven annotations when we combine tables
+            # if the dataframes have different columns, we fill missing columns with nan values
+            # and keep all unique columns
+            all_annotations_df = pd.concat(all_file_dfs).reset_index(drop=True)
+
+        else:
+            all_annotations_df = pd.DataFrame(columns=cls._required_cols)
 
         return cls(
-            df=all_annotations,
+            df=all_annotations_df,
             annotation_files=raven_files,
             audio_files=audio_files,
         )
