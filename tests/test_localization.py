@@ -394,16 +394,23 @@ def test_spatial_event_timestamps(LOCA_2021_aru_coords, LOCA_2021_detections):
 
 
 def test_localize_too_few_receivers(LOCA_2021_aru_coords, LOCA_2021_detections):
-    """Check that the localization pipeline does not return a position estimate when there are too few receivers"""
+    """Check that the localization pipeline does not return a position estimate
+    when there are too few receivers left after filtering by cc_threshold
+
+    events that originally had enough recorders, but after filtering by cc_threshold
+    have too few recorders, should be returned as unlocalized events
+    """
     file_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
     detections = pd.read_csv(LOCA_2021_detections, index_col=[0, 1, 2])
     array = localization.SynchronizedRecorderArray(file_coords=file_coords)
-    localized_events = array.localize_detections(
+    localized_events, unlocalized_events = array.localize_detections(
         detections=detections,
         min_n_receivers=4,
         max_receiver_dist=30,
         localization_algorithm="gillette",
         cc_filter="phat",
-        cc_threshold=100,  # above the threshold for all receivers, meaning no events should be localized
+        cc_threshold=100,
+        return_unlocalized=True,
     )
     assert len(localized_events) == 0
+    assert len(unlocalized_events) == 6
