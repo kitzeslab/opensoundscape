@@ -1,4 +1,5 @@
 """lightweight wrapper to list and get models from bioacoustics model zoo with torch.hub"""
+
 import torch
 
 

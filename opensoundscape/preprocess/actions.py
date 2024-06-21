@@ -8,6 +8,7 @@ or augmented sample, which may or may not be the same type as the original.
 See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
+
 import random
 import warnings
 import numpy as np

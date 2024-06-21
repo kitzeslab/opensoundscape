@@ -2,6 +2,7 @@
 
 This module provides functionality to search audio for periodically fluctuating vocalizations.
 """
+
 import os
 import warnings
 

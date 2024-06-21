@@ -29,6 +29,7 @@ Note: the InceptionV3 architecture must be used differently than other
 architectures - the easiest way is to simply use the InceptionV3 class in
 opensoundscape.ml.cnn.
 """
+
 import warnings
 
 import torch

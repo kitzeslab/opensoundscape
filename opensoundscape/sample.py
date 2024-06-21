@@ -1,4 +1,5 @@
 """Class for holding information on a single sample"""
+
 import copy
 from pathlib import Path
 import torch
