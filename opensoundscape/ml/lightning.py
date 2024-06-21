@@ -59,37 +59,40 @@ from opensoundscape.ml.cnn import BaseModule, SpectrogramModule
 
 import warnings
 
+
 class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.save_hyperparameters()
 
-        # choose functions to inherit from LightningModule rather than
-        # from SpectrogramModule
-        self.train = L.LightningModule.train
+    def train(self, *args, **kwargs):
+        """inherit train() method from LightningModule rather than SpectrogramModule"""
+        return L.LightningModule.train(self, *args, **kwargs)
 
-    def __call__(self, dataloader, **kwargs):
-        """run inference on a dataloader using Trainer
+    def __call__(self, *args, **kwargs):
+        """inherit __call__ method from LightningModule rather than SpectrogramModule"""
+        return L.LightningModule.__call__(self, *args, **kwargs)
+        # """run inference on a dataloader using Trainer
 
-        Args:
-            dataloader: DataLoader object that returns batches of AudioSamples
-                e.g. SafeAudioDataLoader
-            **kwargs: any additional arguments to pass to lightning.Trainer init
-        """
-        trainer = L.Trainer(**kwargs)
-        pred_scores = torch.cat(trainer.predict(self.model, dataloader))
+        # Args:
+        #     dataloader: DataLoader object that returns batches of AudioSamples
+        #         e.g. SafeAudioDataLoader
+        #     **kwargs: any additional arguments to pass to lightning.Trainer init
+        # """
+        # trainer = L.Trainer(**kwargs)
+        # pred_scores = torch.cat(trainer.predict(self, dataloader))
 
-        if len(pred_scores) > 0:
-            pred_scores = np.array(pred_scores)
-            # replace scores with nan for samples that failed in preprocessing
-            # (we predicted on substitute-samples rather than
-            # skipping the samples that failed preprocessing)
-            pred_scores[dataloader.dataset._invalid_indices, :] = np.nan
-        else:
-            pred_scores = None
+        # if len(pred_scores) > 0:
+        #     pred_scores = np.array(pred_scores)
+        #     # replace scores with nan for samples that failed in preprocessing
+        #     # (we predicted on substitute-samples rather than
+        #     # skipping the samples that failed preprocessing)
+        #     pred_scores[dataloader.dataset._invalid_indices, :] = np.nan
+        # else:
+        #     pred_scores = None
 
-        return pred_scores
+        # return pred_scores
 
     def forward(self, samples):
         """standard Lightning method defining action to take on each batch for inference
@@ -101,17 +104,17 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         return self.model(batch_tensors)
 
     def save(self, path, save_hooks=False, weights_only=False):
-        """save model with weights using torch.save()
+        """save model with weights using Trainer.save_checkpoint()
 
-        load from saved file with torch.load(path) or cnn.load_model(path)
+        load from saved file with LightningSpectrogramModule.load_from_checkpoint()
 
         Note: saving and loading model objects across OpenSoundscape versions
-        will not work properly. Instead, use .save_torch_dict and .load_torch_dict
-        (but note that customizations to preprocessing, training params, etc will
-        not be retained using those functions).
+        will not work properly. Instead, use .save_weights() and .load_weights()
+        (but note that architecture, customizations to preprocessing, training params,
+        etc will not be retained using those functions).
 
         For maximum flexibilty in further use, save the model with both .save() and
-        .save_torch_dict()
+        .save_torch_dict() or .save_weights().
 
         Args:
             path: file path for saved model object
@@ -132,52 +135,13 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             # remove all forward and backward hooks on network.modules()
             from collections import OrderedDict
 
-            for m in model_copy.network.modules():
+            for m in model_copy.model.modules():
                 m._forward_hooks = OrderedDict()
                 m._backward_hooks = OrderedDict()
 
         t = L.Trainer()
         t.strategy.connect(model=model_copy)
         t.save_checkpoint(path, weights_only=weights_only)
-
-    @classmethod
-    def load(cls, path, **kwargs):
-        """load model from saved file using torch.load()
-
-        Args:
-            path: file path for saved model object
-            **kwargs passed to LightningModule.load_from_checkpoint()
-
-        Returns:
-            Classifier object
-        """
-        try:
-            model = cls.lightning_module_cls.load_from_checkpoint(path, **kwargs)
-
-            # warn the user if loaded model's opso version doesn't match the current one
-            if model.opensoundscape_version != opensoundscape.__version__:
-                warnings.warn(
-                    f"This model was saved with an earlier version of opensoundscape "
-                    f"({model.opensoundscape_version}) and will not work properly in "
-                    f"the current opensoundscape version ({opensoundscape.__version__}). "
-                    f"To use models across package versions use .save_torch_dict and "
-                    f".load_torch_dict"
-                )
-            return cls(model=model)
-
-        except ModuleNotFoundError as e:
-            raise ModuleNotFoundError(
-                """
-                This model file could not be loaded in this version of
-                OpenSoundscape. You may need to load the model with the version
-                of OpenSoundscape that created it and torch.save() the
-                model.network.state_dict(), then load the weights with model.load_weights
-                in the current OpenSoundscape version (where model is a new instance of the
-                opensoundscape.CNN class). If you do this, make sure to
-                re-create any specific preprocessing steps that were used in the
-                original model. See the `Predict with pre-trained CNN` tutorial for details.
-                """
-            ) from e
 
     def save_weights(self, path):
         """save just the weights of the network
@@ -199,7 +163,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
 
         Args:
             path: file path with saved weights
-            strict: (bool) see torch.load()
+            strict: (bool) see torch.Module.load_state_dict()
         """
         self.model.load_state_dict(torch.load(path), strict=strict)
 
@@ -207,7 +171,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         self,
         train_df,
         validation_df=None,
-        epochs=1,  # override max_epochs
+        epochs=1,
         batch_size=1,
         num_workers=0,
         save_path=".",  # TODO: TypeError: unsupported format string passed to NoneType.__format__ if None is passed
@@ -216,11 +180,6 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         wandb_session=None,  # can also pass logger = kwarg with any Lightning logger
         checkpoint_path=None,
         **kwargs,
-        # save_interval=1,  # save weights every n epochs # now use Lightning Trainer()
-        # log_interval=10,  # print metrics every n batches #now use log_every_n_steps
-        # validation_interval=1,  # compute validation metrics every n epochs
-        # progress_bar=True, #now use enable_progress_bar
-        # accumulate_grad_batches
     ):
         """train the model on samples from train_dataset
 
@@ -273,7 +232,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
                 model.train(...,wandb_session=session)
                 session.finish()
                 ```
-            **kwargs: any arguments to pytorch_lightning.Trainer(), such as max_epochs,
+            **kwargs: any arguments to pytorch_lightning.Trainer(), such as
                 accelerator, precision, logger, accumulate_grad_batches, etc.
                 Note: the `max_epochs` kwarg is overridden by the `epochs` argument
 
@@ -289,9 +248,9 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         kwargs["default_root_dir"] = save_path
 
         ### Input Validation ###
-        check_labels(train_df, self.model.classes)
+        check_labels(train_df, self.classes)
         if validation_df is not None:
-            check_labels(validation_df, self.model.classes)
+            check_labels(validation_df, self.classes)
 
         # Validation: warn user if no validation set
         if validation_df is None:
@@ -322,54 +281,54 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
                 )
             )
 
-            # # use wandb.watch to log histograms of parameter and gradient values
-            # # value of None for log_freq means do not use wandb.watch()
-            # log_freq = self.wandb_logging["watch_freq"]
-            # if log_freq is not None:
-            #     wandb_session.watch(
-            #         self.model,
-            #         log="all",
-            #         log_freq=log_freq,
-            #         log_graph=(self.wandb_logging["log_graph"]),
-            #     )
+            # use wandb.watch to log histograms of parameter and gradient values
+            # value of None for log_freq means do not use wandb.watch()
+            log_freq = self.wandb_logging["watch_freq"]
+            if log_freq is not None:
+                wandb_session.watch(
+                    self.model,
+                    log="all",
+                    log_freq=log_freq,
+                    log_graph=(self.wandb_logging["log_graph"]),
+                )
 
-            # # log tables of preprocessed samples
-            # wandb_session.log(
-            #     {
-            #         "training_samples": wandb_table(
-            #             AudioFileDataset(
-            #                 train_df,
-            #                 self.model.preprocessor,
-            #                 bypass_augmentations=False,
-            #             ),
-            #             self.wandb_logging["n_preview_samples"],
-            #         ),
-            #         "training_samples_no_aug": wandb_table(
-            #             AudioFileDataset(
-            #                 train_df, self.model.preprocessor, bypass_augmentations=True
-            #             ),
-            #             self.wandb_logging["n_preview_samples"],
-            #         ),
-            #         "validation_samples": wandb_table(
-            #             AudioFileDataset(
-            #                 validation_df,
-            #                 self.model.preprocessor,
-            #                 bypass_augmentations=True,
-            #             ),
-            #             self.wandb_logging["n_preview_samples"],
-            #         ),
-            #     }
-            # )
+            # log tables of preprocessed samples
+            wandb_session.log(
+                {
+                    "training_samples": wandb_table(
+                        AudioFileDataset(
+                            train_df,
+                            self.preprocessor,
+                            bypass_augmentations=False,
+                        ),
+                        self.wandb_logging["n_preview_samples"],
+                    ),
+                    "training_samples_no_aug": wandb_table(
+                        AudioFileDataset(
+                            train_df, self.preprocessor, bypass_augmentations=True
+                        ),
+                        self.wandb_logging["n_preview_samples"],
+                    ),
+                    "validation_samples": wandb_table(
+                        AudioFileDataset(
+                            validation_df,
+                            self.preprocessor,
+                            bypass_augmentations=True,
+                        ),
+                        self.wandb_logging["n_preview_samples"],
+                    ),
+                }
+            )
 
         # Set Up DataLoaders
-        train_dataloader = self.model.train_dataloader(
+        train_dataloader = self.train_dataloader(
             samples=train_df,
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
         )
         # TODO: enable multiple validation sets
-        val_loader = self.model.predict_dataloader(
+        val_loader = self.predict_dataloader(
             samples=validation_df,
             batch_size=batch_size,
             num_workers=num_workers,
@@ -396,19 +355,18 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         trainer = L.Trainer(**kwargs)
 
         # if checkpoint_path is provided, resumes training from training state of checkpoint path
-        trainer.fit(self.model, train_dataloader, val_loader, ckpt_path=checkpoint_path)
-        self._log("Training complete")
+        trainer.fit(self, train_dataloader, val_loader, ckpt_path=checkpoint_path)
+        print("Training complete")
         if checkpoint_callback.best_model_score is not None:
-            self._log(
+            print(
                 f"Best model with score {checkpoint_callback.best_model_score:.3f} is saved to {checkpoint_callback.best_model_path}"
             )
 
         # warn the user if there were invalid samples (samples that failed to preprocess)
         invalid_samples = train_dataloader.dataset.report(log=invalid_samples_log)
-        self._log(
+        print(
             f"{len(invalid_samples)} of {len(train_df)} total training "
             f"samples failed to preprocess",
-            level=1,
         )
 
         return trainer
@@ -483,7 +441,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             lightning_trainer_kwargs: dictionary of keyword args to pass to __call__,
                 which are then passed to lightning.Trainer.__init__
                 see Trainer documentation for options. Default [None] passes no kwargs
-            dataloader_kwargs: dictionary of keyword args to self.model.predict_dataloader()
+            dataloader_kwargs: dictionary of keyword args to self.predict_dataloader()
 
         Returns:
             df of post-activation_layer scores
@@ -516,7 +474,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             samples = [samples]
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.model.predict_dataloader(
+        dataloader = self.predict_dataloader(
             samples=samples,
             split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
@@ -532,9 +490,9 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         )  # TODO: add test for kwargs
 
         # check for matching class list
-        if len(dataloader.dataset.dataset.classes) > 0 and list(
-            self.model.classes
-        ) != list(dataloader.dataset.dataset.classes):
+        if len(dataloader.dataset.dataset.classes) > 0 and list(self.classes) != list(
+            dataloader.dataset.dataset.classes
+        ):
             warnings.warn(
                 "The columns of input samples df differ from `model.classes`."
             )
@@ -565,19 +523,15 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
         # TODO: add test for kwargs
-        pred_scores = self.__call__(
-            dataloader=dataloader,
-            **lightning_trainer_kwargs,
-        )
+        trainer = L.Trainer(**lightning_trainer_kwargs)
+        pred_scores = torch.vstack(trainer.predict(self, dataloader))
 
         ### Apply activation layer ### #TODO: test speed vs. doing it in __call__ on batches
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
 
         # return DataFrame with same index/columns as prediction_dataset's df
         df_index = dataloader.dataset.dataset.label_df.index
-        score_df = pd.DataFrame(
-            index=df_index, data=pred_scores, columns=self.model.classes
-        )
+        score_df = pd.DataFrame(index=df_index, data=pred_scores, columns=self.classes)
 
         # warn the user if there were invalid samples (failed to preprocess)
         # and log them to a file
@@ -587,7 +541,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         # if wandb_session is not None:
         #     classes_to_log = self.wandb_logging["top_samples_classes"]
         #     if classes_to_log is None:  # pick the first few classes if none specified
-        #         classes_to_log = self.model.classes
+        #         classes_to_log = self.classes
         #         if len(classes_to_log) > 5:  # don't accidentally log hundreds of tables
         #             classes_to_log = classes_to_log[0:5]
 
@@ -598,7 +552,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         #         # note: the "labels" of these samples are actually prediction scores
         #         dataset = AudioFileDataset(
         #             samples=top_samples,
-        #             preprocessor=self.model.preprocessor,
+        #             preprocessor=self.preprocessor,
         #             bypass_augmentations=True,
         #         )
         #         table = wandb_table(

@@ -106,8 +106,9 @@ def apply_activation_layer(x, activation_layer=None):
     """
     if x is None:
         return None
+    if not isinstance(x, torch.Tensor):
+        x = torch.tensor(x)
 
-    x = torch.tensor(x)
     if activation_layer is None:  # scores [-inf,inf]
         pass
     elif activation_layer == "softmax":

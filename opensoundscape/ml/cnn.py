@@ -566,7 +566,18 @@ class SpectrogramModule(BaseModule):
             }
             self.score_metric = "auroc"
 
-        # self.save_hyperparameters()
+        ### Logging ###
+        self.wandb_logging = dict(
+            n_preview_samples=8,  # before train/predict, log n random samples
+            top_samples_classes=None,  # specify list of classes to see top samples from
+            n_top_samples=3,  # after prediction, log n top scoring samples per class
+            # logs histograms of params & grads every n batches;
+            watch_freq=10,  # use  None for no logging of params & grads
+            gradcam=True,  # if True, logs GradCAMs for top scoring samples during predict()
+            # log the model graph to wandb - seems to cause issues when attempting to
+            # continue training the model, so True is not recommended
+            log_graph=False,
+        )
 
 
 class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
@@ -1166,9 +1177,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                     epochs=epochs,
                     batch_size=batch_size,
                     num_workers=num_workers,
-                    lr_update_interval=self.lr_update_interval,
-                    lr_cooling_factor=self.lr_cooling_factor,
-                    optimizer_cls=self.optimizer_cls,
+                    lr_sheculer_params=self.lr_scheduler_params,
+                    optimizer_params=self.optimizer_params,
                     model_save_path=Path(save_path).resolve(),
                 )
             )
@@ -2048,8 +2058,8 @@ def load_model(path, device=None):
             OpenSoundscape. You may need to load the model with the version
             of OpenSoundscape that created it and torch.save() the
             model.model.state_dict(), then load the weights with model.load_weights
-            in the current OpenSoundscape version (where model is a new instance of the
-            opensoundscape.CNN class). If you do this, make sure to
+            in the current OpenSoundscape version (where model is a new instance of 
+            this class). If you do this, make sure to
             re-create any specific preprocessing steps that were used in the
             original model. See the `Predict with pre-trained CNN` tutorial for details.
             """
