@@ -9,6 +9,7 @@ import itertools
 import pandas as pd
 import numpy as np
 import warnings
+import crowsetta
 
 from opensoundscape.utils import (
     overlap,
@@ -54,11 +55,13 @@ class BoxedAnnotations:
         "high_f",
     ]
 
-    def __init__(self, df, annotation_files=None, audio_files=None):
+    def __init__(self, df=None, annotation_files=None, audio_files=None):
         """
         create object directly from DataFrame of frequency-time annotations
 
         For loading annotations from Raven txt files, use `from_raven_files`
+
+        see also: .from_crowsetta() for integration with the crowsetta package
 
         Args:
             df: DataFrame of frequency-time labels. Columns must include:
@@ -69,7 +72,11 @@ class BoxedAnnotations:
                 - "audio_file": name or path of corresponding audio file
                 - "low_f": lower frequency bound (values can be None/nan)
                 - "high_f": upper frequency bound (values can be None/nan)
-                Note: other columns will be retained in the .df
+                    if df is None, creates object with no annotations
+
+                if None (default), creates BoxedAnnotations object with empty .df
+
+            Note: other columns will be retained in the .df
             annotation_files: list of annotation file paths (as str or pathlib.Path)
                 (e.g., raven .txt files) or None [default: None]
             audio_files: list of audio file paths (as str or pathlib.Path)
@@ -83,12 +90,16 @@ class BoxedAnnotations:
         self.annotation_files = annotation_files
         self.audio_files = audio_files
 
+        if df is None:
+            # create empty dataframe with standard columns
+            df = pd.DataFrame(columns=self._standard_cols)
+
         for col in self._required_cols:
             assert col in df.columns, (
                 f"df columns must include all of these: {str(self._required_cols)}\n"
                 f"columns in df: {list(df.columns)}"
             )
-        # re-order columns
+        # re-order columns with standard columns first
         # keep any extras from input df and add any missing standard columns
         ordered_cols = self._standard_cols + list(
             set(df.columns) - set(self._standard_cols)
@@ -282,7 +293,156 @@ class BoxedAnnotations:
             audio_files=audio_files,
         )
 
-    def to_raven_files(self, save_dir, audio_files=None):  # TODO implement to_csv
+    @classmethod
+    def from_crowsetta_bbox(cls, bbox, audio_file, annotation_file):
+        """create BoxedAnnotations object from a crowsetta.BBox object
+
+        Args:
+            bbox: a crowsetta.BBox object
+            audio_file: (str) path of annotated audio file
+            annotation_file: (str) path of annotation file
+
+        Returns:
+            BoxedAnnotations object
+
+        this classmethod is used by from_crowsetta()
+
+        """
+        return cls(
+            df=pd.DataFrame(
+                {
+                    "audio_file": audio_file,
+                    "annotation_file": annotation_file,
+                    "annotation": bbox.label,
+                    "start_time": bbox.onset,
+                    "end_time": bbox.offset,
+                    "low_f": bbox.low_freq,
+                    "high_f": bbox.high_freq,
+                },
+                index=[0],
+            )
+        )
+
+    @classmethod
+    def from_crowsetta_seq(cls, seq, audio_file, annotation_file):
+        """create BoxedAnnotations from crowsetta.Sequence object
+
+        Note: low_f and high_f will be None since Sequence does not
+        contain information about frequency
+
+        Note: the `.df` of the returned BoxedAnnotations retains
+        the Sequence's `.onset_samples` and `.offset_samples` information,
+        but only uses the Sequence's `.onsets_s` and `.offsets_s`
+        (which may sometimes be `None`) for the `start_time` and `end_time`
+        columns in `BoxedAnnotations.df`.
+
+        Args:
+            seq: a crowsetta.Sequence object
+            audio_file: (str) path of annotated audio file
+            annotation_file: (str) path of annotation file
+
+        Returns:
+            BoxedAnnotations object
+
+        this classmethod is used by from_crowsetta()
+        """
+        return cls(
+            df=pd.DataFrame(
+                {
+                    "audio_file": audio_file,
+                    "annotation_file": annotation_file,
+                    "annotation": seq.labels,
+                    "start_time": seq.onsets_s,
+                    "end_time": seq.offsets_s,
+                    "low_f": None,
+                    "high_f": None,
+                    "onset_sample": seq.onset_samples,
+                    "offset_sample": seq.offset_samples,
+                }
+            )
+        )
+
+    @classmethod
+    def from_crowsetta(cls, annotations):
+        """
+        crowsetta.Annotation object or list of Annotation objects
+        - the objects _either_ have .bbox: list of BBox objects,
+        OR .seq: Sequence object with list of values for
+            onset/offset (or sample onset/offset), labels
+
+        Note: if an empty list is passed, creates empty BoxedAnnotations object
+        """
+        # store individual objects in a list, starting with an empty BoxedAnnotations object
+        boxed_anns = []
+
+        if type(annotations) == crowsetta.Annotation:
+            annotations = [
+                annotations
+            ]  # now we have a list of Annotation regardless of user input
+        for ann_i, ann in enumerate(annotations):
+            assert (
+                type(ann) == crowsetta.Annotation
+            ), f"`annotations` must be a list of crowsetta.Annotations objects, got {type(ann)}"
+
+            # handle three cases: Annotations has .bbox: list of BBox or .seq: Sequence, or .sequence: list of Sequence
+            if hasattr(ann, "bboxes"):
+                for bbox in ann.bboxes:
+                    # ann.bbox is a list of BBox objects with attributes
+                    ba = cls.from_crowsetta_bbox(
+                        bbox,
+                        annotation_file=ann.annot_path,
+                        audio_file=ann.notated_path,
+                    )
+                    ba.df["annotation_id"] = ann_i  # keep record of annotation number
+                    boxed_anns.append(ba)
+            else:  # create BoxedAnnotations objects from ann.seq (crowsetta.Sequence's)
+                # ann.seq might be a list of Sequence or just a Sequence object
+                # if single object, convert to list for consistency
+                if type(ann.seq) == crowsetta.Sequence:
+                    seqs = [ann.seq]
+                else:
+                    seqs = ann.seq
+
+                for seq_i, seq in enumerate(seqs):
+                    ba = cls.from_crowsetta_seq(
+                        seq=seq,
+                        annotation_file=ann.annot_path,
+                        audio_file=ann.notated_path,
+                    )
+                    ba.df["sequence_id"] = seq_i  # keep record of sequence number
+                    ba.df["annotation_id"] = ann_i  # keep record of annotation number
+                    boxed_anns.append(ba)
+
+        return cls.concat(boxed_anns)
+
+    @classmethod
+    def from_csv(cls, path):
+        """load csv from path and creates BoxedAnnotations object
+        Args:
+            path: file path of csv.
+                see __init__() docstring for required column names
+
+        Returns:
+            BoxedAnnotations object
+        """
+        df = pd.read_csv(path)
+        return cls(df)
+
+    def to_csv(self, path):
+        """save annotation table as csv-formatted text file
+
+        Note: the .annotation_files and .audio_files attributes are not saved,
+        only .df is retained in the generated csv file
+
+        Args:
+            path: file path to save to
+
+        Effects:
+            creates a text file containing comma-delimited contents of self.df
+        """
+        self.df.to_csv(path, index=False)
+
+    def to_raven_files(self, save_dir, audio_files=None):
         """save annotations to a Raven-compatible tab-separated text files
 
         Creates one file per unique audio file in 'file' column of self.df
@@ -369,6 +529,91 @@ class BoxedAnnotations:
                 file_df = df[df["audio_file"] == file]
                 fname = f"{Path(file).stem}.selections.txt"
             file_df.to_csv(f"{save_dir}/{fname}", sep="\t", index=False)
+
+    def to_crowsetta(
+        self, mode="bbox", ignore_annotation_id=False, ignore_sequence_id=False
+    ):
+        """create crowsetta.Annotations objects
+
+        Creates (at least) one crowsetta.Annotation object per unique combination of `audio_file`,`annotation_file` in self.df
+        - if `annotation_id` column is present, creates one Annotation object per unique value of
+        `annotation_id` per unique combination of `audio_file` and `annotation_file`
+        - if `sequence_id` column is present and mode=='sequence', creates one Sequence for each unique sequence_id
+            within an Annotation object (Annotation.seq will be a list of Sequences). (If `sequence_id` is not
+            in the columns, Annotation.seq will just be a Sequence object).
+
+        Args:
+            mode: 'bbox' or 'sequence'
+            - if mode=='bbox', Annotations have attribute .bboxes
+            - if mode=='sequence', Annotations have attribute .seq
+                - list of Sequences, one Sequence for each unique value of `sequence_id`
+            ignore_annotation_id: [default: False]
+                if True, creates on Annotation object per unique `audio_file` and `annotation_file` object
+                ignoring `annotation_id`. Otherwise, creates separate objects for each unique `annotation_id`
+                for each unique combination of `audio_file` and `annotation_file`.
+            ignore_sequence_id: [default: False]
+                if True, creates on Sequence object for Annotation.seq ignoring `annotation_id`.
+                Otherwise, Annotation.seq will be a list of Sequence objects,
+                one for each unique `annotation_id` in the subset of annotations being
+                created for a single Annotation object.
+                Note: Only relevant for mode='sequence'
+
+        Returns:
+            list of crowsetta.Annotation objects (one per unique value of `audio_file` in self.df
+            - if mode=='bbox', Annotations have attribute .bboxes
+            - if mode=='sequence', Annotations have attribute .seq)
+        """
+        assert mode in ("bbox", "sequence"), "invalid mode, choose 'bbox' or 'sequence'"
+
+        ann_objects = []  # we plan to return a list of crowsetta.Annotation objects
+
+        # iterate through each unique combination of audio file and annotation file
+        for aud_file, ann_file in list(
+            self.df.groupby(["audio_file", "annotation_file"]).groups.keys()
+        ):
+            subset = self.df[
+                (self.df["audio_file"] == aud_file)
+                & (self.df["annotation_file"] == ann_file)
+            ]
+
+            # if `annotation_id` column is present, make one Annotation per unique value
+            # (unless user passes `ignore_annotation_id=True`)
+            # otherwise, just make one Annotation with all rows
+            if not "annotation_id" in subset.columns or ignore_annotation_id:
+                subset["annotation_id"] = 0
+
+            for ann_id in subset["annotation_id"].unique():
+                ann_labels = subset[subset["annotation_id"] == ann_id]
+
+                # create crowsetta Annotation object
+                seq = None
+                bboxes = None
+                if mode == "bbox":
+                    bboxes = _df_to_crowsetta_bboxes(ann_labels)
+
+                else:
+                    # create Sequences:
+                    # if `sequence_id` column is present,
+                    # (and user has not passed ignore_sequence_id=True),
+                    # make one Annotation per unique value
+                    # otherwise, just make one Annotation using all rows
+                    if "sequence_id" in ann_labels.columns and (not ignore_sequence_id):
+                        seq = []  # one per `annotation_id` value
+                        for seq_id in ann_labels["sequence_id"].unique():
+                            seq_labels = ann_labels[ann_labels["sequence_id"] == seq_id]
+                            seq.append(_df_to_crowsetta_sequence(seq_labels))
+                    else:
+                        seq = _df_to_crowsetta_sequence(ann_labels)
+
+                ann_objects.append(
+                    crowsetta.Annotation(
+                        annot_path=ann_file,
+                        notated_path=aud_file,
+                        seq=seq,
+                        bboxes=bboxes,
+                    )
+                )
+        return ann_objects
 
     def _spawn(self, **kwargs):
         """return copy of object, replacing any desired fields from __slots__
@@ -788,6 +1033,18 @@ class BoxedAnnotations:
 
         return self._spawn(df=df)
 
+    @classmethod
+    def concat(cls, list_of_boxed_annotations):
+        """concatenate a list of BoxedAnnotations objects into one"""
+        dfs = [ba.df for ba in list_of_boxed_annotations]
+        return cls(pd.concat(dfs).reset_index(drop=True))
+
+    @classmethod
+    def concat(cls, list_of_boxed_annotations):
+        """concatenate a list of BoxedAnnotations objects into one"""
+        dfs = [ba.df for ba in list_of_boxed_annotations]
+        return cls(pd.concat(dfs).reset_index(drop=True))
+
 
 def diff(base_annotations, comparison_annotations):
     """look at differences between two BoxedAnnotations objects
@@ -910,3 +1167,38 @@ def one_hot_to_categorical(one_hot, classes):
     """
     classes = np.array(classes)
     return [list(classes[np.array(row).astype(bool)]) for row in one_hot]
+
+
+def _df_to_crowsetta_sequence(df):
+    """create a crowsetta.Sequence from BoxedAnnotations style dataframe"""
+    return crowsetta.Sequence.from_dict(
+        {
+            "onset_samples": (
+                df["onset_sample"].values if "onset_sample" in df.columns else None
+            ),
+            "offset_samples": (
+                df["offset_samples"].values if "offset_samples" in df.columns else None
+            ),
+            "onsets_s": df["start_time"].astype(float).values,
+            "offsets_s": df["end_time"].astype(float).values,
+            "labels": df["annotation"].values,
+        }
+    )
+
+
+def _df_to_crowsetta_bboxes(df):
+    """create list of crowsetta.BBoxes from BoxedAnnotations style dataframe"""
+    # ensure we have a unique index
+    df = df.reset_index(drop=True)
+
+    # create crowsetta Annotation object
+    return [
+        crowsetta.BBox(
+            label=df.at[i, "annotation"],
+            onset=df.at[i, "start_time"],
+            offset=df.at[i, "end_time"],
+            low_freq=df.at[i, "low_f"],
+            high_freq=df.at[i, "high_f"],
+        )
+        for i in df.index
+    ]

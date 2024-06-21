@@ -107,6 +107,7 @@ autodoc_mock_imports = [
     "wandb",
     "pytorch_grad_cam",
     "aru_metadata_parser",
+    "crowsetta",
     "pytz",
     "pillow",
     "PIL",
