@@ -33,9 +33,11 @@ def freq_mask(spec, F=30, max_masks=3, replace_with_zero=False):
         ]
 
         mask_end = [
-            random.randrange(f_zero[i], f_zero[i] + f[i])
-            if f_zero[i] != (f_zero[i] + f[i])
-            else (f_zero[i] + F)
+            (
+                random.randrange(f_zero[i], f_zero[i] + f[i])
+                if f_zero[i] != (f_zero[i] + f[i])
+                else (f_zero[i] + F)
+            )
             for i, _ in enumerate(range(batch_size))
         ]
 
@@ -77,9 +79,11 @@ def time_mask(spec, T=40, max_masks=3, replace_with_zero=False):
         ]
 
         mask_end = [
-            random.randrange(t_zero[i], t_zero[i] + t[i])
-            if t_zero[i] != (t_zero[i] + t[i])
-            else (t_zero[i] + T)
+            (
+                random.randrange(t_zero[i], t_zero[i] + t[i])
+                if t_zero[i] != (t_zero[i] + t[i])
+                else (t_zero[i] + T)
+            )
             for i, _ in enumerate(range(batch_size))
         ]
 
