@@ -3,6 +3,7 @@
 includes BoxedAnnotations class and utilities to combine or "diff" annotations,
 etc.
 """
+
 from pathlib import Path
 import itertools
 import pandas as pd
@@ -41,21 +42,17 @@ class BoxedAnnotations:
     because it was annotated/reviewed.
     """
 
-    __slots__ = (
-        "df",
-        "annotation_files",
-        "audio_files"
-    )
+    __slots__ = ("df", "annotation_files", "audio_files")
     _required_cols = ["annotation", "start_time", "end_time"]
     _standard_cols = [
-            "audio_file",
-            "annotation_file",
-            "annotation",
-            "start_time",
-            "end_time",
-            "low_f",
-            "high_f",
-        ]
+        "audio_file",
+        "annotation_file",
+        "annotation",
+        "start_time",
+        "end_time",
+        "low_f",
+        "high_f",
+    ]
 
     def __init__(self, df, annotation_files=None, audio_files=None):
         """
@@ -86,7 +83,6 @@ class BoxedAnnotations:
         self.annotation_files = annotation_files
         self.audio_files = audio_files
 
-        
         for col in self._required_cols:
             assert col in df.columns, (
                 f"df columns must include all of these: {str(self._required_cols)}\n"
@@ -94,7 +90,9 @@ class BoxedAnnotations:
             )
         # re-order columns
         # keep any extras from input df and add any missing standard columns
-        ordered_cols = self._standard_cols + list(set(df.columns) - set(self._standard_cols))
+        ordered_cols = self._standard_cols + list(
+            set(df.columns) - set(self._standard_cols)
+        )
         self.df = df.reindex(columns=ordered_cols)
 
     def __repr__(self):
@@ -170,13 +168,13 @@ class BoxedAnnotations:
         # update defaults with any user-specified mappings
         column_mapping_dict.update(column_mapping_dict or {})
 
-        standard_columns = [
-            "annotation_file",
-            "start_time",
-            "end_time",
-            "low_f",
-            "high_f",
-        ]
+        # standard_columns = [
+        #     "annotation_file",
+        #     "start_time",
+        #     "end_time",
+        #     "low_f",
+        #     "high_f",
+        # ]
 
         if audio_files is not None:
             assert len(audio_files) == len(
@@ -212,10 +210,10 @@ class BoxedAnnotations:
                         df.columns[annotation_column_idx - 1]: "annotation",
                     }
                 )
-            else:  # None was passed to annotatino_column_idx
+            else:  # None was passed to annotation_column_idx
                 # we'll create an empty `annotation` column
                 df["annotation"] = np.nan
-                
+
             # rename Raven columns to standard opensoundscape names
             try:
                 df = df.rename(
@@ -232,27 +230,26 @@ class BoxedAnnotations:
             # add column containing the raven file path
             df["annotation_file"] = raven_file
 
-            if annotation_column_idx is not None:
-                standard_columns.append("annotation")
-            if hasattr(keep_extra_columns, "__iter__"):
-                # keep the desired columns
-                # if values in keep_extra_columns are missing, fill with nan
-                df = df.reindex(
-                    columns=standard_columns + list(keep_extra_columns),
-                    fill_value=np.nan,
-                )
-            elif not keep_extra_columns:
-                # only keep required columns
-                df = df.reindex(columns=standard_columns)
-            else:
-                # keep all columns
-                pass
-
             # add audio file column
             if audio_files is not None:
                 df["audio_file"] = audio_files[i]
             else:
                 df["audio_file"] = np.nan
+
+            # subset and re-order columns
+            if hasattr(keep_extra_columns, "__iter__"):
+                # keep the desired columns
+                # if values in keep_extra_columns are missing, fill with nan
+                df = df.reindex(
+                    columns=cls._standard_cols + list(keep_extra_columns),
+                    fill_value=np.nan,
+                )
+            elif not keep_extra_columns:
+                # only keep required columns
+                df = df.reindex(columns=cls._standard_cols)
+            else:
+                # keep all columns
+                pass
 
             all_file_dfs.append(df)
 
@@ -263,9 +260,7 @@ class BoxedAnnotations:
             all_annotations_df = pd.concat(all_file_dfs).reset_index(drop=True)
 
         else:
-            all_annotations_df = pd.DataFrame(
-                columns = cls._required_cols
-            )
+            all_annotations_df = pd.DataFrame(columns=cls._required_cols)
 
         return cls(
             df=all_annotations_df,
