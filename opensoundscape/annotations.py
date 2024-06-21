@@ -55,7 +55,7 @@ class BoxedAnnotations:
         "high_f",
     ]
 
-    def __init__(self, df, annotation_files=None, audio_files=None):
+    def __init__(self, df=None, annotation_files=None, audio_files=None):
         """
         create object directly from DataFrame of frequency-time annotations
 
@@ -73,6 +73,8 @@ class BoxedAnnotations:
                 - "low_f": lower frequency bound (values can be None/nan)
                 - "high_f": upper frequency bound (values can be None/nan)
                     if df is None, creates object with no annotations
+
+                if None (default), creates BoxedAnnotations object with empty .df
 
             Note: other columns will be retained in the .df
             annotation_files: list of annotation file paths (as str or pathlib.Path)

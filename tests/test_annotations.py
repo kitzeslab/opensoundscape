@@ -126,17 +126,16 @@ def boxed_annotations_zero_len():
 
 
 def test_init_boxed_annotations_with_no_df():
-    ba = BoxedAnnotations()  # init without passing df
+    ba = BoxedAnnotations(df=None)  # init without passing df
     assert len(ba.df) == 0
-    assert list(ba.df.columns) == [
-        "audio_file",
-        "annotation_file",
-        "annotation",
-        "start_time",
-        "end_time",
-        "low_f",
-        "high_f",
-    ]
+    assert list(ba.df.columns) == BoxedAnnotations._standard_cols
+
+
+def test_init_boxed_annotations_with_only_reqd_cols():
+    """creates df with nan in other standard columns"""
+    df = pd.DataFrame({"annotation": ["a"], "start_time": [0], "end_time": [1]})
+    ba = BoxedAnnotations(df)
+    assert len(ba.df) == 1
 
 
 def test_load_raven_annotations(raven_file):
