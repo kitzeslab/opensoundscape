@@ -63,7 +63,6 @@ class BaseAction:
         new_params = dict(self.params)
         new_params.update(kwargs)
         self.params = pd.Series(new_params, dtype=object)
-        # self.params.update(pd.Series(kwargs, dtype=object))
 
     def get(self, arg):
         return self.params[arg]

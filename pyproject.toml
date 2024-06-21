@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "opensoundscape"
-version = "0.10.1"
+version = "0.10.2"
 description = "Open source, scalable acoustic classification for ecology and conservation"
 authors = [
   "Sam Lapp <sammlapp@gmail.com>",
@@ -8,6 +8,8 @@ authors = [
   "Louis Freeland-Haynes <>",
   "Jatin Khilnani <>",
   "Sasha Syunkova <>",
+  "Leonardo Viotti <>",
+  "Santiago Ruiz-Guzman <>", 
   "Justin Kitzes <justin.kitzes@pitt.edu>",
 ]
 license = "MIT"
