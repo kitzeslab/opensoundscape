@@ -122,6 +122,7 @@ class Spectrogram:
         fft_size=None,
         dB_scale=True,
         scaling="spectrum",
+        **kwargs,
     ):
         """
         create a Spectrogram object from an Audio object
@@ -144,9 +145,11 @@ class Spectrogram:
                 - Note: cannot specify both overlap_samples and overlap_fraction
             fft_size: see scipy.signal.spectrogram's `nfft` parameter
             dB_scale: If True, rescales values to decibels, x=10*log10(x)
-            scaling="spectrum": ("spectrum" or "density")
-                see scipy.signal.spectrogram docs
+            scaling: ("spectrum" (V^2/Hz) or "density" (V^2))
+                see scipy.signal.spectrogram docs; Note that [default: "spectrum"] is different
+                from scipy.signal.spectrogram's default
 
+            **kwargs: kwargs are passed to scipy.signal.spectrogram()
 
         Returns:
             opensoundscape.spectrogram.Spectrogram object
@@ -188,6 +191,7 @@ class Spectrogram:
             noverlap=int(overlap_samples),
             nfft=fft_size,
             scaling=scaling,
+            **kwargs,
         )
 
         # convert to decibels
