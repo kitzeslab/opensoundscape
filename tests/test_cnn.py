@@ -619,3 +619,21 @@ def test_predict_overlap_fraction_deprecated(test_df):
         assert len(scores) == 3
     with pytest.raises(AssertionError):
         model.predict(test_df, overlap_fraction=0.5, clip_overlap_fraction=0.5)
+
+
+def test_embed(test_df):
+    from opensoundscape.ml.cnn_architectures import list_architectures
+
+    for arch in list_architectures():
+        if "inception" in arch:
+            continue
+        print(arch)
+        m = cnn.SpectrogramClassifier(
+            classes=test_df.columns,
+            single_target=False,
+            architecture=arch,
+            sample_duration=5,
+        )
+        embeddings = m.embed(samples=test_df, avgpool=True, progress_bar=False)
+        assert embeddings.shape[0] == 2
+        assert len(embeddings.shape) == 2
