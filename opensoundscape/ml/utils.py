@@ -1,4 +1,5 @@
 """Utilties for .ml"""
+
 import warnings
 import pandas as pd
 import numpy as np
@@ -131,57 +132,6 @@ def apply_activation_layer(x, activation_layer=None):
     return x
 
 
-# override pytorch_grad_cam's score cam class because it has a bug
-# with device mismatch of upsampled (cpu) vs input_tensor (may be mps, cuda, etc)
-class ScoreCAM(pytorch_grad_cam.base_cam.BaseCAM):
-    def __init__(self, model, target_layers, use_cuda=False, reshape_transform=None):
-        super(ScoreCAM, self).__init__(
-            model,
-            target_layers,
-            use_cuda,
-            reshape_transform=reshape_transform,
-            uses_gradients=False,
-        )
-
-    def get_cam_weights(self, input_tensor, target_layer, targets, activations, grads):
-        with torch.no_grad():
-            upsample = torch.nn.UpsamplingBilinear2d(size=input_tensor.shape[-2:])
-            activation_tensor = torch.from_numpy(activations)
-            if self.cuda:
-                activation_tensor = activation_tensor.cuda()
-
-            upsampled = upsample(activation_tensor)
-
-            maxs = upsampled.view(upsampled.size(0), upsampled.size(1), -1).max(dim=-1)[
-                0
-            ]
-            mins = upsampled.view(upsampled.size(0), upsampled.size(1), -1).min(dim=-1)[
-                0
-            ]
-
-            maxs, mins = maxs[:, :, None, None], mins[:, :, None, None]
-            upsampled = (upsampled - mins) / (maxs - mins)
-
-            upsampled = upsampled.to(input_tensor.device)
-            input_tensors = input_tensor[:, None, :, :] * upsampled[:, :, None, :, :]
-
-            if hasattr(self, "batch_size"):
-                BATCH_SIZE = self.batch_size
-            else:
-                BATCH_SIZE = 16
-
-            scores = []
-            for target, tensor in zip(targets, input_tensors):
-                for i in tqdm.tqdm(range(0, tensor.size(0), BATCH_SIZE)):
-                    batch = tensor[i : i + BATCH_SIZE, :]
-                    outputs = [target(o).cpu().item() for o in self.model(batch)]
-                    scores.extend(outputs)
-            scores = torch.Tensor(scores)
-            scores = scores.view(activations.shape[0], activations.shape[1])
-            weights = torch.nn.Softmax(dim=-1)(scores).numpy()
-            return weights
-
-
 def collate_audio_samples_to_tensors(batch):
     """
     takes a list of AudioSample objects, returns batched tensors
@@ -215,3 +165,17 @@ def collate_audio_samples_to_tensors(batch):
     tensors = torch.stack([i.data for i in batch])
     labels = torch.tensor([i.labels.tolist() for i in batch])
     return tensors, labels
+
+
+def check_labels(label_df, classes):
+    class_err = """
+            Train and validation datasets must have same classes
+            and class order as model object. Consider using
+            `train_df=train_df[cnn.classes]` or `cnn.classes=train_df.columns` 
+            before training.
+            """
+    assert list(classes) == list(label_df.columns), class_err
+
+    assert (
+        label_df.max(axis=None) <= 1 and label_df.min(axis=None) >= 0
+    ), "Labels must in range [0,1], but found values outside range"

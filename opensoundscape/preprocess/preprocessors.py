@@ -1,7 +1,9 @@
 """Preprocessor classes: tools for preparing and augmenting audio samples"""
+
 from pathlib import Path
 import pandas as pd
 import copy
+import time
 
 from opensoundscape.preprocess import actions
 from opensoundscape.preprocess.actions import (
@@ -89,6 +91,7 @@ class BasePreprocessor:
         break_on_key=None,
         bypass_augmentations=False,
         trace=False,
+        profile=False,
     ):
         """perform actions in self.pipeline on a sample (until a break point)
 
@@ -113,8 +116,10 @@ class BasePreprocessor:
                     the start and end time of clip in audio
             bypass_augmentations: if True, actions with .is_augmentatino=True
                 are skipped
-            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument - should be utilized for analysis/debugging on samples of interest
-
+            trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument
+                Can be used for analysis/debugging of intermediate values of the sample during preprocessing
+            profile (boolean - default False): if True, saves the runtime of each pipeline step in `.runtime`
+                (a series indexed like .pipeline)
         Returns:
             sample (instance of AudioSample class)
 
@@ -127,26 +132,36 @@ class BasePreprocessor:
         # create AudioSample from input path
         sample = self._generate_sample(sample)
         if trace:
-            sample.trace = pd.Series(index=self.pipeline.index)
+            sample.trace = pd.Series(index=self.pipeline.index, dtype=str)
+
+        if profile:
+            sample.runtime = pd.Series(index=self.pipeline.index)
 
         # run the pipeline by performing each Action on the AudioSample
         try:
             # perform each action in the pipeline
             for k, action in self.pipeline.items():
+                time0 = time.time()
+
                 if type(action) == break_on_type or k == break_on_key:
                     if trace:
                         # saved "output" of this step informs user pipeline was stopped
-                        sample.trace[k] = f"## Pipeline terminated ## {sample.trace[k]}"
+                        sample.trace.loc[k] = (
+                            f"## Pipeline terminated ## {sample.trace[k]}"
+                        )
                     break
                 if action.bypass:
                     continue
                 if action.is_augmentation and bypass_augmentations:
                     if trace:
-                        sample.trace[k] = f"## Bypassed ## {sample.trace[k]}"
+                        sample.trace.loc[k] = f"## Bypassed ## {sample.trace[k]}"
                     continue
 
                 # perform the action (modifies the AudioSample in-place)
                 action.go(sample)
+
+                if profile:
+                    sample.runtime[k] = time.time() - time0
 
                 if trace:  # user requested record of preprocessing steps
                     # save the current state of the sample's data
@@ -183,19 +198,14 @@ class BasePreprocessor:
         """
         # handle paths or pd.Series as input for `sample`
         if isinstance(sample, tuple):
+            # assume duration should be self.sample_duration
             path, start = sample
             assert isinstance(
                 path, (str, Path)
             ), "if passing tuple, first element must be str or pathlib.Path"
             sample = AudioSample(path, start_time=start, duration=self.sample_duration)
         elif isinstance(sample, pd.Series):
-            # .name should contain (path, start_time, end_time)
-            # note: end is not used, uses start_time self.sample_duration
-            path, start, _ = sample.name
-            assert isinstance(
-                path, (str, Path)
-            ), "if passing a series, series.name must contain (path, start_time, end_time)"
-            sample = AudioSample(path, start_time=start, duration=self.sample_duration)
+            sample = AudioSample.from_series(sample)
         else:
             assert isinstance(sample, AudioSample), (
                 "sample must be AudioSample, tuple of (path, start_time), "
@@ -270,9 +280,16 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 # references AudioSample attributes: start_time and duration
                 "load_audio": AudioClipLoader(),
                 # if we are augmenting and get a long file, take a random trim from it
-                "random_trim_audio": AudioTrim(is_augmentation=True, random_trim=True),
+                "random_trim_audio": AudioTrim(
+                    target_duration=sample_duration,
+                    is_augmentation=True,
+                    random_trim=True,
+                ),
                 # otherwise, we expect to get the correct duration. no random trim
-                "trim_audio": AudioTrim(),  # trim or extend (w/silence) clips to correct length
+                # trim or extend (w/silence) clips to correct length
+                "trim_audio": AudioTrim(
+                    target_duration=sample_duration, random_trim=False
+                ),
                 # convert Audio object to Spectrogram
                 "to_spec": Action(Spectrogram.from_audio),
                 # bandpass to 0-11.025 kHz (to ensure all outputs have same scale in y-axis)
@@ -285,11 +302,13 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 ##  augmentations ##
                 # Overlay is a version of "mixup" that draws samples from a user-specified dataframe
                 # and overlays them on the current sample
-                "overlay": Overlay(
-                    is_augmentation=True, overlay_df=overlay_df, update_labels=False
-                )
-                if overlay_df is not None
-                else None,
+                "overlay": (
+                    Overlay(
+                        is_augmentation=True, overlay_df=overlay_df, update_labels=False
+                    )
+                    if overlay_df is not None
+                    else None
+                ),
                 # add vertical (time) and horizontal (frequency) masking bars
                 "time_mask": Action(actions.time_mask, is_augmentation=True),
                 "frequency_mask": Action(actions.frequency_mask, is_augmentation=True),
@@ -335,14 +354,21 @@ class AudioPreprocessor(BasePreprocessor):
         sample_duration:
             length in seconds of audio samples generated
         sample_rate: target sample rate. [default: None] does not resample
+        extend_short_clips: if True, clips shorter than sample_duration are extended
+            to sample_duration by adding silence.
     """
 
-    def __init__(self, sample_duration, sample_rate):
+    def __init__(self, sample_duration, sample_rate, extend_short_clips=True):
         super(AudioPreprocessor, self).__init__(sample_duration=sample_duration)
         self.pipeline = pd.Series(
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
                 "load_audio": AudioClipLoader(sample_rate=sample_rate),
+                # trim samples to correct length
+                # if extend_short_clips=True, extend short clips with silence
+                "trim_audio": AudioTrim(
+                    target_duration=sample_duration, extend=extend_short_clips
+                ),
             }
         )

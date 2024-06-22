@@ -3,12 +3,15 @@
 import datetime
 import warnings
 
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytz
 import soundfile
 import librosa
 from matplotlib.colors import LinearSegmentedColormap
+import torch
+import random
 
 
 class GetDurationError(ValueError):
@@ -125,7 +128,9 @@ def jitter(x, width, distribution="gaussian"):
 def generate_clip_times_df(
     full_duration,
     clip_duration,
-    clip_overlap=0,
+    clip_overlap=None,
+    clip_overlap_fraction=None,
+    clip_step=None,
     final_clip=None,
     rounding_precision=10,
 ):
@@ -140,7 +145,11 @@ def generate_clip_times_df(
     Args:
         full_duration: The amount of time (seconds) to split into clips
         clip_duration (float):  The duration in seconds of the clips
-        clip_overlap (float):   The overlap of the clips in seconds [default: 0]
+        clip_overlap (float):   The overlap of the clips in seconds
+        clip_overlap_fraction (float): The overlap of the clips as a fraction of clip_duration
+        clip_step (float):      The increment in seconds between starts of consecutive clips
+            - must only specify one of clip_overlap, clip_overlap_fraction, or clip_step
+            - if all are None, overlap is set to 0
         final_clip (str):       Behavior if final_clip is less than clip_duration
             seconds long. By default, discards remaining time if less than
             clip_duration seconds long [default: None].
@@ -165,11 +174,33 @@ def generate_clip_times_df(
             f"or None. Got {final_clip}."
         )
 
-    assert clip_overlap < clip_duration, "clip_overlap must be less than clip_duration"
+    overspecified_overlap_err = (
+        "only one of clip_overlap, clip_overlap_fraction, or clip_step can be specified"
+    )
+    if clip_overlap is not None:
+        if clip_overlap_fraction is not None or clip_step is not None:
+            raise ValueError(overspecified_overlap_err)
+        assert (
+            clip_overlap < clip_duration
+        ), "clip_overlap must be less than clip_duration"
+    elif clip_overlap_fraction is not None:
+        if clip_overlap is not None or clip_step is not None:
+            raise ValueError(overspecified_overlap_err)
+        assert 0 <= clip_overlap_fraction < 1, "clip_overlap_fraction must be in [0, 1)"
+        clip_overlap = clip_overlap_fraction * clip_duration
+    elif clip_step is not None:
+        # allow values outside of [0, clip_duration]
+        if clip_overlap is not None or clip_overlap_fraction is not None:
+            raise ValueError(overspecified_overlap_err)
+        clip_overlap = clip_duration - clip_step
+    else:
+        clip_overlap = 0
 
     # Lists of start and end times for clips
     increment = clip_duration - clip_overlap
     starts = np.arange(0, full_duration, increment)
+    if rounding_precision is not None:
+        starts = starts.round(rounding_precision)
     ends = starts + clip_duration
 
     # Handle the final_clip
@@ -197,17 +228,28 @@ def generate_clip_times_df(
         # Keep the end values that extend beyond full_duration
         pass
 
-    if rounding_precision is not None:
-        starts = starts.round(rounding_precision)
-        ends = ends.round(rounding_precision)
-
     return pd.DataFrame({"start_time": starts, "end_time": ends}).drop_duplicates()
+
+
+def cast_np_to_native(x):
+    """if the input is a numpy integer or floating type, cast to native Python int or float
+
+    otherwise, input is unaffected
+    """
+    # timedelta doesn't like np types, fix issue #928
+    if isinstance(x, np.integer):
+        return int(x)
+    elif isinstance(x, np.floating):
+        return float(x)
+    return x
 
 
 def make_clip_df(
     files,
     clip_duration,
-    clip_overlap=0,
+    clip_overlap=None,
+    clip_overlap_fraction=None,
+    clip_step=None,
     final_clip=None,
     return_invalid_samples=False,
     raise_exceptions=False,
@@ -232,6 +274,8 @@ def make_clip_df(
             belonging to that file in the returned clip dataframe.
         clip_duration (float): see generate_clip_times_df
         clip_overlap (float): see generate_clip_times_df
+        clip_overlap_fraction (float): see generate_clip_times_df
+        clip_step (float): see generate_clip_times_df
         final_clip (str): see generate_clip_times_df
         return_invalid_samples (bool): if True, returns additional value,
             a list of samples that caused exceptions
@@ -252,10 +296,6 @@ def make_clip_df(
         the dataframe will have one row with np.nan for 'start_time' and 'end_time' for that
         file path.
     """
-    if isinstance(files, str):
-        raise TypeError(
-            "make_clip_df expects a list of files, it looks like you passed it a string"
-        )
 
     label_df = None  # assume no labels to begin with, just a list of paths
     if isinstance(files, pd.DataFrame):
@@ -263,6 +303,8 @@ def make_clip_df(
         # use the dataframe as labels, keeping each column as a class
         # if paths are duplicated in index, keep only the first of each
         label_df = files[~files.index.duplicated(keep="first")]
+    elif isinstance(files, (str, Path)):
+        files = [files]  # be lenient, turn single path into list
     else:
         assert hasattr(files, "__iter__"), (
             f"`files` should be a dataframe with paths as "
@@ -280,6 +322,8 @@ def make_clip_df(
                 full_duration=t,
                 clip_duration=clip_duration,
                 clip_overlap=clip_overlap,
+                clip_overlap_fraction=clip_overlap_fraction,
+                clip_step=clip_step,
                 final_clip=final_clip,
             )
             clips["file"] = f
@@ -329,3 +373,20 @@ def generate_opacity_colormaps(
         colormaps.append(cmap)
 
     return colormaps
+
+
+def set_seed(seed, verbose=True):
+    """Set random state across different libraries for reproducibility
+
+    Args:
+        seed (int): Number to fix random number generators to a specific start.
+        verbose (bool, optional): Print set seed. Defaults to True.
+    """
+    if verbose:
+        print(f"Random state set with seed {seed}")
+
+    torch.backends.cudnn.deterministic = True
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)

@@ -38,6 +38,7 @@ from aru_metadata_parser.utils import load_metadata
 import opensoundscape
 from opensoundscape.utils import generate_clip_times_df
 from opensoundscape.signal_processing import tdoa
+from opensoundscape.utils import cast_np_to_native
 
 DEFAULT_RESAMPLE_TYPE = "soxr_hq"  # changed from kaiser_fast in v0.9.0
 
@@ -354,6 +355,8 @@ class Audio:
 
             # if the offset > 0, we need to update the timestamp
             if "recording_start_time" in metadata and offset > 0:
+                # timedelta doesn't like np types, fix issue #928
+                offset = cast_np_to_native(offset)
                 metadata["recording_start_time"] += datetime.timedelta(seconds=offset)
 
         return cls(samples, sr, resample_type=resample_type, metadata=metadata)
@@ -533,9 +536,10 @@ class Audio:
         else:
             metadata = self.metadata.copy()
             if "recording_start_time" in metadata:
-                metadata["recording_start_time"] += datetime.timedelta(
-                    seconds=start_sample / self.sample_rate
-                )
+                # timedelta doesn't like np types, fix issue #928
+                seconds = start_sample / self.sample_rate
+                seconds = cast_np_to_native(seconds)
+                metadata["recording_start_time"] += datetime.timedelta(seconds=seconds)
 
             if "duration" in metadata:
                 metadata["duration"] = len(samples_trimmed) / self.sample_rate
@@ -587,41 +591,42 @@ class Audio:
     def extend_to(self, duration):
         """Extend audio file to desired duration by adding silence to the end
 
-        If duration is less than the Audio's .duration, the Audio object is trimmed.
+        If `duration` is less than or equal to the Audio's self.duration, the Audio remains unchanged.
+
         Otherwise, silence is added to the end of the Audio object to achieve the desired
-        duration.
+        `duration`.
 
         Args:
-            duration: the final duration in seconds of the audio object
+            duration: the minimum final duration in seconds of the audio object
 
         Returns:
             a new Audio object of the desired duration
         """
 
-        target_n_samples = round(duration * self.sample_rate)
+        minimum_n_samples = round(duration * self.sample_rate)
         current_n_samples = len(self.samples)
 
-        if target_n_samples > current_n_samples:
+        if minimum_n_samples <= current_n_samples:
+            return self._spawn()
+
+        else:
             # add 0's to the end of the sample array
             new_samples = np.pad(
-                self.samples, pad_width=(0, target_n_samples - current_n_samples)
+                self.samples, pad_width=(0, minimum_n_samples - current_n_samples)
             )
-        elif target_n_samples < current_n_samples:
-            # trim to desired samples (similar to self.trim())
-            new_samples = self.samples[0:target_n_samples]
 
-        # update metadata to reflect new duration
-        if self.metadata is None:
-            metadata = None
-        else:
-            metadata = self.metadata.copy()
-            if "duration" in metadata:
-                metadata["duration"] = len(new_samples) / self.sample_rate
+            # update metadata to reflect new duration
+            if self.metadata is None:
+                metadata = None
+            else:
+                metadata = self.metadata.copy()
+                if "duration" in metadata:
+                    metadata["duration"] = len(new_samples) / self.sample_rate
 
-        return self._spawn(
-            samples=new_samples,
-            metadata=metadata,
-        )
+            return self._spawn(
+                samples=new_samples,
+                metadata=metadata,
+            )
 
     def extend_by(self, duration):
         """Extend audio file by adding `duration` seconds of silence to the end
@@ -731,17 +736,20 @@ class Audio:
 
         # Compute the fft (fast fourier transform) of the selected clip
         N = len(self.samples)
-        fft = scipy.fft.fft(self.samples)
+        fft = scipy.fft.rfft(self.samples)
+        fft = np.abs(fft)  # get the magnitude of the fft
 
         # create the frequencies corresponding to fft bins
-        freq = scipy.fft.fftfreq(N, d=1 / self.sample_rate)
+        freq = scipy.fft.rfftfreq(N, d=1 / self.sample_rate)
 
-        # remove negative frequencies and scale magnitude by 2.0/N:
-        fft = 2.0 / N * fft[0 : int(N / 2)]
-        frequencies = freq[0 : int(N / 2)]
-        fft = np.abs(fft)
+        # scale magnitude by 2.0/N,
+        # except for the DC and sr/2 (Nyquist frequency) components
+        fft *= 2.0 / N
+        fft[0] *= 0.5
+        if N % 2 == 0:
+            fft[-1] *= 0.5
 
-        return fft, frequencies
+        return fft, freq
 
     def normalize(self, peak_level=None, peak_dBFS=None):
         """Return audio object with normalized waveform
@@ -865,41 +873,24 @@ class Audio:
             else:  # we can write metadata for WAV and AIFF
                 _write_metadata(self.metadata, metadata_format, path)
 
-    def split(self, clip_duration, clip_overlap=0, final_clip=None):
+    def split(self, clip_duration, **kwargs):
         """Split Audio into even-lengthed clips
 
         The Audio object is split into clips of a specified duration and overlap
 
         Args:
             clip_duration (float):  The duration in seconds of the clips
-            clip_overlap (float):   The overlap of the clips in seconds [default: 0]
-            final_clip (str):       Behavior if final_clip is less than clip_duration
-                seconds long. By default, discards remaining audio if less than
-                clip_duration seconds long [default: None].
-                Options:
-                - None: Discard the remainder (do not make a clip)
-                - "extend": Extend the final clip with silence to reach
-                    clip_duration length
-                - "remainder": Use only remainder of Audio (final clip will be
-                    shorter than clip_duration)
-                - "full": Increase overlap with previous clip to yield a clip with
-                    clip_duration length
+            **kwargs (such as clip_overlap_fraction, final_clip) are passed to
+                opensoundscape.utils.generate_clip_times_df()
+                - extends last Audio object if user passes final_clip == "extend"
         Returns:
             - audio_clips: list of audio objects
             - dataframe w/columns for start_time and end_time of each clip
         """
-        if not final_clip in ["remainder", "full", "extend", None]:
-            raise ValueError(
-                f"final_clip must be 'remainder', 'full', 'extend',"
-                f"or None. Got {final_clip}."
-            )
 
         duration = self.duration
         clip_df = generate_clip_times_df(
-            full_duration=duration,
-            clip_duration=clip_duration,
-            clip_overlap=clip_overlap,
-            final_clip=final_clip,
+            full_duration=duration, clip_duration=clip_duration, **kwargs
         )
 
         clips = [None] * len(clip_df)
@@ -910,8 +901,9 @@ class Audio:
             audio_clip = self.trim(start, end)
 
             # Extend the final clip if necessary
-            if end > duration and final_clip == "extend":
-                audio_clip = audio_clip.extend_to(clip_duration)
+            if "final_clip" in kwargs.keys():
+                if end > duration and kwargs["final_clip"] == "extend":
+                    audio_clip = audio_clip.extend_to(clip_duration)
 
             # Add clip to list of clips
             clips[idx] = audio_clip
@@ -919,8 +911,7 @@ class Audio:
         if len(clips) == 0:
             warnings.warn(
                 f"Given Audio object with duration of `{duration}` "
-                f"seconds and `clip_duration={clip_duration}` but "
-                f" `final_clip={final_clip}` produces no clips. "
+                f"seconds and `clip_duration={clip_duration}`, produces no clips. "
                 f"Returning empty list."
             )
 

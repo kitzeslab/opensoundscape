@@ -2,6 +2,7 @@
 
 This module provides functionality to search audio for periodically fluctuating vocalizations.
 """
+
 import os
 import warnings
 
@@ -76,7 +77,9 @@ def ribbit(
     signal_band,
     pulse_rate_range,
     clip_duration,
-    clip_overlap=0,
+    clip_overlap=None,
+    clip_overlap_fraction=None,
+    clip_step=None,
     final_clip=None,
     noise_bands=None,
     spec_clip_range=(-100, -20),
@@ -93,8 +96,13 @@ def ribbit(
         pulse_rate_range: [min,max] pulses per second for the target species
         clip_duration: the length of audio (in seconds) to analyze at one time
             - each clip is analyzed independently and recieves a ribbit score
-        clip_overlap (float):   overlap between consecutive clips (sec)
-        final_clip (str):       behavior if final clip is less than clip_duration
+        clip_overlap (float): overlap between consecutive clips (sec)
+        clip_overlap_fraction (float): overlap between consecutive clips as a fraction of
+            clip_duration
+        clip_step (float): step size between consecutive clips (sec)
+            - only one of clip_overlap, clip_overlap_fraction, or clip_step should be provided
+            - if all are None, defaults to clip_overlap=0
+        final_clip (str): behavior if final clip is less than clip_duration
             seconds long. By default, discards remaining audio if less than
             clip_duration seconds long [default: None].
             Options:
@@ -189,6 +197,8 @@ def ribbit(
         full_duration=spectrogram.duration,
         clip_duration=clip_duration,
         clip_overlap=clip_overlap,
+        clip_overlap_fraction=clip_overlap_fraction,
+        clip_step=clip_step,
         final_clip=final_clip,
     )
     clip_df["score"] = np.nan

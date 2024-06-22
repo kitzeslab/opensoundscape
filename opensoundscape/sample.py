@@ -1,7 +1,9 @@
 """Class for holding information on a single sample"""
+
 import copy
 from pathlib import Path
 import torch
+import numpy as np
 
 
 class Sample:
@@ -70,7 +72,7 @@ class AudioSample(Sample):
             return list(self.labels[self.labels == 1].index)
 
     @classmethod
-    def from_series(cls, labels_series):
+    def from_series(cls, labels_series, rounding_precision=10):
         """initialize AudioSample from a pandas Series (optionally containing labels)
 
         - if series name (dataframe index) is tuple, extracts ['file','start_time','end_time']
@@ -83,9 +85,12 @@ class AudioSample(Sample):
         Creates an AudioSample object.
 
         Args:
-            labels: a pd.Series with name = file path or ['file','start_time','end_time']
+            labels_series: a pd.Series with name = file path or ['file','start_time','end_time']
                 and index as classes with 0/1 values as labels. Labels can have no values
                 (just a name) if sample does not have labels.
+            rounding_precision: rounds duration to this many decimals
+                to avoid floating point precision errors. Pass `None` for no rounding.
+                Default: 10 decimal places
         """
         if type(labels_series.name) == tuple:
             # if the dataframe has a multi-index, it should be (file,start_time,end_time)
@@ -100,9 +105,12 @@ class AudioSample(Sample):
             start_time = None
             end_time = None
 
-        # calcualte duration if start, end given
+        # calculate duration if start, end given
         if end_time is not None and start_time is not None:
             duration = end_time - start_time
+            # avoid annoying floating point precision errors, round
+            if rounding_precision is not None:
+                duration = round(duration, rounding_precision)
         else:
             duration = None
 
@@ -129,12 +137,12 @@ class AudioSample(Sample):
 
 # TODO: move this to dataloaders.py? or preprocessing.utils?
 def collate_audio_samples_to_dict(samples):
-    """generate batched tensors of data and labels (in a dictionary)
-
+    """
+    generate batched tensors of data and labels (in a dictionary).
     returns collated samples: a dictionary with keys "samples" and "labels"
 
     assumes that s.data is a Tensor and s.labels is a list/array
-    for each sample S
+    for each sample S, and that every sample has labels for the same classes.
 
     Args:
 
@@ -149,5 +157,5 @@ def collate_audio_samples_to_dict(samples):
     """
     return {
         "samples": torch.stack([s.data for s in samples]),
-        "labels": torch.Tensor([s.labels for s in samples]),
+        "labels": torch.Tensor(np.vstack([s.labels.values for s in samples])),
     }
