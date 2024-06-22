@@ -1,63 +1,17 @@
 import warnings
-import torch
-from torchmetrics.classification import (
-    MultilabelAveragePrecision,
-    MultilabelAUROC,
-    MulticlassAveragePrecision,
-    MulticlassAUROC,
-)
-from torchmetrics import Accuracy
-
-import opensoundscape
-from opensoundscape.ml import cnn_architectures
-from opensoundscape.ml.loss import (
-    BCEWithLogitsLoss_hot,
-    CrossEntropyLoss_hot,
-    ResampleLoss,
-)
-from opensoundscape.preprocess.preprocessors import (
-    BasePreprocessor,
-    SpectrogramPreprocessor,
-)
-from lightning.pytorch.callbacks import ModelCheckpoint
-
-import warnings
-
-import lightning as L
-
-
 from pathlib import Path
 import warnings
 import numpy as np
 import pandas as pd
-import os
-import copy
 
 import torch
-import torch.nn.functional as F
-import wandb
-from tqdm.autonotebook import tqdm
-
-import opensoundscape
-from opensoundscape.ml import cnn_architectures
-from opensoundscape.ml.utils import apply_activation_layer, check_labels
-from opensoundscape.preprocess.preprocessors import (
-    SpectrogramPreprocessor,
-    BasePreprocessor,
-)
-from opensoundscape.ml.datasets import AudioFileDataset
-from opensoundscape.ml.cnn_architectures import inception_v3
-from opensoundscape.sample import collate_audio_samples, collate_audio_samples_to_dict
-from opensoundscape.utils import identity
-from opensoundscape.logging import wandb_table
-
-from opensoundscape.ml.cam import CAM
-import pytorch_grad_cam
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint
-from opensoundscape.ml.cnn import BaseModule, SpectrogramModule
 
-import warnings
+from opensoundscape.ml.utils import apply_activation_layer, check_labels
+from opensoundscape.ml.datasets import AudioFileDataset
+from opensoundscape.logging import wandb_table
+from opensoundscape.ml.cnn import SpectrogramModule
 
 
 class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
