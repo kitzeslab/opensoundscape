@@ -11,9 +11,11 @@ class PreprocessingError(Exception):
 
 
 def get_args(func):
-    """get list of arguments and default values from a function"""
+    """get list of arguments and default values from a function
+
+    ignores 'kwargs' argument, which is included in inspect.signature.parameters"""
     signature = inspect.signature(func)
-    return {k: v.default for k, v in signature.parameters.items()}
+    return {k: v.default for k, v in signature.parameters.items() if k != "kwargs"}
 
 
 def get_reqd_args(func):
@@ -22,7 +24,7 @@ def get_reqd_args(func):
     return [
         k
         for k, v in signature.parameters.items()
-        if v.default is inspect.Parameter.empty
+        if v.default is inspect.Parameter.empty and k != "kwargs"
     ]
 
 
