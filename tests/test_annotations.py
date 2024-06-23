@@ -224,32 +224,36 @@ def test_unique_labels(boxed_annotations):
     assert set(boxed_annotations.unique_labels()) == set(["a", "b"])
 
 
-def test_global_one_hot_labels(boxed_annotations):
-    assert boxed_annotations.global_one_hot_labels(classes=["a", "b", "c"]) == [1, 1, 0]
+def test_global_multi_hot_labels(boxed_annotations):
+    assert boxed_annotations.global_multi_hot_labels(classes=["a", "b", "c"]) == [
+        1,
+        1,
+        0,
+    ]
 
 
-def test_one_hot_labels_like(boxed_annotations):
+def test_multi_hot_labels_like(boxed_annotations):
     clip_df = generate_clip_times_df(5, clip_duration=1.0, clip_overlap=0)
     clip_df["audio_file"] = "audio_file.wav"
     clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
-    labels = boxed_annotations.one_hot_labels_like(
+    labels = boxed_annotations.multi_hot_labels_like(
         clip_df, class_subset=["a"], min_label_overlap=0.25
     )
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
 
 
-def test_one_hot_labels_like_overlap(boxed_annotations):
+def test_multi_hot_labels_like_overlap(boxed_annotations):
     clip_df = generate_clip_times_df(3, clip_duration=1.0, clip_overlap=0.5)
     clip_df["audio_file"] = "audio_file.wav"
     clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
-    labels = boxed_annotations.one_hot_labels_like(
+    labels = boxed_annotations.multi_hot_labels_like(
         clip_df, class_subset=["a"], min_label_overlap=0.25
     )
     assert np.array_equal(labels.values, np.array([[1, 1, 0, 0, 0]]).transpose())
 
 
-def test_one_hot_clip_labels(boxed_annotations):
-    labels = boxed_annotations.one_hot_clip_labels(
+def test_multi_hot_clip_labels(boxed_annotations):
+    labels = boxed_annotations.multi_hot_clip_labels(
         full_duration=5,
         clip_duration=1.0,
         clip_overlap=0,
@@ -259,12 +263,12 @@ def test_one_hot_clip_labels(boxed_annotations):
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
 
 
-def test_one_hot_clip_labels_get_duration(boxed_annotations, silence_10s_mp3_str):
+def test_multi_hot_clip_labels_get_duration(boxed_annotations, silence_10s_mp3_str):
     """should get duration of audio files if full_duration is None"""
     boxed_annotations.df["audio_file"] = [silence_10s_mp3_str] * len(
         boxed_annotations.df
     )
-    labels = boxed_annotations.one_hot_clip_labels(
+    labels = boxed_annotations.multi_hot_clip_labels(
         full_duration=None,
         clip_duration=2.0,
         clip_overlap=0,
@@ -275,13 +279,13 @@ def test_one_hot_clip_labels_get_duration(boxed_annotations, silence_10s_mp3_str
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
 
 
-def test_one_hot_clip_labels_exception(boxed_annotations):
+def test_multi_hot_clip_labels_exception(boxed_annotations):
     """raises GetDurationError because file length cannot be determined
     and full_duration is None
     """
     boxed_annotations.audio_files = ["non existant file"]
     with pytest.raises(GetDurationError):
-        labels = boxed_annotations.one_hot_clip_labels(
+        labels = boxed_annotations.multi_hot_clip_labels(
             full_duration=None,
             clip_duration=2.0,
             clip_overlap=0,
@@ -290,8 +294,8 @@ def test_one_hot_clip_labels_exception(boxed_annotations):
         )
 
 
-def test_one_hot_clip_labels_overlap(boxed_annotations):
-    labels = boxed_annotations.one_hot_clip_labels(
+def test_multi_hot_clip_labels_overlap(boxed_annotations):
+    labels = boxed_annotations.multi_hot_clip_labels(
         full_duration=3,
         clip_duration=1.0,
         clip_overlap=0.5,
@@ -325,8 +329,8 @@ def test_convert_labels_wrong_type(boxed_annotations):
         boxed_annotations = boxed_annotations.convert_labels(df)
 
 
-def test_one_hot_labels_on_time_interval(boxed_annotations):
-    a = annotations.one_hot_labels_on_time_interval(
+def test_multi_hot_labels_on_time_interval(boxed_annotations):
+    a = annotations.multi_hot_labels_on_time_interval(
         boxed_annotations.df,
         start_time=0,
         end_time=3.5,
@@ -335,7 +339,7 @@ def test_one_hot_labels_on_time_interval(boxed_annotations):
     )
     assert a["a"] == 1 and a["b"] == 1
 
-    a = annotations.one_hot_labels_on_time_interval(
+    a = annotations.multi_hot_labels_on_time_interval(
         boxed_annotations.df,
         start_time=0,
         end_time=3.5,
@@ -345,10 +349,10 @@ def test_one_hot_labels_on_time_interval(boxed_annotations):
     assert a["a"] == 1 and a["b"] == 0
 
 
-def test_one_hot_labels_on_time_interval_fractional(boxed_annotations):
+def test_multi_hot_labels_on_time_interval_fractional(boxed_annotations):
     """test min_label_fraction use cases"""
     # too short but satisfies fraction
-    a = annotations.one_hot_labels_on_time_interval(
+    a = annotations.multi_hot_labels_on_time_interval(
         boxed_annotations.df,
         start_time=0.4,
         end_time=3,
@@ -359,7 +363,7 @@ def test_one_hot_labels_on_time_interval_fractional(boxed_annotations):
     assert a["a"] == 1
 
     # too short and not enough for fraction
-    a = annotations.one_hot_labels_on_time_interval(
+    a = annotations.multi_hot_labels_on_time_interval(
         boxed_annotations.df,
         start_time=0.4,
         end_time=3,
@@ -370,7 +374,7 @@ def test_one_hot_labels_on_time_interval_fractional(boxed_annotations):
     assert a["a"] == 0
 
     # long enough, although less than fraction
-    a = annotations.one_hot_labels_on_time_interval(
+    a = annotations.multi_hot_labels_on_time_interval(
         boxed_annotations.df,
         start_time=0.4,
         end_time=3,
@@ -381,33 +385,33 @@ def test_one_hot_labels_on_time_interval_fractional(boxed_annotations):
     assert a["a"] == 1
 
 
-def test_categorical_to_one_hot():
+def test_categorical_to_multi_hot():
     cat_labels = [["a", "b"], ["a", "c"]]
-    one_hot, classes = annotations.categorical_to_one_hot(
+    multi_hot, classes = annotations.categorical_to_multi_hot(
         cat_labels, class_subset=["a", "b", "c", "d"]
     )
     assert set(classes) == {"a", "b", "c", "d"}
-    assert one_hot.tolist() == [[1, 1, 0, 0], [1, 0, 1, 0]]
+    assert multi_hot.tolist() == [[1, 1, 0, 0], [1, 0, 1, 0]]
 
     # without passing classes list:
-    one_hot, classes = annotations.categorical_to_one_hot(cat_labels)
+    multi_hot, classes = annotations.categorical_to_multi_hot(cat_labels)
     assert set(classes) == {"a", "b", "c"}
 
 
-def test_one_hot_to_categorical():
+def test_multi_hot_to_categorical():
     classes = ["a", "b", "c"]
-    one_hot = [[0, 0, 1], [1, 1, 1]]
-    cat_labels = annotations.one_hot_to_categorical(one_hot, classes)
+    multi_hot = [[0, 0, 1], [1, 1, 1]]
+    cat_labels = annotations.multi_hot_to_categorical(multi_hot, classes)
     assert list(cat_labels) == [["c"], ["a", "b", "c"]]
 
 
-def test_one_hot_to_categorical_and_back():
+def test_multi_hot_to_categorical_and_back():
     classes = ["a", "b", "c"]
-    one_hot = [[0, 0, 1], [1, 1, 1]]
-    cat_labels = annotations.one_hot_to_categorical(one_hot, classes)
-    one_hot2, classes2 = annotations.categorical_to_one_hot(cat_labels, classes)
+    multi_hot = [[0, 0, 1], [1, 1, 1]]
+    cat_labels = annotations.multi_hot_to_categorical(multi_hot, classes)
+    multi_hot2, classes2 = annotations.categorical_to_multi_hot(cat_labels, classes)
 
-    assert np.array_equal(one_hot, one_hot2)
+    assert np.array_equal(multi_hot, multi_hot2)
     assert np.array_equal(classes, classes2)
 
 
@@ -428,7 +432,7 @@ def test_raven_annotation_methods_empty(raven_file_empty):
     clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
 
     # class_subset = None: keep all
-    labels_df = a.one_hot_labels_like(
+    labels_df = a.multi_hot_labels_like(
         clip_df,
         class_subset=None,
         min_label_overlap=0.25,
@@ -437,7 +441,7 @@ def test_raven_annotation_methods_empty(raven_file_empty):
     assert (labels_df.reset_index() == clip_df.reset_index()).all().all()
 
     # classes = subset
-    labels_df = a.one_hot_labels_like(
+    labels_df = a.multi_hot_labels_like(
         clip_df,
         class_subset=["Species1", "Species2"],
         min_label_overlap=0.25,
@@ -463,10 +467,10 @@ def test_methods_on_zero_length_annotations(boxed_annotations_zero_len):
     assert len(filtered.df == 1)
 
 
-def test_one_hot_clip_labels_with_empty_annotation_file(
+def test_multi_hot_clip_labels_with_empty_annotation_file(
     raven_file_empty, silence_10s_mp3_str, raven_file, rugr_wav_str
 ):
-    """test that one_hot_clip_labels works with empty annotation file
+    """test that multi_hot_clip_labels works with empty annotation file
 
     it should return a dataframe with rows for each clip and 0s for all labels
     """
@@ -474,7 +478,7 @@ def test_one_hot_clip_labels_with_empty_annotation_file(
         [raven_file_empty], [silence_10s_mp3_str]
     )
 
-    small_label_df = boxed_annotations.one_hot_clip_labels(
+    small_label_df = boxed_annotations.multi_hot_clip_labels(
         full_duration=None,
         clip_duration=4,
         clip_overlap=2,
@@ -492,7 +496,7 @@ def test_one_hot_clip_labels_with_empty_annotation_file(
         [raven_file_empty, raven_file], [silence_10s_mp3_str, rugr_wav_str]
     )
 
-    small_label_df = boxed_annotations.one_hot_clip_labels(
+    small_label_df = boxed_annotations.multi_hot_clip_labels(
         full_duration=None,
         clip_duration=4,
         clip_overlap=2,
