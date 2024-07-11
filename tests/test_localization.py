@@ -414,3 +414,11 @@ def test_localize_too_few_receivers(LOCA_2021_aru_coords, LOCA_2021_detections):
     )
     assert len(localized_events) == 0
     assert len(unlocalized_events) == 6
+
+
+def test_SpatialGrid():
+    # Verify that the SpatialGrid class creates the correct grid
+    receivers = np.array([[0, 0], [0, 10], [10, 0], [10, 10]])
+    grid = localization.SpatialGrid(receivers, resolution=1, margin=0)
+    # verify there are the right number of grid points
+    assert len(grid.grid) == 100

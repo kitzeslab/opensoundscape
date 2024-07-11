@@ -8,7 +8,7 @@ from opensoundscape.audio import Audio
 from opensoundscape import audio
 from opensoundscape.utils import cast_np_to_native
 from scipy.optimize import least_squares
-
+from scipy.spatial import ConvexHull
 
 # define defaults for physical constants
 SPEED_OF_SOUND = 343  # default value in meters per second
@@ -282,9 +282,6 @@ class SpatialEvent:
         return self.location_estimate
 
 
-from scipy.spatial import ConvexHull
-
-
 class SpatialGrid:
     """
     Class for creating a grid of points for localizing sound events with methods that use grid search.
@@ -305,7 +302,6 @@ class SpatialGrid:
         self.resolution = resolution
         self.margin = margin
         self.dimensions = self.recorder_positions.shape[1]
-        self.convex_hull = ConvexHull(self.recorder_positions)
         self.grid = self._make_grid()
 
     def _make_grid(self):
@@ -338,14 +334,17 @@ class SpatialGrid:
             )
             grid = np.array(np.meshgrid(x, y, z)).T.reshape(-1, 3)
 
+        hull = ConvexHull(self.recorder_positions)
         # only keep the points that are inside the convex hull of the recorder positions
         # self.hull is the ConvexHull object of the recorder positions
         # self.hull.equations is the equation of the hyperplane of each face of the convex hull
         # apply the equation of each face to the grid points to check if they are inside the convex hull
+        eps = (
+            margin / 100
+        )  # add a small epsilon to the margin to ensure that points on the edge of the convex hull are included
         mask = np.all(
-            self.convex_hull.equations[:, :-1].dot(grid.T)
-            + self.convex_hull.equations[:, -1][:, None]
-            <= self.margin,
+            hull.equations[:, :-1].dot(grid.T) + hull.equations[:, -1][:, None]
+            <= self.margin + eps,
             axis=0,
         )
         grid = grid[mask]
