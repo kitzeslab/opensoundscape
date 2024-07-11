@@ -339,9 +339,8 @@ class SpatialGrid:
         # self.hull is the ConvexHull object of the recorder positions
         # self.hull.equations is the equation of the hyperplane of each face of the convex hull
         # apply the equation of each face to the grid points to check if they are inside the convex hull
-        eps = (
-            margin / 100
-        )  # add a small epsilon to the margin to ensure that points on the edge of the convex hull are included
+        eps = 1e-6
+        # add a small epsilon to the margin to ensure that points on the edge of the convex hull are included
         mask = np.all(
             hull.equations[:, :-1].dot(grid.T) + hull.equations[:, -1][:, None]
             <= self.margin + eps,
