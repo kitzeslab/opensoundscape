@@ -99,10 +99,11 @@ class SpatialEvent:
         self,
         localization_algorithm="gillette",
         use_stored_tdoas=True,
-        return_self=False,
     ):
         """
-        Estimate spatial location of this event. This method first estimates the time delays (TDOAS) using cross-correlation, then estimates the location from those TDOAS.
+        Estimate spatial location of this event. Modifies attributes in place.
+
+        This method first estimates the time delays (TDOAS) using cross-correlation, then estimates the location from those TDOAS.
         Localization is performed in 2d or 3d according to the dimensions of self.receiver_locations (x,y) or (x,y,z)
         Note: if self.tdoas or self.receiver_locations is None, first calls self._estimate_delays() to estimate the time delays.
 
@@ -113,7 +114,6 @@ class SpatialEvent:
             - use_stored_tdoas: if True, uses the tdoas stored in self.tdoas to estimate the location.
                 If False, first calls self._estimate_delays() to estimate the tdoas.
                 default: True
-            - return_self: if True, returns the SpatialEvent object itself. This is used under the hood for parallelization.
 
         Returns:
             Location estimate as cartesian coordinates (x,y) or (x,y,z) (units: meters)
@@ -130,10 +130,7 @@ class SpatialEvent:
             localization_algorithm=localization_algorithm
         )
         # Sets the attributes self.location_estimate, self.receivers_used_for_localization, self.distance_residuals, self.residual_rms
-        if return_self:
-            return self  # TODO: why return self?
-        else:
-            return location_estimate
+        return location_estimate
 
     def _estimate_delays(self):
         """Hidden method to estimate time delay of event relative to receiver_files[0] with gcc
@@ -659,10 +656,10 @@ class SynchronizedRecorderArray:
         # this calls estimate_delays under the hood
         from joblib import Parallel, delayed
 
-        events = Parallel(n_jobs=num_workers)(
-            delayed(e.estimate_location)(
-                localization_algorithm=localization_algorithm, return_self=True
-            )
+        # since .estiamte_location() modifies the object in place,
+        # we don't need to return the objects.
+        Parallel(n_jobs=num_workers)(
+            delayed(e.estimate_location)(localization_algorithm=localization_algorithm)
             for e in candidate_events
         )
 
@@ -670,14 +667,14 @@ class SynchronizedRecorderArray:
         # (e.g. too few receivers, too few receivers after applying cc_threshold or high residual in localization)
         unlocalized_events = [
             e
-            for e in events
+            for e in candidate_events
             if (e.location_estimate is None or e.residual_rms > residual_threshold)
         ]
 
         # list of events that were successfully localized
         localized_events = [
             e
-            for e in events
+            for e in candidate_events
             if (
                 e.location_estimate is not None and e.residual_rms <= residual_threshold
             )
