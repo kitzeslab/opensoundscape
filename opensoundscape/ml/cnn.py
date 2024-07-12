@@ -1619,6 +1619,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 ), "target_layers must be in self.model.modules(), but {tl} is not."
 
         ## INITIALIZE CAMS AND DATALOADER ##
+        # move model to device
+        # TODO: choose cuda or not in pytorch_grad_cam methods
+        self.model.to(self.device)
+        self.model.eval()
 
         # initialize cam object: `method` is either str in methods_dict keys, or the class
         methods_dict = {
@@ -1652,19 +1656,15 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # initialize guided back propagation object
         if guided_backprop:
             gb_model = pytorch_grad_cam.GuidedBackpropReLUModel(
-                model=self.model, use_cuda=False
-            )  # TODO cuda usage - expose? use model setting?
+                model=self.model, device=self.device
+            )
+            # TODO cuda usage - expose? use model setting?
 
         # create dataloader, collate using `identity` to return list of AudioSample
         # rather than (samples, labels) tensors
         dataloader = self.inference_dataloader_cls(
             samples, self.preprocessor, shuffle=False, collate_fn=identity, **kwargs
         )
-
-        # move model to device
-        # TODO: choose cuda or not in pytorch_grad_cam methods
-        self.model.to(self.device)
-        self.model.eval()
 
         ## GENERATE SAMPLES ##
 
@@ -1722,7 +1722,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 # high resolution pixel-activation levels for specific classes
                 # GuidedBackpropReLUasModule does not support batching
                 if guided_backprop:
-                    t = batch_tensors[i].unsqueeze(0)  # "batch" with one sample
+                    # create "batch" with one sample
+                    t = batch_tensors[i].unsqueeze(0)
                     # target_category expects the index position of the class eg 0 for
                     # first class, rather than the class name
                     # note: t.detach() to avoid bug,
