@@ -1778,6 +1778,21 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         self._device = torch.device(device)
 
 
+class CNN(SpectrogramClassifier):
+    """alias for SpectrogramClassifier
+
+    improves comaptibility with older code / previous opso versions
+    """
+
+    def __init__(self, architecture, classes, sample_duration, **kwargs):
+        super(CNN, self).__init__(
+            architecture=architecture,
+            classes=classes,
+            sample_duration=sample_duration,
+            **kwargs,
+        )
+
+
 def use_resample_loss(
     model, train_df
 ):  # TODO revisit how this work. Should be able to set loss_cls=ResampleLoss()
