@@ -67,7 +67,7 @@ def onemin_wav_df():
 
 
 def test_init_with_str():
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
 
 
 def test_train_single_target(train_df):
@@ -86,7 +86,7 @@ def test_train_single_target(train_df):
 
 
 def test_train_multi_target(train_df):
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     model.train(
         train_df,
         train_df,
@@ -100,7 +100,7 @@ def test_train_multi_target(train_df):
 
 
 def test_train_resample_loss(train_df):
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     cnn.use_resample_loss(model, train_df=train_df)
     model.train(
         train_df,
@@ -115,7 +115,7 @@ def test_train_resample_loss(train_df):
 
 
 def test_train_one_class(train_df):
-    model = cnn.CNN("resnet18", classes=[0], sample_duration=5.0)
+    model = cnn.CNN(architecture="resnet18", classes=[0], sample_duration=5.0)
     model.single_target = True
     model.train(
         train_df[[0]],
@@ -130,20 +130,20 @@ def test_train_one_class(train_df):
 
 
 def test_single_target_prediction(test_df):
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     model.single_target = True
     scores = model.predict(test_df)
     assert len(scores) == 2
 
 
 def test_predict_on_list_of_files(test_df):
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     scores = model.predict(test_df.index.values)
     assert len(scores) == 2
 
 
 def test_predict_on_empty_list():
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     scores = model.predict([])
     expected = ["file", "start_time", "end_time", 0, 1]
     assert list(scores.reset_index().columns) == expected
@@ -276,20 +276,15 @@ def test_train_predict_inception(train_df):
 
 
 def test_train_predict_architecture(train_df):
-    """test passing architecture object to CNN class"""
-    arch = alexnet(2, weights=None)
-    model = cnn.CNN(arch, [0, 1], sample_duration=2)
-    model.train(
-        train_df,
-        train_df,
-        save_path="tests/models/",
-        epochs=1,
-        batch_size=2,
-        save_interval=10,
-        num_workers=0,
-    )
-    model.predict(train_df, num_workers=0)
-    shutil.rmtree("tests/models/")
+    """test passing architecture object to CNN class
+
+    should internally update `channels` to match architecture (3 channels)
+    """
+    for num_channels in (1, 3):
+        arch = alexnet(2, weights=None, num_channels=num_channels)
+        model = cnn.CNN(arch, [0, 1], sample_duration=2)
+        model.predict(train_df, num_workers=0)
+        assert model.preprocessor.channels == num_channels
 
 
 def test_train_on_clip_df(train_df):
@@ -425,14 +420,14 @@ def test_prediction_returns_consistent_values(train_df):
 
 
 def test_save_and_load_weights(model_save_path):
-    arch = resnet18(2, weights=None)
+    arch = resnet18(2, weights=None, num_channels=1)
     model = cnn.CNN("resnet18", classes=["a", "b"], sample_duration=5.0)
     model.save_weights(model_save_path)
     model1 = cnn.CNN(arch, classes=["a", "b"], sample_duration=5.0)
     model1.load_weights(model_save_path)
     assert np.array_equal(
-        model.network.state_dict()["conv1.weight"].numpy(),
-        model1.network.state_dict()["conv1.weight"].numpy(),
+        model.model.state_dict()["conv1.weight"].numpy(),
+        model1.model.state_dict()["conv1.weight"].numpy(),
     )
 
 
@@ -452,10 +447,13 @@ def test_eval_raises_bad_labels(train_df):
 
 
 def test_split_resnet_feat_clf(train_df):
+    # TODO: will add attributes to cnn architectures
+    # specifying which layers are feature and which are classifier,
+    # to make this API more generic
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=2)
     cnn.separate_resnet_feat_clf(model)
-    assert "feature" in model.optimizer_params
-    model.optimizer_params["feature"]["lr"] = 0.1
+    assert "feature" in model.optimizer_params["kwargs"]
+    model.optimizer_params["kwargs"]["feature"]["lr"] = 0.1
     model.train(train_df, epochs=0, save_path="tests/models")
     shutil.rmtree("tests/models/")
 

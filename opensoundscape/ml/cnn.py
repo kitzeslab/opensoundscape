@@ -61,6 +61,11 @@ import warnings
 
 class BaseModule:
     def __init__(self):
+        """base class for pytorch and lightning models in opensoundscape
+
+        This class is intended to be subclassed by classes with more customized functionality.
+        For example, see SpectrogramModule, SpectrogramClassifier, and LightningSpectrogramModule.
+        """
         super().__init__()
 
         self.name = "BaseModule"
@@ -451,7 +456,35 @@ class BaseModule:
     #     self.model.load_state_dict(torch.load(path), strict=strict)
 
 
+class ChannelDimCheckError(Exception):
+    pass
+
+
+def get_channel_dim(model):
+
+    # Get the first layer
+    first_layer = list(model.children())[0]
+
+    # If the first layer is a Sequential container, get its first module
+    while isinstance(first_layer, torch.nn.Sequential):
+        first_layer = list(first_layer.children())[0]
+
+    # Get the number of input channels
+    # try checking first layer's .in_channelss then .in_featuers
+    try:
+        return first_layer.in_channels
+    except:
+        raise ChannelDimCheckError(
+            "Couldn't access .in_channels or .in_features of first layer"
+        )
+
+
 class SpectrogramModule(BaseModule):
+    """Parent class for both SpectrogramClassifier (pytorch) and LightningSpectrogramModule (lightning)
+
+    implements functionality that is shared between both pure PyTorch and Lightning classes/workflows
+    """
+
     def __init__(
         self,
         architecture,
@@ -459,7 +492,8 @@ class SpectrogramModule(BaseModule):
         sample_duration,
         single_target=False,
         channels=1,
-        sample_shape=[224, 224, 1],
+        sample_height=224,
+        sample_width=224,
     ):
         super().__init__()
         self.classes = classes
@@ -483,14 +517,26 @@ class SpectrogramModule(BaseModule):
             assert issubclass(
                 type(architecture), torch.nn.Module
             ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
-            if channels != 3:
+
+            # try to update channels arg to match architecture
+            try:
+                arch_channels = get_channel_dim(architecture)
+                if channels != arch_channels:
+                    warnings.warn(
+                        f"Using architecture's expected number of channels ({arch_channels}) "
+                        f"rather than user-specified channels ({channels})."
+                    )
+                    channels = arch_channels
+            except ChannelDimCheckError:
                 # can we try to check if first layer expects input with channels=channels?
                 warnings.warn(
-                    f"Make sure your architecture expects the number of channels in "
-                    f"your input samples ({channels}). "
-                    f"Pytorch architectures expect 3 channels by default."
+                    f"Failed to detect expected # input channels of this architecture."
+                    "Make sure your architecture expects the number of channels "
+                    f"equal to `channels` argument {channels}). "
+                    f"Pytorch architectures generally expect 3 channels by default."
                 )
             self.architecture_name = str(type(architecture))
+
         self.model = architecture
         """a pytorch Module such as Resnet18 or a custom object
 
@@ -503,9 +549,9 @@ class SpectrogramModule(BaseModule):
         ### PREPROCESSOR ###
         self.preprocessor = SpectrogramPreprocessor(
             sample_duration=sample_duration,
-            height=sample_shape[0],
-            width=sample_shape[1],
-            channels=sample_shape[2],
+            height=sample_height,
+            width=sample_width,
+            channels=channels,
         )
 
         ### LOSS FUNCTION ###
@@ -581,11 +627,17 @@ class SpectrogramModule(BaseModule):
 
 
 class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
-    """defines pure pytorch train, predict, and eval methods for a spectrogram classifier"""
-
     name = "SpectrogramClassifier"
 
     def __init__(self, **kwargs):
+        """defines pure pytorch train, predict, and eval methods for a spectrogram classifier
+
+        subclasses SpectrogramModule, defines methods that are used for pure PyTorch workflow.
+        To use lightning, see ml.lightning.LightningSpectrogramModule.
+
+        Args:
+            see SpectrogramModule for arguments
+        """
         super(SpectrogramClassifier, self).__init__(**kwargs)
 
         self.log_file = None  # specify a path to save output to a text file
@@ -1809,64 +1861,64 @@ def use_resample_loss(
     model.loss_fn = ResampleLoss(class_frequency)
 
 
-def separate_resnet_feat_clf(model):
-    """Separate feature/classifier training params for a ResNet model
+# def separate_resnet_feat_clf(model):
+#     """Separate feature/classifier training params for a ResNet model
 
-    Args:
-        model: an opso model object with a pytorch resnet architecture
+#     Args:
+#         model: an opso model object with a pytorch resnet architecture
 
-    Returns:
-        model with modified .optimizer_params and ._init_optimizer() method
+#     Returns:
+#         model with modified .optimizer_params and ._init_optimizer() method
 
-    Effects:
-        creates a new self.optimizer object that replaces the old one
-        resets self.current_epoch to 0
-    """
+#     Effects:
+#         creates a new self.optimizer object that replaces the old one
+#         resets self.current_epoch to 0
+#     """
 
-    # optimization parameters for parts of the networks - see
-    # https://pytorch.org/docs/stable/optim.html#per-parameter-options
-    model.optimizer_params = {
-        "feature": {  # optimizer parameters for feature extraction layers
-            # "params": self.model.feature.parameters(),
-            "lr": 0.001,
-            "momentum": 0.9,
-            "weight_decay": 0.0005,
-        },
-        "classifier": {  # optimizer parameters for classification layers
-            # "params": self.model.classifier.parameters(),
-            "lr": 0.01,
-            "momentum": 0.9,
-            "weight_decay": 0.0005,
-        },
-    }
+#     # optimization parameters for parts of the networks - see
+#     # https://pytorch.org/docs/stable/optim.html#per-parameter-options
+#     model.optimizer_params["kwargs"] = {
+#         "feature": {  # optimizer parameters for feature extraction layers
+#             # "params": self.model.feature.parameters(),
+#             "lr": 0.001,
+#             "momentum": 0.9,
+#             "weight_decay": 0.0005,
+#         },
+#         "classifier": {  # optimizer parameters for classification layers
+#             # "params": self.model.classifier.parameters(),
+#             "lr": 0.01,
+#             "momentum": 0.9,
+#             "weight_decay": 0.0005,
+#         },
+#     }
 
-    # We override the parent method because we need to pass a list of
-    # separate optimizer_params for different parts of the network
-    # - ie we now have a dictionary of param dictionaries instead of just a
-    # param dictionary.
-    # TODO out of date, write configure_optimziers() instead
-    def _init_optimizer(self):
-        """override parent method to pass separate parameters to feat/clf"""
-        param_dict = self.optimizer_params
-        # in torch's resnet classes, the classifier layer is called "fc"
-        feature_extractor_params_list = [
-            param
-            for name, param in self.model.named_parameters()
-            if not name.split(".")[0] == "fc"
-        ]
-        classifier_params_list = [
-            param
-            for name, param in self.model.named_parameters()
-            if name.split(".")[0] == "fc"
-        ]
-        param_dict["feature"]["params"] = feature_extractor_params_list
-        param_dict["classifier"]["params"] = classifier_params_list
-        return self.optimizer_cls(param_dict.values())
+#     # We override the parent method because we need to pass a list of
+#     # separate optimizer_params for different parts of the network
+#     # - ie we now have a dictionary of param dictionaries instead of just a
+#     # param dictionary.
+#     # TODO out of date, write configure_optimziers() instead
+#     def _init_optimizer(self):
+#         """override parent method to pass separate parameters to feat/clf"""
+#         param_dict = self.optimizer_params
+#         # in torch's resnet classes, the classifier layer is called "fc"
+#         feature_extractor_params_list = [
+#             param
+#             for name, param in self.model.named_parameters()
+#             if not name.split(".")[0] == "fc"
+#         ]
+#         classifier_params_list = [
+#             param
+#             for name, param in self.model.named_parameters()
+#             if name.split(".")[0] == "fc"
+#         ]
+#         param_dict["feature"]["params"] = feature_extractor_params_list
+#         param_dict["classifier"]["params"] = classifier_params_list
+#         return self.optimizer_params["kwar"](param_dict.values())
 
-    model._init_optimizer = types.MethodType(_init_optimizer, model)
-    model.opt_net = None  # clears existing opt_net and its parameters
-    model.current_epoch = 0  # resets the epoch to 0
-    # model.opt_net will be created when .train() calls ._set_train()
+#     model._init_optimizer = types.MethodType(_init_optimizer, model)
+#     model.opt_net = None  # clears existing opt_net and its parameters
+#     model.current_epoch = 0  # resets the epoch to 0
+#     # model.opt_net will be created when .train() calls ._set_train()
 
 
 class InceptionV3(SpectrogramClassifier):
