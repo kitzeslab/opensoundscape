@@ -302,11 +302,8 @@ def test_localization_pipeline_real_audio_edge_case(
         assert len(event.receiver_files) == 6
 
 
-def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords, LOCA_2021_detections):
+def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords):
     # Test ensure that SpatialEvent_estimate_delays returns what is expected
-
-    LOCA_2021_aru_coords = pd.read_csv(LOCA_2021_aru_coords, index_col=0)
-
     max_delay = 0.04
     receiver_start_time_offsets = [0.2] * len(LOCA_2021_aru_coords)
     duration = 0.3
