@@ -637,3 +637,22 @@ def test_embed(test_df):
         embeddings = m.embed(samples=test_df, avgpool=True, progress_bar=False)
         assert embeddings.shape[0] == 2
         assert len(embeddings.shape) == 2
+
+
+def test_call_with_intermediate_layers(test_df):
+    """test that passing intermediate_layers to SpectrogramClassifier.__call__ returns tensors of expected shape"""
+    model = cnn.SpectrogramClassifier(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0
+    )
+    dl = model.predict_dataloader(test_df)
+    preds, intermediate_outs = model(
+        dl, intermediate_layers=[model.model.layer1, model.model.layer4]
+    )
+    assert len(intermediate_outs) == 2
+    assert np.shape(intermediate_outs[0]) == (2, 64)
+    assert np.shape(intermediate_outs[1]) == (2, 512)
+    preds, intermediate_outs = model(
+        dl, intermediate_layers=[model.model.layer4], avgpool_intermediates=False
+    )
+    assert len(intermediate_outs) == 1
+    assert np.shape(intermediate_outs[0]) == (2, 512, 7, 7)

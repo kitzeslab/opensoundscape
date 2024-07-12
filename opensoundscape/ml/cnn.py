@@ -1526,6 +1526,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             `(scores, intermediate_outputs)` where intermediate_outputs is
             a list of tensors, the outputs from each layer in intermediate_layers
         """
+
+        if not isinstance(dataloader, torch.utils.data.DataLoader):
+            warnings.warn(
+                "dataloader is not an instance of torch.utils.data.DataLoader!"
+            )
+
         # move network to device
         self.model.to(self.device)
         self.model.eval()
@@ -1551,8 +1557,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
             return hook
 
-        # initialize forward hooks; keep the handles so we can remove the hooks later
-        fhooks = []
+        # initialize forward hooks to save intermediate outputs
+        fhooks = []  # keep the handles so we can remove the hooks later
         for idx, l in enumerate(intermediate_layers):
             fhooks.append(l.register_forward_hook(forward_hook_to_save_output(l, idx)))
 
