@@ -163,7 +163,9 @@ def test_predict_all_arch_4ch(test_df):
                 num_classes=2, num_channels=4, weights=None
             )
             if "inception" in arch_name:
-                model = cnn.InceptionV3(classes=[0, 1], sample_duration=5.0, channels=4)
+                # inception requires 3 channels
+                # (_transform_input() implementation is hard-coded for 3 channels)
+                continue
             else:
                 model = cnn.CNN(
                     arch,
@@ -184,7 +186,8 @@ def test_predict_all_arch_1ch(test_df):
                 num_classes=2, num_channels=1, weights=None
             )
             if "inception" in arch_name:
-                model = cnn.InceptionV3(classes=[0, 1], sample_duration=5.0, channels=1)
+                # inception requires 3 channels
+                continue
             else:
                 model = cnn.CNN(arch, classes=[0, 1], sample_duration=5.0, channels=1)
             scores = model.predict(test_df.index.values)

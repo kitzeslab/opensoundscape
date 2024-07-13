@@ -2024,7 +2024,6 @@ class InceptionV3(SpectrogramClassifier):
         preprocessor_class=SpectrogramPreprocessor,
         freeze_feature_extractor=False,
         weights="DEFAULT",
-        channels=3,
         sample_width=299,
         sample_height=299,
     ):
@@ -2047,7 +2046,10 @@ class InceptionV3(SpectrogramClassifier):
                 this architecture. if 'DEFAULT', model is loaded with best available weights (note
                 that these may change across versions). Pre-trained weights available for each
                 architecture are listed at https://pytorch.org/vision/stable/models.html
-            sample_shape: dimensions of a sample Tensor (height,width,channels)
+            sample_height: height of input image in pixels
+            sample_width: width of input image in pixels
+
+        Note: InceptionV3 architecture implementation assumes channels=3
         """
 
         self.classes = classes
@@ -2063,7 +2065,7 @@ class InceptionV3(SpectrogramClassifier):
             classes=classes,
             sample_duration=sample_duration,
             single_target=single_target,
-            channels=channels,
+            channels=3,
             sample_width=sample_width,
             sample_height=sample_height,
         )
