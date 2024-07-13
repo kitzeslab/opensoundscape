@@ -46,6 +46,9 @@ def train_df():
     )
 
 
+# TODO: add tests that train on clip dfs rather than file dfs (index of file, start_time, end_time)
+
+
 @pytest.fixture()
 def test_df():
     return pd.DataFrame(index=["tests/audio/silence_10s.mp3"])
@@ -160,15 +163,13 @@ def test_predict_all_arch_4ch(test_df):
                 num_classes=2, num_channels=4, weights=None
             )
             if "inception" in arch_name:
-                model = cnn.InceptionV3(
-                    classes=[0, 1], sample_duration=5.0, sample_shape=[224, 224, 4]
-                )
+                model = cnn.InceptionV3(classes=[0, 1], sample_duration=5.0, channels=4)
             else:
                 model = cnn.CNN(
                     arch,
                     classes=[0, 1],
                     sample_duration=5.0,
-                    sample_shape=[224, 224, 4],
+                    channels=4,
                 )
             scores = model.predict(test_df.index.values)
             assert len(scores) == 2
@@ -183,16 +184,9 @@ def test_predict_all_arch_1ch(test_df):
                 num_classes=2, num_channels=1, weights=None
             )
             if "inception" in arch_name:
-                model = cnn.InceptionV3(
-                    classes=[0, 1], sample_duration=5.0, sample_shape=[224, 224, 4]
-                )
+                model = cnn.InceptionV3(classes=[0, 1], sample_duration=5.0, channels=1)
             else:
-                model = cnn.CNN(
-                    arch,
-                    classes=[0, 1],
-                    sample_duration=5.0,
-                    sample_shape=[224, 224, 1],
-                )
+                model = cnn.CNN(arch, classes=[0, 1], sample_duration=5.0, channels=1)
             scores = model.predict(test_df.index.values)
             assert len(scores) == 2
         except:
@@ -455,7 +449,7 @@ def test_split_resnet_feat_clf(train_df):
     assert "feature" in model.optimizer_params["kwargs"]
     model.optimizer_params["kwargs"]["feature"]["lr"] = 0.1
     model.train(train_df, epochs=0, save_path="tests/models")
-    shutil.rmtree("tests/models/")
+    # shutil.rmtree("tests/models/")
 
 
 # test load_outdated_model?
@@ -552,7 +546,7 @@ def test_generate_cams_target_layers(test_df):
     """specify multiple target layers for cam"""
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
     _ = model.generate_cams(
-        test_df, target_layers=[model.network.layer3, model.network.layer4]
+        test_df, target_layers=[model.model.layer3, model.model.layer4]
     )
 
 

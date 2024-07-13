@@ -136,21 +136,21 @@ def apply_activation_layer(x, activation_layer=None):
 # override pytorch_grad_cam's score cam class because it has a bug
 # with device mismatch of upsampled (cpu) vs input_tensor (may be mps, cuda, etc)
 class ScoreCAM(pytorch_grad_cam.base_cam.BaseCAM):
-    def __init__(self, model, target_layers, use_cuda=False, reshape_transform=None):
+    def __init__(self, model, target_layers, reshape_transform=None, device=None):
         super(ScoreCAM, self).__init__(
             model,
-            target_layers,
-            use_cuda,
+            target_layers=target_layers,
             reshape_transform=reshape_transform,
             uses_gradients=False,
         )
+        self.device = device
 
     def get_cam_weights(self, input_tensor, target_layer, targets, activations, grads):
         with torch.no_grad():
             upsample = torch.nn.UpsamplingBilinear2d(size=input_tensor.shape[-2:])
             activation_tensor = torch.from_numpy(activations)
-            if self.cuda:
-                activation_tensor = activation_tensor.cuda()
+            if self.device is not None:
+                activation_tensor = activation_tensor.to(self.device)
 
             upsampled = upsample(activation_tensor)
 

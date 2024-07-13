@@ -172,6 +172,9 @@ class BaseModule:
         ```
         """
 
+        self.use_amp = False
+        """if True, uses automatic mixed precision for training"""
+
     def training_step(self, samples, batch_idx):
         """a standard Lightning method used within the training loop, acting on each batch
 
@@ -185,29 +188,89 @@ class BaseModule:
         batch_labels = batch_labels.to(self.device)
 
         batch_size = len(batch_tensors)
-        logits = self.model(batch_tensors)
-        loss = self.loss_fn(logits, batch_labels)
-        self.log(
-            f"train_loss",
-            loss,
-            on_step=True,
-            on_epoch=True,
-            batch_size=len(batch_tensors),
-        )
+
+        # automatic mixed precision
+        # TODO: add tests with self.use_amp=True
+        # can get rid of if/else blocks and use enabled=true
+        # once mps is supported https://github.com/pytorch/pytorch/pull/99272
+
+        # self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        # with torch.autocast(
+        #     device_type=self.device, dtype=torch.float16, enabled=self.use_amp
+        # ):
+        #     output = self.model(input)
+        #     loss = self.loss_fn(output, batch_labels)
+
+        # if not self.lightning_mode:
+        #     # if not using Lightning, we manually call
+        #     # loss.backward() and optimizer.step()
+        #     # Lightning does this behind the scenes
+        #     self.scaler.scale(loss).backward()
+        #     self.scaler.step(self.optimizer)
+        #     self.scaler.update()
+        #     self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
+
+        # # compute and log any metrics in self.torch_metrics
+        # # TODO: consider using validation set names rather than integer index
+        # # (would have to store a set of names for the validation set)
+        # batch_metrics = {
+        #     f"train_{name}": metric.to(self.device)(
+        #         output.detach(), batch_labels.detach().int()
+        #     ).cpu()
+        #     for name, metric in self.torch_metrics.items()
+        # }
+        # if self.use_amp is False, GradScaler with enabled=False should have no effect
+
+        if self.use_amp:  # as of 7/11/24, torch.autocast is not supported for mps
+            self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+            with torch.autocast(
+                device_type=self.device, dtype=torch.float16
+            ):  # , enabled=self.use_amp
+                # ):
+                output = self.model(batch_tensors)
+                loss = self.loss_fn(output, batch_labels)
+            if not self.lightning_mode:
+                # if not using Lightning, we manually call
+                # loss.backward() and optimizer.step()
+                # Lightning does this behind the scenes
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
+        else:
+            output = self.model(batch_tensors)
+            loss = self.loss_fn(output, batch_labels)
+            if not self.lightning_mode:
+                # if not using Lightning, we manually call
+                # loss.backward() and optimizer.step()
+                # Lightning does this behind the scenes
+                loss.backward()
+                self.optimizer.step()
+                self.optimizer.zero_grad()
 
         # compute and log any metrics in self.torch_metrics
         # TODO: consider using validation set names rather than integer index
         # (would have to store a set of names for the validation set)
         batch_metrics = {
             f"train_{name}": metric.to(self.device)(
-                logits.detach(), batch_labels.detach().int()
+                output.detach(), batch_labels.detach().int()
             ).cpu()
             for name, metric in self.torch_metrics.items()
         }
-        self.log_dict(
-            batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
-        )
-        # when on_epoch=True, compute() is called to reset the metric at epoch end
+
+        if self.lightning_mode:
+            self.log(
+                f"train_loss",
+                loss,
+                on_step=True,
+                on_epoch=True,
+                batch_size=len(batch_tensors),
+            )
+            self.log_dict(
+                batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
+            )
+            # when on_epoch=True, compute() is called to reset the metric at epoch end
+            # TODO: log this somehow when not in lightning_mode?
 
         return loss
 
@@ -216,7 +279,8 @@ class BaseModule:
     def configure_optimizers(self):
         """standard Lightning method to initialize an optimizer and learning rate scheduler
 
-        Lightning uses this function at the start of training
+        Lightning uses this function at the start of training. Weirdly it needs to
+        return {"optimizer": optimizer, "scheduler": scheduler}.
 
         Initializes the optimizer and  learning rate scheduler using the parameters
         self.optimizer_params and self.scheduler_params, which are dictionaries with a key
@@ -228,30 +292,48 @@ class BaseModule:
         You can also override this method and write one that returns
         {"optimizer": optimizer, "scheduler": scheduler}
 
-        Documentation:
-        https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.core.LightningModule.html#lightning.pytorch.core.LightningModule.configure_optimizers
-
         Uses the attributes:
         - self.optimizer_params: dictionary with "class" key such as torch.optim.Adam,
             and "kwargs", dict of keyword args for class's init
         - self.scheduler_params: dictionary with "class" key such as
             torch.optim.lr_scheduler.StepLR, and and "kwargs", dict of keyword args for class's init
+        - self.lr_scheduler_step: int, number of times lr_scheduler.step() has been called
+            - can set to -1 to restart learning rate schedule
+            - can set to another value to start lr scheduler from an arbitrary position
+
+        Documentation:
+        https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.core.LightningModule.html#lightning.pytorch.core.LightningModule.configure_optimizers
+        Args:
+            None
+
+        Returns:
+            dictionary with keys "optimizer" and "scheduler" containing the
+            optimizer and learning rate scheduler objects to use during training
         """
 
+        # create optimizer
         # self.optimizer_params dictionary has "class" and "kwargs" keys
         # copy the kwargs dict to avoid modifying the original values
+        # when the optimizer is stepped
         optimizer = self.optimizer_params["class"](
             self.model.parameters(), **self.optimizer_params["kwargs"].copy()
         )
 
+        # create learning rate scheduler
         # self.scheduler_params dictionary has "class" key and kwargs for init
-        scheduler = self.lr_scheduler_params["class"](
-            optimizer, **self.lr_scheduler_params["kwargs"].copy()
-        )
+        # additionally use self.lr_scheduler_step to initialize the scheduler's "last_epoch"
+        # which determines the starting point of the learning rate schedule
+        # (-1 restarts the lr schedule from the initial lr)
+        args = self.lr_scheduler_params["kwargs"].copy()
+        args.update({"last_epoch": self.lr_scheduler_step})
+        scheduler = self.lr_scheduler_params["class"](optimizer, **args)
 
         return {"optimizer": optimizer, "scheduler": scheduler}
 
     def validation_step(self, samples, batch_idx, dataloader_idx=0):
+        """currently only used for lightning
+
+        not used by SpectrogramClassifier"""
         batch_tensors, batch_labels = samples
         batch_tensors = batch_tensors.to(self.device)
         batch_labels = batch_labels.to(self.device)
@@ -259,13 +341,6 @@ class BaseModule:
         batch_size = len(batch_tensors)
         logits = self.model(batch_tensors)
         loss = self.loss_fn(logits, batch_labels)
-        self.log(
-            f"val{dataloader_idx}_loss",
-            loss,
-            on_step=False,
-            on_epoch=True,
-            batch_size=len(batch_tensors),
-        )
 
         # compute and log any metrics in self.torch_metrics
         # TODO: consider using validation set names rather than integer index
@@ -276,11 +351,18 @@ class BaseModule:
             ).cpu()
             for name, metric in self.torch_metrics.items()
         }
-        self.log_dict(
-            batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
-        )
-        # when on_epoch=True, compute() is called to reset the metric at epoch end
-
+        if self.ligtning_mode:
+            self.log_dict(
+                batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
+            )
+            # when on_epoch=True, compute() is called to reset the metric at epoch end
+            self.log(
+                f"val{dataloader_idx}_loss",
+                loss,
+                on_step=False,
+                on_epoch=True,
+                batch_size=len(batch_tensors),
+            )
         return loss
 
     # reloading models from checkpoints:
@@ -501,6 +583,10 @@ class SpectrogramModule(BaseModule):
         self.name = "SpectrogramModule"
         self.type = type(self)
 
+        ## TRAINING ##
+        self.use_amp = False  # use automatic mixed precision
+        self.lightning_mode = False  # skip things done internally by Lightning if True
+
         ### ARCHITECTURE ###
         # allow user to pass a string, in which case we look up the architecture
         # in cnn_architectures.ARCH_DICT and instantiate it
@@ -648,11 +734,17 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         self.current_epoch = 0
         """track number of trained epochs"""
 
-        self.lr_scheduler_step = 0
+        self.lr_scheduler_step = -1
         """track number of calls to lr_scheduler.step()
         
-        reset to 0 to restart learning rate schedule"""
-        # TODO: implement use of lr_scheduler_step when initializing lr_scheduler in train()
+        set to -1 to restart learning rate schedule from initial lr
+        
+        this value is used to initialize the lr_scheduler's `last_epoch` parameter
+        it is tracked separately from self.current_epoch because the lr_scheduler
+        might be stepped more or less than 1 time per epoch
+
+        Note that the initial learning rate is set via self.optimizer_params['kwargs']['lr']
+        """
 
         ### metrics ###
         self.prediction_threshold = 0.5  # used for threshold-specific metrics
@@ -929,57 +1021,100 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         else:
             return generated_samples
 
-    def eval(self, targets, scores, logging_offset=0):
+    def eval(self, targets=None, scores=None, reset_metrics=True):
         """compute single-target or multi-target metrics from targets and scores
+
+        Or, compute metrics on accumulated values in the TorchMetrics if targets is None
 
         By default, the overall model score is "map" (mean average precision)
         for multi-target models (self.single_target=False) and "f1" (average
         of f1 score across classes) for single-target models).
 
-        Override this function to use a different set of metrics.
-        It should always return (1) a single score (float) used as an overall
-        metric of model quality and (2) a dictionary of computed metrics
+        update self.torch_metrics to include the desired metrics
 
         Args:
             targets: 0/1 for each sample and each class
+            - if None, runs metric.compute() on each of self.torch_metrics
+                (using accumulated values)
             scores: continuous values in 0/1 for each sample and class
-            logging_offset: modify verbosity - for example, -1 will reduce
-                the amount of printing/logging by 1 level
+            - if targets is None, this is ignored
+            reset_metrics: if True, resets the metrics after computing them
+                [default: True]
+
+        Returns:
+            dictionary of `metrics` (name: value)
 
         Raises:
             AssertionError: if targets are outside of range [0,1]
         """
-        scores, targets = torch.tensor(scores).to(self.device), torch.tensor(
-            targets
-        ).to(self.device)
-
-        # check for invalid label values outside range of [0,1]
-        # TODO: convert to torch logic
-        assert (
-            targets.max() <= 1 and targets.min() >= 0
-        ), "Labels must in range [0,1], but found values outside range"
-
-        # remove all samples with NaN for a prediction
-        targets = targets[~torch.isnan(scores).any(dim=1), :]
-        scores = scores[~torch.isnan(scores).any(dim=1), :]
-
-        if len(scores) < 1:
-            warnings.warn("Recieved empty list of predictions (or all nan)")
-            return np.nan, np.nan
-
         metrics = {}
-        for name, metric in self.torch_metrics.items():
+        if targets is not None:
+            scores, targets = torch.tensor(scores).to(self.device), torch.tensor(
+                targets
+            ).to(self.device)
 
-            metrics[name] = metric.to(self.device)(
-                scores.detach(), targets.detach().int()
-            ).cpu()
+            # check for invalid label values outside range of [0,1]
+            assert (
+                targets.max() <= 1 and targets.min() >= 0
+            ), "Labels must in range [0,1], but found values outside range"
 
-            metric.reset()
+            # remove all samples with NaN for a prediction
+            targets = targets[~torch.isnan(scores).any(dim=1), :]
+            scores = scores[~torch.isnan(scores).any(dim=1), :]
 
-        # the overall score is the value of self.score_metric in the metrics dict
-        score = metrics[self.score_metric]
+            if len(scores) < 1:
+                warnings.warn("Recieved empty list of predictions (or all nan)")
+                return np.nan, np.nan
 
-        return score, metrics
+            for name, metric in self.torch_metrics.items():
+                metrics[name] = metric.to(self.device)(
+                    scores.detach(), targets.detach().int()
+                ).cpu()
+
+                if reset_metrics:
+                    metric.reset()
+        else:
+            # compute each TorchMetrics overal value from accumulated values
+            # since .reset() was last called
+            # for instance, over all batches in an epoch
+            for name, metric in self.torch_metrics.items():
+                metrics[name] = metric.compute().cpu()
+                if reset_metrics:
+                    metric.reset()
+
+        return metrics
+
+    def run_validation(self, validation_df, progress_bar=True, **kwargs):
+        """run validation on a validation set
+
+        override this to customize the validation step
+        eg, could run validation on multiple datasets and save performance of each
+        in self.valid_metrics[current_epoch][validation_dataset_name]
+
+        Args:
+            validation_df: dataframe of validation samples
+            progress_bar: if True, show a progress bar with tqdm
+            **kwargs: passed to self.predict_dataloader()
+
+        Returns:
+            metrics: dictionary of evaluation metrics calculated with self.torch_metrics
+
+        Effects:
+            updates self.valid_metrics[current_epoch] with metrics for the current epoch
+        """
+        # run inference
+        validation_scores = self.predict(
+            validation_df,
+            activation_layer=("softmax_and_logit" if self.single_target else None),
+            progress_bar=progress_bar,
+            **kwargs,
+        )
+
+        # if validation_df is a list of file paths, we need to generate clip-df with labels
+        # to evaluate the scores. Easiest to do this iwth self.predict_dataloader()
+        dl = self.predict_dataloader(validation_df, **kwargs)
+        val_labels = dl.dataset.dataset.label_df.values
+        return self.eval(val_labels, validation_scores.values)
 
     def _train_epoch(self, train_loader, wandb_session=None, progress_bar=True):
         """perform forward pass, loss, and backpropagation for one epoch
@@ -993,57 +1128,21 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 Weights and Biases run
                 - if None, does not log to wandb
 
-        Returns: (targets, scores) on training files
+        Returns:
+            dictionary of evaluation metrics calculated with self.torch_metrics
         """
         self.model.train()
-
-        epoch_labels = []
-        epoch_scores = []
         batch_loss = []
 
         for batch_idx, (batch_tensors, batch_labels) in enumerate(
             tqdm(train_loader, disable=not progress_bar)
         ):
-            # load a batch of images and labels from the train loader
-            # all augmentation occurs in the Preprocessor (train_loader)
-            # we collate here rather than in the DataLoader so that
-            # we can still access the AudioSamples and thier information
-            batch_tensors = batch_tensors.to(self.device)
-            batch_labels = batch_labels.to(self.device)
-            if len(self.classes) > 1:  # squeeze one dimension [1,2] -> [1,1]
-                batch_labels = batch_labels.squeeze(1)  # why is this here? #TODO
-
-            ####################
-            # Forward and loss #
-            ####################
-
-            # forward pass: feature extractor and classifier
-            logits = self.model(batch_tensors)
-
-            # save targets and predictions
-            epoch_scores.extend(list(logits.detach().cpu().numpy()))
-            epoch_labels.extend(list(batch_labels.detach().cpu().numpy()))
-
-            # calculate loss
-            loss = self.loss_fn(logits, batch_labels)
-
             # save loss for each batch; later take average for epoch
+            loss = self.training_step((batch_tensors, batch_labels), batch_idx)
             batch_loss.append(loss.detach().cpu().numpy())
-
-            #############################
-            # Backward and optimization #
-            #############################
-            # zero gradients for optimizer
-            self.optimizer.zero_grad()
-            # backward pass: calculate the gradients
-            loss.backward()
-            # update the network using the gradients*lr
-            self.optimizer.step()
-
             ###########
             # Logging #
             ###########
-            # TODO: automated logging with torch?
             # log basic train info (used to print every batch)
             if batch_idx % self.log_interval == 0:
                 # show some basic progress metrics during the epoch
@@ -1053,26 +1152,26 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                     f"[batch {batch_idx}/{N}, {100 * batch_idx / N :.2f}%] "
                 )
 
-                # Log the Jaccard score and Hamming loss, and Loss function
+                # Log the Loss function
                 epoch_loss_avg = np.mean(batch_loss)
-                self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
+                self._log(f"\tAvg Loss: {epoch_loss_avg:.3f}")
 
-                # Evaluate with model's eval function
-                # tgts = batch_labels.detach().cpu().numpy()
-                # scores = logits.detach().cpu().numpy()
-                # self.eval(tgts, scores, logging_offset=-1)
-
-        # update learning parameters each epoch
+        # step the learning rate scheduler
         self.scheduler.step()
+        self.lr_scheduler_step += 1
+
+        # compute and reset TorchMetrics
+        self.train_metrics[self.current_epoch] = self.eval()
 
         # save the loss averaged over all batches
         self.loss_hist[self.current_epoch] = np.mean(batch_loss)
 
         if wandb_session is not None:
             wandb_session.log({"loss": np.mean(batch_loss)})
+            wandb_session.log({"training": self.train_metrics[self.current_epoch]})
 
-        # return labels, continuous scores
-        return np.array(epoch_labels), np.array(epoch_scores)
+        # return a single overall score for the epoch
+        return self.train_metrics[self.current_epoch]
 
     def _generate_wandb_config(self):
         # create a dictionary of parameters to save for this run
@@ -1337,59 +1436,37 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
-            train_targets, train_scores = self._train_epoch(
+            train_metrics = self._train_epoch(
                 train_loader, wandb_session, progress_bar=progress_bar
             )
 
-            ### Evaluate ###
-            train_score, self.train_metrics[self.current_epoch] = self.eval(
-                train_targets, train_scores
-            )
-            if wandb_session is not None:
-                # log metrics for this epoch to wandb
-                wandb_session.log({"training": self.train_metrics[self.current_epoch]})
-
             #### Validation ###
-            if validation_df is not None and epoch % validation_interval == 0:
-                self._log("\nValidation.")
-                validation_scores = self.predict(
-                    validation_df,
-                    batch_size=batch_size,
-                    num_workers=num_workers,
-                    activation_layer=(
-                        "softmax_and_logit" if self.single_target else None
-                    ),
-                    split_files_into_clips=False,
-                )  # returns a dataframe matching validation_df
-                validation_targets = validation_df.values
-                validation_scores = validation_scores.values
+            if epoch % validation_interval == 0:
+                if validation_df is not None:
+                    self._log("\nValidation.")
+                    val_metrics = self.run_validation(validation_df)
+                    self.valid_metrics[self.current_epoch] = val_metrics
+                    score = val_metrics[self.score_metric]  # overall score
+                    if wandb_session is not None:
+                        wandb_session.log({"validation": val_metrics})
+                else:
+                    # Get overall score from training metrics if no validation_df given
+                    score = train_metrics[self.score_metric]
 
-                validation_score, self.valid_metrics[self.current_epoch] = self.eval(
-                    validation_targets, validation_scores
-                )
-                score = validation_score
-            else:  # Evaluate model w/train_score if no validation_df given
-                score = train_score
+                # if this is the best score, update & save weights to best.model
+                if score > self.best_score:
+                    self.best_score = score
+                    self.best_epoch = self.current_epoch
+                    save_path = f"{self.save_path}/best.model"
+                    self._log(f"New best model saved to {save_path}", level=2)
+                    self.save(save_path)
 
-            if wandb_session is not None:
-                wandb_session.log(
-                    {"validation": self.valid_metrics[self.current_epoch]}
-                )
-
-            ### Save ###
+            # save model weights every n epochs
             if (
                 self.current_epoch + 1
             ) % self.save_interval == 0 or epoch == epochs - 1:
                 save_path = f"{self.save_path}/epoch-{self.current_epoch}.model"
                 self._log(f"Saving model to {save_path}", level=2)
-                self.save(save_path)
-
-            # if this is the best score, update & save weights to best.model
-            if score > self.best_score:
-                self.best_score = score
-                self.best_epoch = self.current_epoch
-                save_path = f"{self.save_path}/best.model"
-                self._log(f"New best model saved to {save_path}", level=2)
                 self.save(save_path)
 
             if wandb_session is not None:
@@ -1491,11 +1568,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 "architecture": self.architecture_name,
                 "sample_duration": self.preprocessor.sample_duration,
                 "single_target": self.single_target,
-                "sample_shape": [
-                    self.preprocessor.height,
-                    self.preprocessor.width,
-                    self.preprocessor.channels,
-                ],
+                "sample_height": self.preprocessor.height,
+                "sample_width": self.preprocessor.width,
+                "channels": self.preprocessor.channels,
             },
             path,
         )
@@ -1861,64 +1936,81 @@ def use_resample_loss(
     model.loss_fn = ResampleLoss(class_frequency)
 
 
-# def separate_resnet_feat_clf(model):
-#     """Separate feature/classifier training params for a ResNet model
+def separate_resnet_feat_clf(model):
+    """Separate feature/classifier training params for a ResNet model
 
-#     Args:
-#         model: an opso model object with a pytorch resnet architecture
+    Args:
+        model: an opso model object with a pytorch resnet architecture
 
-#     Returns:
-#         model with modified .optimizer_params and ._init_optimizer() method
+    Returns:
+        model with modified .optimizer_params and ._init_optimizer() method
 
-#     Effects:
-#         creates a new self.optimizer object that replaces the old one
-#         resets self.current_epoch to 0
-#     """
+    Effects:
+        creates a new self.optimizer object that replaces the old one
+        resets self.current_epoch to 0
+    """
 
-#     # optimization parameters for parts of the networks - see
-#     # https://pytorch.org/docs/stable/optim.html#per-parameter-options
-#     model.optimizer_params["kwargs"] = {
-#         "feature": {  # optimizer parameters for feature extraction layers
-#             # "params": self.model.feature.parameters(),
-#             "lr": 0.001,
-#             "momentum": 0.9,
-#             "weight_decay": 0.0005,
-#         },
-#         "classifier": {  # optimizer parameters for classification layers
-#             # "params": self.model.classifier.parameters(),
-#             "lr": 0.01,
-#             "momentum": 0.9,
-#             "weight_decay": 0.0005,
-#         },
-#     }
+    # optimization parameters for parts of the networks - see
+    # https://pytorch.org/docs/stable/optim.html#per-parameter-options
+    model.optimizer_params["kwargs"] = {
+        "feature": {  # optimizer parameters for feature extraction layers
+            # "params": self.model.feature.parameters(),
+            "lr": 0.001,
+            "momentum": 0.9,
+            "weight_decay": 0.0005,
+        },
+        "classifier": {  # optimizer parameters for classification layers
+            # "params": self.model.classifier.parameters(),
+            "lr": 0.01,
+            "momentum": 0.9,
+            "weight_decay": 0.0005,
+        },
+    }
 
-#     # We override the parent method because we need to pass a list of
-#     # separate optimizer_params for different parts of the network
-#     # - ie we now have a dictionary of param dictionaries instead of just a
-#     # param dictionary.
-#     # TODO out of date, write configure_optimziers() instead
-#     def _init_optimizer(self):
-#         """override parent method to pass separate parameters to feat/clf"""
-#         param_dict = self.optimizer_params
-#         # in torch's resnet classes, the classifier layer is called "fc"
-#         feature_extractor_params_list = [
-#             param
-#             for name, param in self.model.named_parameters()
-#             if not name.split(".")[0] == "fc"
-#         ]
-#         classifier_params_list = [
-#             param
-#             for name, param in self.model.named_parameters()
-#             if name.split(".")[0] == "fc"
-#         ]
-#         param_dict["feature"]["params"] = feature_extractor_params_list
-#         param_dict["classifier"]["params"] = classifier_params_list
-#         return self.optimizer_params["kwar"](param_dict.values())
+    # We override the parent method because we need to pass a list of
+    # separate optimizer_params for different parts of the network
+    # - ie we now have a dictionary of param dictionaries instead of just a
+    # param dictionary.
+    # TODO out of date, write configure_optimziers() instead
+    def configure_optimizers(self):
+        """override parent method to pass separate parameters to feat/clf"""
+        # in torch's resnet classes, the classifier layer is called "fc"
+        # and the feature extraction layers are everything else
+        # control optimizer parameters for feature extraction and classifier layers
+        # separately
+        feature_extractor_params_list = [
+            param
+            for name, param in self.model.named_parameters()
+            if not name.split(".")[0] == "fc"
+        ]
+        classifier_params_list = [
+            param
+            for name, param in self.model.named_parameters()
+            if name.split(".")[0] == "fc"
+        ]
+        self.optimizer_params["kwargs"]["feature"][
+            "params"
+        ] = feature_extractor_params_list
+        self.optimizer_params["kwargs"]["classifier"]["params"] = classifier_params_list
+        optimizer = self.optimizer_params["class"](
+            self.optimizer_params["kwargs"].values()
+        )
 
-#     model._init_optimizer = types.MethodType(_init_optimizer, model)
-#     model.opt_net = None  # clears existing opt_net and its parameters
-#     model.current_epoch = 0  # resets the epoch to 0
-#     # model.opt_net will be created when .train() calls ._set_train()
+        # create learning rate scheduler (unchanged from parent)
+        # self.scheduler_params dictionary has "class" key and kwargs for init
+        # additionally use self.lr_scheduler_step to initialize the scheduler's "last_epoch"
+        # which determines the starting point of the learning rate schedule
+        # (-1 restarts the lr schedule from the initial lr)
+        args = self.lr_scheduler_params["kwargs"].copy()
+        args.update({"last_epoch": self.lr_scheduler_step})
+        scheduler = self.lr_scheduler_params["class"](optimizer, **args)
+
+        return {"optimizer": optimizer, "scheduler": scheduler}
+
+    model.configure_optimizers = types.MethodType(configure_optimizers, model)
+    model.opt_net = None  # clears existing opt_net and its parameters
+    model.current_epoch = 0  # resets the epoch to 0
+    # model.opt_net will be created when .train() calls ._set_train()
 
 
 class InceptionV3(SpectrogramClassifier):
@@ -1932,7 +2024,9 @@ class InceptionV3(SpectrogramClassifier):
         preprocessor_class=SpectrogramPreprocessor,
         freeze_feature_extractor=False,
         weights="DEFAULT",
-        sample_shape=(299, 299, 3),
+        channels=3,
+        sample_width=299,
+        sample_height=299,
     ):
         """Model object for InceptionV3 architecture subclassing CNN
 
@@ -1964,113 +2058,126 @@ class InceptionV3(SpectrogramClassifier):
             weights=weights,
         )
 
-        super(InceptionV3, self).__init__(
-            architecture,
-            classes,
-            sample_duration,
+        super().__init__(
+            architecture=architecture,
+            classes=classes,
+            sample_duration=sample_duration,
             single_target=single_target,
-            preprocessor_class=preprocessor_class,
-            sample_shape=sample_shape,
+            channels=channels,
+            sample_width=sample_width,
+            sample_height=sample_height,
         )
         self.name = "InceptionV3"
 
-    def _train_epoch(self, train_loader, wandb_session=None, progress_bar=True):
-        """perform forward pass, loss, backpropagation for one epoch
+    def training_step(self, samples, batch_idx):
+        """Training step for pytorch lightning
 
-        need to override parent because Inception returns different outputs
-        from the forward pass (final and auxiliary layers)
+        Args:
+            batch: a batch of data from the DataLoader
+            batch_idx: index of the batch
 
-        Returns: (targets, scores) on training files
+        Returns:
+            loss: loss value for the batch
         """
+        batch_tensors, batch_labels = samples
+        batch_tensors = batch_tensors.to(self.device)
+        batch_labels = batch_labels.to(self.device)
 
-        self.model.train()
+        batch_size = len(batch_tensors)
 
-        total_tgts = []
-        total_scores = []
-        batch_loss = []
+        # automatic mixed precision
+        # TODO: add tests with self.use_amp=True
+        # can get rid of if/else blocks and use enabled=true
+        # once mps is supported https://github.com/pytorch/pytorch/pull/99272
 
-        for batch_idx, (batch_tensors, batch_labels) in enumerate(
-            tqdm(train_loader, disable=not progress_bar)
-        ):
-            # load a batch of images and labels from the train loader
-            # all augmentation occurs in the Preprocessor (train_loader)
-            # we collate here rather than in the DataLoader so that
-            # we can still access the AudioSamples and thier information
-            batch_tensors = batch_tensors.to(self.device)
-            batch_labels = batch_labels.to(self.device)
-            # batch_labels = batch_labels.squeeze(1)
+        # self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        # with torch.autocast(
+        #     device_type=self.device, dtype=torch.float16, enabled=self.use_amp
+        # ):
+        #     output = self.model(input)
+        #     loss = self.loss_fn(output, batch_labels)
 
-            ####################
-            # Forward and loss #
-            ####################
+        # if not self.lightning_mode:
+        #     # if not using Lightning, we manually call
+        #     # loss.backward() and optimizer.step()
+        #     # Lightning does this behind the scenes
+        #     self.scaler.scale(loss).backward()
+        #     self.scaler.step(self.optimizer)
+        #     self.scaler.update()
+        #     self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
 
-            # forward pass: feature extractor and classifier
-            # inception returns two sets of outputs
-            inception_outputs = self.model(batch_tensors)
-            logits = inception_outputs.logits
-            aux_logits = inception_outputs.aux_logits
+        # # compute and log any metrics in self.torch_metrics
+        # # TODO: consider using validation set names rather than integer index
+        # # (would have to store a set of names for the validation set)
+        # batch_metrics = {
+        #     f"train_{name}": metric.to(self.device)(
+        #         output.detach(), batch_labels.detach().int()
+        #     ).cpu()
+        #     for name, metric in self.torch_metrics.items()
+        # }
+        # if self.use_amp is False, GradScaler with enabled=False should have no effect
 
-            # save targets and predictions
-            total_scores.append(logits.detach().cpu().numpy())
-            total_tgts.append(batch_labels.detach().cpu().numpy())
+        if self.use_amp:  # as of 7/11/24, torch.autocast is not supported for mps
+            self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+            with torch.autocast(
+                device_type=self.device, dtype=torch.float16
+            ):  # , enabled=self.use_amp
+                # ):
+                inception_outs = self.model(batch_tensors)
+                logits = inception_outs.logits
+                aux_logits = inception_outs.aux_logits
+
+                loss1 = self.loss_fn(logits, batch_labels)
+                loss2 = self.loss_fn(aux_logits, batch_labels)
+                loss = loss1 + 0.4 * loss2
+            if not self.lightning_mode:
+                # if not using Lightning, we manually call
+                # loss.backward() and optimizer.step()
+                # Lightning does this behind the scenes
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
+        else:
+            output = self.model(batch_tensors)
 
             # calculate loss
+            inception_outs = self.model(batch_tensors)
+            logits = inception_outs.logits
+            aux_logits = inception_outs.aux_logits
+
             loss1 = self.loss_fn(logits, batch_labels)
             loss2 = self.loss_fn(aux_logits, batch_labels)
             loss = loss1 + 0.4 * loss2
 
-            # save loss for each batch; later take average for epoch
+            if not self.lightning_mode:
+                # if not using Lightning, we manually call
+                # loss.backward() and optimizer.step()
+                # Lightning does this behind the scenes
+                loss.backward()
+                self.optimizer.step()
+                self.optimizer.zero_grad()
 
-            batch_loss.append(loss.detach().cpu().numpy())
+        # compute and log any metrics in self.torch_metrics
+        batch_metrics = {
+            f"train_{name}": metric.to(self.device)(
+                logits.detach(), batch_labels.detach().int()
+            ).cpu()
+            for name, metric in self.torch_metrics.items()
+        }
 
-            #############################
-            # Backward and optimization #
-            #############################
-            # zero gradients for optimizer
-            self.optimizer.zero_grad()
-            # backward pass: calculate the gradients
-            loss.backward()
-            # update the network using the gradients*lr
-            self.optimizer.step()
-
-            ###########
-            # Logging #
-            ###########
-            # log basic train info (used to print every batch)
-            if batch_idx % self.log_interval == 0:
-                # show some basic progress metrics during the epoch
-                N = len(train_loader)
-                self._log(
-                    f"Epoch: {self.current_epoch} "
-                    f"[batch {batch_idx}/{N}, {100 * batch_idx / N :.2f}%] "
-                )
-
-                # Log the Jaccard score and Hamming loss, and Loss function
-                epoch_loss_avg = np.mean(batch_loss)
-                self._log(f"\tDistLoss: {epoch_loss_avg:.3f}")
-
-                # Evaluate with model's eval function
-                tgts = batch_labels.int().detach().cpu().numpy()
-                scores = logits.int().detach().cpu().numpy()
-                self.eval(tgts, scores, logging_offset=-1)
-
-            if wandb_session is not None:
-                wandb_session.log({"batch": batch_idx})
-                wandb_session.log(
-                    {"epoch_progress": self.current_epoch + batch_idx / N}
-                )
-
-        # update learning parameters each epoch
-        self.scheduler.step()
-
-        # save the loss averaged over all batches
-        self.loss_hist[self.current_epoch] = np.mean(batch_loss)
-
-        # return targets, scores
-        total_tgts = np.concatenate(total_tgts, axis=0)
-        total_scores = np.concatenate(total_scores, axis=0)
-
-        return total_tgts, total_scores
+        if self.lightning_mode:
+            self.log(
+                f"train_loss",
+                loss,
+                on_step=True,
+                on_epoch=True,
+                batch_size=len(batch_tensors),
+            )
+            self.log_dict(
+                batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
+            )
+        return loss
 
     @classmethod
     def from_torch_dict(self):
