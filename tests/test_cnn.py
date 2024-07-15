@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import shutil
+import torch
 
 import warnings
 
@@ -99,6 +100,42 @@ def test_train_multi_target(train_df):
         save_interval=10,
         num_workers=0,
     )
+    shutil.rmtree("tests/models/")
+
+
+def test_train_amp(train_df):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    # first test with cpu
+    model.device = "cpu"
+    model.use_amp = True
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    model.predict(train_df)
+
+    # if cuda is available, test with cuda
+    if torch.cuda.is_available():
+        model.device = "cuda"
+        model.use_amp = True
+        model.train(
+            train_df,
+            train_df,
+            save_path="tests/models",
+            epochs=1,
+            batch_size=2,
+            save_interval=10,
+            num_workers=0,
+        )
+        model.predict(train_df)
+
+    # add mps once amp is supported
+
     shutil.rmtree("tests/models/")
 
 

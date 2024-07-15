@@ -220,13 +220,21 @@ class BaseModule:
         #     for name, metric in self.torch_metrics.items()
         # }
         # if self.use_amp is False, GradScaler with enabled=False should have no effect
+        if "mps" in str(self.device):
+            use_amp = False
+            print("Not using amp: not implemented for mps as of 2024-07-11")
+        else:
+            use_amp = self.use_amp
 
-        if self.use_amp:  # as of 7/11/24, torch.autocast is not supported for mps
+        if use_amp:  # as of 7/11/24, torch.autocast is not supported for mps
             self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
-            with torch.autocast(
-                device_type=self.device, dtype=torch.float16
-            ):  # , enabled=self.use_amp
-                # ):
+            if "cuda" in str(self.device):
+                device_type = "cuda"
+                dtype = torch.float16
+            else:
+                device_type = "cpu"
+                dtype = torch.bfloat16
+            with torch.autocast(device_type=device_type, dtype=dtype):
                 output = self.model(batch_tensors)
                 loss = self.loss_fn(output, batch_labels)
             if not self.lightning_mode:
@@ -2118,11 +2126,22 @@ class InceptionV3(SpectrogramClassifier):
         #     for name, metric in self.torch_metrics.items()
         # }
         # if self.use_amp is False, GradScaler with enabled=False should have no effect
+        if "mps" in str(self.device):
+            use_amp = False
+            print("Not using amp: not implemented for mps as of 2024-07-11")
+        else:
+            use_amp = self.use_amp
 
-        if self.use_amp:  # as of 7/11/24, torch.autocast is not supported for mps
+        if use_amp:  # as of 7/11/24, torch.autocast is not supported for mps
             self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+            if "cuda" in str(self.device):
+                device_type = "cuda"
+                dtype = torch.float16
+            else:
+                device_type = "cpu"
+                dtype = torch.bfloat16
             with torch.autocast(
-                device_type=self.device, dtype=torch.float16
+                device_type=device_type, dtype=dtype
             ):  # , enabled=self.use_amp
                 # ):
                 inception_outs = self.model(batch_tensors)
