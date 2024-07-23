@@ -2,14 +2,13 @@ import pytest
 import math
 import numpy as np
 import pandas as pd
-from opensoundscape.preprocess.preprocessors import (
-    SpectrogramPreprocessor,
-    AudioPreprocessor,
-)
+from opensoundscape.preprocess import preprocessors
 from opensoundscape.preprocess.utils import PreprocessingError
 import warnings
 from opensoundscape.audio import Audio
 from opensoundscape.sample import AudioSample
+
+from copy import copy
 
 
 @pytest.fixture()
@@ -24,12 +23,12 @@ def short_sample():
 
 @pytest.fixture()
 def preprocessor():
-    return SpectrogramPreprocessor(2.0)
+    return preprocessors.SpectrogramPreprocessor(2.0)
 
 
 @pytest.fixture()
 def audiopreprocessor():
-    return AudioPreprocessor(2.0, sample_rate=22050)
+    return preprocessors.AudioPreprocessor(2.0, sample_rate=22050)
 
 
 def test_repr(preprocessor):
@@ -122,6 +121,30 @@ def test_audiopreprocessor_extend(audiopreprocessor, short_sample):
     audiopreprocessor.pipeline.trim_audio.set(extend=False)
     with pytest.raises(PreprocessingError):
         s = audiopreprocessor.forward(short_sample).data
+
+
+def test_noisereduceaudiopreprocessor(sample):
+    p1 = preprocessors.NoiseReduceAudioPreprocessor(
+        sample_duration=1, sample_rate=16000, noisereduce_kwargs=dict(prop_decrease=1)
+    )
+    p2 = preprocessors.NoiseReduceAudioPreprocessor(
+        sample_duration=1, sample_rate=16000, noisereduce_kwargs=dict(prop_decrease=0.5)
+    )
+    s1 = p1.forward(copy(sample)).data
+    s2 = p2.forward(copy(sample)).data
+    assert s1.rms < s2.rms
+
+
+def test_noisereducespectrogrampreprocessor(sample):
+    p1 = preprocessors.NoiseReduceSpectrogramPreprocessor(
+        sample_duration=1, noisereduce_kwargs=dict(prop_decrease=1)
+    )
+    p2 = preprocessors.NoiseReduceSpectrogramPreprocessor(
+        sample_duration=1, noisereduce_kwargs=dict(prop_decrease=0.5)
+    )
+    s1 = p1.forward(copy(sample)).data
+    s2 = p2.forward(copy(sample)).data
+    assert s1.mean() < s2.mean()
 
 
 # several specific scenarios are tested using DataSets in test_datasets.py

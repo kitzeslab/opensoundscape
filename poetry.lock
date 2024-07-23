@@ -2527,6 +2527,27 @@ files = [
 ]
 
 [[package]]
+name = "noisereduce"
+version = "3.0.2"
+description = "Noise reduction using Spectral Gating in Python"
+optional = false
+python-versions = "*"
+files = [
+    {file = "noisereduce-3.0.2-py3-none-any.whl", hash = "sha256:552552d148a147578c72532ee4ded253a3a4d12446f171e5bd19fdc8b10211aa"},
+    {file = "noisereduce-3.0.2.tar.gz", hash = "sha256:0a532d2223986e8295ae57a8f86fb4699a477636841237ffa8c323c959bd9c0b"},
+]
+
+[package.dependencies]
+librosa = "*"
+matplotlib = "*"
+numpy = "*"
+scipy = "*"
+tqdm = "*"
+
+[package.extras]
+pytorch = ["torch (>=1.9.0)"]
+
+[[package]]
 name = "notebook-shim"
 version = "0.2.4"
 description = "A shim layer for notebook traits and config"
@@ -5394,4 +5415,4 @@ tensorflow = []
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.12"
-content-hash = "df472dcd1c86f8df6bfe2e91b1cbfb642ba8b99b25bc9fea1b599d00ca1f50d3"
+content-hash = "af5ad12e955ce19b386e825ac79d5174e4ab50fec8dfb77e5245e7cd9a46e5d6"
