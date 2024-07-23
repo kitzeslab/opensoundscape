@@ -25,6 +25,8 @@ from opensoundscape.ml.cam import CAM
 from opensoundscape.utils import make_clip_df
 
 
+#TODO add tests for training on clip df
+
 @pytest.fixture()
 def model_save_path(request):
     path = Path("tests/models/temp.model")
@@ -46,9 +48,10 @@ def train_df():
         data=[[0, 1], [1, 0]],
     )
 
-
-# TODO: add tests that train on clip dfs rather than file dfs (index of file, start_time, end_time)
-
+@pytest.fixture()
+def train_df_clips(train_df):
+    clip_df = make_clip_df(train_df.index.values, clip_duration=1.0)
+    return clip_df
 
 @pytest.fixture()
 def test_df():

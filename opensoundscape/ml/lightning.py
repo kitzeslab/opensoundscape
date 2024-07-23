@@ -22,7 +22,10 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         self.save_hyperparameters()
 
     def train(self, *args, **kwargs):
-        """inherit train() method from LightningModule rather than SpectrogramModule"""
+        """inherit train() method from LightningModule rather than SpectrogramModule
+
+        this is just a method that sets True/False for trianing mode, it doesn't perform training
+        """
         return L.LightningModule.train(self, *args, **kwargs)
 
     def __call__(self, *args, **kwargs):
@@ -202,6 +205,8 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         kwargs["max_epochs"] = epochs
         kwargs["default_root_dir"] = save_path
 
+        
+
         ### Input Validation ###
         check_labels(train_df, self.classes)
         if validation_df is not None:
@@ -215,6 +220,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             )
 
         # Initialize Weights and Biases (wandb) logging
+        # TODO: can we just use built-in lightning logging here instead?
         if wandb_session is not None:
             if not "logger" in kwargs:
                 # if a logger was passed, don't override it
@@ -395,7 +401,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
                 [default: False]
             lightning_trainer_kwargs: dictionary of keyword args to pass to __call__,
                 which are then passed to lightning.Trainer.__init__
-                see Trainer documentation for options. Default [None] passes no kwargs
+                see lightning.Trainer documentation for options. [Default: None] passes no kwargs
             dataloader_kwargs: dictionary of keyword args to self.predict_dataloader()
 
         Returns:

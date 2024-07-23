@@ -359,7 +359,7 @@ class BaseModule:
             ).cpu()
             for name, metric in self.torch_metrics.items()
         }
-        if self.ligtning_mode:
+        if self.lightning_mode:
             self.log_dict(
                 batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
             )
@@ -573,6 +573,15 @@ class SpectrogramModule(BaseModule):
     """Parent class for both SpectrogramClassifier (pytorch) and LightningSpectrogramModule (lightning)
 
     implements functionality that is shared between both pure PyTorch and Lightning classes/workflows
+
+    Args:
+        architecture: a pytorch Module such as Resnet18 or a custom object
+        classes: list of class names
+        sample_duration: duration of audio samples in seconds
+        single_target: if True, predict only class with max score
+        channels: number of channels in input data
+        sample_height: height of input data
+        sample_width: width of input data
     """
 
     def __init__(
@@ -594,6 +603,18 @@ class SpectrogramModule(BaseModule):
         ## TRAINING ##
         self.use_amp = False  # use automatic mixed precision
         self.lightning_mode = False  # skip things done internally by Lightning if True
+
+        self.lr_scheduler_step = -1
+        """track number of calls to lr_scheduler.step()
+        
+        set to -1 to restart learning rate schedule from initial lr
+        
+        this value is used to initialize the lr_scheduler's `last_epoch` parameter
+        it is tracked separately from self.current_epoch because the lr_scheduler
+        might be stepped more or less than 1 time per epoch
+
+        Note that the initial learning rate is set via self.optimizer_params['kwargs']['lr']
+        """
 
         ### ARCHITECTURE ###
         # allow user to pass a string, in which case we look up the architecture
@@ -741,18 +762,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         self.optimizer = None  # optimizer during training
         self.current_epoch = 0
         """track number of trained epochs"""
-
-        self.lr_scheduler_step = -1
-        """track number of calls to lr_scheduler.step()
-        
-        set to -1 to restart learning rate schedule from initial lr
-        
-        this value is used to initialize the lr_scheduler's `last_epoch` parameter
-        it is tracked separately from self.current_epoch because the lr_scheduler
-        might be stepped more or less than 1 time per epoch
-
-        Note that the initial learning rate is set via self.optimizer_params['kwargs']['lr']
-        """
 
         ### metrics ###
         self.prediction_threshold = 0.5  # used for threshold-specific metrics
@@ -2096,9 +2105,9 @@ class InceptionV3(SpectrogramClassifier):
         batch_size = len(batch_tensors)
 
         # automatic mixed precision
-        # TODO: add tests with self.use_amp=True
         # can get rid of if/else blocks and use enabled=true
         # once mps is supported https://github.com/pytorch/pytorch/pull/99272
+        # but right now, raises error if enabled=True and device is mps
 
         # self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
         # with torch.autocast(
