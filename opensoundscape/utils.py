@@ -373,7 +373,7 @@ def generate_opacity_colormaps(
     return colormaps
 
 
-def set_seed(seed, verbose=True):
+def set_seed(seed, verbose=False):
     """Set random state across different libraries for reproducibility
 
     Args:

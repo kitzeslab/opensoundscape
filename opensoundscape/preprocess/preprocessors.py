@@ -4,8 +4,11 @@ from pathlib import Path
 import pandas as pd
 import copy
 import time
+import json
+import yaml
+import pathlib
 
-from opensoundscape.preprocess import actions
+from opensoundscape.preprocess import actions, action_functions
 from opensoundscape.preprocess.actions import (
     Action,
     Overlay,
@@ -13,11 +16,50 @@ from opensoundscape.preprocess.actions import (
     AudioTrim,
     SpectrogramToTensor,
 )
-from opensoundscape.preprocess.utils import PreprocessingError
+from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 from opensoundscape.spectrogram import Spectrogram
 from opensoundscape.sample import AudioSample
+from opensoundscape.preprocess.actions import ACTION_CLS_DICT
+from opensoundscape.preprocess import io
 
 
+PREPROCESSOR_CLS_DICT = {}
+
+
+def register_preprocessor_cls(cls):
+    """add class to PREPROCESSOR_CLS_DICT"""
+    # register the model in dictionary
+    PREPROCESSOR_CLS_DICT[actions.build_name(cls)] = cls
+
+    # return the class (use as decorator)
+    return cls
+
+
+def preprocessor_from_dict(dict):
+    """load a preprocessor from a dictionary saved with pre.to_dict()
+
+    looks up class name using the "class" key in PREPROCESSOR_CLS_DICT
+    requires that the class was decorated with @register_preprocessor_cls
+    so that it is listed in PREPROCESSOR_CLS_DICT.
+
+    If you write a custom preprocessor class, you must decorate it with
+    @register_preprocessor_cls so that it can be looked up by name during from_dict
+
+    Args:
+        dict: dictionary created with a preprocessor class's .to_dict() method
+
+    Returns:
+        initialized preprocessor with same configuration and parameters as original
+        - some caveats: Overlay augentation will not re-load fully, as overlay sample
+            dataframes and `criterion_fn`s are not saved
+
+    See also: BasePreprocessor.from_dict(), .save_json(), load_json()
+    """
+    preprocessor_class = PREPROCESSOR_CLS_DICT[dict["class"]]
+    return preprocessor_class.from_dict(dict)
+
+
+@register_preprocessor_cls
 class BasePreprocessor:
     """Class for defining an ordered set of Actions and a way to run them
 
@@ -146,9 +188,9 @@ class BasePreprocessor:
                 if type(action) == break_on_type or k == break_on_key:
                     if trace:
                         # saved "output" of this step informs user pipeline was stopped
-                        sample.trace.loc[
-                            k
-                        ] = f"## Pipeline terminated ## {sample.trace[k]}"
+                        sample.trace.loc[k] = (
+                            f"## Pipeline terminated ## {sample.trace[k]}"
+                        )
                     break
                 if action.bypass:
                     continue
@@ -236,7 +278,169 @@ class BasePreprocessor:
         part2 = self.pipeline[i + 1 :]
         self.pipeline = pd.concat([part1, new_item, part2])
 
+    def to_dict(self):
+        d = {}
+        # save attributes
+        # remove hidden attributes and methods (starting with _), only keep public attributes
+        # also ignore "pipeline" and handle it separatey below
+        d["attributes"] = {
+            k: v
+            for k, v in copy.deepcopy(self.__dict__).items()
+            if k[0] != "_" and not callable(v) and k != "pipeline"
+        }
+        # convert each action in the pipeline to dictionary
+        d["pipeline"] = {k: v.to_dict() for k, v in self.pipeline.items()}
 
+        # assume that any attributes with the same name as arguments to __init__ should
+        # be passed to __init__, and that all arguments required to re-create this
+        # class with __init__ are stored as parameters. Add them to a separate dictionary
+        # that we will pass to __init__ in from_dict()
+        # note that these are duplicated with d["attributes"]
+        d["init_kwargs"] = {
+            k: d["attributes"][k]
+            for k in get_args(type(self)).keys()
+            if k in d["attributes"]
+        }
+
+        # save class name for re-creating the object; matches a key in PREPROCESSOR_CLS_DICT
+        d["class"] = actions.build_name(type(self))
+
+        return d
+
+    @classmethod
+    def from_dict(cls, dict):
+        # NOTE: might not work properly if child class kwargs are used to initialize the object in a way
+        # other than just setting the kwargs as attributes, or for creating .pipeline
+        # or if arguments are not set as parameters (dataclass style)
+        # (bc they then would not be saved by to_dict())
+
+        # create a new instance of the class
+        # pass any stored kwargs to the __init__ method
+        instance = cls(**dict["init_kwargs"])
+
+        # set any stored attribute values
+        for attr in dict["attributes"]:
+            setattr(instance, attr, dict["attributes"][attr])
+
+        # re-create the pipeline using the actions' .from_dict methods
+        instance.pipeline = pd.Series(
+            {
+                k: ACTION_CLS_DICT[v["class"]].from_dict(v)
+                for k, v in dict["pipeline"].items()
+            }
+        )
+        return instance
+
+    def save_json(self, path):
+        """save preprocessor to a json file
+
+        re-load with load_json(path) or .from_json(path)"""
+        d = self.to_dict()
+        with open(path, "w") as f:
+            json.dump(d, f, cls=io.NumpyTypeEncoder)
+
+    @classmethod
+    def from_json(self, path):
+        """load preprocessor from a json file
+
+        for instance, file created with .save_json()"""
+        with open(path, "r") as f:
+            d = json.load(f, cls=io.NumpyTypeDecoder)
+        return self.from_dict(d)
+
+    def save_yaml(self, path):
+        """save preprocessor to a YAML file
+
+        re-load with load_yaml(path) or .from_yaml(path)
+        """
+        with open(path, "w") as f:
+            yaml.dump(self.to_dict(), f, Dumper=io.CustomYamlDumper, sort_keys=False)
+
+    @classmethod
+    def from_yaml(self, path):
+        """load preprocessor from a YAML file
+
+        for instance, file created with .save_yaml()
+
+        note that safe_load is not used, so make sure you trust the author of the file
+
+        Args:
+            path: path to the .yaml file
+
+        Returns:
+            preprocessor: instance of a preprocessor class
+        """
+        # Load the dictionary from the YAML file
+        with open(path, "r") as f:
+            loaded_data = yaml.load(f, Loader=io.CustomYamlLoader)
+
+        return self.from_dict(loaded_data)
+
+    def save(self, path):
+        """save preprocessor to a file
+
+        Args:
+            path: path to the file, with .json or .yaml extension
+        """
+        if isinstance(path, pathlib.Path):
+            path = str(path)
+        if path.lower().endswith(".json"):
+            self.save_json(path)
+        elif path.lower().endswith(".yaml"):
+            self.save_yaml(path)
+        else:
+            raise ValueError(f"Unsupported file format: {path}. Must be .json or .yaml")
+
+
+def load_json(path):
+    """load preprocessor from a json file
+
+    for instance, file created with .save_json()"""
+    with open(path, "r") as f:
+        d = json.load(f, cls=io.NumpyTypeDecoder)
+    return preprocessor_from_dict(d)
+
+
+def load_yaml(path):
+    """load preprocessor from a YAML file
+
+    for instance, file created with .save_yaml()
+
+    Args:
+        path: path to the .yaml file
+
+    Returns:
+        preprocessor: instance of a preprocessor class
+    """
+    # Load the dictionary from the YAML file
+    with open(path, "r") as f:
+        loaded_data = yaml.load(f, Loader=io.CustomYamlLoader)
+
+    return preprocessor_from_dict(loaded_data)
+
+
+def load(path):
+    """load preprocessor from a file (json or yaml)
+
+    use to load preprocessor definitions saved with .save()
+
+    Args:
+        path: path to the file
+
+    Returns:
+        preprocessor: instance of a preprocessor class
+    """
+    if isinstance(path, pathlib.Path):
+        path = str(path)
+    if path.lower().endswith(".json"):
+        return load_json(path)
+    elif path.lower().endswith(".yaml"):
+        return load_yaml(path)
+    else:
+        raise ValueError(f"Unsupported file format: {path}. Must be .json or .yaml")
+
+
+@register_preprocessor_cls
 class SpectrogramPreprocessor(BasePreprocessor):
     """Child of BasePreprocessor that creates specrogram Tensors w/augmentation
 
@@ -304,39 +508,37 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 # and overlays them on the current sample
                 "overlay": (
                     Overlay(
-                        is_augmentation=True, overlay_df=overlay_df, update_labels=False
+                        is_augmentation=True,
+                        overlay_df=overlay_df or pd.DataFrame(),  # if None, use empty
+                        update_labels=False,
                     )
-                    if overlay_df is not None
-                    else None
                 ),
                 # add vertical (time) and horizontal (frequency) masking bars
-                "time_mask": Action(actions.time_mask, is_augmentation=True),
-                "frequency_mask": Action(actions.frequency_mask, is_augmentation=True),
+                "time_mask": Action(action_functions.time_mask, is_augmentation=True),
+                "frequency_mask": Action(
+                    action_functions.frequency_mask, is_augmentation=True
+                ),
                 # add noise to the sample
                 "add_noise": Action(
-                    actions.tensor_add_noise, is_augmentation=True, std=0.005
+                    action_functions.tensor_add_noise, is_augmentation=True, std=0.005
                 ),
                 # linearly scale the _values_ of the sample
-                "rescale": Action(actions.scale_tensor),
+                "rescale": Action(action_functions.scale_tensor),
                 # apply random affine (rotation, translation, scaling, shearing) augmentation
                 # default values are reasonable for spectrograms: no shearing or rotation
                 "random_affine": Action(
-                    actions.torch_random_affine, is_augmentation=True
+                    action_functions.torch_random_affine, is_augmentation=True
                 ),
             }
         )
 
-        # remove overlay if overlay_df was not specified
-        if overlay_df is None:
-            self.pipeline.drop("overlay", inplace=True)
+        # bypass overlay if overlay_df was not provided (None)
+        # keep the action in the pipeline for ease of enabling it later
+        if overlay_df is None or len(overlay_df) < 1:
+            self.pipeline["overlay"].bypass = True
 
     def _generate_sample(self, sample):
-        """add attributes to the sample specifying desired shape of output sample
-
-        these will be used by the SpectrogramToTensor action in the pipeline
-
-        otherwise, generate AudioSamples from paths as normal
-        """
+        """add attributes to the sample specifying desired shape of output sample"""
         sample = super()._generate_sample(sample)
 
         # add attributes specifying desired shape of output sample
@@ -347,6 +549,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
         return sample
 
 
+@register_preprocessor_cls
 class AudioPreprocessor(BasePreprocessor):
     """Child of BasePreprocessor that only loads audio and resamples
 

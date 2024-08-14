@@ -93,4 +93,9 @@ def test_trace_output(preprocessor, sample):
     assert isinstance(sample.trace["load_audio"], Audio)
 
 
+def test_preprocessor_to_from_dict(preprocessor):
+    d = preprocessor.to_dict()
+    preprocessor2 = SpectrogramPreprocessor.from_dict(d)
+
+
 # several specific scenarios are tested using DataSets in test_datasets.py

@@ -5,6 +5,16 @@ Preprocessor pipelines. Action classes have go(), on(), off(), and set()
 methods. They take a single sample of a specific type and return the transformed
 or augmented sample, which may or may not be the same type as the original.
 
+See the action_functions.py module for functions that can be used to create actions using the Action class.
+Pass the Action class any function to the action_fn argument, and pass additional arguments to 
+set parameters of the Action's .params dictionary. 
+
+Note on converting to/from dictionary/json/yaml:
+This will break if you use non-built-in preprocessing operations. 
+However, will work if you provide any custom functions/classes and 
+decorate them with @register_action_cls or @register_action_fn. 
+See the docstring of `action_from_dict()` for examples. 
+
 See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
@@ -13,16 +23,118 @@ import random
 import warnings
 import numpy as np
 import torchvision
-import torch
 import pandas as pd
+import copy
+from types import MethodType, FunctionType
 
-from opensoundscape.audio import Audio, mix
-from opensoundscape.preprocess import tensor_augment as tensaug
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 from opensoundscape.sample import AudioSample
 from opensoundscape.spectrogram import Spectrogram
+from opensoundscape.audio import Audio
+
+ACTION_CLS_DICT = dict()
+ACTION_FN_DICT = dict()
 
 
+def list_actions():
+    """return list of available Action class keyword strings"""
+    return list(ACTION_CLS_DICT.keys())
+
+
+def list_action_fns():
+    """return list of available action function keyword strings
+    (can be used to initialize Action class)
+    """
+    return list(ACTION_FN_DICT.keys())
+
+
+def build_name(method_or_object):
+    """return the full function or class name
+
+    Args:
+        method_or_object: a method, object, or class
+
+    Returns: a string like "opensoundscape.module.Class.method"
+        - Note: if defined in a script, looks like "__main__.my_function"
+
+    """
+    prefix = method_or_object.__module__
+    if isinstance(method_or_object, (MethodType, FunctionType, type)):
+        # its a method/function or a class
+        return f"{prefix}.{method_or_object.__qualname__}"
+    return f"{prefix}.{type(method_or_object).__qualname__}"
+
+
+def register_action_cls(action_cls):
+    """add class to ACTION_DICT"""
+    # register the model in dictionary
+    ACTION_CLS_DICT[build_name(action_cls)] = action_cls
+
+    # return the function
+    return action_cls
+
+
+def register_action_fn(action_fn):
+    """add function to ACTION_FN_DICT
+
+    this allows us to recreate the Action class with a named action_fn
+
+    see also: ACTION_DICT (stores list of named classes for preprocessing)
+    """
+    # register the model in dictionary
+    ACTION_FN_DICT[build_name(action_fn)] = action_fn
+    # return the function
+    return action_fn
+
+
+# let's register some functions we might want to use from elsewhere in the code as action functions
+# including all public methods of Audio and Spectrogram classes
+def register_all_methods(cls, public_only=True):
+    for k in cls.__dict__.keys():
+        if k.startswith("_") and public_only:
+            pass
+        attr = getattr(cls, k)
+        if callable(attr):
+            register_action_fn(attr)
+
+
+register_all_methods(Audio)
+register_all_methods(Spectrogram)
+
+
+def action_from_dict(dict):
+    """load an action from a dictionary
+
+    Args:
+        dict: dictionary created with Action.to_dict()
+            - contains keys 'class', 'params', and other keys for object attributes
+
+    Note: if the dictionary names a 'class' or 'action_fn' that is not
+    built-in to OpenSoundscape, you should define the class/action in your code and
+    add the decorator @register_action_cls or @register_action_fn
+
+    For instance, if we used the Action class and passed a custom action_fn:
+    @register_action_fn
+    def my_special_sauce(...):
+        ...
+
+    Now we can use action_from_dict() to re-create an action that specifies
+    `'action_fn':'__main__.my_special_sauce'`
+
+    Similarly, say we defined a custom class in a module my_utils.py, we add the decorator before
+    the class definition:
+    @register_action_cls
+    class Magic(BaseAction):
+        ...
+
+    now we can use action_from_dict() to re-create the class from a dictionary that has
+    `'class' : 'my_utils.Magic'`
+    """
+    action_cls = ACTION_CLS_DICT[dict["class"]]
+    return action_cls.from_dict(dict)
+
+
+@register_action_cls
 class BaseAction:
     """Parent class for all Actions (used in Preprocessor pipelines)
 
@@ -35,10 +147,10 @@ class BaseAction:
     See Overlay for an example of an Action that uses labels.
     """
 
-    def __init__(self):
+    def __init__(self, is_augmentation=False):
         self.params = pd.Series(dtype="object")
-        self.returns_labels = False
-        self.is_augmentation = False
+        # self.returns_labels = False
+        self.is_augmentation = is_augmentation
         self.bypass = False
 
     def __repr__(self):
@@ -68,7 +180,53 @@ class BaseAction:
     def get(self, arg):
         return self.params[arg]
 
+    def to_dict(self, ignore_attributes=()):
+        """export current attributes and .params to a dictionary
 
+        useful for saving to JSON
+
+        Args:
+            ignore_attributes:
+                list of str: attributes to not save
+                (useful for skipping large objects to reduce memory usage)
+
+        re-load with `.from_dict(dict)`
+        """
+        # create a dictionary with copies of all attributes except any listed in `ignore_attributes`
+        d = {
+            copy.deepcopy(k): copy.deepcopy(v)
+            for k, v in self.__dict__.items()
+            if not k in ignore_attributes
+        }
+        # note: to_json will fail if params dictionary is not json-able
+        d["params"] = d["params"].to_dict()  # pd.Series to dictionary
+        d["class"] = build_name(type(self))  # eg "opensoundscape.audio.Audio.from_file"
+        return d
+
+    @classmethod
+    def from_dict(cls, dict):
+        """initialize from dictionary created by .to_dict()"""
+
+        instance = cls()
+
+        # set dictionary key:value pairs as attributes
+        # handle params and 'class' name as special cases
+        for key, value in dict.items():
+            if key == "class":
+                # this is just the class name as a string
+                # which we should generate with build_name() when needed
+                pass
+            if key == "params":  # dict to series
+                value = pd.Series(value, dtype="object")
+            # any key-value pairs become attributes
+            instance.__setattr__(key, value)
+
+        # instance.bypass = dict["bypass"]
+        # instance.is_augmentation = dict["is_augmentation"]
+        return instance
+
+
+@register_action_cls
 class Action(BaseAction):
     """Action class for an arbitrary function
 
@@ -131,7 +289,35 @@ class Action(BaseAction):
         # I think its in-place since we now pass an object and update the data
         sample.data = self.action_fn(sample.data, **dict(self.params, **kwargs))
 
+    def to_dict(self, ignore_attributes=()):
+        """export current attributes and .params to a dictionary
 
+        useful for saving to JSON
+
+        re-load with `.from_dict(dict)`
+        """
+        d = super().to_dict(ignore_attributes=ignore_attributes)
+        d["action_fn"] = build_name(self.action_fn)
+        return d
+
+    @classmethod
+    def from_dict(cls, dict):
+        """initialize from dictionary created by .to_dict()"""
+        instance = cls(
+            fn=ACTION_FN_DICT[dict["action_fn"]],
+            is_augmentation=dict["is_augmentation"],
+            **dict["params"],
+        )
+        # set any other attributes stored as key:value pairs in the dict
+        for key, value in dict.items():
+            if key in ("class", "action_fn", "params", "is_augmentation"):
+                continue
+            # dictionary key-value pairs become attributes
+            instance.__setattr__(key, value)
+        return instance
+
+
+@register_action_cls
 class AudioClipLoader(Action):
     """Action to load clips from an audio file
 
@@ -147,7 +333,9 @@ class AudioClipLoader(Action):
     """
 
     def __init__(self, **kwargs):
-        super(AudioClipLoader, self).__init__(Audio.from_file, **kwargs)
+        if "fn" in kwargs:
+            kwargs.pop("fn")
+        super(AudioClipLoader, self).__init__(fn=Audio.from_file, **kwargs)
         # two params are provided by sample.start_time and sample.duration
         self.params = self.params.drop(["offset", "duration"])
 
@@ -159,6 +347,7 @@ class AudioClipLoader(Action):
         )
 
 
+@register_action_cls
 class AudioTrim(Action):
     """Action to trim/extend audio to desired length
 
@@ -167,12 +356,15 @@ class AudioTrim(Action):
     """
 
     def __init__(self, **kwargs):
-        super(AudioTrim, self).__init__(trim_audio, **kwargs)
+        if "fn" in kwargs:
+            kwargs.pop("fn")
+        super(AudioTrim, self).__init__(fn=trim_audio, **kwargs)
 
     def go(self, sample, **kwargs):
         self.action_fn(sample, **dict(self.params, **kwargs))
 
 
+@register_action_fn
 def trim_audio(sample, target_duration, extend=True, random_trim=False, tol=1e-6):
     """trim audio clips from t=0 or random position (Audio -> Audio)
 
@@ -238,6 +430,7 @@ def trim_audio(sample, target_duration, extend=True, random_trim=False, tol=1e-6
     sample.duration = target_duration
 
 
+@register_action_cls
 class SpectrogramToTensor(Action):
     """Action to create Tesnsor of desired shape from Spectrogram
 
@@ -249,6 +442,8 @@ class SpectrogramToTensor(Action):
 
     def __init__(self, fn=Spectrogram.to_image, is_augmentation=False, **kwargs):
         kwargs.update(dict(return_type="torch"))  # return a tensor, not PIL.Image
+        if "fn" in kwargs:
+            kwargs.pop("fn")
         super(SpectrogramToTensor, self).__init__(fn, is_augmentation, **kwargs)
 
     def go(self, sample, **kwargs):
@@ -260,231 +455,7 @@ class SpectrogramToTensor(Action):
         sample.data = self.action_fn(sample.data, **dict(self.params, **kwargs))
 
 
-def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
-    """Applies a randomly selected gain level to an Audio object
-
-    Gain is selected from a uniform distribution in the range dB_range
-
-    Args:
-        audio: an Audio object
-        dB_range: (min,max) decibels of gain to apply
-            - dB gain applied is chosen from a uniform random
-            distribution in this range
-
-    Returns: Audio object with gain applied
-    """
-    gain = random.uniform(dB_range[0], dB_range[1])
-    return audio.apply_gain(dB=gain, clip_range=clip_range)
-
-
-def audio_add_noise(audio, noise_dB=-30, signal_dB=0, color="white"):
-    """Generates noise and adds to audio object
-
-    Args:
-        audio: an Audio object
-        noise_dB: number or range: dBFS of noise signal generated
-            - if number, crates noise with `dB` dBFS level
-            - if (min,max) tuple, chooses noise `dBFS` randomly
-            from range with a uniform distribution
-        signal_dB: dB (decibels) gain to apply to the incoming Audio
-            before mixing with noise [default: -3 dB]
-            - like noise_dB, can specify (min,max) tuple to
-            use random uniform choice in range
-
-    Returns: Audio object with noise added
-    """
-    if hasattr(noise_dB, "__iter__"):
-        # choose noise level randomly from dB range
-        noise_dB = random.uniform(noise_dB[0], noise_dB[1])
-    # otherwise, it should just be a number
-
-    if hasattr(signal_dB, "__iter__"):
-        # choose signal level randomly from dB range
-        signal_dB = random.uniform(signal_dB[0], signal_dB[1])
-    # otherwise, it should just be a number
-
-    noise = Audio.noise(
-        duration=audio.duration,
-        sample_rate=audio.sample_rate,
-        color=color,
-        dBFS=noise_dB,
-    )
-
-    return mix([audio, noise], gain=[signal_dB, 0])
-
-
-def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue=0):
-    """Wraps torchvision.transforms.ColorJitter
-
-    (Tensor -> Tensor) or (PIL Img -> PIL Img)
-
-    Args:
-        tensor: input sample
-        brightness=0.3
-        contrast=0.3
-        saturation=0.3
-        hue=0
-
-    Returns:
-        modified tensor
-    """
-    transform = torchvision.transforms.Compose(
-        [
-            torchvision.transforms.ColorJitter(
-                brightness=brightness, contrast=contrast, saturation=saturation, hue=hue
-            )
-        ]
-    )
-    return transform(tensor)
-
-
-def torch_random_affine(tensor, degrees=0, translate=(0.3, 0.1), fill=0):
-    """Wraps for torchvision.transforms.RandomAffine
-
-    (Tensor -> Tensor) or (PIL Img -> PIL Img)
-
-    Args:
-        tensor: torch.Tensor input saple
-        degrees = 0
-        translate = (0.3, 0.1)
-        fill = 0-255, duplicated across channels
-
-    Returns:
-        modified tensor
-
-    Note: If applying per-image normalization, we recommend applying
-    RandomAffine after image normalization. In this case, an intermediate gray
-    value is ~0. If normalization is applied after RandomAffine on a PIL image,
-    use an intermediate fill color such as (122,122,122).
-    """
-
-    channels = tensor.shape[-3]
-    fill = [fill] * channels
-
-    transform = torchvision.transforms.Compose(
-        [
-            torchvision.transforms.RandomAffine(
-                degrees=degrees, translate=translate, fill=fill
-            )
-        ]
-    )
-    return transform(tensor)
-
-
-def image_to_tensor(img, greyscale=False):
-    """Convert PIL image to RGB or greyscale Tensor (PIL.Image -> Tensor)
-
-    convert PIL.Image w/range [0,255] to torch Tensor w/range [0,1]
-
-    Args:
-        img: PIL.Image
-        greyscale: if False, converts image to RGB (3 channels).
-            If True, converts image to one channel.
-    """
-    if greyscale:
-        img = img.convert("L")
-    else:
-        img = img.convert("RGB")
-
-    transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
-    return transform(img)
-
-
-def scale_tensor(tensor, input_mean=0.5, input_std=0.5):
-    """linear scaling of tensor values using torch.transforms.Normalize
-
-    (Tensor->Tensor)
-
-    WARNING: This does not perform per-image normalization. Instead,
-    it takes as arguments a fixed u and s, ie for the entire dataset,
-    and performs X=(X-input_mean)/input_std.
-
-    Args:
-        input_mean: mean of input sample pixels (average across dataset)
-        input_std: standard deviation of input sample pixels (average across dataset)
-        (these are NOT the target mu and sd, but the original mu and sd of img
-        for which the output will have mu=0, std=1)
-
-    Returns:
-        modified tensor
-    """
-    transform = torchvision.transforms.Compose(
-        [torchvision.transforms.Normalize(input_mean, input_std)]
-    )
-    return transform(tensor)
-
-
-def time_mask(tensor, max_masks=3, max_width=0.2):
-    """add random vertical bars over sample (Tensor -> Tensor)
-
-    Args:
-        tensor: input Torch.tensor sample
-        max_masks: maximum number of vertical bars [default: 3]
-        max_width: maximum size of bars as fraction of sample width
-
-    Returns:
-        augmented tensor
-    """
-
-    # convert max_width from fraction of sample to pixels
-    max_width_px = int(tensor.shape[-1] * max_width)
-
-    # add "batch" dimension expected by tensaug
-    tensor = tensor.unsqueeze(0)
-
-    # perform transform
-    tensor = tensaug.time_mask(tensor, T=max_width_px, max_masks=max_masks)
-
-    # remove "batch" dimension
-    tensor = tensor.squeeze(0)
-
-    return tensor
-
-
-def frequency_mask(tensor, max_masks=3, max_width=0.2):
-    """add random horizontal bars over Tensor
-
-    Args:
-        tensor: input Torch.tensor sample
-        max_masks: max number of horizontal bars [default: 3]
-        max_width: maximum size of horizontal bars as fraction of sample height
-
-    Returns:
-        augmented tensor
-    """
-
-    # convert max_width from fraction of sample to pixels
-    max_width_px = int(tensor.shape[-2] * max_width)
-
-    # add "batch" dimension expected by tensaug
-    tensor = tensor.unsqueeze(0)
-
-    # perform transform
-    tensor = tensaug.freq_mask(tensor, F=max_width_px, max_masks=max_masks)
-
-    # remove "batch" dimension
-    tensor = tensor.squeeze(0)
-
-    return tensor
-
-
-def tensor_add_noise(tensor, std=1):
-    """Add gaussian noise to sample (Tensor -> Tensor)
-
-    Args:
-        std: standard deviation for Gaussian noise [default: 1]
-
-    Note: be aware that scaling before/after this action will change the
-    effect of a fixed stdev Gaussian noise
-    """
-    noise = torch.empty_like(tensor).normal_(mean=0, std=std)
-    return tensor + noise
-
-
-def always_true(x):
-    return True
-
-
+@register_action_cls
 class Overlay(Action):
     """Action Class for augmentation that overlays samples on eachother
 
@@ -511,13 +482,15 @@ class Overlay(Action):
     """
 
     def __init__(self, is_augmentation=True, **kwargs):
+        if "fn" in kwargs:
+            kwargs.pop("fn")
         super(Overlay, self).__init__(
             overlay,
             is_augmentation=is_augmentation,
             **kwargs,
         )
 
-        self.returns_labels = True
+        # self.returns_labels = True
 
         overlay_df = kwargs["overlay_df"].copy()  # copy to avoid modifying original
         overlay_df = overlay_df[~overlay_df.index.duplicated()]  # remove duplicates
@@ -536,9 +509,9 @@ class Overlay(Action):
                 "Consider renaming the `different` class. "
             )
 
-        # move overlay_df from params to its own space so that it doesn't display with print(params)
+        # move overlay_df from .params to its own attribute
         self.overlay_df = overlay_df
-        self.params = self.params.drop("overlay_df")  # removes it
+        self.params = self.params.drop("overlay_df")  # removes it from params Series
 
     def go(self, sample, **kwargs):
         self.action_fn(
@@ -547,7 +520,34 @@ class Overlay(Action):
             **dict(self.params, **kwargs),
         )
 
+    def to_dict(self):
+        # don't save self.overlay_df since it might be huge and is not json friendly
+        # also don't save criterion_fn, will default to always_true on reload
+        # user will have to specify these after using from_dict
+        d = super().to_dict(ignore_attributes=("overlay_df"))
+        d["params"].pop("criterion_fn")
+        return d
 
+    @classmethod
+    def from_dict(cls, dict):
+        dict["params"]["overlay_df"] = pd.DataFrame()
+        dict["params"]["criterion_fn"] = always_true
+        instance = super().from_dict(dict)
+        # since we don't have an overlay df, set this action to bypass mode
+        instance.bypass = True
+        warnings.warn(
+            "Overlay class's .overlay_df will be None after loading from dict and `.criterion_fn` will be always_true(). "
+            "Reset these attributes and set .bypass to False to use Overlay after loading with from_dict()."
+        )
+        assert isinstance(instance, cls)  # make sure its not the parent type?
+        return instance
+
+
+def always_true(x):
+    return True
+
+
+@register_action_fn
 def overlay(
     sample,
     overlay_df,
