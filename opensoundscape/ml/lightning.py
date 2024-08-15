@@ -89,6 +89,9 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         # save a pickled model object; will not work across opso versions
         model_copy = copy.deepcopy(self)
 
+        # save the preprocessor as a dictionary so we can reload/recreate it
+        model_copy.hparams.preprocessor_dict = model_copy.preprocessor.to_dict()
+
         if not save_hooks:
             # remove all forward and backward hooks on network.modules()
             from collections import OrderedDict
@@ -204,8 +207,6 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         """
         kwargs["max_epochs"] = epochs
         kwargs["default_root_dir"] = save_path
-
-        
 
         ### Input Validation ###
         check_labels(train_df, self.classes)

@@ -468,12 +468,12 @@ class SpectrogramPreprocessor(BasePreprocessor):
         height: height of output sample (frequency axis)
             - default None will use the original height of the spectrogram
         width: width of output sample (time axis)
-            -  default None will use the originalwidth of the spectrogram
+            -  default None will use the original width of the spectrogram
         channels: number of channels in output sample (default 1)
     """
 
     def __init__(
-        self, sample_duration, overlay_df=None, height=None, width=None, channels=1
+        self, sample_duration, overlay_df=None, height=224, width=224, channels=1
     ):
         super(SpectrogramPreprocessor, self).__init__(sample_duration=sample_duration)
         self.height = height

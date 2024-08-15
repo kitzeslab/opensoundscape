@@ -22,7 +22,9 @@ from opensoundscape.ml.utils import apply_activation_layer, check_labels
 from opensoundscape.preprocess.preprocessors import (
     SpectrogramPreprocessor,
     BasePreprocessor,
+    preprocessor_from_dict,
 )
+from opensoundscape.preprocess import io
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.ml.loss import ResampleLoss
@@ -57,6 +59,28 @@ from opensoundscape.sample import collate_audio_samples
 
 
 import warnings
+
+
+MODEL_CLS_DICT = dict()
+
+
+def list_model_classes():
+    """return list of available action function keyword strings
+    (can be used to initialize Action class)
+    """
+    return list(MODEL_CLS_DICT.keys())
+
+
+def register_model_cls(model_cls):
+    """add class to MODEL_CLS_DICT
+
+    this allows us to recreate the class when loading saved model file with load_model()
+
+    """
+    # register the model in dictionary
+    MODEL_CLS_DICT[io.build_name(model_cls)] = model_cls
+    # return the function
+    return model_cls
 
 
 class BaseModule:
@@ -446,105 +470,6 @@ class BaseModule:
             **kwargs,
         )
 
-    # def save_torch_dict(self, path):
-    #     """save model to file for use in other opso versions
-
-    #      WARNING: this does not save any preprocessing or augmentation
-    #         settings or parameters, or other attributes such as the training
-    #         parameters or loss function. It only saves architecture, weights,
-    #         classes, sample shape, sample duration, and single_target.
-
-    #     To save the entire pickled model object (recover all parameters and
-    #     settings), use model.save() instead. Note that models saved with
-    #     model.save() will not work across different versions of OpenSoundscape.
-
-    #     To recreate the model after saving with this function, use CNN.from_torch_dict(path)
-
-    #     Args:
-    #         path: file path for saved model object
-
-    #     Effects:
-    #         saves a file using torch.save() containing model weights and other information
-    #     """
-
-    #     # warn the user if the achirecture can't be re-created from the
-    #     # string name (self.architecture_name)
-    #     if not self.architecture_name in cnn_architectures.list_architectures():
-    #         warnings.warn(
-    #             f"""\n The value of `self.architecture_name` ({self.architecture_name})
-    #                 is not an architecture that can be generated in OpenSoundscape. Using
-    #                 CNN.from_torch_dict on the saved file will cause an error. To fix this,
-    #                 you can use .save() instead of .save_torch_model, or change
-    #                 `self.architecture_name` to one of the architecture name strings listed by
-    #                 opensoundscape.ml.cnn_architectures.list_architectures()
-    #                 if this architecture is supported."""
-    #         )
-
-    #     os.makedirs(Path(path).parent, exist_ok=True)
-
-    #     # save just the basics, loses preprocessing/other settings
-    #     torch.save(
-    #         {
-    #             "weights": self.model.state_dict(),
-    #             "classes": self.classes,
-    #             "architecture": self.architecture_name,
-    #             "sample_duration": self.preprocessor.sample_duration,
-    #             "single_target": self.single_target,
-    #             "sample_shape": [
-    #                 self.preprocessor.height,
-    #                 self.preprocessor.width,
-    #                 self.preprocessor.channels,
-    #             ],
-    #         },
-    #         path,
-    #     )
-
-    # @classmethod
-    # def from_torch_dict(cls, path):
-    #     """load a model saved using CNN.save_torch_dict()
-
-    #     Args:
-    #         path: path to file saved using CNN.save_torch_dict()
-
-    #     Returns:
-    #         new CNN instance
-
-    #     Note: if you used .save() instead of .save_torch_dict(), load
-    #     the model using cnn.load_model(). Note that the model object will not load properly
-    #     across different versions of OpenSoundscape. To save and load models across
-    #     different versions of OpenSoundscape, use .save_torch_dict(), but note that
-    #     preprocessing and other customized settings will not be retained.
-    #     """
-    #     model_dict = torch.load(path)
-    #     state_dict = model_dict.pop("weights")
-    #     model = cls(**model_dict)
-    #     model.model.load_state_dict(state_dict)
-    #     return model
-
-    # def save_weights(self, path):
-    #     """save just the weights of the network
-
-    #     This allows the saved weights to be used more flexibly than model.save()
-    #     which will pickle the entire object. The weights are saved in a pickled
-    #     dictionary using torch.save(self.model.state_dict())
-
-    #     Args:
-    #         path: location to save weights file
-    #     """
-    #     torch.save(self.model.state_dict(), path)
-
-    # def load_weights(self, path, strict=True):
-    #     """load network weights state dict from a file
-
-    #     For instance, load weights saved with .save_weights()
-    #     in-place operation
-
-    #     Args:
-    #         path: file path with saved weights
-    #         strict: (bool) see torch.load()
-    #     """
-    #     self.model.load_state_dict(torch.load(path), strict=strict)
-
 
 class ChannelDimCheckError(Exception):
     pass
@@ -582,6 +507,15 @@ class SpectrogramModule(BaseModule):
         channels: number of channels in input data
         sample_height: height of input data
         sample_width: width of input data
+        preprocessor_dict: dictionary defining preprocessor and parameters,
+            can be generated with preprocessor.to_dict()
+            if not None, will override other preprocessor arguments
+            (sample_duration, sample_height, sample_width, channels)
+        preprocessor_cls:
+            a class object that inherits from BasePreprocessor
+            if preprocessor_dict is None, this class will be instantiated to set self.preprocessor
+        **preprocessor_kwargs: additional arguments to pass to the initialization of the preprocessor class
+            this is ignored if preprocessor_dict is not None
     """
 
     def __init__(
@@ -590,19 +524,17 @@ class SpectrogramModule(BaseModule):
         classes,
         sample_duration,
         single_target=False,
-        channels=1,
-        sample_height=224,
-        sample_width=224,
+        preprocessor_dict=None,
+        preprocessor_cls=SpectrogramPreprocessor,
+        **preprocessor_kwargs,
     ):
         super().__init__()
         self.classes = classes
         self.single_target = single_target  # if True: predict only class w max score
         self.name = "SpectrogramModule"
-        self.type = type(self)
 
-        ## TRAINING ##
         self.use_amp = False  # use automatic mixed precision
-        self.lightning_mode = False  # skip things done internally by Lightning if True
+        self.lightning_mode = False  # True: skip things done automatically by Lightning
 
         self.lr_scheduler_step = -1
         """track number of calls to lr_scheduler.step()
@@ -616,6 +548,18 @@ class SpectrogramModule(BaseModule):
         Note that the initial learning rate is set via self.optimizer_params['kwargs']['lr']
         """
 
+        ### PREPROCESSOR ###
+        preprocessor_kwargs.update(sample_duration=sample_duration)
+
+        if preprocessor_dict is None:
+            self.preprocessor = preprocessor_cls(**preprocessor_kwargs)
+        else:
+            # reload a preprocessor serialized to a dictionary
+            # finds the class using preprocessors.PREPROCESSOR_DICT lookup
+            # note that some preprocessor settings may not be saved in the dictionary
+            # in particular, Overlay augmentation's overlay_df and criterion_fn
+            self.preprocessor = preprocessor_from_dict(preprocessor_dict)
+
         ### ARCHITECTURE ###
         # allow user to pass a string, in which case we look up the architecture
         # in cnn_architectures.ARCH_DICT and instantiate it
@@ -624,33 +568,50 @@ class SpectrogramModule(BaseModule):
                 f"architecture must be a pytorch model object or string matching "
                 f"one of cnn_architectures.list_architectures() options. Got {architecture}"
             )
-            self.architecture_name = architecture
             architecture = cnn_architectures.ARCH_DICT[architecture](
-                len(classes), num_channels=channels
+                len(classes), num_channels=self.preprocessor.channels
             )
         else:
             assert issubclass(
                 type(architecture), torch.nn.Module
             ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
 
+            # warn user if this architecture is not "registered", since we won't be able to reload it
+            if (
+                not hasattr(architecture, "constructor_name")
+                or architecture.constructor_name
+                not in cnn_architectures.ARCH_DICT.values()
+            ):
+                warnings.warn(
+                    """
+                    This architecture is not listed in opensoundscape.ml.cnn_architectures.ARCH_DICT.
+                    It will not be available for loading after saving the model with .save() (unless using pickle=True). 
+                    To make it re-loadable, define a function that generates the architecture from arguments: (n_classes, n_channels) 
+                    then use opensoundscape.ml.cnn_architectures.register_architecture() to register the generating function.
+
+                    The function can also set the returned object's .constructor_name to the registered string key in ARCH_DICT
+                    to avoid this warning and ensure it is reloaded correctly by opensoundscape.ml.load_model().
+
+                    See opensoundscape.ml.cnn_architectures module for examples of constructor functions
+                    """
+                )
             # try to update channels arg to match architecture
             try:
                 arch_channels = get_channel_dim(architecture)
-                if channels != arch_channels:
+                if self.preprocessor.channels != arch_channels:
                     warnings.warn(
-                        f"Using architecture's expected number of channels ({arch_channels}) "
-                        f"rather than user-specified channels ({channels})."
+                        f"Modifying .preprocessor to match architecture's expected number of channels ({arch_channels}) "
+                        f"(originally {self.preprocessor.channels})."
                     )
-                    channels = arch_channels
+                    self.preprocessor.channels = arch_channels
             except ChannelDimCheckError:
                 # can we try to check if first layer expects input with channels=channels?
                 warnings.warn(
                     f"Failed to detect expected # input channels of this architecture."
                     "Make sure your architecture expects the number of channels "
-                    f"equal to `channels` argument {channels}). "
+                    f"equal to `channels` argument {self.preprocessor.channels}). "
                     f"Pytorch architectures generally expect 3 channels by default."
                 )
-            self.architecture_name = str(type(architecture))
 
         self.model = architecture
         """a pytorch Module such as Resnet18 or a custom object
@@ -660,14 +621,6 @@ class SpectrogramModule(BaseModule):
         
         List options: `opensoundscape.ml.cnn_architectures.list_architectures()`
         """
-
-        ### PREPROCESSOR ###
-        self.preprocessor = SpectrogramPreprocessor(
-            sample_duration=sample_duration,
-            height=sample_height,
-            width=sample_width,
-            channels=channels,
-        )
 
         ### LOSS FUNCTION ###
         # choose canonical loss for single or multi-target classification
@@ -741,10 +694,11 @@ class SpectrogramModule(BaseModule):
         )
 
 
+@register_model_cls
 class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
     name = "SpectrogramClassifier"
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         """defines pure pytorch train, predict, and eval methods for a spectrogram classifier
 
         subclasses SpectrogramModule, defines methods that are used for pure PyTorch workflow.
@@ -753,7 +707,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Args:
             see SpectrogramModule for arguments
         """
-        super(SpectrogramClassifier, self).__init__(**kwargs)
+        super(SpectrogramClassifier, self).__init__(*args, **kwargs)
 
         self.log_file = None  # specify a path to save output to a text file
         self.logging_level = 1  # 0 for nothing, 1,2,3 for increasing logged info
@@ -1193,7 +1147,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
     def _generate_wandb_config(self):
         # create a dictionary of parameters to save for this run
         wandb_config = dict(
-            architecture=self.architecture_name,
+            architecture=io.build_name(self.model),
             sample_duration=self.preprocessor.sample_duration,
             cuda_device_count=torch.cuda.device_count(),
             mps_available=torch.backends.mps.is_available(),
@@ -1471,20 +1425,24 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                     score = train_metrics[self.score_metric]
 
                 # if this is the best score, update & save weights to best.model
+                # we save both the pickled and unpickled formats here
                 if score > self.best_score:
                     self.best_score = score
                     self.best_epoch = self.current_epoch
                     save_path = f"{self.save_path}/best.model"
+                    pickle_path = f"{self.save_path}/best.pickle"
                     self._log(f"New best model saved to {save_path}", level=2)
-                    self.save(save_path)
+                    self.save(save_path, pickle=False)
+                    self.save(pickle_path, pickle=False)
 
-            # save model weights every n epochs
+            # save pickled model every n epochs
+            # pickled model file allows us to resume training
             if (
                 self.current_epoch + 1
             ) % self.save_interval == 0 or epoch == epochs - 1:
                 save_path = f"{self.save_path}/epoch-{self.current_epoch}.model"
                 self._log(f"Saving model to {save_path}", level=2)
-                self.save(save_path)
+                self.save(save_path, pickle=True)
 
             if wandb_session is not None:
                 wandb_session.log({"epoch": epoch})
@@ -1506,29 +1464,28 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         )
         self._log(f"List of invalid samples: {invalid_samples}", level=3)
 
-    def save(self, path, save_hooks=False):
+    def save(self, path, save_hooks=False, pickle=False):
         """save model with weights using torch.save()
 
-        load from saved file with torch.load(path) or cnn.load_model(path)
+        load from saved file with cnn.load_model(path)
 
 
-        Note: saving and loading model objects across OpenSoundscape versions
-        will not work properly. Instead, use .save_torch_dict and .load_torch_dict
-        (but note that customizations to preprocessing, training params, etc will
-        not be retained using those functions).
-
-        For maximum flexibilty in further use, save the model with both .save() and
-        .save_torch_dict()
 
         Args:
             path: file path for saved model object
             save_hooks: retain forward and backward hooks on modules
                 [default: False] Note: True can cause issues when using
                 wandb.watch()
+            pickle: if True, saves the entire model object using torch.save()
+                Note: if using pickle=True, entire object is pickled, which means that
+                saving and loading model objects across OpenSoundscape versions
+                might not work properly. pickle=True is useful for resuming training,
+                because it retains the state of the optimizer, scheduler, loss function, etc
+                pickle=False is recommended for saving models for inference/deployment/sharing
+                [default: False]
         """
         os.makedirs(Path(path).parent, exist_ok=True)
 
-        # save a pickled model object; will not work across opso versions
         model_copy = copy.deepcopy(self)
 
         if not save_hooks:
@@ -1539,79 +1496,69 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 m._forward_hooks = OrderedDict()
                 m._backward_hooks = OrderedDict()
 
-        torch.save(model_copy, path)
-
-    def save_torch_dict(self, path):
-        """save model to file for use in other opso versions
-
-         WARNING: this does not save any preprocessing or augmentation
-            settings or parameters, or other attributes such as the training
-            parameters or loss function. It only saves architecture, weights,
-            classes, sample shape, sample duration, and single_target.
-
-        To save the entire pickled model object (recover all parameters and
-        settings), use model.save() instead. Note that models saved with
-        model.save() will not work across different versions of OpenSoundscape.
-
-        To recreate the model after saving with this function, use CNN.from_torch_dict(path)
-
-        Args:
-            path: file path for saved model object
-
-        Effects:
-            saves a file using torch.save() containing model weights and other information
-        """
-
-        # warn the user if the achirecture can't be re-created from the
-        # string name (self.architecture_name)
-        if not self.architecture_name in cnn_architectures.list_architectures():
-            warnings.warn(
-                f"""\n The value of `self.architecture_name` ({self.architecture_name})
-                    is not an architecture that can be generated in OpenSoundscape. Using
-                    CNN.from_torch_dict on the saved file will cause an error. To fix this,
-                    you can use .save() instead of .save_torch_model, or change
-                    `self.architecture_name` to one of the architecture name strings listed by
-                    opensoundscape.ml.cnn_architectures.list_architectures()
-                    if this architecture is supported."""
+        if pickle:
+            # save a pickled model object; may not work across opso versions
+            torch.save(model_copy, path)
+        else:
+            # save dictionary of separate components
+            # better for cross-version compatability
+            # dictionary can be loaded with torch.load() to inspect individual components
+            torch.save(
+                {
+                    "weights": self.model.state_dict(),
+                    "class": io.build_name(self),
+                    "classes": self.classes,
+                    "sample_duration": self.preprocessor.sample_duration,
+                    "architecture": self.model.constructor_name,
+                    "preprocessor_dict": self.preprocessor.to_dict(),
+                    "opensoundscape_version": opensoundscape.__version__,
+                    # doesn't support resuming training across with optimizer/scheduler states
+                    # because there are many other parameters that would need to be saved
+                    # instead, use pickle=True for resuming training
+                    # "optimizer_state_dict": self.optimizer.state_dict(),
+                    # "scheduler_state_dict": self.scheduler.state_dict(),
+                },
+                path,
             )
 
-        os.makedirs(Path(path).parent, exist_ok=True)
-
-        # save just the basics, loses preprocessing/other settings
-        torch.save(
-            {
-                "weights": self.model.state_dict(),
-                "classes": self.classes,
-                "architecture": self.architecture_name,
-                "sample_duration": self.preprocessor.sample_duration,
-                "single_target": self.single_target,
-                "sample_height": self.preprocessor.height,
-                "sample_width": self.preprocessor.width,
-                "channels": self.preprocessor.channels,
-            },
-            path,
-        )
-
     @classmethod
-    def from_torch_dict(cls, path):
-        """load a model saved using CNN.save_torch_dict()
+    def load(cls, path):
+        """load a model saved using CNN.save()
 
         Args:
-            path: path to file saved using CNN.save_torch_dict()
+            path: path to file saved using CNN.save()
 
         Returns:
             new CNN instance
 
-        Note: if you used .save() instead of .save_torch_dict(), load
-        the model using cnn.load_model(). Note that the model object will not load properly
-        across different versions of OpenSoundscape. To save and load models across
-        different versions of OpenSoundscape, use .save_torch_dict(), but note that
-        preprocessing and other customized settings will not be retained.
+        Note: Note that if you used pickle=True when saving, the model object might not load properly
+        across different versions of OpenSoundscape.
         """
         model_dict = torch.load(path)
-        state_dict = model_dict.pop("weights")
-        model = cls(**model_dict)
-        model.model.load_state_dict(state_dict)
+
+        opso_version = (
+            model_dict.pop("opensoundscape_version")
+            if isinstance(model_dict, dict)
+            else model_dict.opensoundscape_version
+        )
+        if opso_version != opensoundscape.__version__:
+            warnings.warn(
+                f"Model was saved with OpenSoundscape version {opso_version}, "
+                f"but you are currently using version {opensoundscape.__version__}. "
+                "This might not be an issue but you should confirm that the model behaves as expected."
+            )
+
+        if isinstance(model_dict, dict):
+            # load up the weights and instantiate from dictionary keys
+            # includes preprocessing parameters and settings
+            state_dict = model_dict.pop("weights")
+            class_name = model_dict.pop("class")
+            model = cls(**model_dict)
+            model.model.load_state_dict(state_dict)
+        else:
+            model = model_dict  # entire pickled object, not dictionary
+            opso_version = model.opensoundscape_version
+
         return model
 
     def save_weights(self, path):
@@ -1922,19 +1869,15 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         self._device = torch.device(device)
 
 
+@register_model_cls
 class CNN(SpectrogramClassifier):
     """alias for SpectrogramClassifier
 
     improves comaptibility with older code / previous opso versions
     """
 
-    def __init__(self, architecture, classes, sample_duration, **kwargs):
-        super(CNN, self).__init__(
-            architecture=architecture,
-            classes=classes,
-            sample_duration=sample_duration,
-            **kwargs,
-        )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 
 def use_resample_loss(
@@ -2030,6 +1973,7 @@ def separate_resnet_feat_clf(model):
     # model.opt_net will be created when .train() calls ._set_train()
 
 
+@register_model_cls
 class InceptionV3(SpectrogramClassifier):
     """Child of SpectrogramClassifier class for InceptionV3 architecture"""
 
@@ -2038,11 +1982,11 @@ class InceptionV3(SpectrogramClassifier):
         classes,
         sample_duration,
         single_target=False,
-        preprocessor_class=SpectrogramPreprocessor,
         freeze_feature_extractor=False,
         weights="DEFAULT",
         sample_width=299,
         sample_height=299,
+        **kwargs,
     ):
         """Model object for InceptionV3 architecture subclassing CNN
 
@@ -2065,6 +2009,7 @@ class InceptionV3(SpectrogramClassifier):
                 architecture are listed at https://pytorch.org/vision/stable/models.html
             sample_height: height of input image in pixels
             sample_width: width of input image in pixels
+            **kwargs passed to SpectrogramClassifier.__init__()
 
         Note: InceptionV3 architecture implementation assumes channels=3
         """
@@ -2076,15 +2021,20 @@ class InceptionV3(SpectrogramClassifier):
             freeze_feature_extractor=freeze_feature_extractor,
             weights=weights,
         )
+        architecture.constructor_name = "inception_v3"
+
+        if "architecture" in kwargs:
+            kwargs.pop("architecture")
 
         super().__init__(
             architecture=architecture,
             classes=classes,
             sample_duration=sample_duration,
             single_target=single_target,
+            height=sample_height,
+            width=sample_width,
             channels=3,
-            sample_width=sample_width,
-            sample_height=sample_height,
+            **kwargs,
         )
         self.name = "InceptionV3"
 
@@ -2243,6 +2193,10 @@ def load_model(path, device=None):
         if device is None:
             device = _gpu_if_available()
         model = torch.load(path, map_location=device)
+
+        if isinstance(model, dict):
+            model_cls = MODEL_CLS_DICT[model.pop("class")]
+            model = model_cls(**model)
 
         # warn the user if loaded model's opso version doesn't match the current one
         if model.opensoundscape_version != opensoundscape.__version__:

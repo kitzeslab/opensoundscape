@@ -29,6 +29,7 @@ Note: the InceptionV3 architecture must be used differently than other
 architectures - the easiest way is to simply use the InceptionV3 class in
 opensoundscape.ml.cnn.
 """
+
 import warnings
 
 import torch
@@ -92,6 +93,8 @@ def resnet18(
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.layer4]
 
+    architecture_ft.constructor_name = "resnet18"
+
     return architecture_ft
 
 
@@ -128,6 +131,8 @@ def resnet34(
 
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.layer4]
+
+    architecture_ft.constructor_name = "resnet34"
 
     return architecture_ft
 
@@ -166,6 +171,8 @@ def resnet50(
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.layer4]
 
+    architecture_ft.constructor_name = "resnet50"
+
     return architecture_ft
 
 
@@ -202,6 +209,8 @@ def resnet101(
 
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.layer4]
+
+    architecture_ft.constructor_name = "resnet101"
 
     return architecture_ft
 
@@ -244,6 +253,8 @@ def resnet152(
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.layer4]
 
+    architecture_ft.constructor_name = "resnet152"
+
     return architecture_ft
 
 
@@ -285,6 +296,8 @@ def alexnet(
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
 
+    architecture_ft.constructor_name = "alexnet"
+
     return architecture_ft
 
 
@@ -325,6 +338,8 @@ def vgg11_bn(
 
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
+
+    architecture_ft.constructor_name = "vgg11_bn"
 
     return architecture_ft
 
@@ -378,6 +393,8 @@ def squeezenet1_0(
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
 
+    architecture_ft.constructor_name = "squeezenet1_0"
+
     return architecture_ft
 
 
@@ -417,6 +434,8 @@ def densenet121(
 
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
+
+    architecture_ft.constructor_name = "densenet121"
 
     return architecture_ft
 
@@ -468,6 +487,8 @@ def inception_v3(
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.Mixed_7c]
 
+    architecture_ft.constructor_name = "inception_v3"
+
     return architecture_ft
 
 
@@ -514,6 +535,8 @@ def efficientnet_b0(
 
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
+
+    architecture_ft.constructor_name = "efficientnet_b0"
 
     return architecture_ft
 
@@ -562,6 +585,8 @@ def efficientnet_b4(
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
 
+    architecture_ft.constructor_name = "efficientnet_b4"
+
     return architecture_ft
 
 
@@ -609,6 +634,8 @@ def efficientnet_widese_b0(
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
 
+    architecture_ft.constructor_name = "efficientnet_widese_b0"
+
     return architecture_ft
 
 
@@ -655,6 +682,8 @@ def efficientnet_widese_b4(
 
     # default target layers for activation maps like GradCAM and guided backpropagation
     architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
+
+    architecture_ft.constructor_name = "efficientnet_widese_b4"
 
     return architecture_ft
 

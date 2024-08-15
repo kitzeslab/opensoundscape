@@ -56,6 +56,14 @@ def test_lightning_spectrogram_module_init(model):
     assert model.hparams["sample_duration"] == 1.0
 
 
+def test_lightning_spectrogram_module_save_load(model, model_save_dir):
+    p = f"{model_save_dir}/temp.ptl"
+    model.preprocessor.sample_duration = 5
+    model.save(p)
+    m2 = lightning.LightningSpectrogramModule.load_from_checkpoint(p)
+    assert m2.preprocessor.sample_duration == 5
+
+
 def test_lightning_spectrogram_module_train(model, train_df_clips, model_save_dir):
     model.fit_with_trainer(
         train_df=train_df_clips,
