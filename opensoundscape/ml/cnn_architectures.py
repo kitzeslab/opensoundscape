@@ -511,30 +511,28 @@ def efficientnet_b0(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
 
+    Note: in v0.10.2, changed from using NVIDIA/DeepLearningExamples:torchhub repo
+        implementatiuon to native pytorch implementation
+
     """
-    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-    architecture_ft = torch.hub.load(
-        "NVIDIA/DeepLearningExamples:torchhub",
-        "nvidia_efficientnet_b0",
-        pretrained=weights,
-    )
+    architecture_ft = torchvision.models.efficientnet_b0(weights=weights)
 
     # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
     # change number of output nodes
-    architecture_ft.classifier.fc = change_fc_output_size(
-        architecture_ft.classifier.fc, num_classes
+    architecture_ft.classifier[1] = change_fc_output_size(
+        architecture_ft.classifier[1], num_classes=num_classes
     )
 
     # change input shape num_channels
-    architecture_ft.stem.conv = change_conv2d_channels(
-        architecture_ft.stem.conv, num_channels
+    architecture_ft.features[0][0] = change_conv2d_channels(
+        architecture_ft.features[0][0], num_channels
     )
 
     # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
+    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
 
     architecture_ft.constructor_name = "efficientnet_b0"
 
@@ -560,26 +558,24 @@ def efficientnet_b4(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
 
+    Note: in v0.10.2, changed from using NVIDIA/DeepLearningExamples:torchhub repo
+        implementatiuon to native pytorch implementation
+
     """
-    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-    architecture_ft = torch.hub.load(
-        "NVIDIA/DeepLearningExamples:torchhub",
-        "nvidia_efficientnet_b4",
-        pretrained=weights,
-    )
+    architecture_ft = torchvision.models.efficientnet_b4(weights=weights)
 
     # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
 
     # change number of output nodes
-    architecture_ft.classifier.fc = change_fc_output_size(
-        architecture_ft.classifier.fc, num_classes
+    architecture_ft.classifier[1] = change_fc_output_size(
+        architecture_ft.classifier[1], num_classes=num_classes
     )
 
     # change input shape num_channels
-    architecture_ft.stem.conv = change_conv2d_channels(
-        architecture_ft.stem.conv, num_channels
+    architecture_ft.features[0][0] = change_conv2d_channels(
+        architecture_ft.features[0][0], num_channels
     )
 
     # default target layers for activation maps like GradCAM and guided backpropagation
@@ -588,102 +584,6 @@ def efficientnet_b4(
     architecture_ft.constructor_name = "efficientnet_b4"
 
     return architecture_ft
-
-
-@register_arch
-def efficientnet_widese_b0(
-    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
-):
-    """Wrapper for efficientnet_widese_b0 architecture
-
-    Args:
-        num_classes:
-            number of output nodes for the final layer
-        freeze_feature_extractor:
-            if False (default), entire network will have gradients and can train
-            if True, feature block is frozen and only final layer is trained
-        weights:
-            string containing version name of the pre-trained classification weights to use for this architecture.
-            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
-            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
-        num_channels:
-            specify channels in input sample, eg [channels h,w] sample shape
-
-    """
-    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-    architecture_ft = torch.hub.load(
-        "NVIDIA/DeepLearningExamples:torchhub",
-        "nvidia_efficientnet_widese_b0",
-        pretrained=weights,
-    )
-
-    # prevent weights of feature extractor from being trained, if desired
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.classifier.fc = change_fc_output_size(
-        architecture_ft.classifier.fc, num_classes
-    )
-
-    # change input shape num_channels
-    architecture_ft.stem.conv = change_conv2d_channels(
-        architecture_ft.stem.conv, num_channels
-    )
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
-
-    architecture_ft.constructor_name = "efficientnet_widese_b0"
-
-    return architecture_ft
-
-
-@register_arch
-def efficientnet_widese_b4(
-    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
-):
-    """Wrapper for efficientnet_widese_b4 architecture
-
-    Args:
-        num_classes:
-            number of output nodes for the final layer
-        freeze_feature_extractor:
-            if False (default), entire network will have gradients and can train
-            if True, feature block is frozen and only final layer is trained
-        weights:
-            string containing version name of the pre-trained classification weights to use for this architecture.
-            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
-            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
-        num_channels:
-            specify channels in input sample, eg [channels h,w] sample shape
-
-    """
-    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-    architecture_ft = torch.hub.load(
-        "NVIDIA/DeepLearningExamples:torchhub",
-        "nvidia_efficientnet_widese_b4",
-        pretrained=weights,
-    )
-
-    # prevent weights of feature extractor from being trained, if desired
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.classifier.fc = change_fc_output_size(
-        architecture_ft.classifier.fc, num_classes
-    )
-
-    # change input shape num_channels
-    architecture_ft.stem.conv = change_conv2d_channels(
-        architecture_ft.stem.conv, num_channels
-    )
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
-
-    architecture_ft.constructor_name = "efficientnet_widese_b4"
 
     return architecture_ft
 

@@ -3,6 +3,7 @@ import pytest
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import crowsetta
 
 from opensoundscape import annotations
 from opensoundscape.annotations import BoxedAnnotations
@@ -37,6 +38,18 @@ def save_path():
 
 
 @pytest.fixture()
+def saved_csv(request):
+    path = "tests/csvs/labels.csv"
+
+    def fin():
+        Path(path).unlink()
+
+    request.addfinalizer(fin)
+
+    return path
+
+
+@pytest.fixture()
 def silence_10s_mp3_str():
     return "tests/audio/silence_10s.mp3"
 
@@ -66,6 +79,38 @@ def boxed_annotations():
 
 
 @pytest.fixture()
+def boxed_annotations_2_files():
+    df = pd.DataFrame(
+        data={
+            "audio_file": ["audio_file.wav"] * 2 + ["audio2.wav"],
+            "annotation_file": ["ann.txt"] * 2 + ["ann2.txt"],
+            "start_time": [0, 3, 4],
+            "end_time": [1, 5, 5],
+            "low_f": [0, 500, 1000],
+            "high_f": [100, 1200, 1500],
+            "annotation": ["a", "b", None],
+        }
+    )
+    return BoxedAnnotations(df)
+
+
+@pytest.fixture()
+def boxed_annotations_2_files():
+    df = pd.DataFrame(
+        data={
+            "audio_file": ["audio_file.wav"] * 2 + ["audio2.wav"],
+            "annotation_file": ["ann.txt"] * 2 + ["ann2.txt"],
+            "start_time": [0, 3, 4],
+            "end_time": [1, 5, 5],
+            "low_f": [0, 500, 1000],
+            "high_f": [100, 1200, 1500],
+            "annotation": ["a", "b", None],
+        }
+    )
+    return BoxedAnnotations(df)
+
+
+@pytest.fixture()
 def boxed_annotations_zero_len():
     df = pd.DataFrame(
         data={
@@ -80,6 +125,19 @@ def boxed_annotations_zero_len():
     return BoxedAnnotations(df)
 
 
+def test_init_boxed_annotations_with_no_df():
+    ba = BoxedAnnotations(df=None)  # init without passing df
+    assert len(ba.df) == 0
+    assert list(ba.df.columns) == BoxedAnnotations._standard_cols
+
+
+def test_init_boxed_annotations_with_only_reqd_cols():
+    """creates df with nan in other standard columns"""
+    df = pd.DataFrame({"annotation": ["a"], "start_time": [0], "end_time": [1]})
+    ba = BoxedAnnotations(df)
+    assert len(ba.df) == 1
+
+
 def test_load_raven_annotations(raven_file):
     ba = BoxedAnnotations.from_raven_files([raven_file])
     assert len(ba.df) == 10
@@ -89,6 +147,11 @@ def test_load_raven_annotations(raven_file):
         return x != x
 
     assert isnan(ba.df["audio_file"].values[0])
+
+
+def test_concat_boxed_annotations(boxed_annotations):
+    joined = BoxedAnnotations.concat([boxed_annotations] * 3)
+    assert len(joined.df) == 9
 
 
 def test_load_raven_annotations_w_audio(raven_file):
@@ -564,3 +627,127 @@ def test_from_raven_files_one_audio_file(raven_file):
     ba = BoxedAnnotations.from_raven_files(Path(raven_file), Path("path1"))
     assert str(ba.audio_files[0]) == "path1"
     assert len(ba.audio_files) == 1
+
+
+def test_to_and_from_crowsetta(boxed_annotations_2_files):
+    # smoke test: BoxedAnnotations to crowsetta.Annotation list, and back
+
+    # test 'bbox' mode:
+    ba = boxed_annotations_2_files
+    anns = ba.to_crowsetta()
+    assert type(anns[0]) == crowsetta.Annotation
+    assert type(anns[0].bboxes) == list
+    assert type(anns[0].bboxes[0]) == crowsetta.BBox
+    assert len(anns) == 2
+
+    # back to BoxedAnnotations format
+    ba2 = BoxedAnnotations.from_crowsetta(anns)
+
+    # order of annotations is not retained
+    # because of the .groupby call
+    assert set(ba2.df.annotation) == set([None, "a", "b"])
+
+    # test 'sequence' mode:
+    anns = ba.to_crowsetta(mode="sequence")
+    assert type(anns[0]) == crowsetta.Annotation
+    assert type(anns[0].seq) == crowsetta.Sequence
+
+    # back to BoxedAnnotations format
+    ba3 = BoxedAnnotations.from_crowsetta(anns)
+
+    # order of annotations is not retained
+    # because of the .groupby call
+    assert set(ba3.df.annotation) == set([None, "a", "b"])
+
+
+def test_crowsetta_annotation_id(boxed_annotations_2_files):
+    # if annotation_id is in the dataframe columns, to_crowsetta
+    # should create one Annotation per annotation_id for each
+    # unique audio_file+annotation_file combo, rather than just one
+    ba = boxed_annotations_2_files
+    ba.df["annotation_id"] = [0, 1, 2]
+    anns = ba.to_crowsetta(mode="bbox")
+    assert type(anns[0]) == crowsetta.Annotation
+    assert len(anns) == 3
+    assert type(anns[0].bboxes[0]) == crowsetta.BBox
+
+    # test with Sequence mode as well to be safe
+    anns = ba.to_crowsetta(mode="sequence")
+    assert type(anns[0]) == crowsetta.Annotation
+    assert len(anns) == 3
+    assert type(anns[0].seq) == crowsetta.Sequence
+
+    # if user passes `ignore_sequence_id`, should create one Sequence
+    anns = ba.to_crowsetta(mode="sequence", ignore_sequence_id=True)
+    assert type(anns[0]) == crowsetta.Annotation
+    assert type(anns[0].seq) == crowsetta.Sequence
+
+
+def test_crowsetta_sequence_id(boxed_annotations_2_files):
+    # if sequence_id is in the dataframe columns, to_crowsetta with
+    # mode 'sequence' should create a _list_ of Sequences for each Annotation,
+    # with one Sequence for each unique value of sequence_id
+    ba = boxed_annotations_2_files
+    ba.df["sequence_id"] = [0, 1, 2]
+    anns = ba.to_crowsetta(mode="sequence")
+    assert type(anns[0]) == crowsetta.Annotation
+    assert type(anns[0].seq) == list
+    assert type(anns[0].seq[0]) == crowsetta.Sequence
+
+    # if user passes `ignore_sequence_id`, should create one Sequence
+    anns = ba.to_crowsetta(mode="sequence", ignore_sequence_id=True)
+    assert type(anns[0]) == crowsetta.Annotation
+    assert type(anns[0].seq) == crowsetta.Sequence
+
+
+def test_from_crowsetta_bbox():
+    bbox = crowsetta.BBox(
+        onset=0.0, offset=0.2, low_freq=0.0, high_freq=1000, label="a"
+    )
+    ba = BoxedAnnotations.from_crowsetta_bbox(bbox, "af", "anf")
+    assert type(ba) == BoxedAnnotations
+    assert len(ba.df) == 1
+    assert set(ba.df["annotation"].values) == set(["a"])
+
+
+def test_from_crowsetta_seq():
+    seq = crowsetta.Sequence.from_dict(
+        {
+            "onsets_s": [0.0, 1.0],
+            "offsets_s": [0.2, 1.2],
+            "labels": ["a", "b"],
+        }
+    )
+    ba = BoxedAnnotations.from_crowsetta_seq(seq, "af", "anf")
+    assert type(ba) == BoxedAnnotations
+    assert len(ba.df) == 2
+    assert set(ba.df["annotation"].values) == set(["a", "b"])
+
+
+def test_df_to_crowsetta_bbox(boxed_annotations):
+    bboxes = annotations._df_to_crowsetta_bboxes(boxed_annotations.df)
+    assert type(bboxes[0]) == crowsetta.BBox
+    assert len(bboxes) == 3
+
+
+def test_df_to_crowsetta_sequence(boxed_annotations):
+    sequence = annotations._df_to_crowsetta_sequence(boxed_annotations.df)
+    assert type(sequence) == crowsetta.Sequence
+    assert len(sequence.onsets_s) == 3
+
+
+def test_df_to_crowsetta_sequence(boxed_annotations):
+    sequence = annotations._df_to_crowsetta_sequence(boxed_annotations.df)
+    assert type(sequence) == crowsetta.Sequence
+    assert len(sequence.onsets_s) == 3
+
+
+def test_to_from_csv(boxed_annotations, saved_csv):
+    # to csv
+    boxed_annotations.to_csv(saved_csv)
+    # from csv
+    loaded = BoxedAnnotations.from_csv(saved_csv)
+    assert type(loaded) == BoxedAnnotations
+
+    # check for equality
+    assert boxed_annotations.df.equals(loaded.df)

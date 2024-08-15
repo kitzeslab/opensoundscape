@@ -563,14 +563,21 @@ class AudioPreprocessor(BasePreprocessor):
         sample_duration:
             length in seconds of audio samples generated
         sample_rate: target sample rate. [default: None] does not resample
+        extend_short_clips: if True, clips shorter than sample_duration are extended
+            to sample_duration by adding silence.
     """
 
-    def __init__(self, sample_duration, sample_rate):
+    def __init__(self, sample_duration, sample_rate, extend_short_clips=True):
         super(AudioPreprocessor, self).__init__(sample_duration=sample_duration)
         self.pipeline = pd.Series(
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
                 "load_audio": AudioClipLoader(sample_rate=sample_rate),
+                # trim samples to correct length
+                # if extend_short_clips=True, extend short clips with silence
+                "trim_audio": AudioTrim(
+                    target_duration=sample_duration, extend=extend_short_clips
+                ),
             }
         )

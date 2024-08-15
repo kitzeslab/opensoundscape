@@ -268,7 +268,8 @@ def test_radom_sample(input):
 
 
 @pytest.mark.parametrize("input", [1, 11, 13, 42, 59, 666, 1234])
-def test_cnn(input):
+def test_set_seed_results_in_deterministic_weights_cnn_init(input):
+    """initializing a CNN with random weights should be deterministic after running utils.set_seed()"""
     utils.set_seed(input)
     model_resnet1 = cnn_architectures.resnet18(num_classes=10, weights=None)
     lw1 = model_resnet1.layer1[0].conv1.weight
@@ -282,3 +283,12 @@ def test_cnn(input):
     lw3 = model_resnet3.layer1[0].conv1.weight
 
     assert torch.all(lw1 == lw2) & torch.any(lw1 != lw3)
+
+
+def test_cast_np_to_native():
+    """test that np int and float are cast to native, other types unaffected"""
+    assert isinstance(utils.cast_np_to_native(np.int32(1)), int)
+    assert isinstance(utils.cast_np_to_native(np.float32(1.0)), float)
+    # should not affect other dtypes
+    assert isinstance(utils.cast_np_to_native(True), bool)
+    assert isinstance(utils.cast_np_to_native("a"), str)

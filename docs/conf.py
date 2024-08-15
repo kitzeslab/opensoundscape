@@ -20,11 +20,11 @@ sys.path.insert(0, os.path.abspath("../"))
 # -- Project information -----------------------------------------------------
 
 project = "opensoundscape"
-copyright = "2022 Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilnani, Alexandra Syunkova, Justin Kitzes"
-author = "Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilnani, Alexandra Syunkova, Justin Kitzes"
+copyright = "2024 Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilnani, Alexandra Syunkova, Leonardo Viotti, Santiago Ruiz Guzman, Justin Kitzes"
+author = "Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilnani, Alexandra Syunkova, Leonardo Viotti, Santiago Ruiz Guzman, Justin Kitzes"
 
 # The full version, including alpha/beta/rc tags
-release = "0.10.1"
+release = "0.10.2"
 
 
 # -- General configuration ---------------------------------------------------
@@ -107,6 +107,7 @@ autodoc_mock_imports = [
     "wandb",
     "pytorch_grad_cam",
     "aru_metadata_parser",
+    "crowsetta",
     "pytz",
     "pillow",
     "PIL",

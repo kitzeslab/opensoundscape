@@ -1125,9 +1125,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
                 # Log the Loss function
                 epoch_loss_avg = np.mean(batch_loss)
-                self._log(f"\tAvg Loss: {epoch_loss_avg:.3f}")
+                self._log(f"\tEpoch Running Average Loss: {epoch_loss_avg:.3f}")
+                self._log(f"\tMost Recent Batch Loss: {batch_loss[-1]:.3f}")
 
-        # step the learning rate scheduler
+        # update learning parameters each epoch
         self.scheduler.step()
         self.lr_scheduler_step += 1
 
@@ -1654,7 +1655,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 str can be any of the following:
                     "gradcam": pytorch_grad_cam.GradCAM,
                     "hirescam": pytorch_grad_cam.HiResCAM,
-                    "scorecam": opensoundscape.ml.utils.ScoreCAM, #pytorch_grad_cam.ScoreCAM,
+                    "scorecam": pytorch_grad_cam.ScoreCAM,
                     "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
                     "ablationcam": pytorch_grad_cam.AblationCAM,
                     "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1719,7 +1720,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         methods_dict = {
             "gradcam": pytorch_grad_cam.GradCAM,
             "hirescam": pytorch_grad_cam.HiResCAM,
-            "scorecam": opensoundscape.ml.utils.ScoreCAM,  # pytorch_grad_cam.ScoreCAM,
+            "scorecam": pytorch_grad_cam.ScoreCAM,
             "gradcam++": pytorch_grad_cam.GradCAMPlusPlus,
             "ablationcam": pytorch_grad_cam.AblationCAM,
             "xgradcam": pytorch_grad_cam.XGradCAM,
@@ -1732,11 +1733,13 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         if isinstance(method, str) and method in methods_dict:
             # get cam clsas based on string name and create instance
             cam = methods_dict[method](model=self.network, target_layers=target_layers)
+            cam.device = self.device
         elif method is None:
             cam = None
         elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
             # generate instance of cam from class
             cam = method(model=self.network, target_layers=target_layers)
+            cam.device = self.device
         else:
             raise ValueError(
                 f"`method` {method} not supported. "
@@ -1749,7 +1752,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             gb_model = pytorch_grad_cam.GuidedBackpropReLUModel(
                 model=self.network, device=self.device
             )
-            # TODO cuda usage - expose? use model setting?
 
         # create dataloader, collate using `identity` to return list of AudioSample
         # rather than (samples, labels) tensors
