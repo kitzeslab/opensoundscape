@@ -52,7 +52,7 @@ def model_save_dir(request):
 
 def test_lightning_spectrogram_module_init(model):
     assert model.hparams["architecture"] == "resnet18"
-    assert model.hparams["classes"] == [0, 1]
+    assert model.hparams["classes"] == ["class0"]
     assert model.hparams["sample_duration"] == 1.0
 
 

@@ -1,0 +1,32 @@
+architecture: resnet18
+classes: !!python/object/apply:pandas.core.indexes.base._new_Index
+- !!python/name:pandas.core.indexes.base.Index ''
+- data: !!python/object/apply:numpy.core.multiarray._reconstruct
+    args:
+    - !!python/name:numpy.ndarray ''
+    - !!python/tuple
+      - 0
+    - !!binary |
+      Yg==
+    state: !!python/tuple
+    - 1
+    - !!python/tuple
+      - 1
+    - !!python/object/apply:numpy.dtype
+      args:
+      - O8
+      - false
+      - true
+      state: !!python/tuple
+      - 3
+      - '|'
+      - null
+      - null
+      - null
+      - -1
+      - -1
+      - 63
+    - false
+    - - class0
+  name: null
+sample_duration: 1.0

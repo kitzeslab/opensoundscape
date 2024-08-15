@@ -231,9 +231,12 @@ def test_scale_tensor(tensor):
 
 
 def test_generic_action(sample, tensor):
-    """should be able to provide function to Action plus kwargs"""
+    """initialize the Action class with an arbitrary funciton and pass function args as kwargs
+
+    the additional args become action.params Series
+    """
     sample.data = tensor
-    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
     action.go(sample)
     assert sample.data.max() * 2 == tensor.max()
 
