@@ -579,11 +579,9 @@ def efficientnet_b4(
     )
 
     # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
+    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
 
     architecture_ft.constructor_name = "efficientnet_b4"
-
-    return architecture_ft
 
     return architecture_ft
 

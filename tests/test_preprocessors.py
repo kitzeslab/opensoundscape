@@ -97,11 +97,17 @@ def test_spectrogram_preprocessor_output_size(
     preprocessor, preprocessor_3x50x50, preprocessor_with_overlay, sample
 ):
     """should return a sample with a tensor, check output shapes"""
+
     s = preprocessor.forward(sample)
-    assert list(s.data.shape) == [1, 129, 343]
+    assert list(s.data.shape) == [1, 224, 224]
     s = preprocessor_3x50x50.forward(sample)
     assert list(s.data.shape) == [3, 50, 50]
     s = preprocessor_with_overlay.forward(sample)
+    assert list(s.data.shape) == [1, 224, 224]
+    # retain original spec height if width/height are None
+    preprocessor.width = None
+    preprocessor.height = None
+    s = preprocessor.forward(sample)
     assert list(s.data.shape) == [1, 129, 343]
 
 

@@ -79,8 +79,10 @@ def test_audio_file_dataset(dataset_df, pre):
 
 
 def test_audio_file_dataset_no_reshape(dataset_df, pre):
-    """should return tensor and labels. Tensor is the same as the shape of the spectrogram"""
+    """should return tensor and labels. Tensor is the same as the shape of the spectrogram if height and width are None"""
     pre.bypass_augmentation = False
+    pre.height = None
+    pre.width = None
     dataset = AudioFileDataset(dataset_df, pre)
     sample1 = dataset[0]
     # should be the same shape as
