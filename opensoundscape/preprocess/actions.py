@@ -28,12 +28,17 @@ import copy
 from types import MethodType, FunctionType
 
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
+from opensoundscape.preprocess.action_functions import (
+    ACTION_FN_DICT,
+    list_action_fns,
+    register_action_fn,
+)
+from opensoundscape.preprocess import io
 from opensoundscape.sample import AudioSample
 from opensoundscape.spectrogram import Spectrogram
 from opensoundscape.audio import Audio
 
 ACTION_CLS_DICT = dict()
-ACTION_FN_DICT = dict()
 
 
 def list_actions():
@@ -41,50 +46,13 @@ def list_actions():
     return list(ACTION_CLS_DICT.keys())
 
 
-def list_action_fns():
-    """return list of available action function keyword strings
-    (can be used to initialize Action class)
-    """
-    return list(ACTION_FN_DICT.keys())
-
-
-def build_name(method_or_object):
-    """return the full function or class name
-
-    Args:
-        method_or_object: a method, object, or class
-
-    Returns: a string like "opensoundscape.module.Class.method"
-        - Note: if defined in a script, looks like "__main__.my_function"
-
-    """
-    prefix = method_or_object.__module__
-    if isinstance(method_or_object, (MethodType, FunctionType, type)):
-        # its a method/function or a class
-        return f"{prefix}.{method_or_object.__qualname__}"
-    return f"{prefix}.{type(method_or_object).__qualname__}"
-
-
 def register_action_cls(action_cls):
     """add class to ACTION_DICT"""
     # register the model in dictionary
-    ACTION_CLS_DICT[build_name(action_cls)] = action_cls
+    ACTION_CLS_DICT[io.build_name(action_cls)] = action_cls
 
     # return the function
     return action_cls
-
-
-def register_action_fn(action_fn):
-    """add function to ACTION_FN_DICT
-
-    this allows us to recreate the Action class with a named action_fn
-
-    see also: ACTION_DICT (stores list of named classes for preprocessing)
-    """
-    # register the model in dictionary
-    ACTION_FN_DICT[build_name(action_fn)] = action_fn
-    # return the function
-    return action_fn
 
 
 # let's register some functions we might want to use from elsewhere in the code as action functions
@@ -200,12 +168,16 @@ class BaseAction:
         }
         # note: to_json will fail if params dictionary is not json-able
         d["params"] = d["params"].to_dict()  # pd.Series to dictionary
-        d["class"] = build_name(type(self))  # eg "opensoundscape.audio.Audio.from_file"
+        # string name of the class, eg "opensoundscape.audio.Audio"
+        d["class"] = io.build_name(type(self))
         return d
 
     @classmethod
     def from_dict(cls, dict):
-        """initialize from dictionary created by .to_dict()"""
+        """initialize from dictionary created by .to_dict()
+
+        override if subclass should be initialized with any arguments
+        """
 
         instance = cls()
 
@@ -297,7 +269,7 @@ class Action(BaseAction):
         re-load with `.from_dict(dict)`
         """
         d = super().to_dict(ignore_attributes=ignore_attributes)
-        d["action_fn"] = build_name(self.action_fn)
+        d["action_fn"] = io.build_name(self.action_fn)
         return d
 
     @classmethod
@@ -530,16 +502,17 @@ class Overlay(Action):
 
     @classmethod
     def from_dict(cls, dict):
+        # two attributes of the Overlay class are not json-friendly and not saved with to_dict;
+        # we instead initialize with an empty overlay_df and set criterion_fn to always_true
+        # we also initialize the Overlay action with bypass=True so that it is inactive by default
         dict["params"]["overlay_df"] = pd.DataFrame()
         dict["params"]["criterion_fn"] = always_true
         instance = super().from_dict(dict)
-        # since we don't have an overlay df, set this action to bypass mode
         instance.bypass = True
         warnings.warn(
             "Overlay class's .overlay_df will be None after loading from dict and `.criterion_fn` will be always_true(). "
             "Reset these attributes and set .bypass to False to use Overlay after loading with from_dict()."
         )
-        assert isinstance(instance, cls)  # make sure its not the parent type?
         return instance
 
 

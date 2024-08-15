@@ -1,8 +1,26 @@
-"""utilities for reading and writing action and preprocessor objects to disk"""
+"""utilities for serializing, reading, and writing Action and Preprocessor objects to/from files and dictionaries"""
 
 import json
 import numpy as np
 import yaml
+from types import MethodType, FunctionType
+
+
+def build_name(method_or_object):
+    """return the full function or class name
+
+    Args:
+        method_or_object: a method, object, or class
+
+    Returns: a string like "opensoundscape.module.Class.method"
+        - Note: if defined in a script, looks like "__main__.my_function"
+
+    """
+    prefix = method_or_object.__module__
+    if isinstance(method_or_object, (MethodType, FunctionType, type)):
+        # its a method/function or a class
+        return f"{prefix}.{method_or_object.__qualname__}"
+    return f"{prefix}.{type(method_or_object).__qualname__}"
 
 
 # Custom representer for NumPy dtypes

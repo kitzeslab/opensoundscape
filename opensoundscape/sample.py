@@ -89,6 +89,9 @@ class AudioSample(Sample):
                 and index as classes with 0/1 values as labels. Labels can have no values
                 (just a name) if sample does not have labels.
         """
+        # make a copy to avoid modifying original
+        labels_series = labels_series.copy()
+
         if type(labels_series.name) == tuple:
             # if the dataframe has a multi-index, it should be (file,start_time,end_time)
             assert (

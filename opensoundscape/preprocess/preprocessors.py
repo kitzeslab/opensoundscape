@@ -8,7 +8,7 @@ import json
 import yaml
 import pathlib
 
-from opensoundscape.preprocess import actions, action_functions
+from opensoundscape.preprocess import actions, action_functions, io
 from opensoundscape.preprocess.actions import (
     Action,
     Overlay,
@@ -29,7 +29,7 @@ PREPROCESSOR_CLS_DICT = {}
 def register_preprocessor_cls(cls):
     """add class to PREPROCESSOR_CLS_DICT"""
     # register the model in dictionary
-    PREPROCESSOR_CLS_DICT[actions.build_name(cls)] = cls
+    PREPROCESSOR_CLS_DICT[io.build_name(cls)] = cls
 
     # return the class (use as decorator)
     return cls
@@ -229,14 +229,19 @@ class BasePreprocessor:
         return sample
 
     def _generate_sample(self, sample):
-        """create AudioSample object from initial input: any of
-            (path, start time) tuple
-            pd.Series with (file, start_time, end_time) as .name
-                (eg index of a pd.DataFrame from which row was taken)
-            AudioSample object
+        """create AudioSample object from initial input:
 
         can override this method in subclasses to modify how samples
         are created, or to add additional attributes to samples
+
+        Args:
+            sample: can be any of
+            - (path, start time) tuple
+            - pd.Series with (file, start_time, end_time) as .name
+                (eg index of a pd.DataFrame from which row was taken)
+            - AudioSample object
+        Returns:
+            new AudioSample object
         """
         # handle paths or pd.Series as input for `sample`
         if isinstance(sample, tuple):
@@ -254,7 +259,8 @@ class BasePreprocessor:
                 "or pd.Series with (path, start_time, end_time) as .name. "
                 f"was {type(sample)}"
             )
-            pass  # leave it as an AudioSample
+            # make a copy to avoid modifying original
+            sample = copy.deepcopy(sample)
 
         # add attributes to the sample that might be needed by actions in the pipeline
         sample.preprocessor = self
@@ -303,7 +309,7 @@ class BasePreprocessor:
         }
 
         # save class name for re-creating the object; matches a key in PREPROCESSOR_CLS_DICT
-        d["class"] = actions.build_name(type(self))
+        d["class"] = io.build_name(type(self))
 
         return d
 
@@ -509,7 +515,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 "overlay": (
                     Overlay(
                         is_augmentation=True,
-                        overlay_df=overlay_df or pd.DataFrame(),  # if None, use empty
+                        overlay_df=pd.DataFrame() if overlay_df is None else overlay_df,
                         update_labels=False,
                     )
                 ),

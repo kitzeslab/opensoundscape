@@ -1,6 +1,6 @@
 """preprocessing and augmentation functions 
 
-these can be passed to the Action class (action_fn=...) to create a preprocessing action
+these can be passed to the Action class (action_fn=...) to create a preprocessing action that applies the function to a sample
 """
 
 import random
@@ -9,10 +9,29 @@ import torch
 import torchvision
 
 from opensoundscape.audio import Audio, mix
-from opensoundscape.preprocess.actions import (
-    register_action_fn,
-)
-from opensoundscape.preprocess import tensor_augment
+from opensoundscape.preprocess import tensor_augment, io
+
+ACTION_FN_DICT = dict()
+
+
+def list_action_fns():
+    """return list of available action function keyword strings
+    (can be used to initialize Action class)
+    """
+    return list(ACTION_FN_DICT.keys())
+
+
+def register_action_fn(action_fn):
+    """add function to ACTION_FN_DICT
+
+    this allows us to recreate the Action class with a named action_fn
+
+    see also: ACTION_DICT (stores list of named classes for preprocessing)
+    """
+    # register the model in dictionary
+    ACTION_FN_DICT[io.build_name(action_fn)] = action_fn
+    # return the function
+    return action_fn
 
 
 @register_action_fn
