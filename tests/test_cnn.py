@@ -447,7 +447,7 @@ def test_save_and_load_model_custom_arch(model_save_path):
     m = cnn.CNN(architecture=arch, classes=classes, sample_duration=1.0)
     m.save(model_save_path)
     m2 = cnn.load_model(model_save_path)
-    assert type(m2.model) == type(arch)
+    assert type(m2.network) == type(arch)
 
 
 def test_init_positional_args():
@@ -521,8 +521,8 @@ def test_save_and_load_weights(model_save_path):
     model1 = cnn.CNN(arch, classes=["a", "b"], sample_duration=5.0)
     model1.load_weights(model_save_path)
     assert np.array_equal(
-        model.model.state_dict()["conv1.weight"].numpy(),
-        model1.model.state_dict()["conv1.weight"].numpy(),
+        model.network.state_dict()["conv1.weight"].numpy(),
+        model1.network.state_dict()["conv1.weight"].numpy(),
     )
 
 
@@ -646,7 +646,7 @@ def test_generate_cams_target_layers(test_df):
     """specify multiple target layers for cam"""
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     _ = model.generate_cams(
-        test_df, target_layers=[model.model.layer3, model.model.layer4]
+        test_df, target_layers=[model.network.layer3, model.network.layer4]
     )
 
 

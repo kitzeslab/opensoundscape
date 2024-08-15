@@ -116,7 +116,7 @@ class BaseModule:
         The preprocessor contains .pipline, and ordered set of Actions to run
 
         preprocessor will have attributes .sample_duration (seconds)
-        and .height, .width, .channels for output shape (input shape to self.model)
+        and .height, .width, .channels for output shape (input shape to self.network)
         
         The pipeline can be modified by adding or removing actions, and by modifying parameters:
         ```python
@@ -143,7 +143,7 @@ class BaseModule:
         self.inference_dataloader_cls = SafeAudioDataloader
         """a DataLoader class to use for inference, defaults to SafeAudioDataloader"""
 
-        self.model = torch.nn.Module()
+        self.network = torch.nn.Module()
         """a pytorch Module such as Resnet18 or a custom object"""
 
         ### loss function ###
@@ -222,7 +222,7 @@ class BaseModule:
         # with torch.autocast(
         #     device_type=self.device, dtype=torch.float16, enabled=self.use_amp
         # ):
-        #     output = self.model(input)
+        #     output = self.network(input)
         #     loss = self.loss_fn(output, batch_labels)
 
         # if not self.lightning_mode:
@@ -259,7 +259,7 @@ class BaseModule:
                 device_type = "cpu"
                 dtype = torch.bfloat16
             with torch.autocast(device_type=device_type, dtype=dtype):
-                output = self.model(batch_tensors)
+                output = self.network(batch_tensors)
                 loss = self.loss_fn(output, batch_labels)
             if not self.lightning_mode:
                 # if not using Lightning, we manually call
@@ -270,7 +270,7 @@ class BaseModule:
                 self.scaler.update()
                 self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
         else:
-            output = self.model(batch_tensors)
+            output = self.network(batch_tensors)
             loss = self.loss_fn(output, batch_labels)
             if not self.lightning_mode:
                 # if not using Lightning, we manually call
@@ -348,7 +348,7 @@ class BaseModule:
         # copy the kwargs dict to avoid modifying the original values
         # when the optimizer is stepped
         optimizer = self.optimizer_params["class"](
-            self.model.parameters(), **self.optimizer_params["kwargs"].copy()
+            self.network.parameters(), **self.optimizer_params["kwargs"].copy()
         )
 
         # create learning rate scheduler
@@ -371,7 +371,7 @@ class BaseModule:
         batch_labels = batch_labels.to(self.device)
 
         batch_size = len(batch_tensors)
-        logits = self.model(batch_tensors)
+        logits = self.network(batch_tensors)
         loss = self.loss_fn(logits, batch_labels)
 
         # compute and log any metrics in self.torch_metrics
@@ -613,7 +613,7 @@ class SpectrogramModule(BaseModule):
                     f"Pytorch architectures generally expect 3 channels by default."
                 )
 
-        self.model = architecture
+        self.network = architecture
         """a pytorch Module such as Resnet18 or a custom object
 
         for convenience, __init__ also allows user to provide string matching
@@ -975,8 +975,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # move model to device
         try:
-            self.model.to(self.device)
-            self.model.eval()
+            self.network.to(self.device)
+            self.network.eval()
         except AttributeError:
             pass  # not a PyTorch model object
 
@@ -1102,7 +1102,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Returns:
             dictionary of evaluation metrics calculated with self.torch_metrics
         """
-        self.model.train()
+        self.network.train()
         batch_loss = []
 
         for batch_idx, (batch_tensors, batch_labels) in enumerate(
@@ -1147,7 +1147,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
     def _generate_wandb_config(self):
         # create a dictionary of parameters to save for this run
         wandb_config = dict(
-            architecture=io.build_name(self.model),
+            architecture=io.build_name(self.network),
             sample_duration=self.preprocessor.sample_duration,
             cuda_device_count=torch.cuda.device_count(),
             mps_available=torch.backends.mps.is_available(),
@@ -1310,7 +1310,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             log_freq = self.wandb_logging["watch_freq"]
             if log_freq is not None:
                 wandb_session.watch(
-                    self.model,
+                    self.network,
                     log="all",
                     log_freq=log_freq,
                     log_graph=(self.wandb_logging["log_graph"]),
@@ -1343,7 +1343,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             )
 
         # Move network to device
-        self.model.to(self.device)
+        self.network.to(self.device)
 
         ### Set Up DataLoader, Loss and Optimization ###
         train_loader = self.train_dataloader(
@@ -1367,10 +1367,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         optimizer = optimizer_and_scheduler["optimizer"]
         if self.optimizer is not None and not reset_optimizer:
             # load the state dict of the previously existing optimizer,
-            # updating the params references to match current instance of self.model
+            # updating the params references to match current instance of self.network
             try:
                 opt_state_dict = self.optimizer.state_dict().copy()
-                opt_state_dict["params"] = self.model.parameters()
+                opt_state_dict["params"] = self.network.parameters()
                 optimizer.load_state_dict(opt_state_dict)
             except:
                 warnings.warn(
@@ -1379,10 +1379,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 )
         if self.scheduler is not None and not restart_scheduler:
             # load the state dict of the previously existing scheduler,
-            # updating the params references to match current instance of self.model
+            # updating the params references to match current instance of self.network
             try:
                 scheduler_state_dict = self.scheduler.state_dict().copy()
-                scheduler_state_dict["params"] = self.model.parameters()
+                scheduler_state_dict["params"] = self.network.parameters()
                 scheduler.load_state_dict(scheduler_state_dict)
             except:
                 warnings.warn(
@@ -1492,7 +1492,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             # remove all forward and backward hooks on network.modules()
             from collections import OrderedDict
 
-            for m in model_copy.model.modules():
+            for m in model_copy.network.modules():
                 m._forward_hooks = OrderedDict()
                 m._backward_hooks = OrderedDict()
 
@@ -1505,11 +1505,11 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             # dictionary can be loaded with torch.load() to inspect individual components
             torch.save(
                 {
-                    "weights": self.model.state_dict(),
+                    "weights": self.network.state_dict(),
                     "class": io.build_name(self),
                     "classes": self.classes,
                     "sample_duration": self.preprocessor.sample_duration,
-                    "architecture": self.model.constructor_name,
+                    "architecture": self.network.constructor_name,
                     "preprocessor_dict": self.preprocessor.to_dict(),
                     "opensoundscape_version": opensoundscape.__version__,
                     # doesn't support resuming training across with optimizer/scheduler states
@@ -1554,7 +1554,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             state_dict = model_dict.pop("weights")
             class_name = model_dict.pop("class")
             model = cls(**model_dict)
-            model.model.load_state_dict(state_dict)
+            model.network.load_state_dict(state_dict)
         else:
             model = model_dict  # entire pickled object, not dictionary
             opso_version = model.opensoundscape_version
@@ -1566,12 +1566,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         This allows the saved weights to be used more flexibly than model.save()
         which will pickle the entire object. The weights are saved in a pickled
-        dictionary using torch.save(self.model.state_dict())
+        dictionary using torch.save(self.network.state_dict())
 
         Args:
             path: location to save weights file
         """
-        torch.save(self.model.state_dict(), path)
+        torch.save(self.network.state_dict(), path)
 
     def load_weights(self, path, strict=True):
         """load network weights state dict from a file
@@ -1583,12 +1583,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             path: file path with saved weights
             strict: (bool) see torch.load()
         """
-        self.model.load_state_dict(torch.load(path), strict=strict)
+        self.network.load_state_dict(torch.load(path), strict=strict)
 
     def __call__(self, dataloader, wandb_session=None, progress_bar=True):
         # move network to device
-        self.model.to(self.device)
-        self.model.eval()
+        self.network.to(self.device)
+        self.network.eval()
 
         # initialize scores
         pred_scores = []
@@ -1602,7 +1602,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 batch_tensors.requires_grad = False
 
                 # forward pass of network: feature extractor + classifier
-                logits = self.model(batch_tensors)
+                logits = self.network(batch_tensors)
 
                 # disable gradients on returned values
                 pred_scores.extend(list(logits.detach().cpu().numpy()))
@@ -1697,23 +1697,23 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # if target_layer is None, attempt to retrieve default target layers of network
         if target_layers is None:
             try:
-                target_layers = self.model.cam_target_layers
+                target_layers = self.network.cam_target_layers
             except AttributeError as exc:
                 raise AttributeError(
                     "Please specify target_layers. Models trained with older versions of Opensoundscape do not have default target layers"
-                    "For a ResNET model, try target_layers=[model.model.layer4]"
+                    "For a ResNET model, try target_layers=[model.network.layer4]"
                 ) from exc
-        else:  # check that target_layers are modules of self.model
+        else:  # check that target_layers are modules of self.network
             for tl in target_layers:
                 assert (
-                    tl in self.model.modules()
-                ), "target_layers must be in self.model.modules(), but {tl} is not."
+                    tl in self.network.modules()
+                ), "target_layers must be in self.network.modules(), but {tl} is not."
 
         ## INITIALIZE CAMS AND DATALOADER ##
         # move model to device
         # TODO: choose cuda or not in pytorch_grad_cam methods
-        self.model.to(self.device)
-        self.model.eval()
+        self.network.to(self.device)
+        self.network.eval()
 
         # initialize cam object: `method` is either str in methods_dict keys, or the class
         methods_dict = {
@@ -1731,12 +1731,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         }
         if isinstance(method, str) and method in methods_dict:
             # get cam clsas based on string name and create instance
-            cam = methods_dict[method](model=self.model, target_layers=target_layers)
+            cam = methods_dict[method](model=self.network, target_layers=target_layers)
         elif method is None:
             cam = None
         elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
             # generate instance of cam from class
-            cam = method(model=self.model, target_layers=target_layers)
+            cam = method(model=self.network, target_layers=target_layers)
         else:
             raise ValueError(
                 f"`method` {method} not supported. "
@@ -1747,7 +1747,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # initialize guided back propagation object
         if guided_backprop:
             gb_model = pytorch_grad_cam.GuidedBackpropReLUModel(
-                model=self.model, device=self.device
+                model=self.network, device=self.device
             )
             # TODO cuda usage - expose? use model setting?
 
@@ -1774,7 +1774,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             batch_tensors.requires_grad = False
 
             # generate logits with forward pass
-            logits = self.model(batch_tensors)
+            logits = self.network(batch_tensors)
 
             # generate class activation maps using cam object
             def target(class_name):
@@ -1914,13 +1914,13 @@ def separate_resnet_feat_clf(model):
     # https://pytorch.org/docs/stable/optim.html#per-parameter-options
     model.optimizer_params["kwargs"] = {
         "feature": {  # optimizer parameters for feature extraction layers
-            # "params": self.model.feature.parameters(),
+            # "params": self.network.feature.parameters(),
             "lr": 0.001,
             "momentum": 0.9,
             "weight_decay": 0.0005,
         },
         "classifier": {  # optimizer parameters for classification layers
-            # "params": self.model.classifier.parameters(),
+            # "params": self.network.classifier.parameters(),
             "lr": 0.01,
             "momentum": 0.9,
             "weight_decay": 0.0005,
@@ -1940,12 +1940,12 @@ def separate_resnet_feat_clf(model):
         # separately
         feature_extractor_params_list = [
             param
-            for name, param in self.model.named_parameters()
+            for name, param in self.network.named_parameters()
             if not name.split(".")[0] == "fc"
         ]
         classifier_params_list = [
             param
-            for name, param in self.model.named_parameters()
+            for name, param in self.network.named_parameters()
             if name.split(".")[0] == "fc"
         ]
         self.optimizer_params["kwargs"]["feature"][
@@ -2063,7 +2063,7 @@ class InceptionV3(SpectrogramClassifier):
         # with torch.autocast(
         #     device_type=self.device, dtype=torch.float16, enabled=self.use_amp
         # ):
-        #     output = self.model(input)
+        #     output = self.network(input)
         #     loss = self.loss_fn(output, batch_labels)
 
         # if not self.lightning_mode:
@@ -2103,7 +2103,7 @@ class InceptionV3(SpectrogramClassifier):
                 device_type=device_type, dtype=dtype
             ):  # , enabled=self.use_amp
                 # ):
-                inception_outs = self.model(batch_tensors)
+                inception_outs = self.network(batch_tensors)
                 logits = inception_outs.logits
                 aux_logits = inception_outs.aux_logits
 
@@ -2119,10 +2119,10 @@ class InceptionV3(SpectrogramClassifier):
                 self.scaler.update()
                 self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
         else:
-            output = self.model(batch_tensors)
+            output = self.network(batch_tensors)
 
             # calculate loss
-            inception_outs = self.model(batch_tensors)
+            inception_outs = self.network(batch_tensors)
             logits = inception_outs.logits
             aux_logits = inception_outs.aux_logits
 
@@ -2216,7 +2216,7 @@ def load_model(path, device=None):
             This model file could not be loaded in this version of
             OpenSoundscape. You may need to load the model with the version
             of OpenSoundscape that created it and torch.save() the
-            model.model.state_dict(), then load the weights with model.load_weights
+            model.network.state_dict(), then load the weights with model.load_weights
             in the current OpenSoundscape version (where model is a new instance of 
             this class). If you do this, make sure to
             re-create any specific preprocessing steps that were used in the
@@ -2234,7 +2234,7 @@ def load_model(path, device=None):
 #     If your model was saved with .save() in a previous version of OpenSoundscape
 #     >=0.6.0, you must re-load the model
 #     using the original package version and save it's network's state dict, i.e.,
-#     `torch.save(model.model.state_dict(),path)`, then load the state dict
+#     `torch.save(model.network.state_dict(),path)`, then load the state dict
 #     to a new model object with model.load_weights(). See the
 #     `Predict with pre-trained CNN` tutorial for details.
 
@@ -2281,7 +2281,7 @@ def load_model(path, device=None):
 #             "This model could not be loaded in this version of "
 #             "OpenSoundscape. You may need to load the model with the version "
 #             "of OpenSoundscape that created it and torch.save() the "
-#             "model.model.state_dict(), then load the weights with model.load_weights"
+#             "model.network.state_dict(), then load the weights with model.load_weights"
 #         ) from exc
 
 #     if type(model_dict) != dict:
@@ -2312,7 +2312,7 @@ def load_model(path, device=None):
 #     }
 
 #     # load the state dictionary of the network, allowing mismatches
-#     mismatched_keys = model.model.load_state_dict(
+#     mismatched_keys = model.network.load_state_dict(
 #         model_dict["model_state_dict"], strict=False
 #     )
 #     print("mismatched keys:")

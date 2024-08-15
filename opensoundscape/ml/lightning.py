@@ -59,7 +59,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         """
         batch_tensors, _ = samples
         batch_tensors = batch_tensors.to(self.device)
-        return self.model(batch_tensors)
+        return self.network(batch_tensors)
 
     def save(self, path, save_hooks=False, weights_only=False):
         """save model with weights using Trainer.save_checkpoint()
@@ -96,7 +96,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             # remove all forward and backward hooks on network.modules()
             from collections import OrderedDict
 
-            for m in model_copy.model.modules():
+            for m in model_copy.network.modules():
                 m._forward_hooks = OrderedDict()
                 m._backward_hooks = OrderedDict()
 
@@ -109,12 +109,12 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
 
         This allows the saved weights to be used more flexibly than model.save()
         which will pickle the entire object. The weights are saved in a pickled
-        dictionary using torch.save(self.model.state_dict())
+        dictionary using torch.save(self.network.state_dict())
 
         Args:
             path: location to save weights file
         """
-        torch.save(self.model.state_dict(), path)
+        torch.save(self.network.state_dict(), path)
 
     def load_weights(self, path, strict=True):
         """load network weights state dict from a file
@@ -126,7 +126,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             path: file path with saved weights
             strict: (bool) see torch.Module.load_state_dict()
         """
-        self.model.load_state_dict(torch.load(path), strict=strict)
+        self.network.load_state_dict(torch.load(path), strict=strict)
 
     def fit_with_trainer(
         self,
@@ -248,7 +248,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             log_freq = self.wandb_logging["watch_freq"]
             if log_freq is not None:
                 wandb_session.watch(
-                    self.model,
+                    self.network,
                     log="all",
                     log_freq=log_freq,
                     log_graph=(self.wandb_logging["log_graph"]),
