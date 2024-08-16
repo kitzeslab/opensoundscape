@@ -54,7 +54,8 @@ requests=">=2.31.0"
 werkzeug=">=3.0.1"
 
 
-crowsetta = "^5.0.1"
+crowsetta = "==5.0.1"
+pandera = "<0.20" # https://github.com/kitzeslab/opensoundscape/issues/1017
 
 [tool.poetry.dev-dependencies]
 black = "~=24.3"
