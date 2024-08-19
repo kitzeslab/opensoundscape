@@ -116,21 +116,23 @@ class SpatialEvent:
                 default: True
 
         Returns:
-            Location estimate as cartesian coordinates (x,y) or (x,y,z) (units: meters)
+            Copy of self with updated .location_estimate as cartesian coordinates (x,y) or (x,y,z) (units: meters)
 
         Effects:
-            sets the value of self.location_estimate to the same value as the returned location
+            sets the value of self.location_estimate
         """
         # If no values are already stored, perform generalized cross correlation to estimate time delays
         # or if user wants to re-estimate the time delays, perform generalized cross correlation to estimate time delays
         if self.tdoas is None or self.cc_maxs is None or use_stored_tdoas is False:
             self._estimate_delays()  # Stores the results in the the attributes self.cc_maxs and self.tdoas
 
+        # Sets the attributes self.location_estimate, self.receivers_used_for_localization,
+        # self.distance_residuals, and self.residual_rms
         location_estimate = self._localize_after_cross_correlation(
             localization_algorithm=localization_algorithm
         )
-        # Sets the attributes self.location_estimate, self.receivers_used_for_localization, self.distance_residuals, self.residual_rms
-        return location_estimate
+
+        return self
 
     def _estimate_delays(self):
         """Hidden method to estimate time delay of event relative to receiver_files[0] with gcc
@@ -656,9 +658,8 @@ class SynchronizedRecorderArray:
         # this calls estimate_delays under the hood
         from joblib import Parallel, delayed
 
-        # since .estiamte_location() modifies the object in place,
-        # we don't need to return the objects.
-        Parallel(n_jobs=num_workers)(
+        # parallelize the localization of each event across cpus
+        events = Parallel(n_jobs=num_workers)(
             delayed(e.estimate_location)(localization_algorithm=localization_algorithm)
             for e in candidate_events
         )
@@ -667,14 +668,14 @@ class SynchronizedRecorderArray:
         # (e.g. too few receivers, too few receivers after applying cc_threshold or high residual in localization)
         unlocalized_events = [
             e
-            for e in candidate_events
+            for e in events
             if (e.location_estimate is None or e.residual_rms > residual_threshold)
         ]
 
         # list of events that were successfully localized
         localized_events = [
             e
-            for e in candidate_events
+            for e in events
             if (
                 e.location_estimate is not None and e.residual_rms <= residual_threshold
             )

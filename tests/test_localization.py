@@ -341,16 +341,20 @@ def test_localization_pipeline_parallelized(LOCA_2021_aru_coords, LOCA_2021_dete
         localization_algorithm="gillette",
         cc_filter="phat",
         bandpass_ranges={"zeep": (7000, 10000)},
-        num_workers=4,
+        num_workers=2,
     )
 
     true_TDOAS = np.array(
         [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
     )  # with reference receiver LOCA_2021_3...
 
+    assert len(localized_events) == 6
+    checked = False
     for event in localized_events:
         if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
             assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
+            checked = True
+    assert checked
 
 
 def test_localization_pipeline_cc_filters(LOCA_2021_aru_coords, LOCA_2021_detections):
@@ -366,7 +370,7 @@ def test_localization_pipeline_cc_filters(LOCA_2021_aru_coords, LOCA_2021_detect
             localization_algorithm="gillette",
             cc_filter=cc_filter,
             bandpass_ranges={"zeep": (7000, 10000)},
-            num_workers=4,
+            num_workers=1,
         )
         for event in localized_events:
             if event.receiver_files[0] == "tests/audio/LOCA_2021_09_24_652_3.wav":
