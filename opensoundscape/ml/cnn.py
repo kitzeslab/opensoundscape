@@ -1586,13 +1586,73 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         """
         self.network.load_state_dict(torch.load(path), strict=strict)
 
-    def __call__(self, dataloader, wandb_session=None, progress_bar=True):
+    def __call__(
+        self,
+        dataloader,
+        wandb_session=None,
+        progress_bar=True,
+        intermediate_layers=None,
+        avgpool_intermediates=True,
+    ):
+        """Run inference on a dataloader, generating scores for each sample
+
+        Optionally also return outputs from intermediate layers
+
+        Args:
+            dataloader: DataLoader object to create samples, e.g. from .predict_dataloader()
+            wandb_session: a wandb session to log progress to (e.g. return value of wandb.init())
+            progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
+            intermediate_layers: list of layers to return outputs from
+                [default: None] if None, only returns final layer outputs
+                if a list of layers is provided, returns a second value
+                with outputs from each layer. Example: [self.model.layer1]
+            avgpool_intermediates: bool, if True, applies global average pooling to intermediate outputs
+                i.e. averages across all dimensions except first to get a 1D vector per sample
+                [default: True] (note that False may results in large memory usage)
+
+        Returns:
+            if intermediate outputs is None, returns
+            `scores`: np.array of scores for each sample
+
+            if intermediate_outputs is not None, returns a tuple:
+            `(scores, intermediate_outputs)` where intermediate_outputs is
+            a list of tensors, the outputs from each layer in intermediate_layers
+        """
+
+        if not isinstance(dataloader, torch.utils.data.DataLoader):
+            warnings.warn(
+                "dataloader is not an instance of torch.utils.data.DataLoader!"
+            )
+
         # move network to device
         self.network.to(self.device)
         self.network.eval()
 
         # initialize scores
         pred_scores = []
+
+        # init a variable to save outputs of each batch for each target layer
+        intermediate_layers = intermediate_layers or []
+        intermediate_outputs = [[] for _ in intermediate_layers]
+
+        # define a function that will be used to save the output of each target layer
+        # during inference
+        def forward_hook_to_save_output(layer_name, idx):
+            def hook(module, input, output):
+                if avgpool_intermediates:
+                    # apply global average pooling to intermediate outputs
+                    # (average across all dimensions except first to get a 1D vector per sample)
+                    # (also skip batch dimension: so start averaging from dim 2)
+                    if output.dim() > 2:
+                        output = output.mean(list(range(2, output.dim())))
+                intermediate_outputs[idx].append(output)
+
+            return hook
+
+        # initialize forward hooks to save intermediate outputs
+        fhooks = []  # keep the handles so we can remove the hooks later
+        for idx, l in enumerate(intermediate_layers):
+            fhooks.append(l.register_forward_hook(forward_hook_to_save_output(l, idx)))
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
@@ -1617,16 +1677,33 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                         }
                     )
 
+        # clean up by removing forward hooks
+        for fh in fhooks:
+            fh.remove()
+
         # aggregate across all batches
         if len(pred_scores) > 0:
             pred_scores = np.array(pred_scores)
+
+            # aggregate across batches
+            # note that shapes of elements in intermediate_outputs may vary
+            # (so we don't make one combined np.array)
+            intermediate_outputs = [
+                torch.vstack(x).squeeze().detach().cpu().numpy()
+                for x in intermediate_outputs
+            ]
+
             # replace scores with nan for samples that failed in preprocessing
             # (we predicted on substitute-samples rather than
             # skipping the samples that failed preprocessing)
             pred_scores[dataloader.dataset._invalid_indices, :] = np.nan
+            for i in range(len(intermediate_outputs)):
+                intermediate_outputs[i][dataloader.dataset._invalid_indices, :] = np.nan
         else:
             pred_scores = None
 
+        if len(intermediate_layers) > 0:
+            return pred_scores, intermediate_outputs
         return pred_scores
 
     def generate_cams(
@@ -1856,6 +1933,69 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # return list of AudioSamples containing .cam attributes
         return generated_samples
 
+    def embed(
+        self,
+        samples,
+        target_layer=None,
+        progress_bar=True,
+        return_preds=False,
+        avgpool=True,
+        **kwargs,
+    ):
+        """
+        Generate embeddings (intermediate layer outputs) for audio files/clips
+
+        Note: to capture embeddings on multiple layers, use self.__call__ with intermediate_layers
+
+        Args:
+            samples: (same as CNN.predict())
+            target_layers: layers from self.model._modules to extract outputs from
+                - if None, attempts to use self.model.embedding_target_layer default value
+            progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
+            avgpool: bool, if True, applies global average pooling to embeddings [default: True]
+                i.e. averages across all dimensions except first to get a 1D vector per sample
+            kwargs are passed to self.predict_dataloader()
+
+        Returns:
+            if return_preds is False, returns `embeddings` , and np.array of shape [n_samples, ...]
+            if return_preds is True, returns a tuple:
+                `(embeddings, preds)` where `preds` is the raw model output (e.g. logits, no activation layer)
+
+        """
+        # if target_layer is None, attempt to retrieve default target layers of network
+        if target_layer is None:
+            try:
+                target_layer = self.network.embedding_target_layer
+            except AttributeError as exc:
+                raise AttributeError(
+                    "Please specify target_layer. Models trained with older versions of Opensoundscape, "
+                    "or custom architectures, do not have default .embedding_target_layer property. "
+                    "e.g. For a ResNET model, try target_layers=[self.model.layer4]"
+                ) from exc
+        else:  # check that target_layers are modules of self.model
+            assert (
+                target_layer in self.network.modules()
+            ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
+
+        # for convenience, convert `samples` str/pathlib.Path to list of length 1
+        if isinstance(samples, (str, Path)):
+            samples = [samples]
+
+        # create dataloader to generate batches of AudioSamples
+        dataloader = self.predict_dataloader(samples, **kwargs)
+
+        # run inference, returns (scores, intermediate_outputs)
+        preds, embeddings = self(
+            dataloader=dataloader,
+            progress_bar=progress_bar,
+            intermediate_layers=[target_layer],
+            avgpool_intermediates=avgpool,
+        )
+
+        if return_preds:
+            return embeddings[0], preds
+        return embeddings[0]
+
     @property
     def device(self):
         return self._device
@@ -2000,7 +2140,6 @@ class InceptionV3(SpectrogramClassifier):
             sample_duration: duration in seconds of one audio sample
             single_target: if True, predict exactly one class per sample
                 [default:False]
-            preprocessor_class: a class to use for preprocessor object
             freeze-feature_extractor:
                 if True, feature weights don't have
                 gradient, and only final classification layer is trained
