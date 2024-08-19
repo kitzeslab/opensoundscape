@@ -213,7 +213,7 @@ class BasePreprocessor:
                 "or pd.Series with (path, start_time, end_time) as .name. "
                 f"was {type(sample)}"
             )
-            pass  # leave it as an AudioSample
+            sample = copy.deepcopy(sample)  # leave it as an AudioSample
 
         # add attributes to the sample that might be needed by actions in the pipeline
         sample.preprocessor = self

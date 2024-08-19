@@ -35,6 +35,12 @@ def test_repr(preprocessor):
     print(preprocessor)
 
 
+def test_generate_sample_makes_copy(preprocessor, sample):
+    sample_copy = preprocessor._generate_sample(sample)
+    assert sample_copy is not sample
+    assert sample_copy.labels is not sample.labels
+
+
 def test_remove_action(preprocessor):
     original_length = len(preprocessor.pipeline)
     preprocessor.remove_action("load_audio")
@@ -130,20 +136,20 @@ def test_noisereduceaudiopreprocessor(sample):
     p2 = preprocessors.NoiseReduceAudioPreprocessor(
         sample_duration=1, sample_rate=16000, noisereduce_kwargs=dict(prop_decrease=0.5)
     )
-    s1 = p1.forward(copy(sample)).data
-    s2 = p2.forward(copy(sample)).data
+    s1 = p1.forward(sample, bypass_augmentations=True).data
+    s2 = p2.forward(sample, bypass_augmentations=True).data
     assert s1.rms < s2.rms
 
 
-def test_noisereducespectrogrampreprocessor(sample):
+def test_noisereducespectrogrampreprocessor(short_sample):
     p1 = preprocessors.NoiseReduceSpectrogramPreprocessor(
         sample_duration=1, noisereduce_kwargs=dict(prop_decrease=1)
     )
     p2 = preprocessors.NoiseReduceSpectrogramPreprocessor(
         sample_duration=1, noisereduce_kwargs=dict(prop_decrease=0.5)
     )
-    s1 = p1.forward(copy(sample)).data
-    s2 = p2.forward(copy(sample)).data
+    s1 = p1.forward(short_sample, bypass_augmentations=True).data
+    s2 = p2.forward(short_sample, bypass_augmentations=True).data
     assert s1.mean() < s2.mean()
 
 
