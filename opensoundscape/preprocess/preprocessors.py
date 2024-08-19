@@ -158,8 +158,8 @@ class BasePreprocessor:
                         sample.trace.loc[k] = f"## Bypassed ## {sample.trace[k]}"
                     continue
 
-                # perform the action (modifies the AudioSample in-place)
-                action.go(sample)
+                # perform the action on the sample (modifies the AudioSample in-place)
+                action(sample)
 
                 if profile:
                     sample.runtime[k] = time.time() - time0
@@ -272,9 +272,9 @@ class SpectrogramPreprocessor(BasePreprocessor):
         self.channels = channels
 
         # define a default set of Actions
-        # each Action's .go() method is called during preprocessing
-        # the .go() method takes an AudioSample object as an argument
-        # and modifies it _in place_.
+        # each Action's .__call__ method is called during preprocessing
+        # the .__call__ method takes an AudioSample object as an argument
+        # and modifies it _in place_!!
         self.pipeline = pd.Series(
             {
                 # load a segment of an audio file into an Audio object
