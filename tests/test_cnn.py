@@ -762,13 +762,13 @@ def test_call_with_intermediate_layers(test_df):
     )
     dl = model.predict_dataloader(test_df)
     preds, intermediate_outs = model(
-        dl, intermediate_layers=[model.model.layer1, model.model.layer4]
+        dl, intermediate_layers=[model.network.layer1, model.network.layer4]
     )
     assert len(intermediate_outs) == 2
     assert np.shape(intermediate_outs[0]) == (2, 64)
     assert np.shape(intermediate_outs[1]) == (2, 512)
     preds, intermediate_outs = model(
-        dl, intermediate_layers=[model.model.layer4], avgpool_intermediates=False
+        dl, intermediate_layers=[model.network.layer4], avgpool_intermediates=False
     )
     assert len(intermediate_outs) == 1
     assert np.shape(intermediate_outs[0]) == (2, 512, 7, 7)
