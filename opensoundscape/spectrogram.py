@@ -13,6 +13,7 @@ import torch
 import matplotlib
 from matplotlib import pyplot as plt
 import matplotlib.colors
+import torch.nn.functional as F
 
 from opensoundscape.audio import Audio
 from opensoundscape.utils import min_max_scale, linear_scale
@@ -534,6 +535,7 @@ class Spectrogram:
         invert=False,
         return_type="pil",
         range=(-100, -20),
+        use_skimage=False,
     ):
         """Create an image from spectrogram (array, tensor, or PIL.Image)
 
@@ -558,6 +560,9 @@ class Spectrogram:
                 - 'torch': torch.tensor
             range: tuple of (min,max) values of .spectrogram to map to the lowest/highest
                 pixel values. Values outside this range will be clipped to the min/max values
+            use_skimage: if True, use skimage.transform.resize to resize the image
+                [default: False] is recommended and 10-100x faster, but True can be used
+                to match the behavior of OpenSoundscape <0.11.0
         Returns:
             Image/array with type depending on `return_type`:
             - PIL.Image with c channels and shape w,h given by `shape`
@@ -606,29 +611,39 @@ class Spectrogram:
             if shape[1] is None:
                 shape[1] = np.shape(array)[1]
 
-        import torch.nn.functional as F
+        if use_skimage:
+            # match legacy behavior of OpenSoundscape <0.11.0
+            # skimage is 10-100x slower than torch
+            image = skimage.transform.resize(array, (shape[0], shape[1], channels))
+            image = torch.Tensor(image)
+            if len(image.shape) == 2:  # add channel dim to front
+                image = image.unsqueeze(0)
+            else:  # move channel dim to front
+                image = image.permute(2, 0, 1)
+        else:
+            # use torch, much faster than skimage
 
-        # make tensor; copy to avoid an error about -1 stride
-        tensor = torch.Tensor(array.copy())
+            # make tensor; copy to avoid an error about -1 stride
+            tensor = torch.Tensor(array.copy())
 
-        if len(tensor.shape) == 2:  # add channel dim to front
+            if len(tensor.shape) == 2:  # add channel dim to front
+                tensor = tensor.unsqueeze(0)
+            else:  # move channel dim to front
+                tensor = tensor.permute(2, 0, 1)
+            # add batch dim
             tensor = tensor.unsqueeze(0)
-        else:  # move channel dim to front
-            tensor = tensor.permute(2, 0, 1)
-        # add batch dim
-        tensor = tensor.unsqueeze(0)
 
-        # copy over channel dimension if needed
-        tensor = tensor.expand(-1, channels, -1, -1)
+            # copy over channel dimension if needed
+            tensor = tensor.expand(-1, channels, -1, -1)
 
-        # interpolate to desired shape
-        image = F.interpolate(
-            tensor,
-            size=(shape[0], shape[1]),
-            mode="bilinear",
-            align_corners=False,
-        )
-        image = image.squeeze(0)  # remove leading batch dim
+            # interpolate to desired shape
+            image = F.interpolate(
+                tensor,
+                size=(shape[0], shape[1]),
+                mode="bilinear",
+                align_corners=False,
+            )
+            image = image.squeeze(0)  # remove leading batch dim
 
         if return_type == "np":
             image = image.numpy()

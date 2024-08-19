@@ -156,26 +156,54 @@ def test_spectrogram_to_tensor(sample, sample_audio):
 
 
 def test_spectrogram_to_tensor_range(sample, sample_audio):
-    """ensure that range is limited to 0,1 and values are scaled correctly"""
+    """ensure that range is limited to 0,1 and values are scaled correctly
+
+    compare values of image to expected values, for both use_skimage=True and False
+
+    use_skimage=True is the legacy behavior, and should be tested to ensure that it still
+    produces the same values. use_skimage=False uses torch, is faster, and produces slightly
+    different values
+    """
     action = actions.SpectrogramToTensor(range=(-80, 0))
-    sample.data = Spectrogram.from_audio(sample_audio.data)
+
     # these attributes normally get set in SpectrogramPreprocessor._generate_sample
     sample.height = 20
     sample.width = 30
     sample.channels = 1
 
-    action.__call__(sample)  # converts .data from Spectrogram to Tensor
+    # test default behavior using torch
+    sample.data = Spectrogram.from_audio(sample_audio.data)
+    action(sample)
     assert isinstance(sample.data, torch.Tensor)
     assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
     assert math.isclose(sample.data.min(), 0.0, abs_tol=1e-6) and sample.data.max() < 1
-    assert math.isclose(sample.data.mean(), 0.0442, abs_tol=1e-4)
+    assert math.isclose(sample.data.mean(), 0.040718697011470795, abs_tol=1e-6)
+
+    # and with lower db range
+    sample.data = Spectrogram.from_audio(sample_audio.data)
+    action.set(range=(-150, -90))
+    action(sample)
+    assert isinstance(sample.data, torch.Tensor)
+    assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
+    assert sample.data.min() > 0 and math.isclose(sample.data.max(), 1.0, abs_tol=1e-6)
+    assert math.isclose(sample.data.mean(), 0.8361802697181702, abs_tol=1e-6)
+
+    # test matching legacy behavior with use_skimage=True
+    action.set(use_skimage=True)
+    action.set(range=(-80, 0))
+    sample.data = Spectrogram.from_audio(sample_audio.data)
+    action(sample)  # converts .data from Spectrogram to Tensor
+    assert isinstance(sample.data, torch.Tensor)
+    assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
+    assert math.isclose(sample.data.min(), 0.0, abs_tol=1e-6) and sample.data.max() < 1
+    assert math.isclose(sample.data.mean(), 0.044159847293801575, abs_tol=1e-6)
 
     # repeat with lower range
-    action = actions.SpectrogramToTensor(range=(-150, -90))
+    action.set(range=(-150, -90))
     sample.data = Spectrogram.from_audio(sample_audio.data)
-    action.__call__(sample)  # converts .data from Spectrogram to Tensor
+    action(sample)  # converts .data from Spectrogram to Tensor
     assert sample.data.min() > 0 and math.isclose(sample.data.max(), 1.0, abs_tol=1e-6)
-    assert math.isclose(sample.data.mean(), 0.8427, abs_tol=1e-4)
+    assert math.isclose(sample.data.mean(), 0.8427285774873222, abs_tol=1e-6)
 
 
 def test_spectrogram_to_tensor_retain_shape(sample, sample_audio):
