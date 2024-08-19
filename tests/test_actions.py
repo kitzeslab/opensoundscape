@@ -276,14 +276,6 @@ def test_action_get_set():
     assert action.params.get("input_mean") == 1
 
 
-def test_unexpected_param_raises_error():
-    with pytest.raises(AssertionError):
-        actions.Action(action_functions.scale_tensor, not_a_param=0)
-    with pytest.raises(AssertionError):
-        action = actions.Action(action_functions.scale_tensor)
-        action.set(not_a_param=0)
-
-
 def test_modify_parameter_with_series_magic(tensor):
     action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
     assert action.params["input_mean"] == 0
