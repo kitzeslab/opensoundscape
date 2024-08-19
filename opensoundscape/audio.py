@@ -34,6 +34,7 @@ import soundfile
 import IPython.display
 from aru_metadata_parser.parse import parse_audiomoth_metadata
 from aru_metadata_parser.utils import load_metadata
+import noisereduce
 
 import opensoundscape
 from opensoundscape.utils import generate_clip_times_df
@@ -709,6 +710,21 @@ class Audio:
         samples = self.samples * (10 ** (dB / 20))
         if clip_range is not None:
             samples = np.clip(samples, clip_range[0], clip_range[1])
+        return self._spawn(samples=samples)
+
+    def reduce_noise(self, noisereduce_kwargs=None):
+        """Reduce noise in audio signal using noisereduce package
+
+        Args:
+            noisereduce_kwargs: dictionary of args to pass to noisereduce.reduce_noise
+
+        Returns:
+            Audio object with noise reduction applied
+        """
+        noisereduce_kwargs = noisereduce_kwargs or {}
+        samples = noisereduce.reduce_noise(
+            self.samples, sr=self.sample_rate, **noisereduce_kwargs
+        )
         return self._spawn(samples=samples)
 
     def save(
