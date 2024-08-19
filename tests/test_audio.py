@@ -372,6 +372,8 @@ def test_load_not_a_file_asserts_not_a_file(not_a_file_str):
 
 
 def test_load_metadata(veryshort_wav_str):
+    m_dict = audio.parse_metadata(veryshort_wav_str)
+    assert m_dict["samplerate"] == 44100
     a = Audio.from_file(veryshort_wav_str)
     assert a.metadata["samplerate"] == 44100
 
