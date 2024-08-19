@@ -18,6 +18,7 @@ from opensoundscape.preprocess.actions import (
 )
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 from opensoundscape.spectrogram import Spectrogram
+from opensoundscape.audio import Audio
 from opensoundscape.sample import AudioSample
 from opensoundscape.preprocess.actions import ACTION_CLS_DICT
 from opensoundscape.preprocess import io
@@ -580,4 +581,93 @@ class AudioPreprocessor(BasePreprocessor):
                     target_duration=sample_duration, extend=extend_short_clips
                 ),
             }
+        )
+
+
+class NoiseReduceAudioPreprocessor(AudioPreprocessor):
+    def __init__(
+        self,
+        sample_duration,
+        sample_rate,
+        extend_short_clips=True,
+        noisereduce_kwargs=None,
+    ):
+        """Preprocessor that reduces noise in audio signal and returns Audio objects
+
+        uses package noisereduce (documentation: https://pypi.org/project/noisereduce/) by Tim Sainburg
+
+        see also: discusion of stationary and non-stationary noise reduction in this paper
+        https://www.frontiersin.org/journals/behavioral-neuroscience/articles/10.3389/fnbeh.2021.811737/full
+
+
+        Args:
+            sample_duration: length in seconds of audio samples generated
+            sample_rate: target sample rate. [default: None] does not resample
+            extend_short_clips: if True, clips shorter than sample_duration are extended with silence
+            noisereduce_kwargs: dictionary of args to pass to noisereduce.reduce_noise()
+        """
+        # Note that noisereduce package implements torch integration w/gpu acceleration, which we may want to use?
+        noisereduce_kwargs = noisereduce_kwargs or {}
+        super().__init__(
+            sample_duration=sample_duration,
+            sample_rate=sample_rate,
+            extend_short_clips=extend_short_clips,
+        )
+        self.insert_action(
+            "noise_reduce",
+            after_key="trim_audio",
+            action=Action(
+                Audio.reduce_noise,
+                is_augmentation=False,
+                noisereduce_kwargs=noisereduce_kwargs,
+            ),
+        )
+
+
+class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
+    def __init__(
+        self,
+        sample_duration,
+        overlay_df=None,
+        height=None,
+        width=None,
+        channels=1,
+        noisereduce_kwargs=None,
+    ):
+        """Preprocessor that reduces noise in audio samples before creating spectrogram
+
+        uses package noisereduce (documentation: https://pypi.org/project/noisereduce/) by Tim Sainburg
+
+        see also: discusion of stationary and non-stationary noise reduction in this paper
+        https://www.frontiersin.org/journals/behavioral-neuroscience/articles/10.3389/fnbeh.2021.811737/full
+
+
+        Args:
+            sample_duration: length in seconds of audio samples generated
+            overlay_df: if not None, will include an overlay action drawing
+                samples from this df
+            height: height of output sample (frequency axis)
+                - default None will use the original height of the spectrogram
+            width: width of output sample (time axis)
+                -  default None will use the originalwidth of the spectrogram
+            channels: number of channels in output sample (default 1)
+            noisereduce_kwargs: dictionary of args to pass to noisereduce.reduce_noise()
+        """
+        # Note that noisereduce package implements torch integration w/gpu acceleration, which we may want to use?
+        noisereduce_kwargs = noisereduce_kwargs or {}
+        super().__init__(
+            sample_duration=sample_duration,
+            overlay_df=overlay_df,
+            height=height,
+            width=width,
+            channels=channels,
+        )
+        self.insert_action(
+            "noise_reduce",
+            after_key="trim_audio",
+            action=Action(
+                Audio.reduce_noise,
+                is_augmentation=False,
+                noisereduce_kwargs=noisereduce_kwargs,
+            ),
         )

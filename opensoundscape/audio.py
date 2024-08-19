@@ -34,6 +34,7 @@ import soundfile
 import IPython.display
 from aru_metadata_parser.parse import parse_audiomoth_metadata
 from aru_metadata_parser.utils import load_metadata
+import noisereduce
 
 import opensoundscape
 from opensoundscape.utils import generate_clip_times_df
@@ -268,7 +269,7 @@ class Audio:
 
         ## Load Metadata ##
         if load_metadata:
-            metadata = _metadata_from_file_handler(path)
+            metadata = parse_metadata(path)
         else:
             metadata = None
 
@@ -345,6 +346,9 @@ class Audio:
             # update the duration because we may have only loaded
             # a piece of the entire audio file.
             metadata["duration"] = len(samples) / sr
+
+            # we sum to mono when we load with librosa
+            metadata["channels"] = 1
 
             # update the sample rate in metadata
             metadata["samplerate"] = sr
@@ -810,6 +814,21 @@ class Audio:
             samples = np.clip(samples, clip_range[0], clip_range[1])
         return self._spawn(samples=samples)
 
+    def reduce_noise(self, noisereduce_kwargs=None):
+        """Reduce noise in audio signal using noisereduce package
+
+        Args:
+            noisereduce_kwargs: dictionary of args to pass to noisereduce.reduce_noise
+
+        Returns:
+            Audio object with noise reduction applied
+        """
+        noisereduce_kwargs = noisereduce_kwargs or {}
+        samples = noisereduce.reduce_noise(
+            self.samples, sr=self.sample_rate, **noisereduce_kwargs
+        )
+        return self._spawn(samples=samples)
+
     def save(
         self,
         path,
@@ -1024,7 +1043,7 @@ def load_channels_as_audio(
 
     ## Load Metadata ##
     if metadata:
-        metadata_dict = _metadata_from_file_handler(path)
+        metadata_dict = parse_metadata(path)
     else:
         metadata_dict = None
 
@@ -1371,7 +1390,22 @@ def generate_opso_metadata_str(metadata_dictionary, version="v0.1"):
     return "opso_metadata" + json.dumps(metadata)
 
 
-def _metadata_from_file_handler(path):
+def parse_metadata(path):
+    """parse metadata from wav file header and return a dictionary
+
+    supports parsing of opso metadata format as well as AudioMoth and basic wav headers
+
+    for files recorded by AudioMoth firmware, the comment field is parsed into other fields such
+    as recording_start_time and temperature_C
+
+    uses SoundFile for file header parsing
+
+    Args:
+        path: file path to audio file
+
+    Returns:
+        dictionary with key/value pairs of parsed metadata
+    """
     try:
         metadata = load_metadata(path)
         # if we have saved this file an opso_metadata json string in
@@ -1395,9 +1429,6 @@ def _metadata_from_file_handler(path):
                     "This seems to be an AudioMoth file, "
                     f"but parse_audiomoth_metadata() raised: {exc}"
                 )
-
-        ## Update metadata ##
-        metadata["channels"] = 1  # we sum to mono when we load with librosa
 
     except Exception as exc:
         warnings.warn(f"Failed to load metadata: {exc}. Metadata will be None")

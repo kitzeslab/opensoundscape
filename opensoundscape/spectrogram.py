@@ -122,6 +122,7 @@ class Spectrogram:
         fft_size=None,
         dB_scale=True,
         scaling="spectrum",
+        **kwargs,
     ):
         """
         create a Spectrogram object from an Audio object
@@ -144,9 +145,11 @@ class Spectrogram:
                 - Note: cannot specify both overlap_samples and overlap_fraction
             fft_size: see scipy.signal.spectrogram's `nfft` parameter
             dB_scale: If True, rescales values to decibels, x=10*log10(x)
-            scaling="spectrum": ("spectrum" or "density")
-                see scipy.signal.spectrogram docs
+            scaling: ("spectrum" (V^2/Hz) or "density" (V^2))
+                see scipy.signal.spectrogram docs; Note that [default: "spectrum"] is different
+                from scipy.signal.spectrogram's default
 
+            **kwargs: kwargs are passed to scipy.signal.spectrogram()
 
         Returns:
             opensoundscape.spectrogram.Spectrogram object
@@ -188,6 +191,7 @@ class Spectrogram:
             noverlap=int(overlap_samples),
             nfft=fft_size,
             scaling=scaling,
+            **kwargs,
         )
 
         # convert to decibels
@@ -227,7 +231,7 @@ class Spectrogram:
 
     @property
     def duration(self):
-        """calculate the ammount of time represented in the spectrogram
+        """calculate the amount of time represented in the spectrogram
 
         Note: time may be shorter than the duration of the audio from which
         the spectrogram was created, because the windows may align in a way
@@ -485,7 +489,7 @@ class Spectrogram:
 
         rescale the signal and reject bands by dividing by their bandwidths in Hz
         (amplitude of each reject_band is divided by the total bandwidth of all reject_bands.
-        amplitude of signal_band is divided by badwidth of signal_band. )
+        amplitude of signal_band is divided by bandwidth of signal_band. )
 
         Args:
             signal_band: [low,high] frequency range in Hz (positive contribution)
@@ -680,8 +684,8 @@ class MelSpectrogram(Spectrogram):
         First creates a spectrogram and a mel-frequency filter bank,
         then computes the dot product of the filter bank with the spectrogram.
 
-        A Mel spectgrogram is a spectrogram with a quasi-logarithmic frequency
-        axis that has often been used in langauge processing and other domains.
+        A Mel spectrogram is a spectrogram with a quasi-logarithmic frequency
+        axis that has often been used in language processing and other domains.
 
         The kwargs for the mel frequency bank are documented at:
         - https://librosa.org/doc/latest/generated/librosa.feature.melspectrogram.html#librosa.feature.melspectrogram

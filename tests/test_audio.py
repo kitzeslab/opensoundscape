@@ -372,6 +372,8 @@ def test_load_not_a_file_asserts_not_a_file(not_a_file_str):
 
 
 def test_load_metadata(veryshort_wav_str):
+    m_dict = audio.parse_metadata(veryshort_wav_str)
+    assert m_dict["samplerate"] == 44100
     a = Audio.from_file(veryshort_wav_str)
     assert a.metadata["samplerate"] == 44100
 
@@ -821,6 +823,15 @@ def test_bandpass_filter(veryshort_audio):
         veryshort_audio.samples, 1000, 2000, veryshort_audio.sample_rate
     )
     assert len(bandpassed) == len(veryshort_audio.samples)
+
+
+def test_reduce_noise():
+    from opensoundscape.utils import set_seed
+
+    set_seed(0)
+    noise = Audio.noise(1, sample_rate=8000, color="white")
+    reduced = noise.reduce_noise()
+    assert reduced.rms < noise.rms
 
 
 def test_clipping_detector(veryshort_audio):
