@@ -41,20 +41,28 @@ def input_dataframe():
 
 def test_resample_basic(resample_df):
     for _ in range(5):
-        resample_df = selection.resample(resample_df, 2)
-        assert resample_df.shape[0] == 6
+        df = selection.resample(resample_df, 2)
+        assert df.shape[0] == 6
 
 
 def test_resample_no_upsample(resample_df):
     for _ in range(5):
-        resample_df = selection.resample(resample_df, 2, upsample=False)
-        assert resample_df.shape[0] == 5
+        df = selection.resample(resample_df, 2, upsample=False)
+        assert df.shape[0] == 5
 
 
 def test_resample_no_downsample(resample_df):
     for _ in range(5):
-        resample_df = selection.resample(resample_df, 2, downsample=False)
-        assert resample_df.shape[0] == 8
+        df = selection.resample(resample_df, 2, downsample=False)
+        assert df.shape[0] == 8
+
+
+def test_resample_inclue_negatives(resample_df):
+    for negatives in (0, 1, 5):
+        df = selection.resample(
+            resample_df, 1, n_samples_without_labels=negatives, downsample=True
+        )
+        assert df.shape[0] == 3 + negatives
 
 
 def test_upsample_basic(upsample_df):

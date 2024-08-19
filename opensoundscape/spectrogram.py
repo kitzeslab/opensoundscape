@@ -13,6 +13,7 @@ import torch
 import matplotlib
 from matplotlib import pyplot as plt
 import matplotlib.colors
+import torch.nn.functional as F
 
 from opensoundscape.audio import Audio
 from opensoundscape.utils import min_max_scale, linear_scale
@@ -534,6 +535,7 @@ class Spectrogram:
         invert=False,
         return_type="pil",
         range=(-100, -20),
+        use_skimage=False,
     ):
         """Create an image from spectrogram (array, tensor, or PIL.Image)
 
@@ -558,6 +560,9 @@ class Spectrogram:
                 - 'torch': torch.tensor
             range: tuple of (min,max) values of .spectrogram to map to the lowest/highest
                 pixel values. Values outside this range will be clipped to the min/max values
+            use_skimage: if True, use skimage.transform.resize to resize the image
+                [default: False] is recommended and 10-100x faster, but True can be used
+                to match the behavior of OpenSoundscape <0.11.0
         Returns:
             Image/array with type depending on `return_type`:
             - PIL.Image with c channels and shape w,h given by `shape`
@@ -594,11 +599,10 @@ class Spectrogram:
         # apply colormaps
         if colormap is not None:  # apply a colormap to get RGB channels
             cm = matplotlib.cm.get_cmap(colormap)
-            array = cm(array)
+            array = cm(array)[..., :3]  # remove alpha channel (4)
 
-        # resize and change channel dims
-        # if None, use original shape
-        if shape is None:
+        # determine output height and width
+        if shape is None:  # if None, use original shape
             shape = np.shape(array)
         else:
             # if height or width are None, use original sizes
@@ -606,23 +610,53 @@ class Spectrogram:
                 shape[0] = np.shape(array)[0]
             if shape[1] is None:
                 shape[1] = np.shape(array)[1]
-        out_shape = [shape[0], shape[1], channels]
-        array = skimage.transform.resize(array, out_shape)
 
-        if return_type == "pil":  # expected shape of input is [h,w,c]
-            # use correct type for PIL.Image, and scale from 0-1 to 0-255
-            array = np.uint8(array * 255)
-            if array.shape[-1] == 1:
+        if use_skimage:
+            # match legacy behavior of OpenSoundscape <0.11.0
+            # skimage is 10-100x slower than torch
+            image = skimage.transform.resize(array, (shape[0], shape[1], channels))
+            image = torch.Tensor(image)
+            if len(image.shape) == 2:  # add channel dim to front
+                image = image.unsqueeze(0)
+            else:  # move channel dim to front
+                image = image.permute(2, 0, 1)
+        else:
+            # use torch, much faster than skimage
+
+            # make tensor; copy to avoid an error about -1 stride
+            tensor = torch.Tensor(array.copy())
+
+            if len(tensor.shape) == 2:  # add channel dim to front
+                tensor = tensor.unsqueeze(0)
+            else:  # move channel dim to front
+                tensor = tensor.permute(2, 0, 1)
+            # add batch dim
+            tensor = tensor.unsqueeze(0)
+
+            # copy over channel dimension if needed
+            tensor = tensor.expand(-1, channels, -1, -1)
+
+            # interpolate to desired shape
+            image = F.interpolate(
+                tensor,
+                size=(shape[0], shape[1]),
+                mode="bilinear",
+                align_corners=False,
+            )
+            image = image.squeeze(0)  # remove leading batch dim
+
+        if return_type == "np":
+            image = image.numpy()
+        elif return_type == "pil":
+            # reshape c,h,w to h,w,c
+            image = image.permute(1, 2, 0).numpy()
+
+            if image.shape[-1] == 1:
                 # PIL doesnt like [x,y,1] shape, it wants [x,y] instead
                 # if there's only one channel
-                array = array[:, :, 0]
-            image = Image.fromarray(array)
-
-        elif return_type == "np":  # shape should be c,h,w
-            image = array.transpose(2, 0, 1)
-
-        elif return_type == "torch":  # shape should be c,h,w
-            image = torch.Tensor(array.transpose(2, 0, 1))
+                image = image[:, :, 0]
+            # expected shape of input is [h,w,c]
+            image = Image.fromarray(np.uint8(image * 255))
 
         return image
 
