@@ -53,12 +53,6 @@ class BaseAction:
         pass
 
     def set(self, **kwargs):
-        """only allow keys that exist in self.params"""
-        unmatched_args = set(list(kwargs.keys())) - set(list(self.params.keys()))
-        assert unmatched_args == set([]), (
-            f"unexpected arguments: {unmatched_args}. "
-            f"The valid arguments and current values are: \n{self.params}"
-        )
         # Series.update ignores nan/None values, so we use dictionary.update method
         new_params = dict(self.params)
         new_params.update(kwargs)
