@@ -82,6 +82,13 @@ def silence_10s_mp3_pathlib(silence_10s_mp3_str):
 
 
 @pytest.fixture()
+def multichannel_audio():
+    return audio.MultiChannelAudio(
+        samples=np.array([np.ones(10), np.ones(10)]), sample_rate=10
+    )
+
+
+@pytest.fixture()
 def tmp_dir(request):
     path = Path("tests/audio_out")
     if not path.exists():
@@ -920,3 +927,101 @@ def test_from_url_multichannel_to_mono():
     downloads a 2-channel audio file and sums to 1, ensuring resolution of #837
     """
     Audio.from_url("https://xeno-canto.org/830406/download")
+
+
+def test_multichannelaudio_init():
+    a = audio.MultiChannelAudio(np.zeros((2, 10)), sample_rate=10)
+    assert a.samples.shape == (2, 10)
+    assert a.sample_rate == 10
+    assert a.n_channels == 2
+    assert a.duration == 1
+
+
+def test_multichannelaudio_from_file(veryshort_wav_str, stereo_wav_str):
+    a = audio.MultiChannelAudio.from_file(veryshort_wav_str)
+    assert a.samples.shape == (1, 6266)
+    assert a.sample_rate == 44100
+    assert a.n_channels == 1
+    assert np.isclose(a.duration, 0.14208616780045352, atol=1e-5)
+
+    a = audio.MultiChannelAudio.from_file(stereo_wav_str)
+    assert max(a.samples[0, :]) == 0  # channel 1 of stereo.wav is all 0
+    assert max(a.samples[1, :]) == 1  # channel 2 of stereo.wav is all 1
+    assert a.n_channels == 2
+
+
+def test_multichannelaudio_trim(multichannel_audio):
+    a2 = multichannel_audio.trim(0, 0.5)
+    assert np.isclose(a2.duration, 0.5, atol=1e-5)
+
+
+def test_multichannelaudio_apply_gain(multichannel_audio):
+    a2 = multichannel_audio.apply_gain(dB=-20)
+    assert math.isclose(a2.samples.max(), 0.1, abs_tol=1e-6)
+
+
+def test_multichannelaudio_apply_channel_gain(multichannel_audio):
+    a2 = multichannel_audio.apply_channel_gain(dB=[-20, 20], clip_range=[-5, 5])
+    assert math.isclose(a2.samples[0, :].max(), 0.1, abs_tol=1e-6)
+    assert math.isclose(a2.samples[1, :].max(), 5, abs_tol=1e-6)
+
+
+def test_mix_multichannel(multichannel_audio):
+    m = audio.mix([multichannel_audio, multichannel_audio], gain=[-20, -20])
+    assert math.isclose(max(m.samples[0, :]), 0.2, abs_tol=1e-6)
+
+
+def test_mix_multichannel_and_mono(multichannel_audio, veryshort_wav_audio):
+    m = audio.mix([multichannel_audio, veryshort_wav_audio])
+    assert m.n_channels == 2
+
+
+def test_multichannel_extend_to(multichannel_audio):
+    a = multichannel_audio.extend_to(duration=2)
+    assert math.isclose(a.duration, 2.0, abs_tol=1e-5)
+    # added samples should be zero
+    assert math.isclose(0.0, np.max(a.samples[0, -10:]), abs_tol=1e-7)
+
+
+def test_multichannel_extend_by(multichannel_audio):
+    a = multichannel_audio.extend_by(1)
+    assert math.isclose(a.duration, 2.0, abs_tol=1e-5)
+    # added samples should be zero
+    assert math.isclose(0.0, np.max(a.samples[0, -10:]), abs_tol=1e-7)
+
+
+def test_save_load_multichannel(multichannel_audio, saved_wav):
+    multichannel_audio.metadata = {"artist": "test"}
+    multichannel_audio.save(saved_wav)
+    assert saved_wav.exists()
+    a2 = audio.MultiChannelAudio.from_file(saved_wav)
+    # the tolerance is pretty bad for some reason, for saving and reloading the same sample values
+    # TODO why so different? fails if atol=1e-5 or smaller
+    assert np.allclose(a2.samples, multichannel_audio.samples, atol=1e-4)
+    assert a2.sample_rate == multichannel_audio.sample_rate
+    assert a2.n_channels == multichannel_audio.n_channels
+    assert a2.duration == multichannel_audio.duration
+    assert a2.metadata["artist"] == "test"
+
+
+def test_multichannelaudio_silence():
+    a = audio.MultiChannelAudio.silence(duration=2, channels=3, sample_rate=10)
+    assert a.samples.shape == (3, 20)
+    assert a.samples.max() == 0
+
+
+def test_multichannelaudio_noise():
+    a = audio.MultiChannelAudio.noise(duration=2, channels=3, sample_rate=10)
+    assert a.samples.shape == (3, 20)
+    assert type(a) == audio.MultiChannelAudio
+
+
+def test_multichannelaudio_concat(multichannel_audio):
+    a = audio.concat([multichannel_audio, multichannel_audio])
+    assert a.duration == 2 * multichannel_audio.duration
+    assert a.n_channels == multichannel_audio.n_channels
+
+
+def test_multichannel_from_audio_list(veryshort_audio):
+    a = audio.MultiChannelAudio.from_audio_list([veryshort_audio, veryshort_audio])
+    assert a.n_channels == 2
