@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 import math
 import datetime
+import pytz
 
 from opensoundscape import localization
 
@@ -40,13 +41,26 @@ def LOCA_2021_aru_coords():
 
 
 @pytest.fixture()
-def LOCA_2021_detections():
+def LOCA_2021_detections_w_datetimes():
     dets = pd.read_csv("tests/csvs/LOCA_2021_detections.csv", index_col=[0, 1, 2])
-    dets["start_timestamp"] = datetime.datetime(2021, 9, 24, 6, 52, 0)
+    # change microseconds to check this actually gets used
+    dets["start_timestamp"] = datetime.datetime(2021, 9, 24, 6, 52, 0, 1)
     dets = dets.reset_index().set_index(
         ["file", "start_time", "end_time", "start_timestamp"]
     )
     return dets
+
+
+@pytest.fixture()
+def LOCA_2021_detections():
+    return pd.read_csv("tests/csvs/LOCA_2021_detections.csv", index_col=[0, 1, 2])
+
+
+@pytest.fixture()
+def LOCA_2021_detections_different_file_start_times():
+    return pd.read_csv(
+        "tests/csvs/LOCA_2021_detections_different_starts.csv", index_col=[0, 1, 2]
+    )
 
 
 def close(x, y, tol):
@@ -283,8 +297,6 @@ def test_localization_pipeline_real_audio_edge_case(
     # in the detections dataframe is actually too shorter
     # i.e. the file is shorter than the minimum length needed for cross correlation
 
-    # TODO: add tests for automatically finding timestamps - need audio with recording start time metadata
-
     array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
     localized_events, _ = array.localize_detections(
         detections=LOCA_2021_detections,
@@ -295,7 +307,7 @@ def test_localization_pipeline_real_audio_edge_case(
         return_unlocalized=True,
     )
 
-    bad_file = "tests/audio/veryshort.wav"
+    bad_file = "tests/audio/.wav"
     # check that the bad file has been dropped from the event
     for event in localized_events:
         assert bad_file not in event.receiver_files
@@ -329,7 +341,34 @@ def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords):
     assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
 
 
-# TODO: add similar test where start_timestamp is provided instead of receiver_start_time_offsets
+def test_SpatialEvent_estimate_delays_auto_timestamps(LOCA_2021_aru_coords):
+    # test localization of SpatialEvent when it attempts to find
+    # individual file start timestamps from the audio files themselves and start_timestamp
+    # instead of user providing receiver_start_time_offsets
+    max_delay = 0.04
+    duration = 0.3
+    cc_filter = "phat"
+    bandpass_range = (5000, 10000)
+
+    event = localization.SpatialEvent(
+        receiver_files=LOCA_2021_aru_coords.index,
+        receiver_locations=LOCA_2021_aru_coords.values,
+        max_delay=max_delay,
+        duration=duration,
+        class_name="zeep",
+        bandpass_range=bandpass_range,
+        cc_filter=cc_filter,
+        start_timestamp=datetime.datetime(2021, 9, 24, 6, 52, 0, 200_000).astimezone(
+            pytz.UTC
+        ),
+    )
+
+    # check that the delays are what we expect
+    event._estimate_delays()
+    true_TDOAS = np.array(
+        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
+    )  # with reference receiver LOCA_2021_3...
+    assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
 
 
 def test_localization_pipeline_parallelized(LOCA_2021_aru_coords, LOCA_2021_detections):
@@ -383,30 +422,86 @@ def test_localization_pipeline_cc_filters(LOCA_2021_aru_coords, LOCA_2021_detect
     )
 
 
-# TODO: need new tests for automatically extracting time stamps both in SynchronizedRecorderArray.create_candidate_events and
-# #SpatialEvent.localize(start_timetsamp...)
+def test_create_candidate_events_finds_timestamps(
+    LOCA_2021_detections, LOCA_2021_aru_coords
+):
+    # when creating candidate events, start_timestamp is obtained from metadata if not included in detections df
+    # will fail if recording_start_time not in metadata parsed from file
+    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    candidate_events = array.create_candidate_events(
+        detections=LOCA_2021_detections,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        cc_threshold=0,
+        bandpass_ranges={"zeep": (7000, 10000)},
+        cc_filter="phat",
+    )
+    for i, event in enumerate(candidate_events):
+        assert event.start_timestamp == datetime.datetime(
+            2021, 9, 24, 6, 52, 0
+        ).astimezone(pytz.UTC) + datetime.timedelta(
+            seconds=LOCA_2021_detections.reset_index().iloc[i]["start_time"]
+        )
 
-# def test_spatial_event_timestamps(LOCA_2021_aru_coords, LOCA_2021_detections):
-#     """Check that the timestamps of the spatial events are correct"""
-#     import datetime
 
-#     array = localization.SynchronizedRecorderArray(
-#         file_coords=LOCA_2021_aru_coords,
-#     )
+def test_create_candidate_events_provided_timestamps(
+    LOCA_2021_detections_w_datetimes, LOCA_2021_aru_coords
+):
+    # the LOCA_2021_detections_w_datetimes dataframe has a fourth multi-index level "start_timestamp"
+    # which is used to set the start_timestamp of the candidate events, rather than trying to parse from the audio files
 
-#     localized_events = array.localize_detections(
-#         detections=LOCA_2021_detections,
-#         min_n_receivers=4,
-#         max_receiver_dist=30,
-#         localization_algorithm="gillette",
-#         cc_filter="phat",
-#         bandpass_ranges={"zeep": (7000, 10000)},
-#         num_workers=4,
-#     )
-#     for event in localized_events:
-#         assert event.start_timestamp == datetime.datetime(
-#             2021, 9, 24, 6, 52, 0
-#         ) + datetime.timedelta(seconds=event.start_time)
+    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    candidate_events = array.create_candidate_events(
+        detections=LOCA_2021_detections_w_datetimes,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        cc_threshold=0,
+        bandpass_ranges={"zeep": (7000, 10000)},
+        cc_filter="phat",
+    )
+    for i, event in enumerate(candidate_events):
+        assert (
+            event.start_timestamp
+            == LOCA_2021_detections_w_datetimes.reset_index().iloc[i]["start_timestamp"]
+        )
+
+    # test that the events can be localized
+    localized_events = array.localize_detections(
+        detections=LOCA_2021_detections_w_datetimes,
+        localization_algorithm="gillette",
+        cc_filter="phat",
+        num_workers=1,
+        max_receiver_dist=30,
+        min_n_receivers=4,
+    )
+    assert len(localized_events) == 6
+
+
+def test_localize_from_files_with_different_start_times(
+    LOCA_2021_aru_coords, LOCA_2021_detections_different_file_start_times
+):
+    # test that the localize_detections method can handle detections from different files with different start times
+    # and that the start times are correctly used to set the start_timestamp of the candidate events
+    array = localization.SynchronizedRecorderArray(
+        file_coords=LOCA_2021_aru_coords,
+    )
+    localized_events = array.localize_detections(
+        detections=LOCA_2021_detections_different_file_start_times,
+        localization_algorithm="gillette",
+        cc_filter="phat",
+        num_workers=1,
+        max_receiver_dist=30,
+        min_n_receivers=4,
+        # cc_threshold=0,
+    )
+    assert len(localized_events) == 6
+    e = localized_events[0]
+    # last file starts 0.1 sec later, so offset from beginning of file to event is 0.1 sec less than others
+    assert (e.receiver_start_time_offsets == [0.2, 0.2, 0.2, 0.2, 0.2, 0.1]).all()
+    assert e.start_timestamp == datetime.datetime(
+        2021, 9, 24, 6, 52, 0, 200_000
+    ).astimezone(pytz.UTC)
+    # TODO: check that the position estimate is correct
 
 
 def test_localize_too_few_receivers(LOCA_2021_aru_coords, LOCA_2021_detections):
@@ -428,3 +523,84 @@ def test_localize_too_few_receivers(LOCA_2021_aru_coords, LOCA_2021_detections):
     )
     assert len(localized_events) == 0
     assert len(unlocalized_events) == 6
+
+
+def test_spatial_event_to_from_dict(LOCA_2021_aru_coords):
+    # test that a SpatialEvent can be serialized to a dictionary and then re-instantiated
+    max_delay = 0.04
+    receiver_start_time_offsets = [0.2] * len(LOCA_2021_aru_coords)
+    duration = 0.3
+    cc_filter = "phat"
+    bandpass_range = (5000, 10000)
+
+    event = localization.SpatialEvent(
+        receiver_files=LOCA_2021_aru_coords.index,
+        receiver_locations=LOCA_2021_aru_coords.values,
+        max_delay=max_delay,
+        receiver_start_time_offsets=receiver_start_time_offsets,
+        duration=duration,
+        class_name="zeep",
+        bandpass_range=bandpass_range,
+        cc_filter=cc_filter,
+        start_timestamp=datetime.datetime(2021, 9, 24, 6, 52, 0, 200_000).astimezone(
+            pytz.UTC
+        ),
+    )
+
+    event_dict = event.to_dict()
+    assert isinstance(event_dict, dict)
+
+    new_event = localization.SpatialEvent.from_dict(event_dict)
+
+    assert event.start_timestamp == new_event.start_timestamp
+    assert event.receiver_start_time_offsets == new_event.receiver_start_time_offsets
+    assert (event.receiver_files == new_event.receiver_files).all()
+    # compare equality of two arrays that can contain nan
+    assert np.array_equal(
+        event.receiver_locations, new_event.receiver_locations, equal_nan=True
+    )
+    assert event.max_delay == new_event.max_delay
+    assert event.duration == new_event.duration
+    assert event.class_name == new_event.class_name
+    assert event.bandpass_range == new_event.bandpass_range
+    assert event.cc_filter == new_event.cc_filter
+
+
+def test_df_to_events(LOCA_2021_aru_coords, LOCA_2021_detections):
+    # test that a dataframe of detections can be converted to a list of SpatialEvents
+    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    events = array.localize_detections(
+        detections=LOCA_2021_detections,
+        localization_algorithm="gillette",
+        cc_filter="phat",
+        num_workers=1,
+        max_receiver_dist=30,
+        min_n_receivers=4,
+    )
+    df = localization.events_to_df(events)
+    assert isinstance(df, pd.DataFrame)
+
+    # try to recover the events
+    recovered_events = localization.df_to_events(df)
+
+    for i, event in enumerate(events):
+        assert event.start_timestamp == recovered_events[i].start_timestamp
+        assert (
+            event.receiver_start_time_offsets
+            == recovered_events[i].receiver_start_time_offsets
+        ).all()
+        assert event.receiver_files == recovered_events[i].receiver_files
+        # compare equality of two arrays that can contain nan
+        assert np.array_equal(
+            event.receiver_locations,
+            recovered_events[i].receiver_locations,
+            equal_nan=True,
+        )
+        assert event.max_delay == recovered_events[i].max_delay
+        assert event.duration == recovered_events[i].duration
+        assert event.class_name == recovered_events[i].class_name
+        assert event.bandpass_range == recovered_events[i].bandpass_range
+        assert event.cc_filter == recovered_events[i].cc_filter
+        assert (event.tdoas == recovered_events[i].tdoas).all()
+        assert (event.location_estimate == recovered_events[i].location_estimate).all()
+        assert (event.cc_maxs == recovered_events[i].cc_maxs).all()
