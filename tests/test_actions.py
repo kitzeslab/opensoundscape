@@ -79,34 +79,34 @@ def sample_df():
 
 def test_audio_clip_loader_file(sample):
     action = actions.AudioClipLoader()
-    action.go(sample)
+    action.__call__(sample)
     assert sample.data.sample_rate == 44100
 
 
 def test_audio_clip_loader_resample(sample):
     action = actions.AudioClipLoader(sample_rate=32000)
-    action.go(sample)
+    action.__call__(sample)
     assert sample.data.sample_rate == 32000
 
 
 def test_audio_clip_loader_clip(sample_clip):
     action = actions.AudioClipLoader()
-    action.go(sample_clip)
+    action.__call__(sample_clip)
     assert math.isclose(sample_clip.data.duration, 2, abs_tol=1e-4)
 
 
 def test_action_trim(sample_audio):
     action = actions.AudioTrim(target_duration=1)
     sample_audio.target_duration = 2  # should be ignored
-    action.go(sample_audio)
+    action.__call__(sample_audio)
     assert math.isclose(sample_audio.data.duration, 1.0, abs_tol=1e-4)
 
 
 def test_action_random_trim(sample_audio):
     sample2 = copy.deepcopy(sample_audio)
     action = actions.AudioTrim(target_duration=0.001, random_trim=True)
-    action.go(sample_audio)
-    action.go(sample2)
+    action.__call__(sample_audio)
+    action.__call__(sample2)
     assert math.isclose(sample_audio.data.duration, 0.001, abs_tol=1e-4)
     # random trim should result in 2 different samples
     assert not math.isclose(sample_audio.start_time, sample2.start_time, abs_tol=1e-9)
@@ -116,19 +116,19 @@ def test_action_random_trim(sample_audio):
 def test_audio_trimmer_duration_None(sample_audio):
     """should not trim if target_duration=None"""
     action = actions.AudioTrim(target_duration=None)
-    action.go(sample_audio)
+    action.__call__(sample_audio)
     assert math.isclose(sample_audio.data.duration, 0.142086167800, abs_tol=1e-4)
 
 
 def test_audio_trimmer_raises_error_on_short_clip(sample_audio):
     action = actions.AudioTrim(target_duration=10, extend=False)
     with pytest.raises(ValueError):
-        action.go(sample_audio)
+        action.__call__(sample_audio)
 
 
 def test_audio_trimmer_extend_short_clip(sample_audio):
     action = actions.AudioTrim(target_duration=10)
-    action.go(sample_audio)  # extend=True is default
+    action.__call__(sample_audio)  # extend=True is default
     assert math.isclose(sample_audio.data.duration, 10, abs_tol=1e-4)
 
 
@@ -136,18 +136,18 @@ def test_audio_random_gain(sample_audio):
     # should reduce 10x if -20dB gain
     original_max = max(sample_audio.data.samples)
     action = actions.Action(action_functions.audio_random_gain, dB_range=[-20, -20])
-    action.go(sample_audio)
+    action.__call__(sample_audio)
     assert math.isclose(max(sample_audio.data.samples) * 10, original_max, abs_tol=1e-6)
 
 
 def test_audio_add_noise(sample_audio):
     """smoke test: does it run?"""
     action = actions.Action(action_functions.audio_add_noise)
-    action.go(sample_audio)
+    action.__call__(sample_audio)
     action = actions.Action(
         action_functions.audio_add_noise, noise_dB=-100, signal_dB=10, color="pink"
     )
-    action.go(sample_audio)
+    action.__call__(sample_audio)
 
 
 def test_spectrogram_to_tensor(sample, sample_audio):
@@ -158,7 +158,7 @@ def test_spectrogram_to_tensor(sample, sample_audio):
     sample.width = 30
     sample.channels = 3
 
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action.__call__(sample)  # converts .data from Spectrogram to Tensor
     assert isinstance(sample.data, torch.Tensor)
     assert list(sample.data.shape) == [3, 20, 30]  # note channels as dim0
 
@@ -181,7 +181,7 @@ def test_spectrogram_to_tensor_range(sample, sample_audio):
 
     # test default behavior using torch
     sample.data = Spectrogram.from_audio(sample_audio.data)
-    action.go(sample)
+    action(sample)
     assert isinstance(sample.data, torch.Tensor)
     assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
     assert math.isclose(sample.data.min(), 0.0, abs_tol=1e-6) and sample.data.max() < 1
@@ -190,7 +190,7 @@ def test_spectrogram_to_tensor_range(sample, sample_audio):
     # and with lower db range
     sample.data = Spectrogram.from_audio(sample_audio.data)
     action.set(range=(-150, -90))
-    action.go(sample)
+    action(sample)
     assert isinstance(sample.data, torch.Tensor)
     assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
     assert sample.data.min() > 0 and math.isclose(sample.data.max(), 1.0, abs_tol=1e-6)
@@ -200,7 +200,7 @@ def test_spectrogram_to_tensor_range(sample, sample_audio):
     action.set(use_skimage=True)
     action.set(range=(-80, 0))
     sample.data = Spectrogram.from_audio(sample_audio.data)
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action(sample)  # converts .data from Spectrogram to Tensor
     assert isinstance(sample.data, torch.Tensor)
     assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
     assert math.isclose(sample.data.min(), 0.0, abs_tol=1e-6) and sample.data.max() < 1
@@ -209,7 +209,7 @@ def test_spectrogram_to_tensor_range(sample, sample_audio):
     # repeat with lower range
     action.set(range=(-150, -90))
     sample.data = Spectrogram.from_audio(sample_audio.data)
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action(sample)  # converts .data from Spectrogram to Tensor
     assert sample.data.min() > 0 and math.isclose(sample.data.max(), 1.0, abs_tol=1e-6)
     assert math.isclose(sample.data.mean(), 0.8427285774873222, abs_tol=1e-6)
 
@@ -228,21 +228,21 @@ def test_spectrogram_to_tensor_retain_shape(sample, sample_audio):
     sample.height = None
     sample.width = None
     sample.channels = 1
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action.__call__(sample)  # converts .data from Spectrogram to Tensor
 
     assert list(sample.data.shape) == [1] + spec_shape[0:2]  # note channels as dim0
 
     # repeat for just retaining height
     sample.data = spec
     sample.width = 19
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action.__call__(sample)  # converts .data from Spectrogram to Tensor
     assert list(sample.data.shape) == [1] + [spec_shape[0]] + [19]
 
     # repeat for just retaining width
     sample.data = spec
     sample.height = 21
     sample.width = None
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action.__call__(sample)  # converts .data from Spectrogram to Tensor
     assert list(sample.data.shape) == [1] + [21] + [spec_shape[1]]
 
 
@@ -265,7 +265,7 @@ def test_generic_action(sample, tensor):
     """
     sample.data = tensor
     action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
-    action.go(sample)
+    action.__call__(sample)
     assert sample.data.max() * 2 == tensor.max()
 
 
@@ -282,7 +282,7 @@ def test_modify_parameter_with_series_magic(tensor):
     assert action.params.input_mean == 0  # access with . syntax
     action.params.input_mean = 1  # set with . syntax
     assert action.params["input_mean"] == 1
-    action.go(tensor)
+    action.__call__(tensor)
 
 
 def test_base_action_to_from_dict():
