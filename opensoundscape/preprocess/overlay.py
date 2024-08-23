@@ -11,6 +11,7 @@ from opensoundscape.preprocess.actions import (
 from opensoundscape.sample import AudioSample
 from opensoundscape.preprocess.utils import PreprocessingError
 
+
 @register_action_cls
 class Overlay(Action):
     """Action Class for augmentation that overlays samples on eachother
