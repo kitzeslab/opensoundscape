@@ -28,6 +28,19 @@ def predictions(predictions_csv):
     predictions = pd.read_csv(predictions_csv, index_col=[0, 1, 2])
 
     # add start timestamps manually since they won't be parsed from these audio files
+    predictions["start_timestamp"] = datetime.datetime(
+        2021, 9, 24, 6, 52, 0
+    ).astimezone(pytz.UTC)
+    predictions = predictions.reset_index().set_index(
+        ["file", "start_time", "end_time", "start_timestamp"]
+    )
+    return predictions
+
+
+@pytest.fixture()
+def predictions_no_timezone(predictions_csv):
+    """current API will raise an error since datetime is not timezone aware"""
+    predictions = pd.read_csv(predictions_csv, index_col=[0, 1, 2])
     predictions["start_timestamp"] = datetime.datetime(2021, 9, 24, 6, 52, 0)
     predictions = predictions.reset_index().set_index(
         ["file", "start_time", "end_time", "start_timestamp"]
@@ -44,7 +57,9 @@ def LOCA_2021_aru_coords():
 def LOCA_2021_detections_w_datetimes():
     dets = pd.read_csv("tests/csvs/LOCA_2021_detections.csv", index_col=[0, 1, 2])
     # change microseconds to check this actually gets used
-    dets["start_timestamp"] = datetime.datetime(2021, 9, 24, 6, 52, 0, 1)
+    dets["start_timestamp"] = datetime.datetime(2021, 9, 24, 6, 52, 0, 1).astimezone(
+        pytz.UTC
+    )
     dets = dets.reset_index().set_index(
         ["file", "start_time", "end_time", "start_timestamp"]
     )
@@ -214,6 +229,20 @@ def test_least_squares_optimize():
         assert np.allclose(estimated_pos, sound_source, atol=2.5)
 
 
+def test_asserts_localized_timestamps(file_coords_csv, predictions_no_timezone):
+    file_coords = pd.read_csv(file_coords_csv, index_col=0)
+
+    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    with pytest.raises(ValueError):
+        array.localize_detections(
+            detections=predictions_no_timezone,
+            min_n_receivers=4,
+            max_receiver_dist=100,
+            localization_algorithm="least_squares",
+            return_unlocalized=True,
+        )
+
+
 def test_localization_pipeline(file_coords_csv, predictions):
     file_coords = pd.read_csv(file_coords_csv, index_col=0)
 
@@ -317,7 +346,7 @@ def test_localization_pipeline_real_audio_edge_case(
 def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords):
     # Test ensure that SpatialEvent_estimate_delays returns what is expected
     max_delay = 0.04
-    receiver_start_time_offsets = [0.2] * len(LOCA_2021_aru_coords)
+    receiver_start_time_offsets = [0.2] * (len(LOCA_2021_aru_coords) - 1) + [0.1]
     duration = 0.3
     cc_filter = "phat"
     bandpass_range = (5000, 10000)
@@ -336,7 +365,7 @@ def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords):
     # check that the delays are what we expect
     event._estimate_delays()
     true_TDOAS = np.array(
-        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
+        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024, 0.024]
     )  # with reference receiver LOCA_2021_3...
     assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
 
@@ -366,7 +395,7 @@ def test_SpatialEvent_estimate_delays_auto_timestamps(LOCA_2021_aru_coords):
     # check that the delays are what we expect
     event._estimate_delays()
     true_TDOAS = np.array(
-        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024]
+        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024, 0.024]
     )  # with reference receiver LOCA_2021_3...
     assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
 
