@@ -124,13 +124,17 @@ class SpatialEvent:
         # If no values are already stored, perform generalized cross correlation to estimate time delays
         # or if user wants to re-estimate the time delays, perform generalized cross correlation to estimate time delays
         if self.tdoas is None or self.cc_maxs is None or use_stored_tdoas is False:
-            self._estimate_delays()  # Stores the results in the the attributes self.cc_maxs and self.tdoas
+            # Stores the results in the the attributes self.cc_maxs and self.tdoas
+            # if it fails, they will be None
+            self._estimate_delays()
 
-        # Sets the attributes self.location_estimate, self.receivers_used_for_localization,
-        # self.distance_residuals, and self.residual_rms
-        location_estimate = self._localize_after_cross_correlation(
-            localization_algorithm=localization_algorithm
-        )
+        # if self.tdoas is still not set, don't attempt to localize (_estimate_delays was not successful)
+        if self.tdoas is not None:
+            # Sets the attributes self.location_estimate, self.receivers_used_for_localization,
+            # self.distance_residuals, and self.residual_rms
+            self._localize_after_cross_correlation(
+                localization_algorithm=localization_algorithm
+            )
 
         return self
 
