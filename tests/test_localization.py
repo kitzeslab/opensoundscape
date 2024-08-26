@@ -29,8 +29,8 @@ def predictions(predictions_csv):
 
     # add start timestamps manually since they won't be parsed from these audio files
     predictions["start_timestamp"] = datetime.datetime(
-        2021, 9, 24, 6, 52, 0
-    ).astimezone(pytz.UTC)
+        2021, 9, 24, 6, 52, 0, tzinfo=pytz.UTC
+    )
     predictions = predictions.reset_index().set_index(
         ["file", "start_time", "end_time", "start_timestamp"]
     )
@@ -57,8 +57,8 @@ def LOCA_2021_aru_coords():
 def LOCA_2021_detections_w_datetimes():
     dets = pd.read_csv("tests/csvs/LOCA_2021_detections.csv", index_col=[0, 1, 2])
     # change microseconds to check this actually gets used
-    dets["start_timestamp"] = datetime.datetime(2021, 9, 24, 6, 52, 0, 1).astimezone(
-        pytz.UTC
+    dets["start_timestamp"] = datetime.datetime(
+        2021, 9, 24, 6, 52, 0, 1, tzinfo=pytz.UTC
     )
     dets = dets.reset_index().set_index(
         ["file", "start_time", "end_time", "start_timestamp"]
@@ -387,8 +387,8 @@ def test_SpatialEvent_estimate_delays_auto_timestamps(LOCA_2021_aru_coords):
         class_name="zeep",
         bandpass_range=bandpass_range,
         cc_filter=cc_filter,
-        start_timestamp=datetime.datetime(2021, 9, 24, 6, 52, 0, 200_000).astimezone(
-            pytz.UTC
+        start_timestamp=datetime.datetime(
+            2021, 9, 24, 6, 52, 0, 200_000, tzinfo=pytz.UTC
         ),
     )
 
@@ -466,9 +466,9 @@ def test_create_candidate_events_finds_timestamps(
         cc_filter="phat",
     )
     for i, event in enumerate(candidate_events):
-        assert event.start_timestamp == datetime.datetime(
-            2021, 9, 24, 6, 52, 0
-        ).astimezone(pytz.UTC) + datetime.timedelta(
+        assert event.start_timestamp.to_pydatetime() == datetime.datetime(
+            2021, 9, 24, 6, 52, 0, tzinfo=pytz.UTC
+        ) + datetime.timedelta(
             seconds=LOCA_2021_detections.reset_index().iloc[i]["start_time"]
         )
 
@@ -528,8 +528,8 @@ def test_localize_from_files_with_different_start_times(
     # last file starts 0.1 sec later, so offset from beginning of file to event is 0.1 sec less than others
     assert (e.receiver_start_time_offsets == [0.2, 0.2, 0.2, 0.2, 0.2, 0.1]).all()
     assert e.start_timestamp.to_pydatetime() == datetime.datetime(
-        2021, 9, 24, 6, 52, 0, 200_000
-    ).astimezone(pytz.UTC)
+        2021, 9, 24, 6, 52, 0, 200_000, tzinfo=pytz.UTC
+    )
     # TODO: check that the position estimate is correct
 
 
@@ -571,8 +571,8 @@ def test_spatial_event_to_from_dict(LOCA_2021_aru_coords):
         class_name="zeep",
         bandpass_range=bandpass_range,
         cc_filter=cc_filter,
-        start_timestamp=datetime.datetime(2021, 9, 24, 6, 52, 0, 200_000).astimezone(
-            pytz.UTC
+        start_timestamp=datetime.datetime(
+            2021, 9, 24, 6, 52, 0, 200_000, tzinfo=pytz.UTC
         ),
     )
 
