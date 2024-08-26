@@ -527,7 +527,7 @@ def test_localize_from_files_with_different_start_times(
     e = localized_events[0]
     # last file starts 0.1 sec later, so offset from beginning of file to event is 0.1 sec less than others
     assert (e.receiver_start_time_offsets == [0.2, 0.2, 0.2, 0.2, 0.2, 0.1]).all()
-    assert e.start_timestamp == datetime.datetime(
+    assert e.start_timestamp.to_pydatetime() == datetime.datetime(
         2021, 9, 24, 6, 52, 0, 200_000
     ).astimezone(pytz.UTC)
     # TODO: check that the position estimate is correct
