@@ -7,6 +7,8 @@ import datetime
 from opensoundscape.audio import Audio
 from opensoundscape import audio
 from opensoundscape.utils import cast_np_to_native
+from scipy.optimize import least_squares
+
 
 # define defaults for physical constants
 SPEED_OF_SOUND = 343  # default value in meters per second
@@ -31,7 +33,7 @@ class SpatialEvent:
         duration=None,
         class_name=None,
         bandpass_range=None,
-        cc_threshold=None,
+        cc_threshold=0,
         cc_filter=None,
         speed_of_sound=SPEED_OF_SOUND,
     ):
@@ -239,41 +241,43 @@ class SpatialEvent:
         receiver_files = np.array(
             self.receiver_files
         )  # needs to be np array to access using a boolean mask
-        if self.cc_threshold is not None:
-            tdoas = tdoas[self.cc_maxs > self.cc_threshold]
-            locations = locations[self.cc_maxs > self.cc_threshold]
-            receiver_files = receiver_files[
-                self.cc_maxs > self.cc_threshold
-            ]  # fails is receiver_files is not a np.array
 
-        # assert there are enough receivers remaining to localize the event
-        if len(tdoas) < self.min_n_receivers - 1:
+        # apply the cc_threshold filter
+        # only keep receivers that have a cc_max above the cc_threshold
+        tdoas = tdoas[self.cc_maxs > self.cc_threshold]
+        locations = locations[self.cc_maxs > self.cc_threshold]
+        receiver_files = receiver_files[
+            self.cc_maxs > self.cc_threshold
+        ]  # fails if receiver_files is not a np.array
+
+        # If there aren't enough receivers, don't attempt localization.
+        if len(tdoas) < self.min_n_receivers:
             self.location_estimate = None
             self.receivers_used_for_localization = None
             self.distance_residuals = None
             self.residual_rms = None
-            return None
-
+            return self.location_estimate
         # Store which receivers were used for localization. The location is estimated only from these.
         self.receivers_used_for_localization = receiver_files
 
-        # Estimate location from receiver locations and relative Times of Arrival
+        # Estimate location from receiver locations and time differences of arrival
         self.location_estimate = localize(
             receiver_locations=locations,
             tdoas=tdoas,
             algorithm=localization_algorithm,
         )
 
-        # Store the distance residuals (only for the receivers used) as an attribute
-        self.distance_residuals = calculate_tdoa_residuals(
-            receiver_locations=locations,
-            tdoas=tdoas,
-            location_estimate=self.location_estimate,
-            speed_of_sound=self.speed_of_sound,
-        )
+        if self.location_estimate is not None:
+            # Store the distance residuals (only for the receivers used) as an attribute
+            self.distance_residuals = calculate_tdoa_residuals(
+                receiver_locations=locations,
+                tdoas=tdoas,
+                location_estimate=self.location_estimate,
+                speed_of_sound=self.speed_of_sound,
+            )
 
-        # Calculate root mean square of distance residuals and store as attribute
-        self.residual_rms = np.sqrt(np.mean(self.distance_residuals**2))
+            # Calculate root mean square of distance residuals and store as attribute
+            self.residual_rms = np.sqrt(np.mean(self.distance_residuals**2))
 
         return self.location_estimate
 
@@ -764,7 +768,7 @@ def travel_time(source, receiver, speed_of_sound):
 
 def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND):
     """
-    Perform TDOA localization on a sound event.
+    Perform TDOA localization on a sound event. If there are not enough receivers to localize the event, return None.
     Args:
         receiver_locations: a list of [x,y,z] locations for each receiver
             locations should be in meters, e.g., the UTM coordinate system.
@@ -772,19 +776,82 @@ def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND
             The times should be in seconds.
         speed_of_sound: speed of sound in m/s
         algorithm: the algorithm to use for localization
-            Options: 'soundfinder', 'gillette'
+            Options: 'soundfinder', 'gillette', 'least_squares'.
+            See the documentation for the functions soundfinder_localize, gillette_localize, and least_squares_localize for more detail on how each algorithm works.
     Returns:
-        The estimated source location in meters.
+        The estimated source location in meters, in the same number of dimensions as the receiver locations.
     """
+    # check that there are enough receivers to localize the event
+    ndim = len(receiver_locations[0])
+    if len(receiver_locations) < ndim + 1:
+        warnings.warn(
+            f"Only {len(receiver_locations)} receivers. Need at least {ndim+1} to localize in {ndim} dimensions."
+        )
+        return None
     if algorithm == "soundfinder":
         estimate = soundfinder_localize(receiver_locations, tdoas, speed_of_sound)
     elif algorithm == "gillette":
         estimate = gillette_localize(receiver_locations, tdoas, speed_of_sound)
+    elif algorithm == "least_squares":
+        estimate = least_squares_localize(receiver_locations, tdoas, speed_of_sound)
     else:
         raise ValueError(
-            f"Unknown algorithm: {algorithm}. Implemented for 'soundfinder' and 'gillette'"
+            f"Unknown algorithm: {algorithm}. Implemented for 'soundfinder', 'gillette' and 'least_squares'."
         )
     return estimate
+
+
+def least_squares_localize(
+    receiver_locations, arrival_times, speed_of_sound=SPEED_OF_SOUND
+):
+    """
+    Use a least squares optimizer to perform TDOA localization on a sound event, based on a set of TDOA times and receiver locations.
+    Args:
+        receiver_locations: a list of [x,y,z] locations for each receiver
+            locations should be in meters, e.g., the UTM coordinate system.
+        arrival_times: a list of TDOA times (onset times) for each recorder
+            The first receiver is the reference receiver, with arrival time 0.
+        speed of sound: speed of sound in m/s
+    Returns:
+        The solution (x,y,z) in meters. In the same number of dimensions as the receiver locations.
+    """
+
+    # check that these delays are with reference to one receiver (the reference receiver).
+    # We do this by checking that one of the arrival times is within float precision
+    # of 0 (i.e. arrival at the reference)
+    if not np.isclose(np.min(np.abs(arrival_times)), 0):
+        raise ValueError(
+            "Arrival times must be relative to a reference receiver. Therefore one arrival"
+            " time must be 0 (corresponding to arrival at the reference receiver) None of your "
+            "TDOAs are zero. Please check your arrival_times."
+        )
+
+    # make sure our inputs follow consistent format
+    receiver_locations = np.array(receiver_locations).astype("float64")
+    arrival_times = np.array(arrival_times).astype("float64")
+
+    # find which is the reference receiver and reorder, so reference receiver is first
+    ref_receiver = np.argmin(abs(arrival_times))
+    ordered_receivers = np.roll(receiver_locations, -ref_receiver, axis=0)
+    ordered_tdoas = np.roll(arrival_times, -ref_receiver, axis=0)
+    # define the function to minimize, i..e. the TDOA residuals
+
+    def fun(x, ordered_receivers, ordered_tdoas):
+        # calculate the predicted TDOAs for each receiver
+        time_of_flight = np.linalg.norm(ordered_receivers - x, axis=1) / speed_of_sound
+        # the observed TDOAs are all relative to the first receiver, so minus the first receiver's TDOA
+        predicted_tdoas = np.array(time_of_flight) - time_of_flight[0]
+
+        # calculate the difference between the predicted and observed TDOAs (i.e. TDOA residuals)
+        return np.array(predicted_tdoas) - ordered_tdoas
+
+    # initial guess for the source location is the mean of the receiver locations
+    x0 = np.mean(ordered_receivers, axis=0)
+
+    # run the optimization
+    res = least_squares(fun, x0, args=(ordered_receivers, ordered_tdoas))
+
+    return res.x
 
 
 def soundfinder_localize(

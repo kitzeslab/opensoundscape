@@ -3,16 +3,18 @@
 import torch
 
 
-def list_models():
+def list_models(**kwargs):
     """
     list the models available in the [bioacoustics model zoo](https://github.com/kitzeslab/bioacoustics-model-zoo)
 
+    Args:
+        **kwargs are passed to torch.hub.list()
     Returns:
         list of available models
 
     see also: load(model)
     """
-    return torch.hub.list("kitzeslab/bioacoustics-model-zoo")
+    return torch.hub.list("kitzeslab/bioacoustics-model-zoo", trust_repo=True, **kwargs)
 
 
 def load(model, **kwargs):
@@ -37,4 +39,6 @@ def load(model, **kwargs):
     detailed instructions)
 
     """
-    return torch.hub.load("kitzeslab/bioacoustics-model-zoo", model, **kwargs)
+    return torch.hub.load(
+        "kitzeslab/bioacoustics-model-zoo", model, trust_repo=True, **kwargs
+    )

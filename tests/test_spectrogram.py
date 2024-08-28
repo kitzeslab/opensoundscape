@@ -210,8 +210,16 @@ def test_melspectrogram_underflow(cswa_str):
 
 
 def test_to_image_shape(spec):
-    img = spec.to_image(shape=[5, 6], channels=2, return_type="torch")
-    assert list(img.shape) == [2, 5, 6]  # channels, height, width
+    img = spec.to_image(shape=[10, 15], channels=2, return_type="torch")
+    assert list(img.shape) == [2, 10, 15]  # channels, height, width
+
+    # PIL
+    img = spec.to_image(shape=[10, 15], channels=2, return_type="pil")
+    assert img.size == (15, 10)
+
+    # numpy
+    img = spec.to_image(shape=[10, 15], channels=2, return_type="np")
+    assert img.shape == (2, 10, 15)
 
 
 def test_to_image_range(spec):
@@ -236,6 +244,21 @@ def test_to_image_shape_None(spec):
     # test when shape specifies only desired height
     img = spec.to_image(shape=[5, None], channels=2, return_type="torch")
     assert list(img.shape) == [2, 5] + [spec_shape[1]]
+
+
+def test_to_image_colormap(spec):
+    img = spec.to_image(
+        shape=[5, 6], channels=3, return_type="torch", colormap="viridis"
+    )
+    assert img.shape == (3, 5, 6)
+
+    # pil
+    img = spec.to_image(shape=[5, 6], channels=3, return_type="pil", colormap="viridis")
+    assert img.size == (6, 5)
+
+    # numpy
+    img = spec.to_image(shape=[5, 6], channels=3, return_type="np", colormap="viridis")
+    assert img.shape == (3, 5, 6)
 
 
 def test_melspectrogram_shape_of_S_for_veryshort(veryshort_wav_str):
@@ -264,10 +287,17 @@ def test_melspectrogram_to_image_alltypes(veryshort_wav_str):
     mel_spec = MelSpectrogram.from_audio(audio)
     img = mel_spec.to_image(shape=(10, 20), return_type="pil")
     assert isinstance(img, Image)
+    assert img.size == (20, 10)
+    img = mel_spec.to_image(
+        shape=(10, 20), return_type="pil", colormap="viridis", channels=3
+    )
+    assert img.size == (20, 10)
     img = mel_spec.to_image(shape=(10, 20), return_type="np")
     assert isinstance(img, np.ndarray)
+    assert img.shape == (1, 10, 20)
     img = mel_spec.to_image(shape=(10, 20), return_type="torch")
     assert isinstance(img, torch.Tensor)
+    assert img.shape == (1, 10, 20)
 
 
 def test_melspectrogram_to_image_with_invert(veryshort_wav_str):

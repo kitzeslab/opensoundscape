@@ -34,6 +34,7 @@ import soundfile
 import IPython.display
 from aru_metadata_parser.parse import parse_audiomoth_metadata
 from aru_metadata_parser.utils import load_metadata
+import noisereduce
 
 import opensoundscape
 from opensoundscape.utils import generate_clip_times_df
@@ -262,104 +263,18 @@ class Audio:
         resample
 
         """
-        assert out_of_bounds_mode in ["raise", "warn", "ignore"]
-
-        path = str(path)  # Pathlib path can have dependency issues - use string
-
-        ## Load Metadata ##
-        if load_metadata:
-            metadata = _metadata_from_file_handler(path)
-        else:
-            metadata = None
-
-        ## Determine start time / offset ##
-        if start_timestamp is not None:
-            # user should have provied a localized timestamp as the start_timestamp
-            assert (
-                offset is None
-            ), "You must not specify both `start_timestamp` and `offset`"
-            assert (
-                type(start_timestamp) == datetime.datetime
-                and start_timestamp.tzinfo is not None
-            ), "start_timestamp must be a localized datetime object"
-            assert (
-                metadata is not None
-                and "recording_start_time" in metadata
-                and type(metadata["recording_start_time"]) == datetime.datetime
-            ), (
-                "metadata did not contain start time timestamp in key `recording_start_time`. "
-                "This key is automatically created when parsing AudioMoth metadata."
-            )
-            audio_start = metadata["recording_start_time"]
-            offset = (start_timestamp - audio_start).total_seconds()
-            if offset < 0:
-                error_msg = "requested time period begins before start of recording"
-                if out_of_bounds_mode == "raise":
-                    raise AudioOutOfBoundsError(error_msg)
-                elif out_of_bounds_mode == "warn":
-                    warnings.warn(error_msg)
-                # else: pass
-
-        elif offset is None:  # default offset is 0
-            offset = 0
-
-        ## Load samples ##
-        warnings.filterwarnings("ignore")
-        samples, sr = librosa.load(
-            path,
-            sr=sample_rate,
-            res_type=resample_type,
-            mono=True,
+        return _audio_from_file_handler(
+            cls=cls,
+            path=path,
+            sample_rate=sample_rate,
+            resample_type=resample_type,
+            dtype=dtype,
+            load_metadata=load_metadata,
             offset=offset,
             duration=duration,
-            dtype=None,
+            start_timestamp=start_timestamp,
+            out_of_bounds_mode=out_of_bounds_mode,
         )
-        # temporary workaround for soundfile issue #349
-        # which causes empty sample array if loading float32 from mp3:
-        # pass dtype=None, then change it afterwards
-        samples = samples.astype(dtype)
-        warnings.resetwarnings()
-
-        # out of bounds warning/exception user if no samples or too short
-        if len(samples) == 0:
-            error_msg = "audio object has zero samples"
-            if out_of_bounds_mode == "raise":
-                raise AudioOutOfBoundsError(error_msg)
-            elif out_of_bounds_mode == "warn":
-                warnings.warn(error_msg)
-        elif duration is not None and len(samples) < np.floor(duration * sr):
-            if offset < 0:
-                error_msg = "requested time period begins before start of recording"
-            else:
-                error_msg = (
-                    f"Audio object is shorter than requested duration: "
-                    f"{len(samples)/sr} sec instead of {duration} sec"
-                )
-            if out_of_bounds_mode == "raise":
-                raise AudioOutOfBoundsError(error_msg)
-            elif out_of_bounds_mode == "warn":
-                warnings.warn(error_msg)
-
-        ## Update metadata ##
-        if metadata is not None:
-            # update the duration because we may have only loaded
-            # a piece of the entire audio file.
-            metadata["duration"] = len(samples) / sr
-
-            # update the sample rate in metadata
-            metadata["samplerate"] = sr
-
-            # if we loaded part we don't know the file size anymore
-            if offset != 0 or duration is not None:
-                metadata["filesize"] = np.nan
-
-            # if the offset > 0, we need to update the timestamp
-            if "recording_start_time" in metadata and offset > 0:
-                # timedelta doesn't like np types, fix issue #928
-                offset = cast_np_to_native(offset)
-                metadata["recording_start_time"] += datetime.timedelta(seconds=offset)
-
-        return cls(samples, sr, resample_type=resample_type, metadata=metadata)
 
     @classmethod
     def from_bytesio(
@@ -638,20 +553,7 @@ class Audio:
             a new Audio object with silence added to the end
         """
         assert duration >= 0, f"`duration` to extend by must be >=0, got {duration}"
-
-        # create desired duration of silent audio and concatenate to the end
-        silence = Audio.silence(duration=duration, sample_rate=self.sample_rate)
-        new_audio = concat([self, silence])
-
-        # add metadata and update to reflect new duration
-        if self.metadata is None:
-            new_audio.metadata = None
-        else:
-            new_audio.metadata = self.metadata.copy()
-            if "duration" in new_audio.metadata:
-                new_audio.metadata["duration"] = new_audio.duration
-
-        return new_audio
+        return self.extend_to(self.duration + duration)
 
     def bandpass(self, low_f, high_f, order):
         """Bandpass audio signal with a butterworth filter
@@ -783,7 +685,7 @@ class Audio:
             # dBFS is defined as 20*log10(V), so V = 10^(dBFS/20)
             peak_level = 10 ** (peak_dBFS / 20)
 
-        abs_max = max(max(self.samples), -min(self.samples))
+        abs_max = max(self.samples.max(), -self.samples.min())
         if abs_max == 0:
             # don't try to normalize 0-valued samples. Return original object
             abs_max = 1
@@ -808,6 +710,21 @@ class Audio:
         samples = self.samples * (10 ** (dB / 20))
         if clip_range is not None:
             samples = np.clip(samples, clip_range[0], clip_range[1])
+        return self._spawn(samples=samples)
+
+    def reduce_noise(self, noisereduce_kwargs=None):
+        """Reduce noise in audio signal using noisereduce package
+
+        Args:
+            noisereduce_kwargs: dictionary of args to pass to noisereduce.reduce_noise
+
+        Returns:
+            Audio object with noise reduction applied
+        """
+        noisereduce_kwargs = noisereduce_kwargs or {}
+        samples = noisereduce.reduce_noise(
+            self.samples, sr=self.sample_rate, **noisereduce_kwargs
+        )
         return self._spawn(samples=samples)
 
     def save(
@@ -1024,7 +941,7 @@ def load_channels_as_audio(
 
     ## Load Metadata ##
     if metadata:
-        metadata_dict = _metadata_from_file_handler(path)
+        metadata_dict = parse_metadata(path)
     else:
         metadata_dict = None
 
@@ -1083,7 +1000,7 @@ def concat(audio_objects, sample_rate=None):
     """
 
     assert np.all(
-        [type(a) == Audio for a in audio_objects]
+        [isinstance(a, Audio) for a in audio_objects]
     ), "all elements in audio_objects must be Audio objects"
 
     # use first object's sample rate if None provided
@@ -1112,7 +1029,7 @@ def mix(
     and optionally applies individual gain and time-offsets to each Audio.
 
     Args:
-        audio_objects: iterable of Audio objects
+        audio_objects: iterable of Audio objects, or MultiChannelAudio objects
         duration: duration in seconds of returned Audio. Can be:
             - number: extends shorter Audio with silence
                 and truncates longer Audio
@@ -1140,26 +1057,30 @@ def mix(
 
 
     Returns:
-        Audio object
+        Audio object, or MultiChannelAudio object if input is list of MultiChannelAudio
 
     Notes:
-        Audio metadata is discarded. .resample_type of first Audio is retained.
+        Audio metadata is copied from first object in list
         Resampling of each Audio uses respective .resample_type of objects.
-
+        if MultiChannelAudio objects are passed, returns MultiChannelAudio object with
+            the same number of channels as the maximum number of channels of any input.
+            Channels with fewer channels are zero-padded, and channel[n] is always
+            summed with channel[n] of other objects.
     """
 
     ## Input validation ##
 
     assert np.all(
-        [type(a) == Audio for a in audio_objects]
+        [isinstance(a, Audio) for a in audio_objects]
     ), "all elements in audio_objects must be Audio objects"
 
-    if hasattr(duration, "__iter__"):
-        assert len(duration) == len(audio_objects), (
-            f"duration must be a number, None, or an iterable of the same "
-            f"length as audio_objects. duration length {len(duration)} does not "
-            f"match audio_objects length {len(audio_objects)}."
-        )
+    multichannel = any([isinstance(a, MultiChannelAudio) for a in audio_objects])
+
+    # determine the maximum number of channels in any object, and whether to create multichannel
+    channels = 1
+    for a in audio_objects:
+        if isinstance(a, MultiChannelAudio):
+            channels = max(channels, a.n_channels)
 
     if hasattr(gain, "__iter__"):
         assert len(gain) == len(audio_objects), (
@@ -1188,9 +1109,26 @@ def mix(
 
     ## Create mixdown ##
 
-    mixdown = np.zeros(int(duration * sample_rate))
+    # initialize empty array, handling single or multi channel audio
+    if multichannel:
+        sample_shape = (
+            channels,
+            int(duration * sample_rate),
+        )
+    else:
+        sample_shape = (int(duration * sample_rate),)
+    mixdown = np.zeros(sample_shape)
 
     for i, audio in enumerate(audio_objects):
+        if multichannel and not isinstance(audio, MultiChannelAudio):
+            # convert Audio object to MultiChannelAudio
+            audio = MultiChannelAudio(
+                samples=audio.samples[np.newaxis, :],
+                sample_rate=audio.sample_rate,
+                resample_type=audio.resample_type,
+                metadata=audio.metadata,
+            )
+
         # apply volume (gain) adjustment to this Audio
         if hasattr(gain, "__iter__"):
             audio = audio.apply_gain(gain[i])
@@ -1202,9 +1140,10 @@ def mix(
             audio = audio.resample(sample_rate)
 
         # add offset if desired
+        audio_cls = MultiChannelAudio if multichannel else Audio
         if offsets is not None:
             audio = concat(
-                [Audio.silence(duration=offsets[i], sample_rate=sample_rate), audio]
+                [audio_cls.silence(duration=offsets[i], sample_rate=sample_rate), audio]
             )
 
         # pad or truncate to correct length
@@ -1371,7 +1310,22 @@ def generate_opso_metadata_str(metadata_dictionary, version="v0.1"):
     return "opso_metadata" + json.dumps(metadata)
 
 
-def _metadata_from_file_handler(path):
+def parse_metadata(path):
+    """parse metadata from wav file header and return a dictionary
+
+    supports parsing of opso metadata format as well as AudioMoth and basic wav headers
+
+    for files recorded by AudioMoth firmware, the comment field is parsed into other fields such
+    as recording_start_time and temperature_C
+
+    uses SoundFile for file header parsing
+
+    Args:
+        path: file path to audio file
+
+    Returns:
+        dictionary with key/value pairs of parsed metadata
+    """
     try:
         metadata = load_metadata(path)
         # if we have saved this file an opso_metadata json string in
@@ -1395,9 +1349,6 @@ def _metadata_from_file_handler(path):
                     "This seems to be an AudioMoth file, "
                     f"but parse_audiomoth_metadata() raised: {exc}"
                 )
-
-        ## Update metadata ##
-        metadata["channels"] = 1  # we sum to mono when we load with librosa
 
     except Exception as exc:
         warnings.warn(f"Failed to load metadata: {exc}. Metadata will be None")
@@ -1526,3 +1477,493 @@ def clipping_detector(samples, threshold=0.6):
         number of samples exceeding threshold
     """
     return len(list(filter(lambda x: x > threshold, samples)))
+
+
+def _audio_from_file_handler(
+    cls,
+    path,
+    sample_rate=None,
+    resample_type=DEFAULT_RESAMPLE_TYPE,
+    dtype=np.float32,
+    load_metadata=True,
+    offset=None,
+    duration=None,
+    start_timestamp=None,
+    out_of_bounds_mode="warn",
+):
+    """Load audio from files
+
+    Deal with the various possible input types to load an audio file
+    Also attempts to load metadata using tinytag.
+
+    Audio objects only support mono (one-channel) at this time. Files
+    with multiple channels are mixed down to a single channel. To load
+    multiple channels as separate Audio objects, use `load_channels_as_audio()`
+
+    Optionally, load only a piece of a file using `offset` and `duration`.
+    This will efficiently read sections of a .wav file regardless of where
+    the desired clip is in the audio. For mp3 files, access time grows
+    linearly with time since the beginning of the file.
+
+    This function relies on librosa.load(), which supports wav natively but
+    requires ffmpeg for mp3 support.
+
+    Args:
+        path (str, Path): path to an audio file
+        sample_rate (int, None): resample audio with value and resample_type,
+            if None use source sample_rate (default: None)
+        resample_type: method used to resample_type (default: "soxr_hq")
+        dtype: data type of samples returned [Default: np.float32]
+        load_metadata (bool): if True, attempts to load metadata from the audio
+            file. If an exception occurs, self.metadata will be `None`.
+            Otherwise self.metadata is a dictionary.
+            Note: will also attempt to parse AudioMoth metadata from the
+            `comment` field, if the `artist` field includes `AudioMoth`.
+            The parsing function for AudioMoth is likely to break when new
+            firmware versions change the `comment` metadata field.
+        offset: load audio starting at this time (seconds) after the
+            start of the file. Defaults to 0 seconds.
+            - cannot specify both `offset` and `start_timestamp`
+        duration: load audio of this duration (seconds) starting at
+            `offset`. If None, loads all the way to the end of the file.
+        start_timestamp: load audio starting at this localized datetime.datetime timestamp
+            - cannot specify both `offset` and `start_timestamp`
+            - will only work if loading metadata results in localized datetime
+                object for 'recording_start_time' key
+            - will raise AudioOutOfBoundsError if requested time period
+            is not full contained within the audio file
+            Example of creating localized timestamp:
+            ```
+            import pytz; from datetime import datetime;
+            local_timestamp = datetime(2020,12,25,23,59,59)
+            local_timezone = pytz.timezone('US/Eastern')
+            timestamp = local_timezone.localize(local_timestamp)
+            ```
+        out_of_bounds_mode:
+            - 'warn': generate a warning [default]
+            - 'raise': raise an AudioOutOfBoundsError
+            - 'ignore': return any available audio with no warning/error
+
+    Returns:
+        Audio object with attributes: samples, sample_rate, resample_type,
+        metadata (dict or None)
+
+    Note: default sample_rate=None means use file's sample rate, does not
+    resample
+
+    """
+    to_mono = cls == Audio  # MultiChannelAudio: don't sum to mono
+
+    assert out_of_bounds_mode in ["raise", "warn", "ignore"]
+
+    path = str(path)  # Pathlib path can have dependency issues - use string
+
+    ## Load Metadata ##
+    if load_metadata:
+        metadata = parse_metadata(path)
+    else:
+        metadata = None
+
+    ## Determine start time / offset ##
+    if start_timestamp is not None:
+        # user should have provied a localized timestamp as the start_timestamp
+        assert (
+            offset is None
+        ), "You must not specify both `start_timestamp` and `offset`"
+        assert (
+            type(start_timestamp) == datetime.datetime
+            and start_timestamp.tzinfo is not None
+        ), "start_timestamp must be a localized datetime object"
+        assert (
+            metadata is not None
+            and "recording_start_time" in metadata
+            and type(metadata["recording_start_time"]) == datetime.datetime
+        ), (
+            "metadata did not contain start time timestamp in key `recording_start_time`. "
+            "This key is automatically created when parsing AudioMoth metadata."
+        )
+        audio_start = metadata["recording_start_time"]
+        offset = (start_timestamp - audio_start).total_seconds()
+        if offset < 0:
+            error_msg = "requested time period begins before start of recording"
+            if out_of_bounds_mode == "raise":
+                raise AudioOutOfBoundsError(error_msg)
+            elif out_of_bounds_mode == "warn":
+                warnings.warn(error_msg)
+            # else: pass
+
+    elif offset is None:  # default offset is 0
+        offset = 0
+
+    ## Load samples ##
+    warnings.filterwarnings("ignore")
+    samples, sr = librosa.load(
+        path,
+        sr=sample_rate,
+        res_type=resample_type,
+        mono=to_mono,
+        offset=offset,
+        duration=duration,
+        dtype=None,
+    )
+    # temporary workaround for soundfile issue #349
+    # which causes empty sample array if loading float32 from mp3:
+    # pass dtype=None, then change it afterwards
+    samples = samples.astype(dtype)
+    warnings.resetwarnings()
+
+    # out of bounds warning/exception user if no samples or too short
+    if len(samples) == 0:
+        error_msg = "audio object has zero samples"
+        if out_of_bounds_mode == "raise":
+            raise AudioOutOfBoundsError(error_msg)
+        elif out_of_bounds_mode == "warn":
+            warnings.warn(error_msg)
+    elif duration is not None and len(samples) < np.floor(duration * sr):
+        if offset < 0:
+            error_msg = "requested time period begins before start of recording"
+        else:
+            error_msg = (
+                f"Audio object is shorter than requested duration: "
+                f"{len(samples)/sr} sec instead of {duration} sec"
+            )
+        if out_of_bounds_mode == "raise":
+            raise AudioOutOfBoundsError(error_msg)
+        elif out_of_bounds_mode == "warn":
+            warnings.warn(error_msg)
+
+    ## Update metadata ##
+    if metadata is not None:
+        # update the duration because we may have only loaded
+        # a piece of the entire audio file.
+        metadata["duration"] = len(samples) / sr
+
+        # we sum to mono when we load with librosa
+        metadata["channels"] = 1
+
+        # update the sample rate in metadata
+        metadata["samplerate"] = sr
+
+        # if we loaded part we don't know the file size anymore
+        if offset != 0 or duration is not None:
+            metadata["filesize"] = np.nan
+
+        # if the offset > 0, we need to update the timestamp
+        if "recording_start_time" in metadata and offset > 0:
+            # timedelta doesn't like np types, fix issue #928
+            offset = cast_np_to_native(offset)
+            metadata["recording_start_time"] += datetime.timedelta(seconds=offset)
+
+    return cls(samples, sr, resample_type=resample_type, metadata=metadata)
+
+
+def transpose_samples_decorator(method):
+    # for multi-channel audio, some methods will be the same as Audio up to a .sample transpose
+    def wrapper(self, *args, **kwargs):
+        # Transpose the .samples attribute; does not use extra memory, unlike if we copied
+        self.samples = self.samples.T
+
+        # Call the original method
+        result = method(self, *args, **kwargs)
+
+        # transpose both new and original samples back
+        if isinstance(result, Audio):
+            result.samples = result.samples.T
+
+        self.samples = self.samples.T
+
+        return result
+
+    return wrapper
+
+
+class MultiChannelAudio(Audio):
+
+    @transpose_samples_decorator
+    def trim_samples(self, *args, **kwargs):
+        return super().trim_samples(*args, **kwargs)
+
+    @transpose_samples_decorator
+    def save(self, *args, **kwargs):
+        return super().save(*args, **kwargs)
+
+    # @transpose_samples_decorator
+    # def loop(self, *args, **kwargs):
+    #     return super().loop(*args, **kwargs)
+
+    @classmethod
+    def silence(cls, duration, sample_rate, channels):
+        """ "Create audio object with zero-valued samples
+
+        Args:
+            duration: length in seconds
+            sample_rate: samples per second
+
+        Note: rounds down to integer number of samples
+        """
+        return cls(np.zeros([channels, int(duration * sample_rate)]), sample_rate)
+
+    @classmethod
+    def noise(cls, duration, sample_rate, color="white", dBFS=-10, channels=2):
+        channels = [
+            Audio.noise(
+                duration=duration, sample_rate=sample_rate, color=color, dBFS=dBFS
+            )
+            for _ in range(channels)
+        ]
+        return cls(np.vstack([c.samples for c in channels]), sample_rate)
+
+    @classmethod
+    def from_file(
+        cls,
+        path,
+        sample_rate=None,
+        resample_type=DEFAULT_RESAMPLE_TYPE,
+        dtype=np.float32,
+        load_metadata=True,
+        offset=None,
+        duration=None,
+        start_timestamp=None,
+        out_of_bounds_mode="warn",
+    ):
+        """Load audio from files
+
+        Deal with the various possible input types to load an audio file
+        Also attempts to load metadata using tinytag.
+
+        Audio objects only support mono (one-channel) at this time. Files
+        with multiple channels are mixed down to a single channel. To load
+        multiple channels as separate Audio objects, use `load_channels_as_audio()`
+
+        Optionally, load only a piece of a file using `offset` and `duration`.
+        This will efficiently read sections of a .wav file regardless of where
+        the desired clip is in the audio. For mp3 files, access time grows
+        linearly with time since the beginning of the file.
+
+        This function relies on librosa.load(), which supports wav natively but
+        requires ffmpeg for mp3 support.
+
+        Args:
+            path (str, Path): path to an audio file
+            sample_rate (int, None): resample audio with value and resample_type,
+                if None use source sample_rate (default: None)
+            resample_type: method used to resample_type (default: "soxr_hq")
+            dtype: data type of samples returned [Default: np.float32]
+            load_metadata (bool): if True, attempts to load metadata from the audio
+                file. If an exception occurs, self.metadata will be `None`.
+                Otherwise self.metadata is a dictionary.
+                Note: will also attempt to parse AudioMoth metadata from the
+                `comment` field, if the `artist` field includes `AudioMoth`.
+                The parsing function for AudioMoth is likely to break when new
+                firmware versions change the `comment` metadata field.
+            offset: load audio starting at this time (seconds) after the
+                start of the file. Defaults to 0 seconds.
+                - cannot specify both `offset` and `start_timestamp`
+            duration: load audio of this duration (seconds) starting at
+                `offset`. If None, loads all the way to the end of the file.
+            start_timestamp: load audio starting at this localized datetime.datetime timestamp
+                - cannot specify both `offset` and `start_timestamp`
+                - will only work if loading metadata results in localized datetime
+                    object for 'recording_start_time' key
+                - will raise AudioOutOfBoundsError if requested time period
+                is not full contained within the audio file
+                Example of creating localized timestamp:
+                ```
+                import pytz; from datetime import datetime;
+                local_timestamp = datetime(2020,12,25,23,59,59)
+                local_timezone = pytz.timezone('US/Eastern')
+                timestamp = local_timezone.localize(local_timestamp)
+                ```
+            out_of_bounds_mode:
+                - 'warn': generate a warning [default]
+                - 'raise': raise an AudioOutOfBoundsError
+                - 'ignore': return any available audio with no warning/error
+
+        Returns:
+            Audio object with attributes: samples, sample_rate, resample_type,
+            metadata (dict or None)
+
+        Note: default sample_rate=None means use file's sample rate, does not
+        resample
+
+        """
+        obj = _audio_from_file_handler(
+            cls=cls,
+            path=path,
+            sample_rate=sample_rate,
+            resample_type=resample_type,
+            dtype=dtype,
+            load_metadata=load_metadata,
+            offset=offset,
+            duration=duration,
+            start_timestamp=start_timestamp,
+            out_of_bounds_mode=out_of_bounds_mode,
+        )
+        # librosa returns 1d array if mono, need to expand to 2d
+        if len(obj.samples.shape) == 1:
+            obj.samples = obj.samples[np.newaxis, :]
+
+        return obj
+
+    @classmethod
+    def from_audio_list(cls, audio_list, sample_rate=None):
+        """Create MultiChannelAudio object from list of Audio objects, one per channel
+
+        Metadata and resample_type of new object are copied from first object in list
+
+        Args:
+            audio_list: list of Audio objects
+            sample_rate: target sample rate, if None uses the sample rate of the first Audio object
+
+        Returns:
+            MultiChannelAudio object
+        """
+        if sample_rate is None:
+            sample_rate = audio_list[0].sample_rate
+        resampled = [
+            a.resample(sample_rate) if a.sample_rate != sample_rate else a
+            for a in audio_list
+        ]
+        return cls(
+            np.vstack([a.samples for a in resampled]),
+            sample_rate,
+            resample_type=audio_list[0].resample_type,
+            metadata=audio_list[0].metadata,
+        )
+
+    def __repr__(self):
+        return f"<MultiChannelAudio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
+
+    @property
+    def n_channels(self):
+        return self.samples.shape[0]
+
+    def extend_to(self, duration):
+        """Extend audio file to desired duration by adding silence to the end
+
+        If `duration` is less than or equal to the Audio's self.duration, the Audio remains unchanged.
+
+        Otherwise, silence is added to the end of the Audio object to achieve the desired
+        `duration`.
+
+        Args:
+            duration: the minimum final duration in seconds of the audio object
+
+        Returns:
+            a new Audio object of the desired duration
+        """
+        minimum_n_samples = round(duration * self.sample_rate)
+        current_n_samples = self.samples.shape[1]
+
+        if minimum_n_samples <= current_n_samples:
+            return self._spawn()
+
+        else:
+            # add 0's to the end of the sample array
+            new_samples = np.pad(
+                self.samples,
+                pad_width=((0, 0), (0, minimum_n_samples - current_n_samples)),
+            )
+
+            # update metadata to reflect new duration
+            if self.metadata is None:
+                metadata = None
+            else:
+                metadata = self.metadata.copy()
+                if "duration" in metadata:
+                    metadata["duration"] = len(new_samples) / self.sample_rate
+
+            return self._spawn(
+                samples=new_samples,
+                metadata=metadata,
+            )
+
+    def spectrum(self):
+        """Create frequency spectrum from an Audio object using fft
+
+        first averages over all of the channels to create a mono signal
+
+        Args:
+            self
+
+        Returns:
+            fft, frequencies
+        """
+        mono = self.to_mono()
+        return mono.spectrum()
+
+    def split_and_save(
+        self,
+        destination,
+        prefix,
+        clip_duration,
+        clip_overlap=0,
+        final_clip=None,
+        dry_run=False,
+    ):
+        """Split audio into clips and save them to a folder
+
+        Args:
+            destination: A folder to write clips to
+            prefix: A name to prepend to the written clips
+            clip_duration: The duration of each clip in seconds
+            clip_overlap: The overlap of each clip in seconds [default: 0]
+            final_clip (str): Behavior if final_clip is less than clip_duration seconds long.
+            [default: None]
+                By default, ignores final clip entirely.
+                Possible options (any other input will ignore the final clip entirely),
+                    - "remainder": Include the remainder of the Audio (clip will not have
+                      clip_duration length)
+                    - "full": Increase the overlap to yield a clip with clip_duration length
+                    - "extend": Similar to remainder but extend (repeat) the clip to reach
+                      clip_duration length
+                    - None: Discard the remainder
+            dry_run (bool): If True, skip writing audio and just return clip DataFrame
+                [default: False]
+
+        Returns:
+            pandas.DataFrame containing paths and start and end times for each clip
+        """
+        raise NotImplementedError
+
+    @property
+    def duration(self):
+        return self.samples.shape[1] / self.sample_rate
+
+    def to_mono(self):
+        return Audio(
+            samples=self.samples.mean(axis=0),
+            sample_rate=self.sample_rate,
+            resample_type=self.resample_type,
+            metadata=self.metadata,
+        )
+
+    def to_channels(self):
+        return [Audio(samples=s, sample_rate=self.sample_rate) for s in self.samples]
+
+    def apply_channel_gain(self, dB, clip_range=(-1, 1)):
+        """apply dB (decibels) of gain to each channel of audio
+
+        Specifically, multiplies samples by 10^(dB/20)
+
+        Args:
+            dB: list of float, decibels of gain to apply to each channel
+                must have length == self.n_channels
+            clip_range: [minimum,maximum] values for samples
+                - values outside this range will be replaced with the range
+                boundary values. Pass `None` to preserve original sample values
+                without clipping. [Default: [-1,1]]
+
+        Returns:
+            Audio object with gain applied to samples
+        """
+        assert len(dB) == self.n_channels, (
+            f"dB must be a list of length {self.n_channels}, "
+            f"but was length {len(dB)}"
+        )
+        new_samples = self.samples.copy()
+        for i in range(self.n_channels):
+            new_samples[i, :] = new_samples[i, :] * 10 ** (dB[i] / 20)
+        if clip_range is not None:
+            new_samples = np.clip(new_samples, clip_range[0], clip_range[1])
+        return self._spawn(samples=new_samples)
