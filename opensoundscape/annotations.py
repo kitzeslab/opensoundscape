@@ -850,12 +850,12 @@ class BoxedAnnotations:
             df = df[df["annotation"].isin(classes)]
 
         # the clip_df should have ['file','start_time','end_time'] as the index
-        clip_df[classes] = float("nan")  # add columns for each class
         output_df = clip_df.copy()
+        output_df[
+            classes
+        ] = 0  # add columns for each class with 0s. We will add 1s in the loop below
 
         for class_name in classes:
-            # set all the values to 0 for clip_df. We will add the 1s in the next step
-            output_df[class_name] = 0
             # get just the annotations for this class
             class_df = df[df["annotation"] == class_name]
             for _, row in class_df.iterrows():
@@ -1154,7 +1154,20 @@ def find_overlapping_idxs_in_clip_df(
         annotation_end: end time of the annotation
         clip_df: dataframe with multi-index ['file', 'start_time', 'end_time']
         min_label_overlap: minimum duration (seconds) of annotation within the
-    Returns:
+                time interval for it to count as a label. Note that any annotation
+                of length less than this value will be discarded.
+                We recommend a value of 0.25 for typical bird songs, or shorter
+                values for very short-duration events such as chip calls or
+                nocturnal flight calls.
+        min_label_fraction: [default: None] if >= this fraction of an annotation
+                overlaps with the time window, it counts as a label regardless of
+                its duration. Note that *if either* of the two
+                criterea (overlap and fraction) is met, the label is 1.
+                if None (default), this criterion is not used (i.e., only min_label_overlap
+                is used). A value of 0.5 for this parameter would ensure that all
+                annotations result in at least one clip being labeled 1
+                (if there are no gaps between clips).
+         Returns:
         [(file, start_time, end_time)]) Multi-index values for the rows in the clip_df that overlap with the annotation_start and annotation_end.
     """
     # ignore all rows that start after the annotation ends. Start is level 1 of multi-index
@@ -1176,8 +1189,17 @@ def find_overlapping_idxs_in_clip_df(
         for row in clip_df.index
     ]
 
-    if min_label_overlap is not None:
+    # min_label_overlap is a required argument. If min_label_fraction is passed, it means
+    # we should keep annotations that have at least least min_label_fraction overlap
+    # EVEN if they have less than min_label_overlap seconds of overlap
+    if min_label_fraction is None:  # just use min_label_overlap
         clip_df = clip_df[clip_df["overlap"] >= min_label_overlap]
-    if min_label_fraction is not None:
-        clip_df = clip_df[clip_df["overlap_fraction"] >= min_label_fraction]
+    else:
+        # get all rows rows with at least min_label_fraction overlap
+        above_fraction = clip_df[clip_df["overlap_fraction"] >= min_label_fraction]
+        # we need to keep these AND any that have more than min_label_overlap
+        overlapping = clip_df[clip_df["overlap"] >= min_label_overlap]
+        # combine the two dataframes. but drop duplicates
+        clip_df = pd.concat([above_fraction, overlapping]).drop_duplicates()
+
     return clip_df.index

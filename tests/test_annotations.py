@@ -338,6 +338,34 @@ def test_one_hot_clip_labels(boxed_annotations):
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
 
 
+def test_one_hot_clip_labels_overlap_fraction(boxed_annotations):
+    # test that min_label_fraction argument works as expected.
+    # expected behavior is that all clips with at least 50% are labeled, even if
+    # the time overlap is less than the min_label_overlap
+
+    labels = boxed_annotations.one_hot_clip_labels(
+        full_duration=5,
+        clip_duration=1.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=50,  # longer than any clip. NO clips should be labeled
+        min_label_fraction=0.5,  # means that any clip with at least 50% overlap will be labeled
+    )
+    assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
+
+
+def test_one_hot_clip_labels_no_overlaps(boxed_annotations):
+    # confirm that no annotations are made if the required overlap is not met
+    labels = boxed_annotations.one_hot_clip_labels(
+        full_duration=5,
+        clip_duration=1.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=50,  # longer than any clip. NO clips should be labeled
+    )
+    assert np.array_equal(labels.values, np.array([[0, 0, 0, 0, 0]]).transpose())
+
+
 def test_one_hot_clip_labels_get_duration(boxed_annotations, silence_10s_mp3_str):
     """should get duration of audio files if full_duration is None"""
     boxed_annotations.df["audio_file"] = [silence_10s_mp3_str] * len(
