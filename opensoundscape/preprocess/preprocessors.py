@@ -348,6 +348,57 @@ class SpectrogramPreprocessor(BasePreprocessor):
         return sample
 
 
+from opensoundscape.preprocess import preprocessors, actions
+from opensoundscape import CNN
+import librosa
+
+
+# @action_functions.register_action_fn #TODO add when lightning branch merged
+def pcen(s, **kwargs):
+    return s._spawn(spectrogram=librosa.pcen(S=s.spectrogram, **kwargs))
+
+
+class PCENPreprocessor(preprocessors.SpectrogramPreprocessor):
+    def __init__(self, *args, **kwargs):
+        """same arguments as SpectrogramPreprocessor
+
+        adds an action that performs PCEN after making spectrogram
+        PCEN is Per Channel Energy Normalization, see https://arxiv.org/abs/1607.05666
+
+        The only other difference from SpectrogramPreprocessor is that we set the dB_scale to False
+        when generating the Spectrogram, because PCEN expects a linear-scale spectrogram; and that
+        the we normalize the output of PCEN to [0,1], then use range=[0,1] for spec.to_tensor()
+
+        note: user should set self.pipeline['pcen'].params['sr'] and 'hop_length' to match the audio/spectrogram settings
+        after instantiating this class
+
+        User can modify parameters, in particular setting PCEN parameters via self.pipeline['pcen'].params
+        """
+        super().__init__(*args, **kwargs)
+
+        # need to pass linear-value spectrogram to pcen
+        self.pipeline["to_spec"].set(dB_scale=False)
+
+        # use Librosa implementation of PCEN (could use a pytorch implementation in the future, and make it trainable)
+        pcen_action = actions.Action(fn=pcen, is_augmentation=False)
+        self.insert_action(action_index="pcen", action=pcen_action, after_key="to_spec")
+
+        # normalize PCEN output to [0,1]
+        def normalize_to_01(s):
+            new_s = (s.spectrogram - s.spectrogram.min()) / (
+                s.spectrogram.max() - s.spectrogram.min()
+            )
+            return s._spawn(spectrogram=new_s)
+
+        self.insert_action(
+            action_index="normalize",
+            action=actions.Action(fn=normalize_to_01, is_augmentation=False),
+            after_key="pcen",
+        )
+
+        self.pipeline.to_tensor.set(range=[0, 1])
+
+
 class AudioPreprocessor(BasePreprocessor):
     """Child of BasePreprocessor that only loads audio and resamples
 
