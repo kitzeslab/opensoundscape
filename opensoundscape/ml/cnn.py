@@ -244,9 +244,9 @@ class BaseModule:
         #     for name, metric in self.torch_metrics.items()
         # }
         # if self.use_amp is False, GradScaler with enabled=False should have no effect
+        # TODO: use amp with mps once supported https://github.com/pytorch/pytorch/issues/88415
         if "mps" in str(self.device):
-            use_amp = False
-            print("Not using amp: not implemented for mps as of 2024-07-11")
+            use_amp = False  # Not using amp: not implemented for mps as of 2024-07-11
         else:
             use_amp = self.use_amp
 
@@ -1020,9 +1020,14 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         """
         metrics = {}
         if targets is not None:
-            scores, targets = torch.tensor(scores).to(self.device), torch.tensor(
-                targets
-            ).to(self.device)
+            # avoid error float64 not supported on mps
+            targets = np.array(targets)
+            if targets.dtype == np.dtype("float64") and self.device.type == "mps":
+                targets = targets.astype("float32")
+
+            # move to self.device
+            scores = torch.tensor(scores).to(self.device)
+            targets = torch.tensor(targets).to(self.device)
 
             # check for invalid label values outside range of [0,1]
             assert (
@@ -2022,6 +2027,14 @@ class CNN(SpectrogramClassifier):
         super().__init__(*args, **kwargs)
 
 
+class BaseClassifier(SpectrogramClassifier):
+    """alias for SpectrogramClassifier
+
+    improves compatibility with older code / previous opso versions,
+    which had a BaseClassifier class as a parent to the CNN class
+    """
+
+
 def use_resample_loss(
     model, train_df
 ):  # TODO revisit how this work. Should be able to set loss_cls=ResampleLoss()
@@ -2227,8 +2240,7 @@ class InceptionV3(SpectrogramClassifier):
         # }
         # if self.use_amp is False, GradScaler with enabled=False should have no effect
         if "mps" in str(self.device):
-            use_amp = False
-            print("Not using amp: not implemented for mps as of 2024-07-11")
+            use_amp = False  # Not using amp: not implemented for mps as of 2024-07-11
         else:
             use_amp = self.use_amp
 
@@ -2310,13 +2322,12 @@ class InceptionV3(SpectrogramClassifier):
 def load_model(path, device=None):
     """load a saved model object
 
-    Note: saving and loading model objects across OpenSoundscape versions
-    will not work properly. Instead, use .save_torch_dict and .load_torch_dict
-    (but note that customizations to preprocessing, training params, etc will
-    not be retained using those functions).
+    This function handles models saved either as pickled objects or as a dictionary
+    including weights, preprocessing parameters, architecture name, etc.
 
-    For maximum flexibilty in further use, save the model with both .save() and
-    .save_torch_dict()
+    Note that pickled objects may not load properly across different versions of
+    OpenSoundscape, while the dictionary format does not retain the full training state
+    for resuming model training.
 
     Args:
         path: file path of saved model
@@ -2333,11 +2344,14 @@ def load_model(path, device=None):
         # otherwise mps (Apple Silicon) if available, otherwise cpu
         if device is None:
             device = _gpu_if_available()
-        model = torch.load(path, map_location=device)
+        loaded_content = torch.load(path, map_location=device)
 
-        if isinstance(model, dict):
-            model_cls = MODEL_CLS_DICT[model.pop("class")]
-            model = model_cls(**model)
+        if isinstance(loaded_content, dict):
+            model_cls = MODEL_CLS_DICT[loaded_content.pop("class")]
+            model = model_cls(**loaded_content)
+            model.network.load_state_dict(loaded_content["weights"])
+        else:
+            model = loaded_content
 
         # warn the user if loaded model's opso version doesn't match the current one
         if model.opensoundscape_version != opensoundscape.__version__:
