@@ -22,7 +22,8 @@ from .preprocess import preprocessors, actions
 from .audio import Audio
 from .spectrogram import Spectrogram, MelSpectrogram
 
-from .ml.cnn import SpectrogramClassifier
+from .ml.cnn import SpectrogramClassifier, CNN
+from .ml.lightning import LightningSpectrogramModule
 from .ml.datasets import AudioFileDataset, AudioSplittingDataset
 from .preprocess.actions import Action
 from .preprocess.preprocessors import SpectrogramPreprocessor, AudioPreprocessor
