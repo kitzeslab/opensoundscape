@@ -693,6 +693,75 @@ class SpectrogramModule(BaseModule):
             log_graph=False,
         )
 
+    def freeze_layers_except(self, train_layers=None):
+        """Freeze all parameters of a model except the parameters in the target_layer(s)
+
+        Freezing parameters means that the optimizer will not update the weights
+
+        Modifies the model in place!
+
+        Args:
+            model: the model to freeze the parameters of
+            train_layers: layer or list/iterable of the layers whose parameters should not be frozen
+                try using model.targets['classifier'] to train only the classifier
+
+        Example 1:
+        ```
+        freeze_all_layers_except(model, model.targets['classifier'])
+        ```
+
+        Example 2: freeze all but 2 layers
+        ```
+        freeze_all_layers_except(model, [model.layer1, model.layer2])
+        ```
+        """
+        # handle single layer or list of layers
+        if isinstance(train_layers, torch.nn.Module):
+            train_layers = [train_layers]
+        elif train_layers is None:
+            train_layers = []
+
+        for train_layer in train_layers:
+            assert isinstance(
+                train_layer, torch.nn.Module
+            ), f"model attribute {train_layer} was not a torch.nn.Module"
+
+        # first, disable gradients for all layers
+        for param in self.network.parameters():
+            param.requires_grad = False
+
+        # then, enable gradient updates for the target layers
+        for train_layer in train_layers:
+            for param in train_layer.parameters():
+                param.requires_grad = True
+
+    def freeze_feature_extractor(self):
+        """freeze all layers except self.network.targets['classifier']
+
+        prepares the model for transfer learning where only the classifier is trained
+
+        uses the attribute self.network.targets['classifier'] to identify the classifier layer(s),
+        if this is not set will raise Exception - use freeze_layers_except() instead
+        """
+        try:
+            clf_layer = self.network.targets["classifier"]
+        except:
+            raise ValueError(
+                "freeze_feature_extractor() requires self.network.targets['classifier'] to be set."
+                "Consider using freeze_layers_except() and specifying layers to leave unfrozen."
+            )
+        self.freeze_layers_except(train_layers=clf_layer)
+
+    def unfreeze(self):
+        """Unfreeze all layers & parameters of self.network
+
+        Enables gradient updates for all layers & parameters
+
+        Modifies the object in place
+        """
+        for param in self.network.parameters():
+            param.requires_grad = True
+
 
 @register_model_cls
 class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
@@ -1780,7 +1849,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # if target_layer is None, attempt to retrieve default target layers of network
         if target_layers is None:
             try:
-                target_layers = self.network.cam_target_layers
+                # get default layer to use for outputs to CAMs
+                target_layers = self.network.targets["cam"]
             except AttributeError as exc:
                 raise AttributeError(
                     "Please specify target_layers. Models trained with older versions of Opensoundscape do not have default target layers"
@@ -1955,7 +2025,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Args:
             samples: (same as CNN.predict())
             target_layers: layers from self.model._modules to extract outputs from
-                - if None, attempts to use self.model.embedding_target_layer default value
+                - if None, attempts to use self.model.targets['embedding'] default value
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             avgpool: bool, if True, applies global average pooling to embeddings [default: True]
                 i.e. averages across all dimensions except first to get a 1D vector per sample
@@ -1970,11 +2040,11 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # if target_layer is None, attempt to retrieve default target layers of network
         if target_layer is None:
             try:
-                target_layer = self.network.embedding_target_layer
-            except AttributeError as exc:
+                target_layer = self.network.targets["embedding"]
+            except (AttributeError, KeyError) as exc:
                 raise AttributeError(
                     "Please specify target_layer. Models trained with older versions of Opensoundscape, "
-                    "or custom architectures, do not have default .embedding_target_layer property. "
+                    "or custom architectures, do not have default .targets['embedding'] property. "
                     "e.g. For a ResNET model, try target_layers=[self.model.layer4]"
                 ) from exc
         else:  # check that target_layers are modules of self.model

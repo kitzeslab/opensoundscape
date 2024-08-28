@@ -53,12 +53,6 @@ def list_architectures():
     return list(ARCH_DICT.keys())
 
 
-def freeze_params(model):
-    """remove gradients (aka freeze) all model parameters"""
-    for param in model.parameters():
-        param.requires_grad = False
-
-
 @register_arch
 def resnet18(
     num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
@@ -90,11 +84,13 @@ def resnet18(
     # change input shape num_channels
     architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layer4]
-
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.avgpool
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.layer4],
+        # default target layer for embedding
+        "embedding": architecture_ft.avgpool,
+        "classifier": architecture_ft.fc,
+    }
 
     architecture_ft.constructor_name = "resnet18"
 
@@ -132,10 +128,13 @@ def resnet34(
     # change input shape num_channels
     architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layer4]
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.avgpool
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.layer4],
+        # default target layer for embedding
+        "embedding": architecture_ft.avgpool,
+        "classifier": architecture_ft.fc,
+    }
 
     architecture_ft.constructor_name = "resnet34"
 
@@ -173,10 +172,13 @@ def resnet50(
     # change input shape num_channels
     architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layer4]
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.avgpool
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.layer4],
+        # default target layer for embedding
+        "embedding": architecture_ft.avgpool,
+        "classifier": architecture_ft.fc,
+    }
 
     architecture_ft.constructor_name = "resnet50"
 
@@ -214,10 +216,13 @@ def resnet101(
     # change input shape num_channels
     architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layer4]
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.avgpool
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.layer4],
+        # default target layer for embedding
+        "embedding": architecture_ft.avgpool,
+        "classifier": architecture_ft.fc,
+    }
 
     architecture_ft.constructor_name = "resnet101"
 
@@ -246,8 +251,6 @@ def resnet152(
             specify channels in input sample, eg [channels h,w] sample shape
     """
     architecture_ft = torchvision.models.resnet152(weights=weights)
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
 
     # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
@@ -259,10 +262,13 @@ def resnet152(
     # change input shape num_channels
     architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layer4]
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.avgpool
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.layer4],
+        # default target layer for embedding
+        "embedding": architecture_ft.avgpool,
+        "classifier": architecture_ft.fc,
+    }
 
     architecture_ft.constructor_name = "resnet152"
 
@@ -304,10 +310,13 @@ def alexnet(
         architecture_ft.features[0], num_channels
     )
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.avgpool
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.features[-1]],
+        # default target layer for embedding
+        "embedding": architecture_ft.avgpool,
+        "classifier": architecture_ft.classifier,
+    }
 
     architecture_ft.constructor_name = "alexnet"
 
@@ -349,10 +358,13 @@ def vgg11_bn(
         architecture_ft.features[0], num_channels
     )
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.avgpool
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.features[-1]],
+        # default target layer for embedding
+        "embedding": architecture_ft.avgpool,
+        "classifier": architecture_ft.classifier,
+    }
 
     architecture_ft.constructor_name = "vgg11_bn"
 
@@ -407,11 +419,13 @@ def squeezenet1_0(
         architecture_ft.features[0], num_channels
     )
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
-
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.features
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.features[-1]],
+        # default target layer for embedding
+        "embedding": architecture_ft.features,
+        "classifier": architecture_ft.classifier,
+    }
 
     architecture_ft.constructor_name = "squeezenet1_0"
 
@@ -452,10 +466,13 @@ def densenet121(
         architecture_ft.features[0], num_channels
     )
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.features[-1]
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.features[-1]],
+        # default target layer for embedding
+        "embedding": architecture_ft.features[-1],
+        "classifier": architecture_ft.classifier,
+    }
 
     architecture_ft.constructor_name = "densenet121"
 
@@ -506,10 +523,13 @@ def inception_v3(
             num_channels, 32, kernel_size=3, stride=2
         )
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.Mixed_7c]
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.Mixed_7c
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.Mixed_7c],
+        # default target layer for embedding
+        "embedding": architecture_ft.Mixed_7c,
+        "classifier": architecture_ft.fc,
+    }
 
     architecture_ft.constructor_name = "inception_v3"
 
@@ -555,11 +575,13 @@ def efficientnet_b0(
         architecture_ft.features[0][0], num_channels
     )
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
-
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.avgpool
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.features[-1]],
+        # default target layer for embedding
+        "embedding": architecture_ft.avgpool,
+        "classifier": architecture_ft.classifier,
+    }
 
     architecture_ft.constructor_name = "efficientnet_b0"
 
@@ -591,9 +613,6 @@ def efficientnet_b4(
     """
     architecture_ft = torchvision.models.efficientnet_b4(weights=weights)
 
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.avgpool
-
     # prevent weights of feature extractor from being trained, if desired
     if freeze_feature_extractor:
         freeze_params(architecture_ft)
@@ -608,13 +627,15 @@ def efficientnet_b4(
         architecture_ft.features[0][0], num_channels
     )
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
+    architecture_ft.targets = {
+        # default target layers for activation maps like GradCAM and guided backpropagation
+        "cam": [architecture_ft.features[-1]],
+        # default target layer for embedding
+        "embedding": architecture_ft.avgpool,
+        "classifier": architecture_ft.classifier,
+    }
 
     architecture_ft.constructor_name = "efficientnet_b4"
-
-    # default target layer for embedding
-    architecture_ft.embedding_target_layer = architecture_ft.avgpool
 
     return architecture_ft
 
@@ -701,3 +722,15 @@ def change_fc_output_size(
     assert num_classes > 0, "num_classes must be > 0"
     num_ftrs = fc.in_features
     return torch.nn.Linear(num_ftrs, num_classes)
+
+
+def freeze_params(model):
+    """disable gradient updates for all model parameters"""
+    for param in model.parameters():
+        param.requires_grad = False
+
+
+def unfreeze_params(model):
+    """enable gradient updates for all model parameters"""
+    for param in model.parameters():
+        param.requires_grad = True
