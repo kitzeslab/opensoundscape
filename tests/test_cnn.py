@@ -82,9 +82,8 @@ def test_init_with_str():
 
 def test_save_load():
     classes = [0, 1]
-    m = cnn.SpectrogramClassifier(
-        architecture="resnet18", classes=classes, sample_duration=3
-    )
+    arch = resnet18(2, weights=None, num_channels=1)
+    m = cnn.SpectrogramClassifier(architecture=arch, classes=classes, sample_duration=3)
     m.save("tests/models/saved1.model")
     m2 = cnn.SpectrogramClassifier.load("tests/models/saved1.model")
     assert m2.classes == classes
@@ -97,6 +96,12 @@ def test_save_load():
     assert m3.classes == classes
     assert type(m3) == cnn.SpectrogramClassifier
     assert m3.preprocessor.sample_duration == 3
+
+    # check that the weights are equivalent
+    for k in m.network.state_dict().keys():
+        assert np.allclose(
+            m.network.state_dict()[k].numpy(), m2.network.state_dict()[k].numpy()
+        )
 
 
 def test_save_load_pickel(train_df):
