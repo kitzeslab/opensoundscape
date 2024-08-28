@@ -1195,11 +1195,9 @@ def find_overlapping_idxs_in_clip_df(
     if min_label_fraction is None:  # just use min_label_overlap
         clip_df = clip_df[clip_df["overlap"] >= min_label_overlap]
     else:
-        # get all rows rows with at least min_label_fraction overlap
-        above_fraction = clip_df[clip_df["overlap_fraction"] >= min_label_fraction]
-        # we need to keep these AND any that have more than min_label_overlap
-        overlapping = clip_df[clip_df["overlap"] >= min_label_overlap]
-        # combine the two dataframes. but drop duplicates
-        clip_df = pd.concat([above_fraction, overlapping]).drop_duplicates()
-
+        # get all rows that are either above min_label_overlap or min_label_fraction
+        clip_df = clip_df[
+            (clip_df["overlap"] >= min_label_overlap)
+            | (clip_df["overlap_fraction"] >= min_label_fraction)
+        ]
     return clip_df.index
