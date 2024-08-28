@@ -580,7 +580,7 @@ class SpectrogramModule(BaseModule):
             if (
                 not hasattr(architecture, "constructor_name")
                 or architecture.constructor_name
-                not in cnn_architectures.ARCH_DICT.values()
+                not in cnn_architectures.ARCH_DICT.keys()
             ):
                 warnings.warn(
                     """
