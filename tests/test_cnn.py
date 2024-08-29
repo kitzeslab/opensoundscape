@@ -777,3 +777,57 @@ def test_call_with_intermediate_layers(test_df):
     )
     assert len(intermediate_outs) == 1
     assert np.shape(intermediate_outs[0]) == (2, 512, 7, 7)
+
+
+def test_freeze_layers_except_and_unfreeze():
+    model = cnn.SpectrogramClassifier(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0
+    )
+    model.freeze_layers_except()
+    for param in model.network.parameters():
+        assert not param.requires_grad
+
+    model.unfreeze()
+    for param in model.network.parameters():
+        assert param.requires_grad
+
+    model.freeze_layers_except(model.network.layer1)
+    for name, param in model.network.named_parameters():
+        if "layer1" in name:
+            assert param.requires_grad
+        else:
+            assert not param.requires_grad
+
+    # should also work when the weights were previously frozen
+    model.freeze_layers_except()
+    model.freeze_layers_except(model.network.layer1)
+    for name, param in model.network.named_parameters():
+        if "layer1" in name:
+            assert param.requires_grad
+        else:
+            assert not param.requires_grad
+
+
+def test_freeze_feature_extractor_all_arch():
+    """freeze_feature_extractor() should result in only the classifier layer having requires_grad=True
+
+    all other params will have requires_grad=False. Classifier layer is determined by .network.targets["classifier"]
+    """
+    for arch_name in cnn_architectures.ARCH_DICT.keys():
+        try:
+            arch = cnn_architectures.ARCH_DICT[arch_name](
+                num_classes=2, num_channels=1, weights=None
+            )
+            model = cnn.CNN(
+                architecture=arch, classes=[0, 1], sample_duration=5.0, channels=1
+            )
+            model.freeze_feature_extractor()
+            for layer in model.network.children():
+                if layer == model.network.targets["classifier"]:
+                    for param in layer.parameters():
+                        assert param.requires_grad
+                else:
+                    for param in layer.parameters():
+                        assert not param.requires_grad
+        except Exception as e:
+            raise Exception(f"{arch_name} failed") from e
