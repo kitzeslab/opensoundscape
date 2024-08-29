@@ -7,6 +7,7 @@ import time
 import json
 import yaml
 import pathlib
+import warnings
 
 from opensoundscape.preprocess import actions, action_functions, io
 from opensoundscape.preprocess.actions import (
@@ -471,12 +472,34 @@ class SpectrogramPreprocessor(BasePreprocessor):
         width: width of output sample (time axis)
             -  default None will use the original width of the spectrogram
         channels: number of channels in output sample (default 1)
+        sample_shape: tuple of (height, width, channels) for output sample
+            Deprecated in favor of using height, width, channels
+            - if not None, will override height, width, channels
+            [default: None] means use height, width, channels arguments
     """
 
     def __init__(
-        self, sample_duration, overlay_df=None, height=224, width=224, channels=1
+        self,
+        sample_duration,
+        overlay_df=None,
+        height=224,
+        width=224,
+        channels=1,
+        sample_shape=None,
     ):
         super(SpectrogramPreprocessor, self).__init__(sample_duration=sample_duration)
+
+        # allow sample_shape argument for backwards compatability
+        if sample_shape is not None:
+            height, width, channels = sample_shape
+            warnings.warn(
+                """sample_shape argument is deprecated. Please use height, width, channels arguments instead. 
+                The current behavior is to override height, width, channels with sample_shape 
+                when sample_shape is not None.
+                """,
+                DeprecationWarning,
+            )
+
         self.height = height
         self.width = width
         self.channels = channels

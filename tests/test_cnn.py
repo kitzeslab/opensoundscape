@@ -811,7 +811,7 @@ def test_freeze_layers_except_and_unfreeze():
 def test_freeze_feature_extractor_all_arch():
     """freeze_feature_extractor() should result in only the classifier layer having requires_grad=True
 
-    all other params will have requires_grad=False. Classifier layer is determined by .network.targets["classifier"]
+    all other params will have requires_grad=False. Classifier layer is determined by .classifier property
     """
     for arch_name in cnn_architectures.ARCH_DICT.keys():
         try:
@@ -823,11 +823,30 @@ def test_freeze_feature_extractor_all_arch():
             )
             model.freeze_feature_extractor()
             for layer in model.network.children():
-                if layer == model.network.targets["classifier"]:
+                if layer == model.classifier:
                     for param in layer.parameters():
                         assert param.requires_grad
                 else:
                     for param in layer.parameters():
                         assert not param.requires_grad
+        except Exception as e:
+            raise Exception(f"{arch_name} failed") from e
+
+
+def test_change_classes_all_arch():
+    """change_classes should change the classes attribute and the output layer of the network"""
+    for arch_name in cnn_architectures.ARCH_DICT.keys():
+        try:
+            model = cnn.CNN(
+                architecture=arch_name, classes=[0, 1], sample_duration=5.0, channels=1
+            )
+            if arch_name == "squeezenet1_0":
+                # has conv2d not linear layer
+                with pytest.raises(AssertionError):
+                    model.change_classes([0, 1, 2])
+            else:
+                model.change_classes([0, 1, 2])
+                assert model.classes == [0, 1, 2]
+                assert model.classifier.out_features == 3
         except Exception as e:
             raise Exception(f"{arch_name} failed") from e

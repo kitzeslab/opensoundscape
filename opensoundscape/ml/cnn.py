@@ -634,6 +634,61 @@ class SpectrogramModule(BaseModule):
         # These metrics are a good starting point
         # for single and multi-target classification
         # User can add/remove metrics as desired.
+        # TODO: should re-initialize if number of classes changes
+        self._init_torch_metrics()
+
+        ### Logging ###
+        self.wandb_logging = dict(
+            n_preview_samples=8,  # before train/predict, log n random samples
+            top_samples_classes=None,  # specify list of classes to see top samples from
+            n_top_samples=3,  # after prediction, log n top scoring samples per class
+            # logs histograms of params & grads every n batches;
+            watch_freq=10,  # use  None for no logging of params & grads
+            gradcam=True,  # if True, logs GradCAMs for top scoring samples during predict()
+            # log the model graph to wandb - seems to cause issues when attempting to
+            # continue training the model, so True is not recommended
+            log_graph=False,
+        )
+
+    def change_classes(self, new_classes):
+        """change the classes that the model predicts
+
+        replaces the network's final linear classifier layer with a new layer
+        with random weights and the correct number of output features
+
+        will raise an error if self.network.classifier_layer is not the name of
+        a torch.nn.Linear layer, since we don't know how to replace it otherwise
+
+        Args:
+            new_classes: list of class names
+        """
+        assert len(new_classes) > 0, "new_classes must have >0 elements"
+
+        assert isinstance(self.classifier, torch.nn.Linear), (
+            f"Expected self.classifier to be a torch.nn.Linear layer, "
+            f"but found {type(self.classifier)}. Cannot automatically replace this layer to "
+            "achieve desired number of output features."
+        )
+
+        # replace fully-connected final classifier layer
+        clf_layer_name = self.network.classifier_layer
+        new_layer = cnn_architectures.change_fc_output_size(
+            self.classifier, len(new_classes)
+        )
+        cnn_architectures.set_layer_from_name(self.network, clf_layer_name, new_layer)
+
+        # update class list
+        self.classes = new_classes
+
+        # re-initialize metrics, using the new number of classes
+        self._init_torch_metrics()
+
+    @property
+    def classifier(self):
+        """return the classifier layer of the network, based on .network.classifier_layer string"""
+        return self.network.get_submodule(self.network.classifier_layer)
+
+    def _init_torch_metrics(self):
         if self.single_target:
             self.torch_metrics = {
                 "map": MulticlassAveragePrecision(
@@ -679,19 +734,6 @@ class SpectrogramModule(BaseModule):
                 # ),
             }
             self.score_metric = "auroc"
-
-        ### Logging ###
-        self.wandb_logging = dict(
-            n_preview_samples=8,  # before train/predict, log n random samples
-            top_samples_classes=None,  # specify list of classes to see top samples from
-            n_top_samples=3,  # after prediction, log n top scoring samples per class
-            # logs histograms of params & grads every n batches;
-            watch_freq=10,  # use  None for no logging of params & grads
-            gradcam=True,  # if True, logs GradCAMs for top scoring samples during predict()
-            # log the model graph to wandb - seems to cause issues when attempting to
-            # continue training the model, so True is not recommended
-            log_graph=False,
-        )
 
     def freeze_layers_except(self, train_layers=None):
         """Freeze all parameters of a model except the parameters in the target_layer(s)
@@ -744,13 +786,13 @@ class SpectrogramModule(BaseModule):
         if this is not set will raise Exception - use freeze_layers_except() instead
         """
         try:
-            clf_layer = self.network.targets["classifier"]
-        except:
+            clf_layer = self.classifier
+        except Exception as e:
             raise ValueError(
-                "freeze_feature_extractor() requires self.network.targets['classifier'] to be set."
+                "freeze_feature_extractor() requires self.network.classifier_layer to be a string defining the classifier layer."
                 "Consider using freeze_layers_except() and specifying layers to leave unfrozen."
-            )
-        self.freeze_layers_except(train_layers=clf_layer)
+            ) from e
+        self.freeze_layers_except(train_layers=self.classifier)
 
     def unfreeze(self):
         """Unfreeze all layers & parameters of self.network
@@ -1111,9 +1153,14 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 warnings.warn("Recieved empty list of predictions (or all nan)")
                 return np.nan, np.nan
 
+            # map is failing with memory limit on MPS, use CPU instead
+            # TODO: reconsider casting labels to int (support soft labels)
             for name, metric in self.torch_metrics.items():
-                metrics[name] = metric.to(self.device)(
-                    scores.detach(), targets.detach().int()
+                device = (
+                    self.device if self.device.type != "mps" else torch.device("cpu")
+                )
+                metrics[name] = metric.to(device)(
+                    scores.detach().to(device), targets.detach().int().to(device)
                 ).cpu()
 
                 if reset_metrics:
@@ -1156,7 +1203,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         )
 
         # if validation_df is a list of file paths, we need to generate clip-df with labels
-        # to evaluate the scores. Easiest to do this iwth self.predict_dataloader()
+        # to evaluate the scores. Easiest to do this with self.predict_dataloader()
         dl = self.predict_dataloader(validation_df, **kwargs)
         val_labels = dl.dataset.dataset.label_df.values
         return self.eval(val_labels, validation_scores.values)
