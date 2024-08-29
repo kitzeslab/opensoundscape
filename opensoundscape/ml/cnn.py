@@ -745,11 +745,11 @@ class SpectrogramModule(BaseModule):
         Args:
             model: the model to freeze the parameters of
             train_layers: layer or list/iterable of the layers whose parameters should not be frozen
-                try using model.targets['classifier'] to train only the classifier
+                For example: pass `model.classifier` to train only the classifier
 
         Example 1:
         ```
-        freeze_all_layers_except(model, model.targets['classifier'])
+        freeze_all_layers_except(model, model.classifier)
         ```
 
         Example 2: freeze all but 2 layers
@@ -769,24 +769,25 @@ class SpectrogramModule(BaseModule):
             ), f"model attribute {train_layer} was not a torch.nn.Module"
 
         # first, disable gradients for all layers
-        for param in self.network.parameters():
-            param.requires_grad = False
+        self.network.requires_grad_(False)
 
         # then, enable gradient updates for the target layers
         for train_layer in train_layers:
-            for param in train_layer.parameters():
-                param.requires_grad = True
+            train_layer.requires_grad_(True)
 
     def freeze_feature_extractor(self):
-        """freeze all layers except self.network.targets['classifier']
+        """freeze all layers except self.classifier
 
         prepares the model for transfer learning where only the classifier is trained
 
-        uses the attribute self.network.targets['classifier'] to identify the classifier layer(s),
+        uses the attribute self.network.classifier_layer (via the .classifier attribute)
+        to identify the classifier layer
+
         if this is not set will raise Exception - use freeze_layers_except() instead
         """
         try:
             clf_layer = self.classifier
+            assert isinstance(clf_layer, torch.nn.Module)
         except Exception as e:
             raise ValueError(
                 "freeze_feature_extractor() requires self.network.classifier_layer to be a string defining the classifier layer."
@@ -801,8 +802,7 @@ class SpectrogramModule(BaseModule):
 
         Modifies the object in place
         """
-        for param in self.network.parameters():
-            param.requires_grad = True
+        self.network.requires_grad_(True)
 
 
 @register_model_cls
@@ -2073,7 +2073,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Args:
             samples: (same as CNN.predict())
             target_layers: layers from self.model._modules to extract outputs from
-                - if None, attempts to use self.model.targets['embedding'] default value
+                - if None, attempts to use self.model.embedding_layer as default
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             avgpool: bool, if True, applies global average pooling to embeddings [default: True]
                 i.e. averages across all dimensions except first to get a 1D vector per sample
@@ -2088,11 +2088,11 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # if target_layer is None, attempt to retrieve default target layers of network
         if target_layer is None:
             try:
-                target_layer = self.network.targets["embedding"]
+                target_layer = self.network.get_submodule(self.network.embedding_layer)
             except (AttributeError, KeyError) as exc:
                 raise AttributeError(
                     "Please specify target_layer. Models trained with older versions of Opensoundscape, "
-                    "or custom architectures, do not have default .targets['embedding'] property. "
+                    "or custom architectures, do not have default `.network.embedding_layer`. "
                     "e.g. For a ResNET model, try target_layers=[self.model.layer4]"
                 ) from exc
         else:  # check that target_layers are modules of self.model

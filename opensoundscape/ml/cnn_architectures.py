@@ -670,14 +670,12 @@ def change_fc_output_size(
 
 def freeze_params(model):
     """disable gradient updates for all model parameters"""
-    for param in model.parameters():
-        param.requires_grad = False
+    model.requires_grad_(False)
 
 
 def unfreeze_params(model):
     """enable gradient updates for all model parameters"""
-    for param in model.parameters():
-        param.requires_grad = True
+    model.requires_grad_(True)
 
 
 def set_layer_from_name(module, layer_name, new_layer):

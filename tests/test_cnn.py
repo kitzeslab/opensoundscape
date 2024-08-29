@@ -822,13 +822,13 @@ def test_freeze_feature_extractor_all_arch():
                 architecture=arch, classes=[0, 1], sample_duration=5.0, channels=1
             )
             model.freeze_feature_extractor()
-            for layer in model.network.children():
-                if layer == model.classifier:
-                    for param in layer.parameters():
-                        assert param.requires_grad
+
+            clf_params = list([id(x) for x in model.classifier.parameters()])
+            for p in model.network.parameters():
+                if id(p) in clf_params:
+                    assert p.requires_grad
                 else:
-                    for param in layer.parameters():
-                        assert not param.requires_grad
+                    assert not p.requires_grad
         except Exception as e:
             raise Exception(f"{arch_name} failed") from e
 
