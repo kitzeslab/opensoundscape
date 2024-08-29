@@ -1897,17 +1897,18 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         if target_layers is None:
             try:
                 # get default layer to use for outputs to CAMs
-                target_layers = self.network.targets["cam"]
+                target_layers = [self.network.get_submodule(self.network.cam_layer)]
             except AttributeError as exc:
                 raise AttributeError(
-                    "Please specify target_layers. Models trained with older versions of Opensoundscape do not have default target layers"
-                    "For a ResNET model, try target_layers=[model.network.layer4]"
+                    "Please specify target_layers. Models trained with older versions of Opensoundscape "
+                    "and user-specified models do not have default target layers for the cam. "
+                    "For example, for a ResNET model, try target_layers=[model.network.layer4]"
                 ) from exc
         else:  # check that target_layers are modules of self.network
             for tl in target_layers:
                 assert (
                     tl in self.network.modules()
-                ), "target_layers must be in self.network.modules(), but {tl} is not."
+                ), f"target_layers must be in self.network.modules(), but {tl} is not."
 
         ## INITIALIZE CAMS AND DATALOADER ##
         # move model to device
