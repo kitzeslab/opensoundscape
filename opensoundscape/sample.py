@@ -119,7 +119,7 @@ class AudioSample(Sample):
             source=sample_path,
             start_time=start_time,
             duration=duration,
-            labels=labels_series,
+            labels=labels_series.copy(),
             trace=None,
         )
 

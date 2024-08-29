@@ -1,8 +1,9 @@
 """Actions for augmentation and preprocessing pipelines
 
 This module contains Action classes which act as the elements in
-Preprocessor pipelines. Action classes have go(), on(), off(), and set()
-methods. They take a single sample of a specific type and return the transformed
+Preprocessor pipelines. Action classes have __call__() method that operates on an audio sample,
+using the .params dictionary of parameter values.
+They take a single sample of a specific type and return the transformed
 or augmented sample, which may or may not be the same type as the original.
 
 See the preprocessor module and Preprocessing tutorial
@@ -27,17 +28,10 @@ class BaseAction:
     """Parent class for all Actions (used in Preprocessor pipelines)
 
     New actions should subclass this class.
-
-    Subclasses should set `self.requires_labels = True` if go() expects (X,y)
-    instead of (X). y is a row of a dataframe (a pd.Series) with index (.name)
-    = original file path, columns=class names, values=labels (0,1). X is the
-    sample, and can be of various types (path, Audio, Spectrogram, Tensor, etc).
-    See Overlay for an example of an Action that uses labels.
     """
 
     def __init__(self):
         self.params = pd.Series(dtype="object")
-        self.returns_labels = False
         self.is_augmentation = False
         self.bypass = False
 
@@ -48,17 +42,11 @@ class BaseAction:
             "Action"
         )
 
-    def go(self, x):
+    def __call__(self, x):
         # modifies the sample in-place
         pass
 
     def set(self, **kwargs):
-        """only allow keys that exist in self.params"""
-        unmatched_args = set(list(kwargs.keys())) - set(list(self.params.keys()))
-        assert unmatched_args == set([]), (
-            f"unexpected arguments: {unmatched_args}. "
-            f"The valid arguments and current values are: \n{self.params}"
-        )
         # Series.update ignores nan/None values, so we use dictionary.update method
         new_params = dict(self.params)
         new_params.update(kwargs)
@@ -114,20 +102,18 @@ class Action(BaseAction):
             f"Action calling {self.action_fn}"
         )
 
-    def go(self, sample, **kwargs):
+    def __call__(self, sample, **kwargs):
         # the syntax is the same regardless of whether
         # first argument is "self" (for a class method) or not
         # we pass self.params to kwargs along with any additional kwargs
 
         # only pass (and get back) the data of the sample to the action function
         # to use other attributes of sample.data, write another class and override
-        # this go() method, for example:
-        # def go(self, sample, **kwargs):
+        # this __call__ method, for example:
+        # def __call__(self, sample, **kwargs):
         #   self.action_fn(sample, **dict(self.params, **kwargs))
 
-        # should we make a copy to avoid modifying the original object?
-        # or accept that we are modifying the original sample in-place?
-        # I think its in-place since we now pass an object and update the data
+        # we modify the sample in-place and don't return anything
         sample.data = self.action_fn(sample.data, **dict(self.params, **kwargs))
 
 
@@ -150,7 +136,7 @@ class AudioClipLoader(Action):
         # two params are provided by sample.start_time and sample.duration
         self.params = self.params.drop(["offset", "duration"])
 
-    def go(self, sample, **kwargs):
+    def __call__(self, sample, **kwargs):
         offset = 0 if sample.start_time is None else sample.start_time
         duration = None if sample.duration is None else sample.duration
         sample.data = self.action_fn(
@@ -168,7 +154,7 @@ class AudioTrim(Action):
     def __init__(self, **kwargs):
         super(AudioTrim, self).__init__(trim_audio, **kwargs)
 
-    def go(self, sample, **kwargs):
+    def __call__(self, sample, **kwargs):
         self.action_fn(sample, **dict(self.params, **kwargs))
 
 
@@ -250,7 +236,7 @@ class SpectrogramToTensor(Action):
         kwargs.update(dict(return_type="torch"))  # return a tensor, not PIL.Image
         super(SpectrogramToTensor, self).__init__(fn, is_augmentation, **kwargs)
 
-    def go(self, sample, **kwargs):
+    def __call__(self, sample, **kwargs):
         """converts sample.data from Spectrogram to Tensor"""
         # sample.data must be Spectrogram object
         # sample should have attributes: height, width, channels
@@ -539,7 +525,7 @@ class Overlay(Action):
         self.overlay_df = overlay_df
         self.params = self.params.drop("overlay_df")  # removes it
 
-    def go(self, sample, **kwargs):
+    def __call__(self, sample, **kwargs):
         self.action_fn(
             sample,
             overlay_df=self.overlay_df,
