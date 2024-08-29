@@ -315,7 +315,8 @@ def alexnet(
         "cam": [architecture_ft.features[-1]],
         # default target layer for embedding
         "embedding": architecture_ft.avgpool,
-        "classifier": architecture_ft.classifier,
+        # for alexnet, "classifier" has 55M parameters, just select final FC layer
+        "classifier": architecture_ft.classifier[6],
     }
 
     architecture_ft.constructor_name = "alexnet"
@@ -363,7 +364,8 @@ def vgg11_bn(
         "cam": [architecture_ft.features[-1]],
         # default target layer for embedding
         "embedding": architecture_ft.avgpool,
-        "classifier": architecture_ft.classifier,
+        # for vgg11, "classifier" has 111M parameters, just select final FC layer
+        "classifier": architecture_ft.classifier[6],
     }
 
     architecture_ft.constructor_name = "vgg11_bn"
