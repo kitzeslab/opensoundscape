@@ -8,6 +8,7 @@ from opensoundscape.preprocess.preprocessors import (
 from opensoundscape.preprocess.utils import PreprocessingError
 import warnings
 from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
+from opensoundscape.ml import datasets
 
 
 @pytest.fixture()
@@ -251,3 +252,9 @@ def test_audio_splitting_dataset_overlap_rounding(dataset_df):
         )
         for x in dataset:
             assert len(x.data.samples) == 48000 * 2
+
+
+def test_get_item_with_list_index_raises_error(dataset_df, pre):
+    dataset = AudioFileDataset(dataset_df, pre)
+    with pytest.raises(datasets.InvalidIndexError):
+        dataset[[0, 1]]
