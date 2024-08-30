@@ -312,3 +312,11 @@ def test_overlay_to_from_dict(sample_df):
     # new action will have empty overlay_df and will be bypassed
     assert action2.bypass == True
     assert action2.overlay_df.empty
+
+
+def test_pcen(sample_audio):
+    sample_audio.data = Spectrogram.from_audio(sample_audio.data, dB_scale=False)
+    action = actions.Action(action_functions.pcen)
+    original_spec = copy.copy(sample_audio.data.spectrogram)
+    action(sample_audio)
+    assert not np.array_equal(sample_audio.data.spectrogram, original_spec)
