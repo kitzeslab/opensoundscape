@@ -1564,7 +1564,13 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             ) % self.save_interval == 0 or epoch == epochs - 1:
                 save_path = f"{self.save_path}/epoch-{self.current_epoch}.model"
                 self._log(f"Saving model to {save_path}", level=2)
-                self.save(save_path, pickle=True)
+                try:
+                    self.save(save_path, pickle=True)
+                except Exception as e:
+                    print(
+                        "Saving pickled model failed. This may be beacuse the model is not picklable "
+                        "e.g. if it contains a lambda function, generator, or other non-picklable object."
+                    )
 
             if wandb_session is not None:
                 wandb_session.log({"epoch": epoch})
@@ -1625,13 +1631,20 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             # save dictionary of separate components
             # better for cross-version compatability
             # dictionary can be loaded with torch.load() to inspect individual components
+            try:
+                arch_name = self.network.constructor_name
+            except AttributeError:
+                arch_name = "unknown"
+                warnings.warn(
+                    "Could not determine architecture constructor name for saved model"
+                )
             torch.save(
                 {
                     "weights": self.network.state_dict(),
                     "class": io.build_name(self),
                     "classes": self.classes,
                     "sample_duration": self.preprocessor.sample_duration,
-                    "architecture": self.network.constructor_name,
+                    "architecture": arch_name,
                     "preprocessor_dict": self.preprocessor.to_dict(),
                     "opensoundscape_version": opensoundscape.__version__,
                     # doesn't support resuming training across with optimizer/scheduler states
