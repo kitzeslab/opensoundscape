@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from opensoundscape.audio import Audio
 from numpy.testing import assert_allclose
-from opensoundscape.preprocess import actions
+from opensoundscape.preprocess import actions, action_functions
 from opensoundscape.sample import AudioSample
 from PIL import Image
 import torch
@@ -64,6 +64,14 @@ def sample_clip(audio_10s_path):
 def img():
     x = np.random.uniform(0, 255, [10, 10, 3])
     return Image.fromarray(x, mode="RGB")
+
+
+@pytest.fixture()
+def sample_df():
+    return pd.DataFrame(
+        index=["tests/audio/silence_10s.mp3", "tests/audio/silence_10s.mp3"],
+        data=[[0, 1], [1, 0]],
+    )
 
 
 ## Tests ##
@@ -127,17 +135,17 @@ def test_audio_trimmer_extend_short_clip(sample_audio):
 def test_audio_random_gain(sample_audio):
     # should reduce 10x if -20dB gain
     original_max = max(sample_audio.data.samples)
-    action = actions.Action(actions.audio_random_gain, dB_range=[-20, -20])
+    action = actions.Action(action_functions.audio_random_gain, dB_range=[-20, -20])
     action.__call__(sample_audio)
     assert math.isclose(max(sample_audio.data.samples) * 10, original_max, abs_tol=1e-6)
 
 
 def test_audio_add_noise(sample_audio):
     """smoke test: does it run?"""
-    action = actions.Action(actions.audio_add_noise)
+    action = actions.Action(action_functions.audio_add_noise)
     action.__call__(sample_audio)
     action = actions.Action(
-        actions.audio_add_noise, noise_dB=-100, signal_dB=10, color="pink"
+        action_functions.audio_add_noise, noise_dB=-100, signal_dB=10, color="pink"
     )
     action.__call__(sample_audio)
 
@@ -240,35 +248,67 @@ def test_spectrogram_to_tensor_retain_shape(sample, sample_audio):
 
 def test_color_jitter(tensor):
     """test that color jitter changes the tensor so that channels differ"""
-    tensor = actions.torch_color_jitter(tensor)
+    tensor = action_functions.torch_color_jitter(tensor)
     assert not np.array_equal(tensor[0, :, :].numpy(), tensor[1, :, :].numpy())
 
 
 def test_scale_tensor(tensor):
     """scale_tensor with 0,1 parameters should have no impact"""
-    result = actions.scale_tensor(tensor, input_mean=0, input_std=1)
+    result = action_functions.scale_tensor(tensor, input_mean=0, input_std=1)
     assert np.array_equal(tensor.numpy(), result.numpy())
 
 
 def test_generic_action(sample, tensor):
-    """should be able to provide function to Action plus kwargs"""
+    """initialize the Action class with an arbitrary funciton and pass function args as kwargs
+
+    the additional args become action.params Series
+    """
     sample.data = tensor
-    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
     action.__call__(sample)
     assert sample.data.max() * 2 == tensor.max()
 
 
 def test_action_get_set():
-    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
     assert action.get("input_std") == 2
     action.set(input_mean=1)
     assert action.params.get("input_mean") == 1
 
 
 def test_modify_parameter_with_series_magic(tensor):
-    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
     assert action.params["input_mean"] == 0
     assert action.params.input_mean == 0  # access with . syntax
     action.params.input_mean = 1  # set with . syntax
     assert action.params["input_mean"] == 1
     action.__call__(tensor)
+
+
+def test_base_action_to_from_dict():
+    action = actions.BaseAction(is_augmentation=True)
+    d = action.to_dict()
+    action2 = actions.BaseAction.from_dict(d)
+    assert action2.is_augmentation == action.is_augmentation
+    action3 = actions.action_from_dict(d)
+    assert action3.is_augmentation == action.is_augmentation
+
+
+def test_action_to_from_dict():
+    action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
+    d = action.to_dict()
+    action2 = actions.Action.from_dict(d)
+    assert (action2.params.values == action.params.values).all()
+    assert action2.action_fn == action.action_fn
+    action3 = actions.action_from_dict(d)
+    assert (action3.params.values == action.params.values).all()
+    assert action3.action_fn == action.action_fn
+
+
+def test_overlay_to_from_dict(sample_df):
+    action = actions.Overlay(overlay_df=sample_df, update_labels=True)
+    d = action.to_dict()
+    action2 = actions.Overlay.from_dict(d)  # raises warning about not having overlay_df
+    # new action will have empty overlay_df and will be bypassed
+    assert action2.bypass == True
+    assert action2.overlay_df.empty

@@ -19,7 +19,7 @@ def get_args(func):
 
 
 def get_reqd_args(func):
-    """get list of required arguments and default values from a function"""
+    """get list of required arguments from a function"""
     signature = inspect.signature(func)
     return [
         k

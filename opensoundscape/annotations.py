@@ -129,7 +129,7 @@ class BoxedAnnotations:
                 or a single file path (str or pathlib.Path). Eg ['path1.txt','path2.txt']
             audio_files: (list) optionally specify audio files corresponding to each
                 raven file (length should match raven_files) Eg ['path1.txt','path2.txt']
-                - if None (default), .one_hot_clip_labels() will not be able to
+                - if None (default), .multi_hot_clip_labels() will not be able to
                 check the duration of each audio file, and will raise an error
                 unless `full_duration` is passed as an argument
             annotation_column_idx: (int) position of column containing annotations
@@ -777,8 +777,9 @@ class BoxedAnnotations:
         """
         return self.df.dropna(subset=["annotation"])["annotation"].unique()
 
-    def global_one_hot_labels(self, classes):
-        """get a list of one-hot labels for entire set of annotations
+    def global_multi_hot_labels(self, classes):
+        """make list of 0/1 for presence/absence of classes across all annotations
+
         Args:
             classes: iterable of class names to give 0/1 labels
 
@@ -788,7 +789,7 @@ class BoxedAnnotations:
         all_labels = self.unique_labels()
         return [int(c in all_labels) for c in classes]
 
-    def one_hot_labels_like(
+    def multi_hot_labels_like(
         self,
         clip_df,
         min_label_overlap,
@@ -796,7 +797,7 @@ class BoxedAnnotations:
         class_subset=None,
         warn_no_annotations=False,
     ):
-        """create a dataframe of one-hot clip labels based on given starts/ends
+        """create a dataframe of multi-hot (0/1) clip labels based on given starts/ends
 
         Uses start and end clip times from clip_df to define a set of clips
         for each file. Then extracts annotations overlapping with each clip.
@@ -808,7 +809,7 @@ class BoxedAnnotations:
 
         clip_df can be created using `opensoundscap.utils.make_clip_df`
 
-        See also: `.one_hot_clip_labels()`, which creates even-lengthed clips
+        See also: `.multi_hot_clip_labels()`, which creates even-lengthed clips
         automatically and can often be used instead of this function.
 
         Args:
@@ -867,7 +868,7 @@ class BoxedAnnotations:
 
             # add clip labels for this row of clip dataframe
             # TODO: this could be what's slow, maybe concat will be much faster
-            clip_df.loc[(file, start, end), :] = one_hot_labels_on_time_interval(
+            clip_df.loc[(file, start, end), :] = multi_hot_labels_on_time_interval(
                 file_df,
                 start_time=start,
                 end_time=end,
@@ -878,7 +879,7 @@ class BoxedAnnotations:
 
         return clip_df
 
-    def one_hot_clip_labels(
+    def multi_hot_clip_labels(
         self,
         clip_duration,
         min_label_overlap,
@@ -890,9 +891,9 @@ class BoxedAnnotations:
     ):
         """Generate one-hot labels for clips of fixed duration
 
-        wraps utils.make_clip_df() with self.one_hot_labels_like()
+        wraps utils.make_clip_df() with self.multi_hot_labels_like()
         - Clips are created in the same way as Audio.split()
-        - Labels are applied based on overlap, using self.one_hot_labels_like()
+        - Labels are applied based on overlap, using self.multi_hot_labels_like()
 
         Args:
             clip_duration (float):  The duration in seconds of the clips
@@ -956,7 +957,7 @@ class BoxedAnnotations:
                     """`full_duration` was None, but failed to retrieve the durations of 
                     some files. This could occur if the values of 'file' in self.df are 
                     not paths to valid audio files. Specifying `full_duration` as an 
-                    argument to `one_hot_clip_labels()` will avoid the attempt to get 
+                    argument to `multi_hot_clip_labels()` will avoid the attempt to get 
                     audio file durations from file paths."""
                 ) from exc
         else:  # use fixed full_duration for all files
@@ -971,7 +972,7 @@ class BoxedAnnotations:
             clip_df = clip_df.set_index(["file", "start_time", "end_time"])
 
         # then create 0/1 labels for each clip and each class
-        return self.one_hot_labels_like(
+        return self.multi_hot_labels_like(
             clip_df=clip_df,
             class_subset=class_subset,
             min_label_overlap=min_label_overlap,
@@ -1057,7 +1058,7 @@ def diff(base_annotations, comparison_annotations):
     raise NotImplementedError
 
 
-def one_hot_labels_on_time_interval(
+def multi_hot_labels_on_time_interval(
     df, class_subset, start_time, end_time, min_label_overlap, min_label_fraction=None
 ):
     """generate a dictionary of one-hot labels for given time-interval
@@ -1106,7 +1107,7 @@ def one_hot_labels_on_time_interval(
         for t0, t1 in zip(df["start_time"], df["end_time"])
     ]
 
-    one_hot_labels = [0] * len(class_subset)
+    multi_hot_labels = [0] * len(class_subset)
     for i, c in enumerate(class_subset):
         # subset annotations to those of this class
         df_cls = df[df["annotation"] == c]
@@ -1116,21 +1117,21 @@ def one_hot_labels_on_time_interval(
 
         # add label=1 if any annotation overlaps with the clip by >= min_overlap
         if max(df_cls.overlap) >= min_label_overlap:
-            one_hot_labels[i] = 1
+            multi_hot_labels[i] = 1
 
         elif (  # add label=1 if annotation's overlap exceeds minimum fraction
             min_label_fraction is not None
             and max(df_cls.overlap_fraction) >= min_label_fraction
         ):
-            one_hot_labels[i] = 1
+            multi_hot_labels[i] = 1
         else:  # otherwise, we leave the label as 0
             pass
 
     # return a dictionary mapping classes to 0/1 labels
-    return {c: l for c, l in zip(class_subset, one_hot_labels)}
+    return {c: l for c, l in zip(class_subset, multi_hot_labels)}
 
 
-def categorical_to_one_hot(labels, class_subset=None):
+def categorical_to_multi_hot(labels, class_subset=None):
     """transform multi-target categorical labels (list of lists) to one-hot array
 
     Args:
@@ -1139,34 +1140,34 @@ def categorical_to_one_hot(labels, class_subset=None):
         classes=None: list of classes for one-hot labels. if None,
             taken to be the unique set of values in `labels`
     Returns:
-        one_hot: 2d array with 0 for absent and 1 for present
+        multi_hot: 2d array with 0 for absent and 1 for present
         class_subset: list of classes corresponding to columns in the array
     """
     if class_subset is None:
         class_subset = list(set(itertools.chain(*labels)))
 
-    one_hot = np.zeros([len(labels), len(class_subset)]).astype(int)
+    multi_hot = np.zeros([len(labels), len(class_subset)]).astype(int)
     for i, sample_labels in enumerate(labels):
         for label in sample_labels:
             if label in class_subset:
-                one_hot[i, class_subset.index(label)] = 1
+                multi_hot[i, class_subset.index(label)] = 1
 
-    return one_hot, class_subset
+    return multi_hot, class_subset
 
 
-def one_hot_to_categorical(one_hot, classes):
-    """transform one_hot labels to multi-target categorical (list of lists)
+def multi_hot_to_categorical(labels, classes):
+    """transform multi-hot (2d array of 0/1) labels to multi-target categorical (list of lists)
 
     Args:
-        one_hot: 2d array with 0 for absent and 1 for present
+        labels: 2d array with 0 for absent and 1 for present
         classes: list of classes corresponding to columns in the array
 
     Returns:
-        labels: list of lists of categorical labels for each sample, eg
+        list of lists of categorical labels for each sample, eg
             [['white','red'],['green','white']] or [[0,1,2],[3]]
     """
     classes = np.array(classes)
-    return [list(classes[np.array(row).astype(bool)]) for row in one_hot]
+    return [list(classes[np.array(row).astype(bool)]) for row in labels]
 
 
 def _df_to_crowsetta_sequence(df):
