@@ -46,6 +46,11 @@ def veryshort_wav_str():
 
 
 @pytest.fixture()
+def short_no_metadata_wav_str():
+    return "tests/audio/short_no_metadata.wav"
+
+
+@pytest.fixture()
 def veryshort_wav_audio(veryshort_wav_str):
     return Audio.from_file(veryshort_wav_str)
 
@@ -244,12 +249,13 @@ def test_load_incorrect_timestamp(onemin_wav_str):
         s = Audio.from_file(onemin_wav_str, start_timestamp=timestamp)
 
 
-def test_load_timestamp_notanaudiomothrecording(veryshort_wav_str):
+def test_load_timestamp_no_metadata_raises(short_no_metadata_wav_str):
+    """attempts to parse metadata to get datetime, fails because file doesn't have metadata"""
     with pytest.raises(AssertionError):  # file doesn't have audiomoth metadata
         local_timestamp = datetime.datetime(2018, 4, 5, 9, 32, 0)
         local_timezone = pytz.timezone("US/Eastern")
         timestamp = local_timezone.localize(local_timestamp)
-        s = Audio.from_file(veryshort_wav_str, start_timestamp=timestamp)
+        s = Audio.from_file(short_no_metadata_wav_str, start_timestamp=timestamp)
 
 
 def test_load_timestamp_after_end_of_recording(metadata_wav_str):

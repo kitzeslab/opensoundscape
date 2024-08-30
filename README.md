@@ -113,7 +113,7 @@ all_annotations = BoxedAnnotations.from_raven_files(raven_file_paths,audio_file_
 class_list = ['IBWO','BLJA']
 
 # create labels for fixed-duration (2 second) clips 
-labels = all_annotations.one_hot_clip_labels(
+labels = all_annotations.multi_hot_clip_labels(
   cip_duration=2,
   clip_overlap=0,
   min_label_overlap=0.25,

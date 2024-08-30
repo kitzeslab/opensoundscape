@@ -54,6 +54,7 @@ urllib3=">=2.0.7"
 requests=">=2.31.0"
 werkzeug=">=3.0.1"
 noisereduce=">=3.0.2"
+lightning=">=2.2.5"
 
 
 crowsetta = "==5.0.1"
