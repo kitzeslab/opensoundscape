@@ -454,6 +454,9 @@ def test_save_and_load_model_custom_arch(model_save_path):
     m2 = cnn.load_model(model_save_path)
     assert type(m2.network) == type(arch)
 
+    # remove the custom architecture from the ARCH_DICT when done
+    del cnn_architectures.ARCH_DICT["my_alexnet_generator"]
+
 
 def test_init_positional_args():
     cnn.CNN("resnet18", [0, 1], 0)
