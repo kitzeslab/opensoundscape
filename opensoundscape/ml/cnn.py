@@ -283,9 +283,10 @@ class BaseModule:
         # compute and log any metrics in self.torch_metrics
         # TODO: consider using validation set names rather than integer index
         # (would have to store a set of names for the validation set)
+        # TODO: does not allow soft labels, but some torchmetrics expect long type?
         batch_metrics = {
             f"train_{name}": metric.to(self.device)(
-                output.detach(), batch_labels.detach().int()
+                output.detach(), batch_labels.detach().long()
             ).cpu()
             for name, metric in self.torch_metrics.items()
         }
@@ -1063,6 +1064,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 - a dataframe with index containing audio paths, OR
                 - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
+                - a single file path as str or pathlib.Path
             see .predict() documentation for other args
             **kwargs: any arguments to inference_dataloader_cls.__init__
                 (default class is SafeAudioDataloader)
@@ -1080,6 +1082,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         show_tensor_grid(tensors,columns=3)
         ```
         """
+        # allow passing a single file path (str or pathlib.Path) for convenience
+        if isinstance(samples, (str, Path)):
+            samples = [samples]
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.inference_dataloader_cls(samples, self.preprocessor, **kwargs)
