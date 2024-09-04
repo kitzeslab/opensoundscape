@@ -158,6 +158,78 @@ def test_train_multi_target(train_df):
     shutil.rmtree("tests/models/")
 
 
+def test_reset_or_keep_optimizer_and_scheduler(train_df):
+    import copy
+    from opensoundscape.utils import set_seed
+
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+
+    set_seed(0)
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models",
+        epochs=0,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    opt1 = copy.deepcopy(model.optimizer)
+
+    # test that default (reset_optimzer=False, restart_scheduler=False)
+    # retains optimizer and scheduler state from previous .train()
+    # rather than re-initializing with random values
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models",
+        epochs=0,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+        reset_optimizer=False,
+        restart_scheduler=False,
+    )
+
+    assert (
+        model.optimizer.state_dict()["state"][0]["momentum_buffer"]
+        == opt1.state_dict()["state"][0]["momentum_buffer"]
+    ).all()
+    assert model.scheduler.state_dict()["last_epoch"] == 1
+    assert model.scheduler.state_dict()["_step_count"] == 2
+
+    # test that reset_optimizer=True, restart_scheduler=False
+    # resets the optimizer to the initial state
+    set_seed(0)
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models",
+        epochs=0,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+        reset_optimizer=True,
+        restart_scheduler=True,
+    )
+
+    assert model.optimizer.state_dict()["state"] == {}
+    assert model.scheduler.state_dict()["last_epoch"] == 0
+    assert model.scheduler.state_dict()["_step_count"] == 1
+
+    shutil.rmtree("tests/models/")
+
+
 def test_train_amp(train_df):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     # first test with cpu

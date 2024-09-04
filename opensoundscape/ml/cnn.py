@@ -309,7 +309,11 @@ class BaseModule:
 
     # def predict_step(self, batch): #runs forward() if we don't override default
 
-    def configure_optimizers(self):
+    def configure_optimizers(
+        self,
+        reset_optimizer=False,
+        restart_scheduler=False,
+    ):
         """standard Lightning method to initialize an optimizer and learning rate scheduler
 
         Lightning uses this function at the start of training. Weirdly it needs to
@@ -337,20 +341,38 @@ class BaseModule:
         Documentation:
         https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.core.LightningModule.html#lightning.pytorch.core.LightningModule.configure_optimizers
         Args:
-            None
-
+            reset_optimizer: if True, initializes the optimizer from scratch even if self.optimizer is not None
+            reset_scheduler: if True, initializes the scheduler from scratch even if self.scheduler is not None
         Returns:
             dictionary with keys "optimizer" and "scheduler" containing the
             optimizer and learning rate scheduler objects to use during training
         """
+        if reset_optimizer:
+            self.optimizer = None
+        if restart_scheduler:
+            self.scheduler = None
+            self.lr_scheduler_step = -1
 
-        # create optimizer
+        # create optimizer, if it doesn't exist yet
         # self.optimizer_params dictionary has "class" and "kwargs" keys
         # copy the kwargs dict to avoid modifying the original values
         # when the optimizer is stepped
         optimizer = self.optimizer_params["class"](
             self.network.parameters(), **self.optimizer_params["kwargs"].copy()
         )
+
+        if self.optimizer is not None:
+            # load the state dict of the previously existing optimizer,
+            # updating the params references to match current instance of self.network
+            try:
+                opt_state_dict = self.optimizer.state_dict().copy()
+                opt_state_dict["params"] = self.network.parameters()
+                optimizer.load_state_dict(opt_state_dict)
+            except:
+                warnings.warn(
+                    "attempt to load state dict of existing self.optimizer failed. "
+                    "Optimizer will be initialized from scratch"
+                )
 
         # create learning rate scheduler
         # self.scheduler_params dictionary has "class" key and kwargs for init
@@ -360,6 +382,19 @@ class BaseModule:
         args = self.lr_scheduler_params["kwargs"].copy()
         args.update({"last_epoch": self.lr_scheduler_step})
         scheduler = self.lr_scheduler_params["class"](optimizer, **args)
+
+        if self.scheduler is not None:
+            # load the state dict of the previously existing scheduler,
+            # updating the params references to match current instance of self.network
+            try:
+                scheduler_state_dict = self.scheduler.state_dict().copy()
+                # scheduler_state_dict["params"] = self.network.parameters()
+                scheduler.load_state_dict(scheduler_state_dict)
+            except:
+                warnings.warn(
+                    "attempt to load state dict of existing self.scheduler failed. "
+                    "Scheduler will be initialized from scratch"
+                )
 
         return {"optimizer": optimizer, "scheduler": scheduler}
 
@@ -397,24 +432,6 @@ class BaseModule:
                 batch_size=len(batch_tensors),
             )
         return loss
-
-    # reloading models from checkpoints:
-    # model = MyLightningModule.load_from_checkpoint("/path/to/checkpoint.ckpt") # can override hyperparams
-    # # disable randomness, dropout, etc...
-    # model.eval()
-    # # predict with the model
-    # y_hat = model(x)
-    # hyperparameters passed to init are saved and reloaded
-    # resume training
-    # model = MyLitModel()
-    # trainer = Trainer()
-    # # automatically restores model, epoch, step, LR schedulers, etc...
-    # trainer.fit(model, ckpt_path="some/path/to/my_checkpoint.ckpt")
-    # can also call trainer.validate()
-
-    # self.save_hyperparameters() create .hparams dictionary?
-    # load:
-    # model = MyClass.load_from_checkpoint(PATH, override_hparam=new_value)
 
     # previously used in eval(): #TODO add this validation
     # maybe using at_train_start hook
@@ -1485,40 +1502,15 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         ######################
         # TODO: check if resuming training is working properly for optimizer and scheduler
 
-        # Setup optimizer parameters for each network component
-        # Note: we re-create bc the user may have changed self.optimizer_params
-        # If optimizer already exists, keep the same state dict
-        # (for instance, user may be resuming training w/saved state dict)
-        optimizer_and_scheduler = self.configure_optimizers()
-        scheduler = optimizer_and_scheduler["scheduler"]
-        optimizer = optimizer_and_scheduler["optimizer"]
-        if self.optimizer is not None and not reset_optimizer:
-            # load the state dict of the previously existing optimizer,
-            # updating the params references to match current instance of self.network
-            try:
-                opt_state_dict = self.optimizer.state_dict().copy()
-                opt_state_dict["params"] = self.network.parameters()
-                optimizer.load_state_dict(opt_state_dict)
-            except:
-                warnings.warn(
-                    "attempt to load state dict of existing optimizer failed. "
-                    "Optimizer will be initialized from scratch"
-                )
-        if self.scheduler is not None and not restart_scheduler:
-            # load the state dict of the previously existing scheduler,
-            # updating the params references to match current instance of self.network
-            try:
-                scheduler_state_dict = self.scheduler.state_dict().copy()
-                scheduler_state_dict["params"] = self.network.parameters()
-                scheduler.load_state_dict(scheduler_state_dict)
-            except:
-                warnings.warn(
-                    "attempt to load state dict of existing scheduler failed. "
-                    "Scheduler will be initialized from scratch"
-                )
-
-        self.optimizer = optimizer
-        self.scheduler = scheduler
+        # Set up optimizer parameters for each network component
+        # Note: we re-create bc the user may have changed self.optimizer_params, or
+        # if we re-created the objects, the IDs of the params list have changed.
+        # if self.optimizer/self.scheduler are not None, re-loads their state_dicts
+        optimizer_and_scheduler = self.configure_optimizers(
+            reset_optimizer=reset_optimizer, restart_scheduler=restart_scheduler
+        )
+        self.scheduler = optimizer_and_scheduler["scheduler"]
+        self.optimizer = optimizer_and_scheduler["optimizer"]
 
         # Note: loss function (self.loss_fn) was initialized at __init__
         # can override like model.loss_fn = SomeLossCls()
@@ -1529,8 +1521,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         ### Train ###
 
         for epoch in range(epochs):
-            # 1 epoch = 1 view of each training file
-            # loss fn & backpropogation occurs after each batch
+            # 1 epoch = 1 view of each training sample
+            # loss fn, backpropogation, and optimizer step generally occur after each batch
+            # validation generally occurs after validation_interval epochs
 
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_epoch}")
@@ -1601,7 +1594,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         """save model with weights using torch.save()
 
         load from saved file with cnn.load_model(path)
-
 
 
         Args:
@@ -2187,81 +2179,7 @@ def use_resample_loss(
     model.loss_fn = ResampleLoss(class_frequency)
 
 
-def separate_resnet_feat_clf(model):
-    """Separate feature/classifier training params for a ResNet model
-
-    Args:
-        model: an opso model object with a pytorch resnet architecture
-
-    Returns:
-        model with modified .optimizer_params and ._init_optimizer() method
-
-    Effects:
-        creates a new self.optimizer object that replaces the old one
-        resets self.current_epoch to 0
-    """
-
-    # optimization parameters for parts of the networks - see
-    # https://pytorch.org/docs/stable/optim.html#per-parameter-options
-    model.optimizer_params["kwargs"] = {
-        "feature": {  # optimizer parameters for feature extraction layers
-            # "params": self.network.feature.parameters(),
-            "lr": 0.001,
-            "momentum": 0.9,
-            "weight_decay": 0.0005,
-        },
-        "classifier": {  # optimizer parameters for classification layers
-            # "params": self.network.classifier.parameters(),
-            "lr": 0.01,
-            "momentum": 0.9,
-            "weight_decay": 0.0005,
-        },
-    }
-
-    # We override the parent method because we need to pass a list of
-    # separate optimizer_params for different parts of the network
-    # - ie we now have a dictionary of param dictionaries instead of just a
-    # param dictionary.
-    # TODO out of date, write configure_optimziers() instead
-    def configure_optimizers(self):
-        """override parent method to pass separate parameters to feat/clf"""
-        # in torch's resnet classes, the classifier layer is called "fc"
-        # and the feature extraction layers are everything else
-        # control optimizer parameters for feature extraction and classifier layers
-        # separately
-        feature_extractor_params_list = [
-            param
-            for name, param in self.network.named_parameters()
-            if not name.split(".")[0] == "fc"
-        ]
-        classifier_params_list = [
-            param
-            for name, param in self.network.named_parameters()
-            if name.split(".")[0] == "fc"
-        ]
-        self.optimizer_params["kwargs"]["feature"][
-            "params"
-        ] = feature_extractor_params_list
-        self.optimizer_params["kwargs"]["classifier"]["params"] = classifier_params_list
-        optimizer = self.optimizer_params["class"](
-            self.optimizer_params["kwargs"].values()
-        )
-
-        # create learning rate scheduler (unchanged from parent)
-        # self.scheduler_params dictionary has "class" key and kwargs for init
-        # additionally use self.lr_scheduler_step to initialize the scheduler's "last_epoch"
-        # which determines the starting point of the learning rate schedule
-        # (-1 restarts the lr schedule from the initial lr)
-        args = self.lr_scheduler_params["kwargs"].copy()
-        args.update({"last_epoch": self.lr_scheduler_step})
-        scheduler = self.lr_scheduler_params["class"](optimizer, **args)
-
-        return {"optimizer": optimizer, "scheduler": scheduler}
-
-    model.configure_optimizers = types.MethodType(configure_optimizers, model)
-    model.opt_net = None  # clears existing opt_net and its parameters
-    model.current_epoch = 0  # resets the epoch to 0
-    # model.opt_net will be created when .train() calls ._set_train()
+# TODO: implement `classifier_lr` key in self.optimizer_params and use in configure_optimizers
 
 
 @register_model_cls
