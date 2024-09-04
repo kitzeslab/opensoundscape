@@ -102,6 +102,45 @@ class AudioFileDataset(torch.utils.data.Dataset):
         # if True skips Actions with .is_augmentation=True
         self.bypass_augmentations = bypass_augmentations
 
+    @classmethod
+    def from_categorical_df(
+        cls, categorical_labels, preprocessor, class_list, bypass_augmentations=False
+    ):
+        """Create AudioFileDataset from a DataFrame with a column listing categorical labels
+
+        e.g. where df['labels'] = [['a','b'], [], ['a','c']]
+
+        Args:
+            categorical_labels: DataFrame with index (file) or (file, start_time, end_time) and 'label'
+                column containing lists of labels or integers corresponding to class names
+            preprocessor: Preprocessor object
+            bypass_augmentations: if True, skip augmentations with .is_augmentation=True
+
+        Returns:
+            AudioFileDataset object
+        """
+        from opensoundscape.annotations import (
+            categorical_to_multi_hot,
+            multi_hot_to_categorical,
+        )
+
+        multihot_labels_sp = categorical_to_multi_hot(
+            categorical_labels["labels"], class_list, sparse=True
+        )
+        sparse_df = pd.DataFrame.sparse.from_spmatrix(
+            multihot_labels_sp,
+            index=categorical_labels.index,
+            columns=categorical_labels.columns,
+        )
+
+        return cls(
+            samples=sparse_df,
+            preprocessor=preprocessor,
+            bypass_augmentations=bypass_augmentations,
+        )
+
+    # TODO figure out what breaks when we use the sparse pandas df, and where to convert to dense
+
     def __len__(self):
         return self.label_df.shape[0]
 

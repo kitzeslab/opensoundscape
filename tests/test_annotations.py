@@ -451,7 +451,7 @@ def test_multi_hot_labels_on_time_interval_fractional(boxed_annotations):
 def test_categorical_to_multi_hot():
     cat_labels = [["a", "b"], ["a", "c"]]
     multi_hot, classes = annotations.categorical_to_multi_hot(
-        cat_labels, class_subset=["a", "b", "c", "d"]
+        cat_labels, classes=["a", "b", "c", "d"]
     )
     assert set(classes) == {"a", "b", "c", "d"}
     assert multi_hot.tolist() == [[1, 1, 0, 0], [1, 0, 1, 0]]
@@ -461,11 +461,39 @@ def test_categorical_to_multi_hot():
     assert set(classes) == {"a", "b", "c"}
 
 
+def test_categorical_to_multi_hot_sparse():
+    cat_labels = [[], ["a", "b"], [], ["c", "a"]]
+    multi_hot_sparse, classes = annotations.categorical_to_multi_hot(
+        cat_labels, classes=["a", "b", "c", "d"], sparse=True
+    )
+    assert set(classes) == {"a", "b", "c", "d"}
+    assert multi_hot_sparse.todense().tolist() == [
+        [0, 0, 0, 0],
+        [1, 1, 0, 0],
+        [0, 0, 0, 0],
+        [1, 0, 1, 0],
+    ]
+
+
 def test_multi_hot_to_categorical():
     classes = ["a", "b", "c"]
     multi_hot = [[0, 0, 1], [1, 1, 1]]
     cat_labels = annotations.multi_hot_to_categorical(multi_hot, classes)
     assert list(cat_labels) == [["c"], ["a", "b", "c"]]
+
+
+def test_multi_hot_sparse_to_categorical():
+    from scipy.sparse import csr_matrix
+
+    cat_labels = [[], ["a", "b"], [], ["c", "a"]]
+    multi_hot_sparse, classes = annotations.categorical_to_multi_hot(
+        cat_labels, classes=["a", "b", "c", "d", "e"], sparse=True
+    )
+    cat_labels_new = annotations.multi_hot_to_categorical(multi_hot_sparse, classes)
+
+    # doesn't retain order, just set composition
+    for l0, l1 in zip(cat_labels, cat_labels_new):
+        assert set(l0) == set(l1)
 
 
 def test_multi_hot_to_categorical_and_back():

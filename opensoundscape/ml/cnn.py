@@ -57,7 +57,6 @@ from opensoundscape.ml.loss import (
 from opensoundscape.ml.dataloaders import SafeAudioDataloader
 from opensoundscape.sample import collate_audio_samples
 
-
 import warnings
 
 
@@ -1410,12 +1409,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         """
 
         ### Input Validation ###
-        class_err = """
-            Train and validation datasets must have same classes
-            and class order as model object. Consider using
-            `train_df=train_df[cnn.classes]` or `cnn.classes=train_df.columns`
-            before training.
-            """
         check_labels(train_df, self.classes)
         if validation_df is not None:
             check_labels(validation_df, self.classes)

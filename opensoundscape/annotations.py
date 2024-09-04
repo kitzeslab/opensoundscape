@@ -19,6 +19,8 @@ from opensoundscape.utils import (
     GetDurationError,
 )
 
+import scipy.sparse
+
 
 class BoxedAnnotations:
     """container for "boxed" (frequency-time) annotations of audio
@@ -1131,7 +1133,35 @@ def multi_hot_labels_on_time_interval(
     return {c: l for c, l in zip(class_subset, multi_hot_labels)}
 
 
-def categorical_to_multi_hot(labels, class_subset=None):
+def integer_to_multi_hot(labels, n_classes, sparse=False):
+    """transform integer labels to multi-hot array
+
+    Args:
+        labels: list of lists of integer labels, eg [[0,1,2],[3]]
+        n_classes: number of classes
+    Returns:
+        2d np.array with False for absent and True for present
+    """
+    if sparse:
+        vals = []
+        rows = []
+        cols = []
+        for i, row in enumerate(labels):
+            for col in row:
+                vals.append(True)
+                rows.append(i)
+                cols.append(col)
+        return scipy.sparse.csr_matrix(
+            (vals, (rows, cols)), shape=(len(labels), n_classes), dtype=bool
+        )
+    else:
+        multi_hot = np.zeros((len(labels), n_classes), dtype=bool)
+        for i, row in enumerate(labels):
+            multi_hot[i, row] = True
+        return multi_hot
+
+
+def categorical_to_multi_hot(labels, classes=None, sparse=False):
     """transform multi-target categorical labels (list of lists) to one-hot array
 
     Args:
@@ -1139,27 +1169,79 @@ def categorical_to_multi_hot(labels, class_subset=None):
             [['white','red'],['green','white']] or [[0,1,2],[3]]
         classes=None: list of classes for one-hot labels. if None,
             taken to be the unique set of values in `labels`
-    Returns:
+        sparse: bool [default: False] if True, returns a scipy.sparse.csr_matrix
+    Returns: tuple (multi_hot, class_subset)
         multi_hot: 2d array with 0 for absent and 1 for present
         class_subset: list of classes corresponding to columns in the array
     """
-    if class_subset is None:
-        class_subset = list(set(itertools.chain(*labels)))
+    if classes is None:
+        classes = list(set(itertools.chain(*labels)))
 
-    multi_hot = np.zeros([len(labels), len(class_subset)]).astype(int)
-    for i, sample_labels in enumerate(labels):
-        for label in sample_labels:
-            if label in class_subset:
-                multi_hot[i, class_subset.index(label)] = 1
+    label_idx_dict = {l: i for i, l in enumerate(classes)}
+    vals = []
+    rows = []
+    cols = []
 
-    return multi_hot, class_subset
+    def add_labels(i, labels):
+        for label in labels:
+            if label in classes:
+                vals.append(True)
+                rows.append(i)
+                cols.append(label_idx_dict[label])
+
+    [add_labels(i, l) for i, l in enumerate(labels)]
+
+    multi_hot = scipy.sparse.csr_matrix(
+        (vals, (rows, cols)), shape=(len(labels), len(classes)), dtype=bool
+    )
+
+    if sparse:
+        return multi_hot, classes
+    else:
+        return multi_hot.todense(), classes
+
+
+def multi_hot_to_integer_labels(labels):
+    """transform multi-hot (2d array of 0/1) labels to multi-target
+    categorical (list of lists of integer class indices)
+
+    Args:
+        labels: 2d array or scipy.sparse.csr_matrix with 0 for absent and 1 for present
+
+    Returns:
+        list of lists of categorical labels for each sample, eg
+            [[0,1,2],[3]] where 0 corresponds to column 0 of labels
+    """
+    if scipy.sparse.issparse(labels):
+        return [
+            [col for col in labels.indices[labels.indptr[i] : labels.indptr[i + 1]]]
+            for i in range(len(labels.indptr) - 1)
+        ]
+    else:
+        return [list(itertools.compress(range(len(x)), x)) for x in labels]
+
+
+def categorical_to_integer_labels(labels, classes):
+    """
+    Convert a list of categorical labels to a list of numeric labels
+    """
+    # for large lists, dict lookup is 100x faster than list.index()
+    classes_dict = {c: i for i, c in enumerate(classes)}
+    return [[classes_dict[li] for li in l] for l in labels]
+
+
+def integer_to_categorical_labels(labels, classes):
+    """
+    Convert a list of numeric labels to a list of categorical labels
+    """
+    return [[classes[li] for li in l] for l in labels]
 
 
 def multi_hot_to_categorical(labels, classes):
     """transform multi-hot (2d array of 0/1) labels to multi-target categorical (list of lists)
 
     Args:
-        labels: 2d array with 0 for absent and 1 for present
+        labels: 2d array or scipy.sparse.csr_matrix with 0 for absent and 1 for present
         classes: list of classes corresponding to columns in the array
 
     Returns:
@@ -1167,7 +1249,19 @@ def multi_hot_to_categorical(labels, classes):
             [['white','red'],['green','white']] or [[0,1,2],[3]]
     """
     classes = np.array(classes)
-    return [list(classes[np.array(row).astype(bool)]) for row in labels]
+    integer_labels = multi_hot_to_integer_labels(labels)
+    return integer_to_categorical_labels(integer_labels, classes)
+
+    # if scipy.sparse.issparse(labels):
+    #     return [
+    #         [
+    #             classes[col]
+    #             for col in labels.indices[labels.indptr[i] : labels.indptr[i + 1]]
+    #         ]
+    #         for i in range(len(labels.indptr) - 1)
+    #     ]
+    # else:
+    #     return [list(classes[np.array(row).astype(bool)]) for row in labels]
 
 
 def _df_to_crowsetta_sequence(df):
@@ -1203,3 +1297,117 @@ def _df_to_crowsetta_bboxes(df):
         )
         for i in df.index
     ]
+
+
+from itertools import chain
+from opensoundscape.annotations import (
+    multi_hot_to_categorical,
+    categorical_to_multi_hot,
+)
+
+
+class CategoricalLabels:
+    def __init__(
+        self, files, start_times, end_times, labels, classes=None, integer_labels=False
+    ):
+        # labels can be list of lists of class names or list of lists of integer class indices
+        if (
+            classes is None
+        ):  # if classes are not provided, infer them from unique set of labels
+            classes = list(set(chain(*labels)))
+        self.classes = classes
+        # convert from lists of string class names to lists of integer class indices
+        if (
+            not integer_labels
+        ):  # convert from lists of class names to lists of integer class indices
+            labels = categorical_to_integer_labels(labels, self.classes)
+        self.df = pd.DataFrame(
+            {
+                "file": files,
+                "start_time": start_times,
+                "end_time": end_times,
+                "labels": labels,
+            }
+        )
+
+    @classmethod
+    def from_categorical_labels_df(cls, df, classes, integer_labels=False):
+        """
+        df has columns of 'file', 'start_time', 'end_time', 'labels' with labels as list of class names (integer_labels=False)
+        or list of integer class indices (integer_labels=True)
+
+        Args:
+            df (pd.DataFrame): dataframe with columns of 'file', 'start_time', 'end_time', 'labels'
+            classes (list): list of str class names or list of integer class indices
+            integer_labels (bool): if True, labels are integer class indices, otherwise labels are class names
+        """
+        return cls(
+            df["file"],
+            df["clip_start"],
+            df["clip_end"],
+            df["labels"].values,
+            classes=classes,
+            integer_labels=integer_labels,
+        )
+
+    @classmethod
+    def from_multihot_df(cls, df):
+        # multihot df has multi-index of file, start_time, end_time; columns = classes
+        labels_int = multi_hot_to_integer_labels(df.values)
+        file = df.index.get_level_values("file")
+        clip_start = df.index.get_level_values("start_time")
+        clip_end = df.index.get_level_values("end_time")
+        return cls(file, clip_start, clip_end, labels_int, classes=df.columns)
+
+    # @property
+    def multihot_array(self, sparse=True):
+        """generate multi-hot array of labels"""
+        cat_classes = integer_to_categorical_labels(
+            self.df["labels"].values, self.classes
+        )
+        sp_labels, _ = categorical_to_multi_hot(
+            labels=list(cat_classes),
+            classes=self.classes,
+            sparse=sparse,
+        )
+        return sp_labels
+
+    @property
+    def multihot_sparse(self):
+        return self.multihot_array(sparse=True)
+
+    @property
+    def multihot_dense(self):
+        return self.multihot_array(sparse=False)
+
+    def multihot_df(self, sparse=True):
+        """generate multi-hot dataframe of 0/1 labels"""
+        # multi-index from columns ('file','start_time','end_time')
+        index = self._get_multiindex()
+        if sparse:
+            return pd.DataFrame.sparse.from_spmatrix(
+                self.multihot_sparse, index=index, columns=self.classes
+            )
+        else:
+            return pd.DataFrame(self.multihot_dense, index=index, columns=self.classes)
+
+    @property
+    def multihot_df_sparse(self):
+        return self.multihot_df(sparse=True)
+
+    @property
+    def multihot_df_dense(self):
+        return self.multihot_df(sparse=False)
+
+    def labels_at_index(self, index):
+        return [self.classes[i] for i in self.df["labels"].iloc[index]]
+
+    def multihot_labels_at_index(self, index):
+        integer_labels = self.df["labels"].iloc[index]
+        return integer_to_multi_hot([integer_labels], len(self.classes))[0]
+
+    def _get_multiindex(self):
+        return pd.MultiIndex.from_tuples(
+            list(zip(self.df["file"], self.df["clip_start"], self.df["clip_end"])),
+            names=["file", "start_time", "end_time"],
+        )

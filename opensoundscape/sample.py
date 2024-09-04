@@ -77,11 +77,11 @@ class AudioSample(Sample):
 
         - if series name (dataframe index) is tuple, extracts ['file','start_time','end_time']
         these values to (source, start_time, duration=end_time-start_time)
-        - otherwise, series name extracted as source; start_time and duraiton will be none
+        - otherwise, series name extracted as source; start_time and duration will be none
 
         Extracts source (file), start_time, and end_time from multi-index pd.Series (one row
         of a pd.DataFrame with multi index ['file','start_time','end_time']).
-        The argument `series` is saved as self.labels
+        The argument `series` is saved as self.labels. If sparse, converts to dense.
         Creates an AudioSample object.
 
         Args:
@@ -92,8 +92,10 @@ class AudioSample(Sample):
                 to avoid floating point precision errors. Pass `None` for no rounding.
                 Default: 10 decimal places
         """
+        # cast (potentially sparse input) to dense boolean #TODO: should it be int or long, or float?
+        # note that this implementation doesn't allow soft labels
         # make a copy to avoid modifying original
-        labels_series = labels_series.copy()
+        labels_series = labels_series.copy().astype(bool)
 
         if type(labels_series.name) == tuple:
             # if the dataframe has a multi-index, it should be (file,start_time,end_time)
