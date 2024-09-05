@@ -305,6 +305,38 @@ def test_multi_hot_labels_like(boxed_annotations):
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
 
 
+def test_multi_hot_labels_like_no_overlap(boxed_annotations):
+    # check it does not fail if no annotations overlap with any of the clip_df times
+    clip_df = pd.DataFrame.from_dict(
+        {
+            "audio_file": ["audio_file.wav"] * 2,
+            "start_time": [50, 60],  # after all the annotations
+            "end_time": [60, 70],
+        }
+    )
+    clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
+    labels = boxed_annotations.multi_hot_labels_like(
+        clip_df, class_subset=["a"], min_label_overlap=0.25
+    )
+    assert np.array_equal(labels.values, np.array([[0, 0]]).transpose())
+
+
+def test_multi_hot_labels_like_no_overlap(boxed_annotations):
+    # check it does not fail if no annotations overlap with any of the clip_df times
+    clip_df = pd.DataFrame.from_dict(
+        {
+            "audio_file": ["audio_file.wav"] * 2,
+            "start_time": [50, 60],  # after all the annotations
+            "end_time": [60, 70],
+        }
+    )
+    clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
+    labels = boxed_annotations.multi_hot_labels_like(
+        clip_df, class_subset=["a"], min_label_overlap=0.25
+    )
+    assert np.array_equal(labels.values, np.array([[0, 0]]).transpose())
+
+
 def test_multi_hot_labels_like_overlap(boxed_annotations):
     clip_df = generate_clip_times_df(3, clip_duration=1.0, clip_overlap=0.5)
     clip_df["audio_file"] = "audio_file.wav"
@@ -324,6 +356,62 @@ def test_multi_hot_clip_labels(boxed_annotations):
         min_label_overlap=0.25,
     )
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
+
+
+def test_multi_hot_clip_labels_overlap_fraction(boxed_annotations):
+    # test that min_label_fraction argument works as expected.
+    # expected behavior is that all clips with at least 50% are labeled, even if
+    # the time overlap is less than the min_label_overlap
+
+    labels = boxed_annotations.multi_hot_clip_labels(
+        full_duration=5,
+        clip_duration=1.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=50,  # longer than any clip. NO clips should be labeled
+        min_label_fraction=0.5,  # means that any clip with at least 50% overlap will be labeled
+    )
+    assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
+
+
+def test_multi_hot_clip_labels_no_overlaps(boxed_annotations):
+    # confirm that no annotations are made if the required overlap is not met
+    labels = boxed_annotations.multi_hot_clip_labels(
+        full_duration=5,
+        clip_duration=1.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=50,  # longer than any clip. NO clips should be labeled
+    )
+    assert np.array_equal(labels.values, np.array([[0, 0, 0, 0, 0]]).transpose())
+
+
+def test_multi_hot_clip_labels_overlap_fraction(boxed_annotations):
+    # test that min_label_fraction argument works as expected.
+    # expected behavior is that all clips with at least 50% are labeled, even if
+    # the time overlap is less than the min_label_overlap
+
+    labels = boxed_annotations.multi_hot_clip_labels(
+        full_duration=5,
+        clip_duration=1.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=50,  # longer than any clip. NO clips should be labeled
+        min_label_fraction=0.5,  # means that any clip with at least 50% overlap will be labeled
+    )
+    assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
+
+
+def test_multi_hot_clip_labels_no_overlaps(boxed_annotations):
+    # confirm that no annotations are made if the required overlap is not met
+    labels = boxed_annotations.multi_hot_clip_labels(
+        full_duration=5,
+        clip_duration=1.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=50,  # longer than any clip. NO clips should be labeled
+    )
+    assert np.array_equal(labels.values, np.array([[0, 0, 0, 0, 0]]).transpose())
 
 
 def test_multi_hot_clip_labels_get_duration(boxed_annotations, silence_10s_mp3_str):
@@ -390,62 +478,6 @@ def test_convert_labels_wrong_type(boxed_annotations):
     df = [["a", "b", "c"], ["a", "b", "d"]]
     with pytest.raises(TypeError):
         boxed_annotations = boxed_annotations.convert_labels(df)
-
-
-def test_multi_hot_labels_on_time_interval(boxed_annotations):
-    a = annotations.multi_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0,
-        end_time=3.5,
-        min_label_overlap=0.25,
-        class_subset=["a", "b"],
-    )
-    assert a["a"] == 1 and a["b"] == 1
-
-    a = annotations.multi_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0,
-        end_time=3.5,
-        min_label_overlap=0.75,
-        class_subset=["a", "b"],
-    )
-    assert a["a"] == 1 and a["b"] == 0
-
-
-def test_multi_hot_labels_on_time_interval_fractional(boxed_annotations):
-    """test min_label_fraction use cases"""
-    # too short but satisfies fraction
-    a = annotations.multi_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0.4,
-        end_time=3,
-        min_label_overlap=2,
-        min_label_fraction=0.5,
-        class_subset=["a"],
-    )
-    assert a["a"] == 1
-
-    # too short and not enough for fraction
-    a = annotations.multi_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0.4,
-        end_time=3,
-        min_label_overlap=2,
-        min_label_fraction=0.9,
-        class_subset=["a"],
-    )
-    assert a["a"] == 0
-
-    # long enough, although less than fraction
-    a = annotations.multi_hot_labels_on_time_interval(
-        boxed_annotations.df,
-        start_time=0.4,
-        end_time=3,
-        min_label_overlap=0.5,
-        min_label_fraction=0.9,
-        class_subset=["a"],
-    )
-    assert a["a"] == 1
 
 
 def test_categorical_to_multi_hot():
@@ -779,3 +811,25 @@ def test_to_from_csv(boxed_annotations, saved_csv):
 
     # check for equality
     assert boxed_annotations.df.equals(loaded.df)
+
+
+def test_find_overlapping_idxs_in_clip_df(boxed_annotations):
+    clip_df = generate_clip_times_df(5, clip_duration=1.0, clip_overlap=0)
+    # make it a multi-index, with the first level being the audio file, second being start, third being end time
+    clip_df["audio_file"] = "audio_file.wav"
+    clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
+    # annotation overlaps with 1 time-window
+    idxs = annotations.find_overlapping_idxs_in_clip_df(
+        0, 1, clip_df, min_label_overlap=0.25
+    )
+    assert len(idxs) == 1
+    # annotation overlaps with 2 time-windows
+    idxs = annotations.find_overlapping_idxs_in_clip_df(
+        0, 1.3, clip_df, min_label_overlap=0.25
+    )
+    assert len(idxs) == 2
+    # annotation-overlaps with no time-windows
+    idxs = annotations.find_overlapping_idxs_in_clip_df(
+        1000, 1001, clip_df, min_label_overlap=0.25
+    )
+    assert len(idxs) == 0
