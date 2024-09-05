@@ -131,7 +131,7 @@ class BoxedAnnotations:
                 or a single file path (str or pathlib.Path). Eg ['path1.txt','path2.txt']
             audio_files: (list) optionally specify audio files corresponding to each
                 raven file (length should match raven_files) Eg ['path1.txt','path2.txt']
-                - if None (default), .multi_hot_clip_labels() will not be able to
+                - if None (default), .clip_labels() will not be able to
                 check the duration of each audio file, and will raise an error
                 unless `full_duration` is passed as an argument
             annotation_column_idx: (int) position of column containing annotations
@@ -791,15 +791,26 @@ class BoxedAnnotations:
         all_labels = self.unique_labels()
         return [int(c in all_labels) for c in classes]
 
-    def multi_hot_labels_like(
+    def labels_on_index(
         self,
         clip_df,
         min_label_overlap,
         min_label_fraction=None,
         class_subset=None,
+        return_type="multihot",
         warn_no_annotations=False,
     ):
-        """create a dataframe of multi-hot (0/1) clip labels based on given starts/ends
+        """create a dataframe of clip labels based on given starts/ends.
+
+        Format of label dataframe depends on `return_type` argument:
+            'multihot': [default] returns a dataframe with a column for each class
+                and 0/1 values for class presence.
+            'integers': returns a dataframe with 'labels' column containing lists of
+                integer class indices for each clip, corresponding to
+                the `classes` list; also returns a second value, the list of class names
+            'classes': returns a dataframe with 'labels' column containing lists of
+                class names for each clip
+            'CategoricalLabels': returns a CategoricalLabels object
 
         Uses start and end clip times from clip_df to define a set of clips
         for each file. Then extracts annotations overlapping with each clip.
@@ -811,7 +822,7 @@ class BoxedAnnotations:
 
         clip_df can be created using `opensoundscap.utils.make_clip_df`
 
-        See also: `.multi_hot_clip_labels()`, which creates even-lengthed clips
+        See also: `.clip_labels()`, which creates even-lengthed clips
         automatically and can often be used instead of this function.
 
         Args:
@@ -834,13 +845,39 @@ class BoxedAnnotations:
                 (if there are no gaps between clips).
             class_subset: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
+            return_type: ('multihot','integers','classes', or 'CategoricalLabels'):
+                'multihot': [default] returns a dataframe with a column for each class
+                    and 0/1 values for class presence.
+                'integers': returns a dataframe with 'labels' column containing lists of
+                    integer class indices for each clip, corresponding to
+                    the `classes` list; also returns a second value, the list of class names
+                'classes': returns a dataframe with 'labels' column containing lists of
+                    class names for each clip
+                'CategoricalLabels': returns a CategoricalLabels object
             warn_no_annotations: bool [default:False] if True, raises warnings for
                 any files in clip_df with no corresponding annotations in self.df
 
-        Returns:
-            DataFrame of one-hot labels w/ multi-index of (file, start_time, end_time),
-            a column for each class, and values of 0=absent or 1=present
+        Returns: depends on `return_type` argument
+            'multihot': [default] returns a dataframe with a column for each class
+                    and 0/1 values for class presence.
+            'integers': returns a dataframe with 'labels' column containing lists of
+                integer class indices for each clip, corresponding to
+                the `classes` list; also returns a second value, the list of class names
+            'classes': returns a dataframe with 'labels' column containing lists of
+                class names for each clip; also returns a second value, the list of class names
+            'CategoricalLabels': returns a CategoricalLabels object
         """
+        # TODO: implement sparse df for multihot labels
+
+        # check `return_type` argument is valid
+        err = f"invalid return_type: {return_type}, must be one of ('multihot','integers','classes','CategoricalLabels')"
+        assert return_type in (
+            "multihot",
+            "integers",
+            "classes",
+            "CategoricalLabels",
+        ), err
+
         # drop nan annotations
         df = self.df.dropna(subset=["annotation"])  # creates new copy of df object
 
@@ -852,45 +889,84 @@ class BoxedAnnotations:
             # removing rows with annotations for other classes
             df = df[df["annotation"].isin(classes)]
 
-        # the clip_df should have ['file','start_time','end_time'] as the index
+        # if desired, warn users about files with no annotations
+        if warn_no_annotations:
+            all_files = clip_df.index.get_level_values(0).unique()
+            for file in all_files:
+                if not file == file:  # file is NaN, get corresponding rows
+                    file_df = df[df["audio_file"].isnull()]
+                else:  # subset annotations to this file
+                    file_df = df[df["audio_file"] == file]
+
+                # warn user if no annotations correspond to this file
+                if len(file_df) == 0:
+                    warnings.warn(
+                        f"No annotations matched the file {file}. "
+                        " There will be no positive labels for this file."
+                    )
+
+        # initialize an empty dataframe with the same index as clip_df
         output_df = clip_df.copy()
-        output_df[
-            classes
-        ] = 0  # add columns for each class with 0s. We will add 1s in the loop below
 
-        for class_name in classes:
-            # get just the annotations for this class
-            class_df = df[df["annotation"] == class_name]
-            for _, row in class_df.iterrows():
-                annotation_start = row["start_time"]
-                annotation_end = row["end_time"]
-                # find the overlapping rows
-                idxs = find_overlapping_idxs_in_clip_df(
-                    annotation_start,
-                    annotation_end,
-                    clip_df,
-                    min_label_overlap,
-                    min_label_fraction,
+        # how we store labels depends on `multihot` argument, either
+        # multi-hot or lists of integer class indices
+        if return_type == "multihot":
+            # add columns for each class with 0s. We will add 1s in the loop below
+            output_df[classes] = False
+
+            # add the annotations by adding class index positions to appropriate rows
+            for class_name in classes:
+                # get just the annotations for this class
+                class_df = df[df["annotation"] == class_name]
+                for _, row in class_df.iterrows():
+                    annotation_start = row["start_time"]
+                    annotation_end = row["end_time"]
+                    # find the overlapping rows, gets the multi-index back
+                    df_idxs = find_overlapping_idxs_in_clip_df(
+                        annotation_start,
+                        annotation_end,
+                        clip_df,
+                        min_label_overlap,
+                        min_label_fraction,
+                    )
+                    if len(df_idxs) > 0:
+                        output_df.loc[df_idxs, class_name] = True
+            return output_df
+        else:  # create 'labels' column with lists of integer class indices
+            output_df["labels"] = [[] for _ in range(len(output_df))]
+
+            # add the annotations by adding the integer class indices to row label lists
+            for class_idx, class_name in enumerate(classes):
+                # get just the annotations for this class
+                class_df = df[df["annotation"] == class_name]
+                for _, row in class_df.iterrows():
+                    annotation_start = row["start_time"]
+                    annotation_end = row["end_time"]
+                    # find the rows that overlap with the annotation enough in time
+                    df_idxs = find_overlapping_idxs_in_clip_df(
+                        annotation_start,
+                        annotation_end,
+                        clip_df,
+                        min_label_overlap,
+                        min_label_fraction,
+                    )
+
+                    for idx in df_idxs:
+                        if return_type == "classes":
+                            # add the string class name to the appropriate rows' labels
+                            output_df.at[idx, "labels"].append(class_name)
+                        else:
+                            # add this class's integer index to the appropriate rows' labels
+                            output_df.at[idx, "labels"].append(class_idx)
+
+            if return_type == "CategoricalLabels":
+                return CategoricalLabels.from_categorical_labels_df(
+                    df=output_df.reset_index(), classes=classes, integer_labels=True
                 )
-                if len(idxs) > 0:
-                    output_df.loc[idxs, class_name] = 1
-        all_files = clip_df.index.get_level_values(0).unique()
-        for file in all_files:
-            if not file == file:  # file is NaN, get corresponding rows
-                file_df = df[df["audio_file"].isnull()]
-            else:  # subset annotations to this file
-                file_df = df[df["audio_file"] == file]
+            else:
+                return output_df, classes
 
-            # warn user if no annotations correspond to this file
-            if warn_no_annotations and len(file_df) == 0:
-                warnings.warn(
-                    f"No annotations matched the file {file}. All "
-                    "clip labels will be zero for this file."
-                )
-
-        return output_df
-
-    def multi_hot_clip_labels(
+    def clip_labels(
         self,
         clip_duration,
         min_label_overlap,
@@ -898,13 +974,14 @@ class BoxedAnnotations:
         full_duration=None,
         class_subset=None,
         audio_files=None,
+        return_type="multihot",
         **kwargs,
     ):
         """Generate one-hot labels for clips of fixed duration
 
-        wraps utils.make_clip_df() with self.multi_hot_labels_like()
+        wraps utils.make_clip_df() with self.labels_on_index()
         - Clips are created in the same way as Audio.split()
-        - Labels are applied based on overlap, using self.multi_hot_labels_like()
+        - Labels are applied based on overlap, using self.labels_on_index()
 
         Args:
             clip_duration (float):  The duration in seconds of the clips
@@ -930,13 +1007,28 @@ class BoxedAnnotations:
                 be all unique values of self.df['annotation']
             audio_files: list of audio file paths (as str or pathlib.Path)
                 to create clips for. If None, uses self.audio_files. [default: None]
+            return_type: ('multihot','integers','classes', or 'CategoricalLabels'):
+                'multihot': [default] returns a dataframe with a column for each class
+                    and 0/1 values for class presence.
+                'integers': returns a dataframe with 'labels' column containing lists of
+                    integer class indices for each clip, corresponding to
+                    the `classes` list; also returns a second value, the list of class names
+                'classes': returns a dataframe with 'labels' column containing lists of
+                    class names for each clip
+                'CategoricalLabels': returns a CategoricalLabels object
             **kwargs (such as overlap_fraction, final_clip) are passed to
                 opensoundscape.utils.generate_clip_times_df() via make_clip_df()
-        Returns:
-            dataframe with index ['file','start_time','end_time'] and columns=classes
+        Returns: depends on `return_type` argument
+            'multihot': [default] returns a dataframe with a column for each class
+                    and 0/1 values for class presence.
+            'integers': returns a dataframe with 'labels' column containing lists of
+                integer class indices for each clip, corresponding to
+                the `classes` list; also returns a second value, the list of class names
+            'classes': returns a dataframe with 'labels' column containing lists of
+                class names for each clip; also returns a second value, the list of class names
+            'CategoricalLabels': returns a CategoricalLabels object
         """
-
-        # use self.audio_files as list of files to create clips for, unless user passed audio_file
+        # use self.audio_files as list of files to create clips for, unless user passed audio_files
         if audio_files is None:
             if self.audio_files is None:
                 raise ValueError(
@@ -968,7 +1060,7 @@ class BoxedAnnotations:
                     """`full_duration` was None, but failed to retrieve the durations of 
                     some files. This could occur if the values of 'file' in self.df are 
                     not paths to valid audio files. Specifying `full_duration` as an 
-                    argument to `multi_hot_clip_labels()` will avoid the attempt to get 
+                    argument to `clip_labels()` will avoid the attempt to get 
                     audio file durations from file paths."""
                 ) from exc
         else:  # use fixed full_duration for all files
@@ -982,13 +1074,16 @@ class BoxedAnnotations:
             clip_df["file"] = np.repeat(audio_files, len(clip_df_template))
             clip_df = clip_df.set_index(["file", "start_time", "end_time"])
 
-        # then create 0/1 labels for each clip and each class
-        return self.multi_hot_labels_like(
+        # call labels_on_index with clip_df
+        return self.labels_on_index(
             clip_df=clip_df,
             class_subset=class_subset,
             min_label_overlap=min_label_overlap,
             min_label_fraction=min_label_fraction,
+            return_type=return_type,
         )
+
+        # TODO: add tests for all return types, only have 'multihot' now
 
     def convert_labels(self, conversion_table):
         """modify annotations according to a conversion table
@@ -1309,6 +1404,39 @@ class CategoricalLabels:
     def __init__(
         self, files, start_times, end_times, labels, classes=None, integer_labels=False
     ):
+        """
+        Store annotations as list of files, start_times, end_times, and labels
+
+        labels are stored as lists of integer class indices, referring to the classes
+        in self.classes (list).
+
+        Provides various methods for initializing from and converting to different formats.
+
+        Args:
+            files (list): list of file paths
+            start_times (list): list of start times (seconds) for each annotation
+            end_times (list): list of end times (seconds) for each annotation
+            labels (list): list of lists of integer class indices for a file and time range
+            classes (list): list of str class names or list of integer class indices
+            integer_labels (bool): if True, labels are integer class indices, otherwise labels are class names
+
+        ClassMethods:
+            from_categorical_labels_df: create CategoricalLabels object from dataframe with columns
+                'file', 'start_time', 'end_time', 'labels' (either integer or class name labels)
+            from_multihot_df: create CategoricalLabels object from multi-hot dataframe
+
+        Methods
+            multihot_array: generate multi-hot array of labels
+            multihot_df: generate multi-hot dataframe of 0/1 labels
+            labels_at_index: get list of class names for labels at a specific numeric index
+            multihot_labels_at_index: get multi-hot labels at a specific numeric index
+
+        Properties:
+            multihot_sparse: sparse 2d scipy.sparse.csr_matrix of multi-hot labels
+            multihot_dense: dense 2d array of multi-hot labels
+            multihot_df_sparse: sparse dataframe of multi-hot labels
+            multihot_df_dense: dense dataframe of multi-hot labels
+        """
         # labels can be list of lists of class names or list of lists of integer class indices
         if (
             classes is None
@@ -1342,8 +1470,8 @@ class CategoricalLabels:
         """
         return cls(
             df["file"],
-            df["clip_start"],
-            df["clip_end"],
+            df["start_time"],
+            df["end_time"],
             df["labels"].values,
             classes=classes,
             integer_labels=integer_labels,
@@ -1354,11 +1482,10 @@ class CategoricalLabels:
         # multihot df has multi-index of file, start_time, end_time; columns = classes
         labels_int = multi_hot_to_integer_labels(df.values)
         file = df.index.get_level_values("file")
-        clip_start = df.index.get_level_values("start_time")
-        clip_end = df.index.get_level_values("end_time")
-        return cls(file, clip_start, clip_end, labels_int, classes=df.columns)
+        start_time = df.index.get_level_values("start_time")
+        end_time = df.index.get_level_values("end_time")
+        return cls(file, start_time, end_time, labels_int, classes=df.columns)
 
-    # @property
     def multihot_array(self, sparse=True):
         """generate multi-hot array of labels"""
         cat_classes = integer_to_categorical_labels(
@@ -1407,6 +1534,6 @@ class CategoricalLabels:
 
     def _get_multiindex(self):
         return pd.MultiIndex.from_tuples(
-            list(zip(self.df["file"], self.df["clip_start"], self.df["clip_end"])),
+            list(zip(self.df["file"], self.df["start_time"], self.df["end_time"])),
             names=["file", "start_time", "end_time"],
         )
