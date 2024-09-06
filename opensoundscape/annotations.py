@@ -1171,19 +1171,22 @@ def integer_to_multi_hot(labels, n_classes, sparse=False):
         labels: list of lists of integer labels, eg [[0,1,2],[3]]
         n_classes: number of classes
     Returns:
-        2d np.array with False for absent and True for present
+        if sparse is False: 2d np.array with False for absent and True for present
+        if sparse is True: scipy.sparse.csr_matrix with 0 for absent and 1 for present
     """
+    # TODO: consider using bool rather than int dtype, much smaller and int is unnecessary
+    # but bool leads to FutureWarning, see https://github.com/pandas-dev/pandas/issues/59739
     if sparse:
         vals = []
         rows = []
         cols = []
         for i, row in enumerate(labels):
             for col in row:
-                vals.append(True)
+                vals.append(1)
                 rows.append(i)
                 cols.append(col)
         return scipy.sparse.csr_matrix(
-            (vals, (rows, cols)), shape=(len(labels), n_classes), dtype=bool
+            (vals, (rows, cols)), shape=(len(labels), n_classes), dtype=int
         )
     else:
         multi_hot = np.zeros((len(labels), n_classes), dtype=bool)
@@ -1213,17 +1216,19 @@ def categorical_to_multi_hot(labels, classes=None, sparse=False):
     rows = []
     cols = []
 
+    # TODO: consider using bool rather than int dtype, much smaller and int is unnecessary
+    # but bool leads to FutureWarning, see https://github.com/pandas-dev/pandas/issues/59739
     def add_labels(i, labels):
         for label in labels:
             if label in classes:
-                vals.append(True)
+                vals.append(1)
                 rows.append(i)
                 cols.append(label_idx_dict[label])
 
     [add_labels(i, l) for i, l in enumerate(labels)]
 
     multi_hot = scipy.sparse.csr_matrix(
-        (vals, (rows, cols)), shape=(len(labels), len(classes)), dtype=bool
+        (vals, (rows, cols)), shape=(len(labels), len(classes)), dtype=int
     )
 
     if sparse:
@@ -1394,10 +1399,6 @@ def find_overlapping_idxs_in_clip_df(
 
 
 from itertools import chain
-from opensoundscape.annotations import (
-    multi_hot_to_categorical,
-    categorical_to_multi_hot,
-)
 
 
 class CategoricalLabels:
