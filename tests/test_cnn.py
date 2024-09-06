@@ -836,6 +836,52 @@ def test_embed(test_df):
             raise Exception(f"{arch} failed") from e
 
 
+def test_embed_no_avgpool(test_df):
+    # returns arrays rather than dataframes
+    m = cnn.SpectrogramClassifier(
+        classes=[0, 1],
+        single_target=False,
+        architecture="resnet18",
+        sample_duration=5,
+    )
+    embeddings = m.embed(
+        samples=test_df,
+        avgpool=False,
+        progress_bar=False,
+        target_layer=m.network.layer4,
+    )
+    assert embeddings.shape == (2, 512, 7, 7)
+
+
+def test_embed_return_array(test_df):
+    # returns arrays rather than dataframes
+    m = cnn.SpectrogramClassifier(
+        classes=[0, 1],
+        single_target=False,
+        architecture="resnet18",
+        sample_duration=5,
+    )
+    embeddings = m.embed(
+        samples=test_df,
+        progress_bar=False,
+        target_layer=m.network.layer4,
+        return_dfs=False,
+    )
+    assert embeddings.shape == (2, 512)
+    assert isinstance(embeddings, np.ndarray)
+
+
+def test_embed_one_sample(train_df):
+    m = cnn.SpectrogramClassifier(
+        classes=[0, 1, 2],
+        single_target=False,
+        architecture="resnet18",
+        sample_duration=10,
+    )
+    embeddings = m.embed(samples=train_df.head(1), avgpool=True, progress_bar=False)
+    assert embeddings.shape == (1, 512)
+
+
 def test_call_with_intermediate_layers(test_df):
     """test that passing intermediate_layers to SpectrogramClassifier.__call__ returns tensors of expected shape"""
     model = cnn.SpectrogramClassifier(

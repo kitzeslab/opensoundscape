@@ -1819,9 +1819,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             # aggregate across batches
             # note that shapes of elements in intermediate_outputs may vary
             # (so we don't make one combined np.array)
+            # careful with squeezing: if we have a batch size of 1, we don't want to squeeze out the batch dimension
             intermediate_outputs = [
-                torch.vstack(x).squeeze().detach().cpu().numpy()
-                for x in intermediate_outputs
+                torch.vstack(x).detach().cpu().numpy() for x in intermediate_outputs
             ]
 
             # replace scores with nan for samples that failed in preprocessing
@@ -2073,6 +2073,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         progress_bar=True,
         return_preds=False,
         avgpool=True,
+        return_dfs=True,
         **kwargs,
     ):
         """
@@ -2087,6 +2088,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             avgpool: bool, if True, applies global average pooling to embeddings [default: True]
                 i.e. averages across all dimensions except first to get a 1D vector per sample
+            return_dfs: bool, if True, returns embeddings as pd.DataFrame with multi-index like .predict()
+                if False, returns np.array of embeddings [default: True]. If avg_pool=False, overrides
+                to return np.array since we can't have a df with >2 dimensions
+
             kwargs are passed to self.predict_dataloader()
 
         Returns:
@@ -2095,6 +2100,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 `(embeddings, preds)` where `preds` is the raw model output (e.g. logits, no activation layer)
 
         """
+        if not avgpool:  # cannot create a DataFrame with >2 dimensions
+            return_dfs = False
+
         # if target_layer is None, attempt to retrieve default target layers of network
         if target_layer is None:
             try:
@@ -2125,16 +2133,20 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             avgpool_intermediates=avgpool,
         )
 
-        # put embeddings
-        embeddings = pd.DataFrame(
-            data=embeddings[0], index=dataloader.dataset.dataset.label_df.index
-        )
+        if return_dfs:
+            # put embeddings in DataFrame with multi-index like .predict()
+            embeddings = pd.DataFrame(
+                data=embeddings[0], index=dataloader.dataset.dataset.label_df.index
+            )
+        else:
+            embeddings = embeddings[0]
 
         if return_preds:
-            # put predictions in a DataFrame with same index as embeddings
-            preds = pd.DataFrame(
-                data=preds, index=dataloader.dataset.dataset.label_df.index
-            )
+            if return_dfs:
+                # put predictions in a DataFrame with same index as embeddings
+                preds = pd.DataFrame(
+                    data=preds, index=dataloader.dataset.dataset.label_df.index
+                )
             return embeddings, preds
         return embeddings
 
