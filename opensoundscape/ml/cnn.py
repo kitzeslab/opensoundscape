@@ -337,6 +337,10 @@ class BaseModule:
             - can set to -1 to restart learning rate schedule
             - can set to another value to start lr scheduler from an arbitrary position
 
+        Note: when used by lightning, self.optimizer and self.scheduler should not be modified
+        directly, lightning handles these internally. Lightning will call the method without
+        passing reset_optimizer or restart_scheduler, so default=False results in not modifying .optimizer or .scheduler
+
         Documentation:
         https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.core.LightningModule.html#lightning.pytorch.core.LightningModule.configure_optimizers
         Args:
@@ -360,7 +364,7 @@ class BaseModule:
             self.network.parameters(), **self.optimizer_params["kwargs"].copy()
         )
 
-        if self.optimizer is not None:
+        if hasattr(self, "optimizer") and self.optimizer is not None:
             # load the state dict of the previously existing optimizer,
             # updating the params references to match current instance of self.network
             try:
@@ -372,6 +376,7 @@ class BaseModule:
                     "attempt to load state dict of existing self.optimizer failed. "
                     "Optimizer will be initialized from scratch"
                 )
+            # TODO: write tests for lightning to check behavior of continued training
 
         # create learning rate scheduler
         # self.scheduler_params dictionary has "class" key and kwargs for init
