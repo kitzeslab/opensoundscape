@@ -2125,9 +2125,18 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             avgpool_intermediates=avgpool,
         )
 
+        # put embeddings
+        embeddings = pd.DataFrame(
+            data=embeddings[0], index=dataloader.dataset.dataset.label_df.index
+        )
+
         if return_preds:
-            return embeddings[0], preds
-        return embeddings[0]
+            # put predictions in a DataFrame with same index as embeddings
+            preds = pd.DataFrame(
+                data=preds, index=dataloader.dataset.dataset.label_df.index
+            )
+            return embeddings, preds
+        return embeddings
 
     @property
     def device(self):

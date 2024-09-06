@@ -831,6 +831,7 @@ def test_embed(test_df):
             embeddings = m.embed(samples=test_df, avgpool=True, progress_bar=False)
             assert embeddings.shape[0] == 2
             assert len(embeddings.shape) == 2
+            assert isinstance(embeddings, pd.DataFrame)
         except Exception as e:
             raise Exception(f"{arch} failed") from e
 
