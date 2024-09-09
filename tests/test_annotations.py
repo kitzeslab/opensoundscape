@@ -60,6 +60,30 @@ def rugr_wav_str():
 
 
 @pytest.fixture()
+def labels_df():
+    return pd.DataFrame(
+        {
+            "file": ["audio_file.wav"] * 3,
+            "start_time": [0, 3, 6],
+            "end_time": [3, 6, 9],
+            "labels": [["a", "b"], ["b", "c"], ["a", "c"]],
+        }
+    )
+
+
+@pytest.fixture()
+def labels_df_int():
+    return pd.DataFrame(
+        {
+            "file": ["audio_file.wav"] * 3,
+            "start_time": [0, 3, 6],
+            "end_time": [3, 6, 9],
+            "labels": [[0, 1], [1, 2], [0, 2]],
+        }
+    )
+
+
+@pytest.fixture()
 def boxed_annotations():
     df = pd.DataFrame(
         data={
@@ -880,3 +904,95 @@ def test_find_overlapping_idxs_in_clip_df(boxed_annotations):
         1000, 1001, clip_df, min_label_overlap=0.25
     )
     assert len(idxs) == 0
+
+
+def test_categorical_labels_init(labels_df, labels_df_int):
+    # label df with lists of string class labels
+    classes = ["a", "b", "c"]
+    cl = annotations.CategoricalLabels(
+        files=labels_df["file"],
+        start_times=labels_df["start_time"],
+        end_times=labels_df["end_time"],
+        labels=labels_df["labels"],
+        classes=classes,
+        integer_labels=False,
+    )
+    # classes may be in any order when inferred from labels
+    assert cl.classes == classes
+    # test @property labels and class_labels
+    assert cl.class_labels == labels_df["labels"].to_list()
+    assert cl.labels == labels_df_int["labels"].to_list()
+
+    # label df with lists of integer class indices
+
+    cl = annotations.CategoricalLabels(
+        files=labels_df_int["file"],
+        start_times=labels_df_int["start_time"],
+        end_times=labels_df_int["end_time"],
+        labels=labels_df_int["labels"],
+        classes=classes,
+        integer_labels=True,
+    )
+    assert cl.classes == classes
+    # test @property labels and class_labels
+    assert cl.class_labels == labels_df["labels"].to_list()
+    assert cl.labels == labels_df_int["labels"].to_list()
+
+    # test properties multihot_sparse and multihot_dense
+    assert cl.multihot_dense.tolist() == [[1, 1, 0], [0, 1, 1], [1, 0, 1]]
+    assert cl.multihot_sparse.todense().tolist() == [[1, 1, 0], [0, 1, 1], [1, 0, 1]]
+
+    # test properties multihot_df_sparse, multihot_df_dense
+    assert cl.multihot_df_sparse.values.tolist() == [[1, 1, 0], [0, 1, 1], [1, 0, 1]]
+    assert cl.multihot_df_dense.values.tolist() == [[1, 1, 0], [0, 1, 1], [1, 0, 1]]
+
+    # test properties labels_at_index, multihot_labels_at_index
+    assert cl.labels_at_index(0) == ["a", "b"]
+    assert list(cl.multihot_labels_at_index(0)) == [1, 1, 0]
+
+
+def test_categorical_labels_init_no_classes(labels_df):
+
+    # init with classes=None
+    cl = annotations.CategoricalLabels(
+        files=labels_df["file"],
+        start_times=labels_df["start_time"],
+        end_times=labels_df["end_time"],
+        labels=labels_df["labels"],
+        classes=None,
+        integer_labels=True,
+    )
+    assert cl.classes == [0, 1, 2]
+
+
+def test_categorical_labels_from_categorical_labels_df(labels_df):
+    # init with classes=None
+    cl = annotations.CategoricalLabels.from_categorical_labels_df(
+        labels_df, classes=None
+    )
+    assert set(cl.classes) == set(["a", "b", "c"])
+
+    # init with class list
+    cl = annotations.CategoricalLabels.from_categorical_labels_df(
+        labels_df, classes=["a", "b", "c"]
+    )
+    assert cl.classes == ["a", "b", "c"]
+
+
+def test_categorical_labels_from_multihot_df():
+    # define multi-hot dataframe
+    multi_hot_df = pd.DataFrame(
+        {
+            "file": ["f0", "f0", "f1"],
+            "start_time": [0, 1, 0],
+            "end_time": [1, 2, 1],
+            "class0": [1, 0, 1],
+            "class1": [0, 1, 1],
+        },
+    ).set_index(["file", "start_time", "end_time"])
+
+    # convert to CategoricalLabels
+    cl = annotations.CategoricalLabels.from_multihot_df(multi_hot_df)
+    assert cl.classes == ["class0", "class1"]
+    assert cl.labels == [[0], [1], [0, 1]]
+    assert cl.class_labels == [["class0"], ["class1"], ["class0", "class1"]]

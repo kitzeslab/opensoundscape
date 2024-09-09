@@ -1443,7 +1443,7 @@ class CategoricalLabels:
             classes is None
         ):  # if classes are not provided, infer them from unique set of labels
             classes = list(set(chain(*labels)))
-        self.classes = classes
+        self.classes = list(classes)
         # convert from lists of string class names to lists of integer class indices
         if (
             not integer_labels
@@ -1485,7 +1485,14 @@ class CategoricalLabels:
         file = df.index.get_level_values("file")
         start_time = df.index.get_level_values("start_time")
         end_time = df.index.get_level_values("end_time")
-        return cls(file, start_time, end_time, labels_int, classes=df.columns)
+        return cls(
+            file,
+            start_time,
+            end_time,
+            labels_int,
+            classes=df.columns.to_list(),
+            integer_labels=True,
+        )
 
     def multihot_array(self, sparse=True):
         """generate multi-hot array of labels"""
@@ -1500,11 +1507,23 @@ class CategoricalLabels:
         return sp_labels
 
     @property
+    def labels(self):
+        """list of lists of integer class indices (corresponding to self.classes) for each row in self.df"""
+        return self.df["labels"].to_list()
+
+    @property
+    def class_labels(self):
+        """list of lists of class names for each row in self.df"""
+        return integer_to_categorical_labels(self.labels, self.classes)
+
+    @property
     def multihot_sparse(self):
+        """sparse 2d scipy.sparse.csr_matrix of multi-hot (0/1) labels across self.df.index and self.classes"""
         return self.multihot_array(sparse=True)
 
     @property
     def multihot_dense(self):
+        """2d array of multi-hot (0/1) labels across self.df.index and self.classes"""
         return self.multihot_array(sparse=False)
 
     def multihot_df(self, sparse=True):
@@ -1520,20 +1539,25 @@ class CategoricalLabels:
 
     @property
     def multihot_df_sparse(self):
+        """parse dataframe of multi-hot (0/1) labels across self.df.index and self.classes"""
         return self.multihot_df(sparse=True)
 
     @property
     def multihot_df_dense(self):
+        """dataframe of multi-hot (0/1) labels across self.df.index and self.classes"""
         return self.multihot_df(sparse=False)
 
     def labels_at_index(self, index):
+        """list of class names for labels at a specific numeric index"""
         return [self.classes[i] for i in self.df["labels"].iloc[index]]
 
     def multihot_labels_at_index(self, index):
+        """multi-hot (list of 0/1 for self.classes) labels at a specific numeric index"""
         integer_labels = self.df["labels"].iloc[index]
         return integer_to_multi_hot([integer_labels], len(self.classes))[0]
 
     def _get_multiindex(self):
+        """turns self.df columns ['file','start_time','end_time'] into a pandas multi-index"""
         return pd.MultiIndex.from_tuples(
             list(zip(self.df["file"], self.df["start_time"], self.df["end_time"])),
             names=["file", "start_time", "end_time"],
