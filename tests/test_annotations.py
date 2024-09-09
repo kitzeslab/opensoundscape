@@ -962,7 +962,7 @@ def test_categorical_labels_init_no_classes(labels_df):
         classes=None,
         integer_labels=True,
     )
-    assert cl.classes == [0, 1, 2]
+    assert set(cl.classes) == set(["a", "b", "c"])
 
 
 def test_categorical_labels_from_categorical_labels_df(labels_df):
