@@ -5,6 +5,7 @@ these can be passed to the Action class (action_fn=...) to create a preprocessin
 
 import random
 
+import librosa
 import torch
 import torchvision
 
@@ -262,3 +263,8 @@ def tensor_add_noise(tensor, std=1):
     """
     noise = torch.empty_like(tensor).normal_(mean=0, std=std)
     return tensor + noise
+
+
+@register_action_fn
+def pcen(s, **kwargs):
+    return s._spawn(spectrogram=librosa.pcen(S=s.spectrogram, **kwargs))

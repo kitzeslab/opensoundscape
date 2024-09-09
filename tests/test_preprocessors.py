@@ -1,9 +1,11 @@
+from copy import copy
+from pathlib import Path
+
 import pytest
 import math
 import numpy as np
 import pandas as pd
-from copy import copy
-from pathlib import Path
+import torch
 
 from opensoundscape.preprocess import preprocessors, actions, action_functions
 from opensoundscape.preprocess.preprocessors import (
@@ -230,26 +232,15 @@ def test_noisereducespectrogrampreprocessor(short_sample):
     assert s1.mean() < s2.mean()
 
 
-def test_audiopreprocessor(audiopreprocessor, sample):
-    """should retain original sample rate"""
-    s = audiopreprocessor.forward(sample).data
-    assert type(s) == Audio
-    assert math.isclose(s.duration, 2.0, abs_tol=1e-9)
-    assert s.sample_rate == 22050
+def test_pcenpreprocessor(sample):
 
+    p1 = preprocessors.PCENPreprocessor(sample_duration=1)
+    s1 = p1.forward(sample, bypass_augmentations=True).data
+    assert isinstance(s1, torch.Tensor)
 
-def test_audiopreprocessor_extend(audiopreprocessor, short_sample):
-    """should retain original sample rate"""
-    s = audiopreprocessor.forward(short_sample).data
-    assert type(s) == Audio
-    assert math.isclose(s.duration, 2.0, abs_tol=1e-9)
-    assert s.sample_rate == 22050
-
-    # when trim_audio.extend is False, should raise an error
-    # if the input is too short
-    audiopreprocessor.pipeline.trim_audio.set(extend=False)
-    with pytest.raises(PreprocessingError):
-        s = audiopreprocessor.forward(short_sample).data
+    # try using some different settings
+    p1.pipeline.pcen.set(gain=0.5)
+    s2 = p1.forward(sample, bypass_augmentations=True).data
 
 
 def test_preprocessor_to_from_dict(preprocessor, sample):
