@@ -61,7 +61,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 * Most computer cluster users should follow the Linux installation instructions
 
 
-### Use Audio and Spectrogram classes
+### Use Audio and Spectrogram classes to inspect audio data
 ```python
 from opensoundscape import Audio, Spectrogram
 
@@ -85,7 +85,27 @@ path = '/path/to/audiomoth_file.WAV' #an AudioMoth recording
 Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 ```
 
-### Use a pre-trained CNN to make predictions on long audio files
+### Load and use a model from the Bioacoustics Model Zoo
+The [Bioacoustics Model Zoo](https://github.com/kitzeslab/bioacoustics-model-zoo) hosts models in a respository that can be accessed via `torch.hub` and are compatible with OpenSoundscape. Load up a model and apply it to your own audio right away:
+
+```python
+from opensoundscape.ml import bioacoustics_model_zoo as bmz
+
+#list available models
+print(bmz.list_models())
+
+#generate class predictions and embedding vectors with Perch
+perch = bmz.load("Perch")
+scores = perch.predict(files)
+embeddings = perch.generate_embeddings(files)
+
+#...or BirdNET
+birdnet = bmz.load("BirdNET")
+scores = birdnet.predict(files)
+embeddings = birdnet.generate_embeddings(files)
+```
+
+### Load a pre-trained CNN from a local file, and make predictions on long audio files
 ```python
 from opensoundscape import load_model
 
@@ -125,20 +145,7 @@ train_df, validation_df = train_test_split(labels, test_size=0.3)
 
 # create a CNN and train on the labeled data
 model = CNN(architecture='resnet18', sample_duration=2, classes=class_list)
+
+# train the model to recognize the classes of interest in audio data
 model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
-```
-
-### Train a CNN with labeled audio data (one label per audio file):
-```python
-from opensoundscape import CNN
-from sklearn.model_selection import train_test_split
-
-#load a DataFrame of one-hot audio clip labels
-df = pd.read_csv('my_labels.csv') #index: paths; columns: classes
-train_df, validation_df = train_test_split(df,test_size=0.2)
-
-#create a CNN and train on 2-second spectrograms for 20 epochs
-model = CNN('resnet18', classes=df.columns, sample_duration=2.0)
-model.train(train_df, validation_df, epochs=20)
-#the best model is automatically saved to a file `./best.model`
 ```
