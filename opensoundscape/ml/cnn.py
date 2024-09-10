@@ -27,15 +27,13 @@ from opensoundscape.preprocess.preprocessors import (
 from opensoundscape.preprocess import io
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.cnn_architectures import inception_v3
-from opensoundscape.ml.loss import ResampleLoss
-from opensoundscape.sample import collate_audio_samples, collate_audio_samples_to_dict
-from opensoundscape.utils import identity, _check_is_path
+from opensoundscape.sample import collate_audio_samples
+from opensoundscape.utils import identity
 from opensoundscape.logging import wandb_table
 
 from opensoundscape.ml.cam import CAM
 import pytorch_grad_cam
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from lightning.pytorch.callbacks import ModelCheckpoint
 
 
 from torchmetrics.classification import (
@@ -2189,9 +2187,7 @@ class BaseClassifier(SpectrogramClassifier):
     """
 
 
-def use_resample_loss(
-    model, train_df
-):  # TODO revisit how this work. Should be able to set loss_cls=ResampleLoss()
+def use_resample_loss(model, train_df):
     """Modify a model to use ResampleLoss for multi-target training
 
     ResampleLoss may perform better than BCE Loss for multitarget problems
