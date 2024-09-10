@@ -455,12 +455,11 @@ class BaseModule:
 
         train_loader samples batches of images + labels from training set
 
-        Args:
-            samples: list of files or pd.DataFrame with multi-index ['file','start_time','end_time']
+        Args: see self.train_dataloader_cls docstring for arguments
             **kwargs: any arguments to pass to the DataLoader __init__
-                Note: some arguments are fixed and should not be passed in kwargs:
-                - shuffle=True: shuffle samples for training
-                - bypass_augmentations=False: apply augmentations to training samples
+            Note: some arguments are fixed and should not be passed in kwargs:
+            - shuffle=True: shuffle samples for training
+            - bypass_augmentations=False: apply augmentations to training samples
 
         """
         return self.train_dataloader_cls(
@@ -478,7 +477,17 @@ class BaseModule:
         )
 
     def predict_dataloader(self, samples, collate_fn=collate_audio_samples, **kwargs):
-        """generate dataloader for inference (predict/validate/test)"""
+        """generate dataloader for inference (predict/validate/test)
+
+        Args: see self.inference_dataloader_cls docstring for arguments
+            **kwargs: any arguments to pass to the DataLoader __init__
+            Note: these arguments are fixed and should not be passed in kwargs:
+            - shuffle=False: retain original sample order
+        """
+        # for convenience, convert str/pathlib.Path to list of length 1
+        if isinstance(samples, (str, Path)):
+            samples = [samples]
+
         return self.inference_dataloader_cls(
             samples=samples,
             preprocessor=self.preprocessor,
@@ -652,7 +661,6 @@ class SpectrogramModule(BaseModule):
         # These metrics are a good starting point
         # for single and multi-target classification
         # User can add/remove metrics as desired.
-        # TODO: should re-initialize if number of classes changes
         self._init_torch_metrics()
 
         ### Logging ###
@@ -847,18 +855,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         """track number of trained epochs"""
 
         ### metrics ###
-        self.prediction_threshold = 0.5  # used for threshold-specific metrics
         self.loss_hist = {}
         """dictionary of epoch:mean batch loss during training"""
         self.train_metrics = {}
         self.valid_metrics = {}
 
-        ### network device ###
-        # automatically gpu (default is 'cuda:0') if available
-        # can set after init, eg model.device='cuda:1'
-        # network and samples are moved to device during training/inference
-        # devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu'), torch.device('mps') etc
-        self.device = _gpu_if_available()
+        self.device = _gpu_if_available()  # device to use for training and inference
 
     def _log(self, message, level=1):
         txt = str(message)
@@ -960,10 +962,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             for that sample will be np.nan
 
         """
-        # for convenience, convert str/pathlib.Path to list of length 1
-        if isinstance(samples, (str, Path)):
-            samples = [samples]
-
         # create dataloader to generate batches of AudioSamples
         dataloader = self.predict_dataloader(
             samples,
@@ -1099,12 +1097,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         show_tensor_grid(tensors,columns=3)
         ```
         """
-        # allow passing a single file path (str or pathlib.Path) for convenience
-        if isinstance(samples, (str, Path)):
-            samples = [samples]
-
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.inference_dataloader_cls(samples, self.preprocessor, **kwargs)
+        dataloader = self.predict_dataloader(samples, **kwargs)
 
         # move model to device
         try:
@@ -2080,24 +2074,31 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Generate embeddings (intermediate layer outputs) for audio files/clips
 
         Note: to capture embeddings on multiple layers, use self.__call__ with intermediate_layers
+        argument directly. This wrapper only allows one target_layer.
+
+        Note: Output can be n-dimensional array (return_dfs=False) or pd.DataFrame with multi-index
+        like .predict() (return_dfs=True). If avgpool=False, return_dfs is forced to False since we
+        can't create a DataFrame with >2 dimensions.
 
         Args:
-            samples: (same as CNN.predict())
-            target_layers: layers from self.model._modules to extract outputs from
-                - if None, attempts to use self.model.embedding_layer as default
+            samples: same as CNN.predict(): list of file paths, OR pd.DataFrame with index
+                containing audio file paths, OR a pd.DataFrame with multi-index (file, start_time,
+                end_time)
+            target_layers: layers from self.model._modules to
+                extract outputs from - if None, attempts to use self.model.embedding_layer as
+                default
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
-            avgpool: bool, if True, applies global average pooling to embeddings [default: True]
+            return_preds: bool, if True, returns two outputs (embeddings, logits)
+            avgpool: bool, if True, applies global average pooling to intermediate outputs
                 i.e. averages across all dimensions except first to get a 1D vector per sample
-            return_dfs: bool, if True, returns embeddings as pd.DataFrame with multi-index like .predict()
-                if False, returns np.array of embeddings [default: True]. If avg_pool=False, overrides
-                to return np.array since we can't have a df with >2 dimensions
-
+            return_dfs: bool, if True, returns embeddings as pd.DataFrame with multi-index like
+                .predict(). if False, returns np.array of embeddings [default: True]. If
+                avg_pool=False, overrides to return np.array since we can't have a df with >2
+                dimensions
             kwargs are passed to self.predict_dataloader()
 
-        Returns:
-            if return_preds is False, returns `embeddings` , and np.array of shape [n_samples, ...]
-            if return_preds is True, returns a tuple:
-                `(embeddings, preds)` where `preds` is the raw model output (e.g. logits, no activation layer)
+        Returns: (embeddings, preds) if return_preds=True or embeddings if return_preds=False
+            types are pd.DataFrame if return_dfs=True, or np.array if return_dfs=False
 
         """
         if not avgpool:  # cannot create a DataFrame with >2 dimensions
@@ -2117,10 +2118,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             assert (
                 target_layer in self.network.modules()
             ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
-
-        # for convenience, convert `samples` str/pathlib.Path to list of length 1
-        if isinstance(samples, (str, Path)):
-            samples = [samples]
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.predict_dataloader(samples, **kwargs)
@@ -2158,6 +2155,11 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
     def device(self, device):
         """
         Set the device to use in train/predict, casting strings to torch.device datatype
+
+        Automatically gpu (default is 'cuda:0' or 'mps') if available. Can set after init, eg
+        model.device='cuda:1'. Network and samples are moved to device during training/inference.
+        Devices could be 'cuda:0', torch.device('cuda'), torch.device('cpu'), torch.device('mps')
+        etc
 
         Args:
             device: a torch.device object or str such as 'cuda:0', 'mps', 'cpu'
