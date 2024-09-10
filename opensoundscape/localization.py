@@ -65,19 +65,47 @@ class SpatialEvent:
                 - Estimates the tdoas using cross_correlation if not already estimated.
                 - Estimates the location of the event using the tdoas and receiver locations.
                 - Returns the location estimate as a tuple of cartesian coordinates (x,y) or (x,y,z)
+
+        Editable Attributes:
+            These are parameters that can be set before calling estimate_location()
+            min_n_receivers: minimum number of receivers that must detect an event for it to be localized
+            cc_threshold: threshold for cross correlation
+            cc_filter: filter for generalized cross correlation, see
+                opensoundscape.signal_processing.gcc()
+            max_delay: only delays in +/- this range (seconds) will be considered for possible delay
+                (see opensoundscape.signal_processing.tdoa());
+            bandpass_range: bandpass audio to [low, high] frequencies in Hz before cross correlation
+            speed_of_sound: speed of sound in meters per second
+
+        Static Attributes:
+            receiver_files: list of audio files, one for each receiver
+            receiver_locations: list of [x,y] or [x,y,z] positions of each receiver in meters
+            start_timestamp: start time of detection as datetime.datetime
+            duration: length in seconds of the event
+            class_name: name of detection's class
+        Computed Attributes:
+            tdoas: time delay at each receiver (computed by _estimate_delays())
+            cc_maxs: max of cross correlation for each time delay (computed by _estimate_delays())
+            location_estimate: spatial position estimate (computed by estimate_location())
+            distance_residuals: distance residuals in meters (computed by estimate_location())
+            receivers_used_for_localization: list of receivers used for localization during estimate_location()
+            residual_rms: root mean square of distance residuals (computed by estimate_location())
         """
-        self.receiver_files = receiver_files
-        self.receiver_locations = np.array(receiver_locations)
-        self.max_delay = max_delay
-        self.receiver_start_time_offsets = receiver_start_time_offsets
-        self.start_timestamp = start_timestamp
+        # editable attributes
         self.min_n_receivers = min_n_receivers
-        self.duration = duration
-        self.class_name = class_name
-        self.bandpass_range = bandpass_range
         self.cc_threshold = cc_threshold
         self.cc_filter = cc_filter
+        self.max_delay = max_delay
+        self.bandpass_range = bandpass_range
         self.speed_of_sound = speed_of_sound
+
+        # static attributes
+        self.receiver_files = receiver_files
+        self.receiver_locations = np.array(receiver_locations)
+        self.start_timestamp = start_timestamp
+        self.duration = duration
+        self.class_name = class_name
+        self.receiver_start_time_offsets = receiver_start_time_offsets
 
         # Verify that max_delay is not longer than the duration of the audio and raise a value error if it is
         if self.max_delay >= self.duration:
@@ -85,7 +113,7 @@ class SpatialEvent:
                 f"max_delay ({self.max_delay}) is longer than duration ({self.duration}) of audio clips."
             )
 
-        # Initialize attributes
+        # computed attributes
         self.tdoas = None  # time delay at each receiver
         self.cc_maxs = None  # max of cross correlation for each time delay
         self.location_estimate = None  # cartesian location estimate in meters

@@ -847,14 +847,56 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         Args:
             see SpectrogramModule for arguments
+
+        Methods:
+            predict: generate predictions across a set of audio files or a dataframe defining audio files and start/end clip times
+            train: fit the machine learning model using training data and evaluate with validation data
+            save: save the model to a file
+            load: load the model from a file
+            embed: generate embeddings for a set of audio files
+            generate_embeddings: generate embeddings for a set of audio files
+            generate_cams: generate gradient activation maps for a set of audio files
+            eval: evaluate performance by applying self.torch_metrics to predictions and labels
+            run_validation: test accuracy by running inference on a validation set and computing metrics
+            change_classes: change the classes that the model predicts
+            freeze_feature_extractor: freeze all layers except the classifier
+            freeze_layers_except: freeze all parameters of a model, optionally exluding some layers
+            train_dataloader: create dataloader for training
+            predict_dataloader: create dataloader for inference (predict/validate/test)
+            save_weights: save just the self.network state dict to a file
+            load_weights: load just the self.network state dict from a file
+
+        Editable Attributes & Properties:
+            single_target: (bool) if True, predict only class with max score
+            device: (torch.device or str) device to use for training and inference
+            preprocessor: object defining preprocessing and augmentation operations, e.g. SpectrogramPreprocessor
+            network: pytorch model object, e.g. Resnet18
+            loss_fn: callable object to use for calculating loss during training, e.g. BCEWithLogitsLoss_hot()
+            optimizer_params: (dict) with "class" and "kwargs" keys for class.__init__(**kwargs)
+            lr_scheduler_params: (dict) with "class" and "kwargs" for class.__init__(**kwargs)
+            use_amp: (bool) if True, uses automatic mixed precision for training
+            wandb_logging: (dict) settings for logging to Weights and Biases
+            score_metric: (str) name of the metric for overall evaluation - one of the keys in self.torch_metrics
+            log_file: (str) path to save output to a text file
+            logging_level: (int) amt of logging to log file. 0 for nothing, 1,2,3 for increasing logged info
+            verbose: (int) amt of logging to stdout. 0 for nothing, 1,2,3 for increasing printed output
+
+        Other attributes:
+            torch_metrics: dictionary of torchmetrics name:object pairs to use for calculating metrics
+                - override _init_torch_metrics() method in a subclass rather than modifying directly
+            classes: list of class names
+                - set via __init__() or change_classes(), rather than modifying directly
         """
         super().__init__(*args, **kwargs)
 
-        self.log_file = None  # specify a path to save output to a text file
-        self.logging_level = 1  # 0 for nothing, 1,2,3 for increasing logged info
-        self.verbose = 1  # 0 for nothing, 1,2,3 for increasing printed output
-        self.scheduler = None  # learning rate scheduler
-        self.optimizer = None  # optimizer during training
+        self.log_file = None
+        """specify a path to save output to a text file"""
+        self.logging_level = 1
+        """amount of logging to self.log_file. 0 for nothing, 1,2,3 for increasing logged info"""
+        self.verbose = 1
+        """amount of logging to stdout. 0 for nothing, 1,2,3 for increasing printed output"""
+        self.scheduler = None  # learning rate scheduler, initialized during configure_optimizers() call
+        self.optimizer = None  # optimizer during training , initialized during configure_optimizers() call
         self.current_epoch = 0
         """track number of trained epochs"""
 
