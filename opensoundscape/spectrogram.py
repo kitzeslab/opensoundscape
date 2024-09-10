@@ -598,7 +598,7 @@ class Spectrogram:
 
         # apply colormaps
         if colormap is not None:  # apply a colormap to get RGB channels
-            cm = matplotlib.cm.get_cmap(colormap)
+            cm = matplotlib.pyplot.get_cmap(colormap)
             array = cm(array)[..., :3]  # remove alpha channel (4)
 
         # determine output height and width
