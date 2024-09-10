@@ -117,9 +117,9 @@ class BaseAction:
 
     def __repr__(self):
         return (
-            f"{'Bypassed ' if self.bypass else ''}"
+            f"{'__bypassed__ ' if self.bypass else ''}"
             f"{'Augmentation ' if self.is_augmentation else ''}"
-            "Action"
+            f"Action with .params: \n{self.params}"
         )
 
     def __call__(self, x):
@@ -227,9 +227,10 @@ class Action(BaseAction):
 
     def __repr__(self):
         return (
-            f"{'## Bypassed ## ' if self.bypass else ''}"
+            f"{'__bypassed__' if self.bypass else ''}"
             f"{'Augmentation ' if self.is_augmentation else ''}"
-            f"Action calling {self.action_fn}"
+            f"Action calling {self.action_fn}, "
+            f"with .params: \n{self.params}"
         )
 
     def __call__(self, sample, **kwargs):
