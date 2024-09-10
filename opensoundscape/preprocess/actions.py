@@ -201,7 +201,7 @@ class Action(BaseAction):
     """
 
     def __init__(self, fn, is_augmentation=False, **kwargs):
-        super(Action, self).__init__()
+        super().__init__()
 
         self.action_fn = fn
         self.is_augmentation = is_augmentation
@@ -292,7 +292,7 @@ class AudioClipLoader(Action):
     def __init__(self, **kwargs):
         if "fn" in kwargs:
             kwargs.pop("fn")
-        super(AudioClipLoader, self).__init__(fn=Audio.from_file, **kwargs)
+        super().__init__(fn=Audio.from_file, **kwargs)
         # two params are provided by sample.start_time and sample.duration
         self.params = self.params.drop(["offset", "duration"])
 
@@ -315,7 +315,7 @@ class AudioTrim(Action):
     def __init__(self, **kwargs):
         if "fn" in kwargs:
             kwargs.pop("fn")
-        super(AudioTrim, self).__init__(fn=trim_audio, **kwargs)
+        super().__init__(fn=trim_audio, **kwargs)
 
     def __call__(self, sample, **kwargs):
         self.action_fn(sample, **dict(self.params, **kwargs))
@@ -401,7 +401,7 @@ class SpectrogramToTensor(Action):
         kwargs.update(dict(return_type="torch"))  # return a tensor, not PIL.Image
         if "fn" in kwargs:
             kwargs.pop("fn")
-        super(SpectrogramToTensor, self).__init__(fn, is_augmentation, **kwargs)
+        super().__init__(fn, is_augmentation, **kwargs)
 
     def __call__(self, sample, **kwargs):
         """converts sample.data from Spectrogram to Tensor"""

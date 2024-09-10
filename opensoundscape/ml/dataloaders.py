@@ -137,7 +137,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         )
 
         # initialize the pytorch.utils.data.DataLoader
-        super(SafeAudioDataloader, self).__init__(
+        super().__init__(
             dataset=safe_dataset,
             collate_fn=collate_fn,
             **kwargs,

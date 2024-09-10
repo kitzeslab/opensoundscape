@@ -848,7 +848,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Args:
             see SpectrogramModule for arguments
         """
-        super(SpectrogramClassifier, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.log_file = None  # specify a path to save output to a text file
         self.logging_level = 1  # 0 for nothing, 1,2,3 for increasing logged info

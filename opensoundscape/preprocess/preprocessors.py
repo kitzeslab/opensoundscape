@@ -488,7 +488,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
         channels=1,
         sample_shape=None,
     ):
-        super(SpectrogramPreprocessor, self).__init__(sample_duration=sample_duration)
+        super().__init__(sample_duration=sample_duration)
 
         # allow sample_shape argument for backwards compatability
         if sample_shape is not None:
@@ -634,7 +634,7 @@ class AudioPreprocessor(BasePreprocessor):
     """
 
     def __init__(self, sample_duration, sample_rate, extend_short_clips=True):
-        super(AudioPreprocessor, self).__init__(sample_duration=sample_duration)
+        super().__init__(sample_duration=sample_duration)
         self.pipeline = pd.Series(
             {
                 # load a segment of an audio file into an Audio object

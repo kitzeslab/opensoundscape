@@ -221,9 +221,7 @@ class AudioSplittingDataset(AudioFileDataset):
     """
 
     def __init__(self, samples, preprocessor, **kwargs):
-        super(AudioSplittingDataset, self).__init__(
-            samples=samples, preprocessor=preprocessor
-        )
+        super().__init__(samples=samples, preprocessor=preprocessor)
 
         self.has_clips = True
 

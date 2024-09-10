@@ -102,14 +102,14 @@ class Spectrogram:
                 f"frequencies.shape: {frequencies.shape}, times.shape: {times.shape}"
             )
 
-        super(Spectrogram, self).__setattr__("frequencies", frequencies)
-        super(Spectrogram, self).__setattr__("times", times)
-        super(Spectrogram, self).__setattr__("spectrogram", spectrogram)
-        super(Spectrogram, self).__setattr__("window_samples", window_samples)
-        super(Spectrogram, self).__setattr__("overlap_samples", overlap_samples)
-        super(Spectrogram, self).__setattr__("window_type", window_type)
-        super(Spectrogram, self).__setattr__("audio_sample_rate", audio_sample_rate)
-        super(Spectrogram, self).__setattr__("scaling", scaling)
+        super().__setattr__("frequencies", frequencies)
+        super().__setattr__("times", times)
+        super().__setattr__("spectrogram", spectrogram)
+        super().__setattr__("window_samples", window_samples)
+        super().__setattr__("overlap_samples", overlap_samples)
+        super().__setattr__("window_type", window_type)
+        super().__setattr__("audio_sample_rate", audio_sample_rate)
+        super().__setattr__("scaling", scaling)
 
     @classmethod
     def from_audio(
