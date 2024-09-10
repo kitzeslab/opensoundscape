@@ -12,3 +12,4 @@ docs/tutorials/annotated_data
 docs/tutorials/wandb
 untracked/
 docs/tutorials/annotated_data
+lightning_logs/
