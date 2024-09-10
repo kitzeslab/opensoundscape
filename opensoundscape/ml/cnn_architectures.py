@@ -29,6 +29,7 @@ Note: the InceptionV3 architecture must be used differently than other
 architectures - the easiest way is to simply use the InceptionV3 class in
 opensoundscape.ml.cnn.
 """
+
 import warnings
 
 import torch
@@ -52,10 +53,73 @@ def list_architectures():
     return list(ARCH_DICT.keys())
 
 
-def freeze_params(model):
-    """remove gradients (aka freeze) all model parameters"""
-    for param in model.parameters():
-        param.requires_grad = False
+def generic_make_arch(
+    constructor,
+    weights,
+    num_classes,
+    embed_layer,
+    cam_layer,
+    name,
+    input_conv2d_layer,
+    linear_clf_layer,
+    freeze_feature_extractor=False,
+    num_channels=3,
+):
+    """works when first layer is conv2d and last layer is fully-connected Linear
+
+    input_size = 224
+
+    Args:
+        constructor: function that creates a torch.nn.Module and takes weights argument
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
+            Passed to constructor()
+        num_classes:
+            number of output nodes for the final layer
+        embed_layer:
+            specify which layers outputs should be accessed for "embeddings"
+        cam_layer:
+            specify a default layer for GradCAM/etc visualizations
+        name:
+            name of the architecture, used for the constructor_name attribute to re-load from saved version
+        input_conv2d_layer:
+            name of first Conv2D layer that can be accessed with .get_submodule()
+            string formatted as .-delimited list of attribute names or list indices, e.g. "features.0"
+        linear_clf_layer:
+            name of final Linear classification fc layer that can be accessed with .get_submodule()
+            string formatted as .-delimited list of attribute names or list indices, e.g. "classifier.0.fc"
+        freeze_feature_extractor:
+            if False (default), entire network will have gradients and can train
+            if True, feature block is frozen and only final layer is trained
+        num_channels:
+            specify channels in input sample, eg [channels h,w] sample shape
+    """
+    arch = constructor(weights=weights)
+    arch.constructor_name = name
+
+    if freeze_feature_extractor:
+        freeze_params(arch)
+
+    # change number of output nodes in final fully-connected layer
+    new_layer = change_fc_output_size(arch.get_submodule(linear_clf_layer), num_classes)
+    set_layer_from_name(arch, linear_clf_layer, new_layer)
+
+    # change input shape num_channels
+    new_layer = change_conv2d_channels(
+        arch.get_submodule(input_conv2d_layer),
+        num_channels=num_channels,
+        reuse_weights=True,
+    )
+    set_layer_from_name(arch, input_conv2d_layer, new_layer)
+
+    # provide string names of layers we might want to access
+    arch.classifier_layer = linear_clf_layer
+    arch.embedding_layer = embed_layer
+    arch.cam_layer = cam_layer
+
+    return arch
 
 
 @register_arch
@@ -79,20 +143,19 @@ def resnet18(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = torchvision.models.resnet18(weights=weights)
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
 
-    # change number of output nodes
-    architecture_ft.fc = change_fc_output_size(architecture_ft.fc, num_classes)
-
-    # change input shape num_channels
-    architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layer4]
-
-    return architecture_ft
+    return generic_make_arch(
+        constructor=torchvision.models.resnet18,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="layer4",
+        name="resnet18",
+        input_conv2d_layer="conv1",
+        linear_clf_layer="fc",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
+    )
 
 
 @register_arch
@@ -116,20 +179,18 @@ def resnet34(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = torchvision.models.resnet34(weights=weights)
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.fc = change_fc_output_size(architecture_ft.fc, num_classes)
-
-    # change input shape num_channels
-    architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layer4]
-
-    return architecture_ft
+    return generic_make_arch(
+        constructor=torchvision.models.resnet34,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="layer4",
+        name="resnet34",
+        input_conv2d_layer="conv1",
+        linear_clf_layer="fc",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
+    )
 
 
 @register_arch
@@ -153,20 +214,18 @@ def resnet50(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = torchvision.models.resnet50(weights=weights)
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.fc = change_fc_output_size(architecture_ft.fc, num_classes)
-
-    # change input shape num_channels
-    architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layer4]
-
-    return architecture_ft
+    return generic_make_arch(
+        constructor=torchvision.models.resnet50,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="layer4",
+        name="resnet50",
+        input_conv2d_layer="conv1",
+        linear_clf_layer="fc",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
+    )
 
 
 @register_arch
@@ -190,20 +249,18 @@ def resnet101(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = torchvision.models.resnet101(weights=weights)
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.fc = change_fc_output_size(architecture_ft.fc, num_classes)
-
-    # change input shape num_channels
-    architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layer4]
-
-    return architecture_ft
+    return generic_make_arch(
+        constructor=torchvision.models.resnet101,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="layer4",
+        name="resnet101",
+        input_conv2d_layer="conv1",
+        linear_clf_layer="fc",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
+    )
 
 
 @register_arch
@@ -227,24 +284,18 @@ def resnet152(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = torchvision.models.resnet152(weights=weights)
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # prevent weights of feature extractor from being trained, if desired
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.fc = change_fc_output_size(architecture_ft.fc, num_classes)
-
-    # change input shape num_channels
-    architecture_ft.conv1 = change_conv2d_channels(architecture_ft.conv1, num_channels)
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layer4]
-
-    return architecture_ft
+    return generic_make_arch(
+        constructor=torchvision.models.resnet152,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="layer4",
+        name="resnet152",
+        input_conv2d_layer="conv1",
+        linear_clf_layer="fc",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
+    )
 
 
 @register_arch
@@ -268,24 +319,18 @@ def alexnet(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
-    architecture_ft = torchvision.models.alexnet(weights=weights)
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.classifier[6] = change_fc_output_size(
-        architecture_ft.classifier[6], num_classes
+    return generic_make_arch(
+        constructor=torchvision.models.alexnet,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="features.12",
+        name="alexnet",
+        input_conv2d_layer="features.0",
+        linear_clf_layer="classifier.6",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
     )
-
-    # change input shape num_channels
-    architecture_ft.features[0] = change_conv2d_channels(
-        architecture_ft.features[0], num_channels
-    )
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
-
-    return architecture_ft
 
 
 @register_arch
@@ -308,25 +353,18 @@ def vgg11_bn(
             Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
 
     """
-    architecture_ft = torchvision.models.vgg11_bn(weights=weights)
-
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.classifier[6] = change_fc_output_size(
-        architecture_ft.classifier[6], num_classes
+    return generic_make_arch(
+        constructor=torchvision.models.vgg11_bn,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="features.28",
+        name="vgg11_bn",
+        input_conv2d_layer="features.0",
+        linear_clf_layer="classifier.6",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
     )
-
-    # change input shape num_channels
-    architecture_ft.features[0] = change_conv2d_channels(
-        architecture_ft.features[0], num_channels
-    )
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
-
-    return architecture_ft
 
 
 @register_arch
@@ -350,6 +388,8 @@ def squeezenet1_0(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
     """
+    assert num_classes > 0, "num_classes must be > 0"
+
     architecture_ft = torchvision.models.squeezenet1_0(weights=weights)
 
     # prevent weights of feature extractor from being trained, if desired
@@ -357,7 +397,7 @@ def squeezenet1_0(
         freeze_params(architecture_ft)
 
     # change number of output nodes
-    # uses a conv2d, not a fully connected layera
+    # uses a conv2d, not a fully connected layer, as the traininable part of the classifier block
     conv2d = architecture_ft.classifier[1]  # original classifier layer
     architecture_ft.classifier[1] = torch.nn.Conv2d(
         in_channels=conv2d.in_channels,
@@ -375,8 +415,10 @@ def squeezenet1_0(
         architecture_ft.features[0], num_channels
     )
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
+    architecture_ft.cam_layer = "features.12"
+    architecture_ft.embedding_layer = "features"
+    architecture_ft.classifier_layer = "classifier.1"  # not a Linear layer!
+    architecture_ft.constructor_name = "squeezenet1_0"
 
     return architecture_ft
 
@@ -401,24 +443,18 @@ def densenet121(
             specify channels in input sample, eg [channels h,w] sample shape
 
     """
-    architecture_ft = torchvision.models.densenet121(weights=weights)
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.classifier = change_fc_output_size(
-        architecture_ft.classifier, num_classes
+    return generic_make_arch(
+        constructor=torchvision.models.densenet121,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="features.denseblock4.denselayer16.conv2",
+        cam_layer="features.denseblock4.denselayer16.conv2",
+        name="densenet121",
+        input_conv2d_layer="features.conv0",
+        linear_clf_layer="classifier",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
     )
-
-    # change input shape num_channels
-    architecture_ft.features[0] = change_conv2d_channels(
-        architecture_ft.features[0], num_channels
-    )
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.features[-1]]
-
-    return architecture_ft
 
 
 @register_arch
@@ -465,8 +501,11 @@ def inception_v3(
             num_channels, 32, kernel_size=3, stride=2
         )
 
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.Mixed_7c]
+    architecture_ft.embedding_layer = "Mixed_7c"
+    architecture_ft.cam_layer = "Mixed_7c"
+    architecture_ft.classifier_layer = "fc"
+
+    architecture_ft.constructor_name = "inception_v3"
 
     return architecture_ft
 
@@ -490,32 +529,22 @@ def efficientnet_b0(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
 
+    Note: in v0.10.2, changed from using NVIDIA/DeepLearningExamples:torchhub repo
+        implementatiuon to native pytorch implementation
+
     """
-    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-    architecture_ft = torch.hub.load(
-        "NVIDIA/DeepLearningExamples:torchhub",
-        "nvidia_efficientnet_b0",
-        pretrained=weights,
+    return generic_make_arch(
+        constructor=torchvision.models.efficientnet_b0,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="features.8",
+        name="efficientnet_b0",
+        input_conv2d_layer="features.0.0",
+        linear_clf_layer="classifier.1",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
     )
-
-    # prevent weights of feature extractor from being trained, if desired
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.classifier.fc = change_fc_output_size(
-        architecture_ft.classifier.fc, num_classes
-    )
-
-    # change input shape num_channels
-    architecture_ft.stem.conv = change_conv2d_channels(
-        architecture_ft.stem.conv, num_channels
-    )
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
-
-    return architecture_ft
 
 
 @register_arch
@@ -537,126 +566,22 @@ def efficientnet_b4(
         num_channels:
             specify channels in input sample, eg [channels h,w] sample shape
 
-    """
-    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-    architecture_ft = torch.hub.load(
-        "NVIDIA/DeepLearningExamples:torchhub",
-        "nvidia_efficientnet_b4",
-        pretrained=weights,
-    )
-
-    # prevent weights of feature extractor from being trained, if desired
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.classifier.fc = change_fc_output_size(
-        architecture_ft.classifier.fc, num_classes
-    )
-
-    # change input shape num_channels
-    architecture_ft.stem.conv = change_conv2d_channels(
-        architecture_ft.stem.conv, num_channels
-    )
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
-
-    return architecture_ft
-
-
-@register_arch
-def efficientnet_widese_b0(
-    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
-):
-    """Wrapper for efficientnet_widese_b0 architecture
-
-    Args:
-        num_classes:
-            number of output nodes for the final layer
-        freeze_feature_extractor:
-            if False (default), entire network will have gradients and can train
-            if True, feature block is frozen and only final layer is trained
-        weights:
-            string containing version name of the pre-trained classification weights to use for this architecture.
-            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
-            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
-        num_channels:
-            specify channels in input sample, eg [channels h,w] sample shape
+    Note: in v0.10.2, changed from using NVIDIA/DeepLearningExamples:torchhub repo
+        implementatiuon to native pytorch implementation
 
     """
-    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-    architecture_ft = torch.hub.load(
-        "NVIDIA/DeepLearningExamples:torchhub",
-        "nvidia_efficientnet_widese_b0",
-        pretrained=weights,
+    return generic_make_arch(
+        constructor=torchvision.models.efficientnet_b4,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="features.8",
+        name="efficientnet_b4",
+        input_conv2d_layer="features.0.0",
+        linear_clf_layer="classifier.1",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
     )
-
-    # prevent weights of feature extractor from being trained, if desired
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.classifier.fc = change_fc_output_size(
-        architecture_ft.classifier.fc, num_classes
-    )
-
-    # change input shape num_channels
-    architecture_ft.stem.conv = change_conv2d_channels(
-        architecture_ft.stem.conv, num_channels
-    )
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
-
-    return architecture_ft
-
-
-@register_arch
-def efficientnet_widese_b4(
-    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
-):
-    """Wrapper for efficientnet_widese_b4 architecture
-
-    Args:
-        num_classes:
-            number of output nodes for the final layer
-        freeze_feature_extractor:
-            if False (default), entire network will have gradients and can train
-            if True, feature block is frozen and only final layer is trained
-        weights:
-            string containing version name of the pre-trained classification weights to use for this architecture.
-            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
-            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
-        num_channels:
-            specify channels in input sample, eg [channels h,w] sample shape
-
-    """
-    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-    architecture_ft = torch.hub.load(
-        "NVIDIA/DeepLearningExamples:torchhub",
-        "nvidia_efficientnet_widese_b4",
-        pretrained=weights,
-    )
-
-    # prevent weights of feature extractor from being trained, if desired
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-
-    # change number of output nodes
-    architecture_ft.classifier.fc = change_fc_output_size(
-        architecture_ft.classifier.fc, num_classes
-    )
-
-    # change input shape num_channels
-    architecture_ft.stem.conv = change_conv2d_channels(
-        architecture_ft.stem.conv, num_channels
-    )
-
-    # default target layers for activation maps like GradCAM and guided backpropagation
-    architecture_ft.cam_target_layers = [architecture_ft.layers[-1][-1]]
-
-    return architecture_ft
 
 
 def change_conv2d_channels(
@@ -738,5 +663,45 @@ def change_fc_output_size(
         num_classes:
             number of output nodes for the new fc
     """
+    assert num_classes > 0, "num_classes must be > 0"
     num_ftrs = fc.in_features
     return torch.nn.Linear(num_ftrs, num_classes)
+
+
+def freeze_params(model):
+    """disable gradient updates for all model parameters"""
+    model.requires_grad_(False)
+
+
+def unfreeze_params(model):
+    """enable gradient updates for all model parameters"""
+    model.requires_grad_(True)
+
+
+def set_layer_from_name(module, layer_name, new_layer):
+    """assign an attribute of an object using a string name
+
+    Args:
+        module: object to assign attribute to
+        layer_name: string name of attribute to assign
+                the attribute_name is formatted with . delimiter and can contain
+                either attribute names or list indices
+                e.g. "network.classifier.0.0.fc" sets network.classifier[0][0].fc
+                this type of string is given by torch.nn.Module.named_modules()
+        new_layer: replace layer with this torch.nn.Module instance
+
+        see also: torch.nn.Module.named_modules(), torch.nn.Module.get_submodule()
+    """
+    parts = layer_name.split(".")
+    for part in parts[:-1]:
+        # might be an index of a list
+        try:
+            part = int(part)
+            module = module[part]
+        except ValueError:
+            module = getattr(module, part)
+    try:
+        part = int(parts[-1])
+        module[part] = new_layer
+    except ValueError:
+        setattr(module, parts[-1], new_layer)

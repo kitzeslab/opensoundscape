@@ -9,7 +9,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 
 ### How do I install OpenSoundscape?
 
-* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.10.1`. 
+* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.10.2`. 
 * To use OpenSoundscape in Jupyter Notebooks (e.g. for tutorials), follow the installation instructions for your operating system, then follow the "Jupyter" instructions.
 * Contributors and advanced users can also use Poetry to install OpenSoundscape using the "Contributor" instructions
 
@@ -73,7 +73,7 @@ all_annotations = BoxedAnnotations.from_raven_files(raven_file_paths,audio_file_
 class_list = ['IBWO','BLJA']
 
 # create labels for fixed-duration (2 second) clips 
-labels = all_annotations.one_hot_clip_labels(
+labels = all_annotations.multi_hot_clip_labels(
   cip_duration=2,
   clip_overlap=0,
   min_label_overlap=0.25,

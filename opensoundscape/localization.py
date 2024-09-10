@@ -3,10 +3,13 @@
 import warnings
 import numpy as np
 import datetime
+import pandas as pd
 
 from opensoundscape.audio import Audio
 from opensoundscape import audio
 from opensoundscape.utils import cast_np_to_native
+from scipy.optimize import least_squares
+
 
 # define defaults for physical constants
 SPEED_OF_SOUND = 343  # default value in meters per second
@@ -26,12 +29,12 @@ class SpatialEvent:
         receiver_locations,
         max_delay,
         min_n_receivers=3,
-        start_time=0,
+        receiver_start_time_offsets=None,
         start_timestamp=None,
         duration=None,
         class_name=None,
         bandpass_range=None,
-        cc_threshold=None,
+        cc_threshold=0,
         cc_filter=None,
         speed_of_sound=SPEED_OF_SOUND,
     ):
@@ -42,8 +45,13 @@ class SpatialEvent:
             receiver_files: list of audio files, one for each receiver
             receiver_locations: list of [x,y] or [x,y,z] positions of each receiver in meters
             max_delay: maximum time delay (in seconds) to consider for time-delay-of-arrival estimate. Cannot be longer than 1/2 the duration.
-            start_time: start_time of detection relative to start of audio file, for cross correlation
-            start_timestamp: start time of detection relative to start of audio file, in datetime format
+            receiver_start_time_offsets: list of start_time of detection (seconds) for each receiver
+                - if all audio files started at the same real-world time, this value will be the same for all recievers
+                - for example, 5.0 means the detection window starts 5 seconds after the beginning of the Audio file
+                (the detection window's duration in seconds is given by the `duration` argument and is the same across recievers)
+                - if `None`, and `start_timestamp` is given, attempts to extract the correct audio time period from each file
+                    using the audio file's metadata 'recording_start_time' field (using Audio.from_file with start_timestamp argument)
+            start_timestamp: start time of detection as datetime.datetime
             duration: duration of sound event. This duration of audio will be used for cross-correlation to estimate TDOAs.
             class_name: (str) name of detection's class. Default: None
             bandpass_range: [low,high] frequency range that audio will be bandpassed to before cross-correlation.
@@ -61,7 +69,7 @@ class SpatialEvent:
         self.receiver_files = receiver_files
         self.receiver_locations = np.array(receiver_locations)
         self.max_delay = max_delay
-        self.start_time = start_time
+        self.receiver_start_time_offsets = receiver_start_time_offsets
         self.start_timestamp = start_timestamp
         self.min_n_receivers = min_n_receivers
         self.duration = duration
@@ -91,10 +99,11 @@ class SpatialEvent:
         self,
         localization_algorithm="gillette",
         use_stored_tdoas=True,
-        return_self=False,
     ):
         """
-        Estimate spatial location of this event. This method first estimates the time delays (TDOAS) using cross-correlation, then estimates the location from those TDOAS.
+        Estimate spatial location of this event. Modifies attributes in place.
+
+        This method first estimates the time delays (TDOAS) using cross-correlation, then estimates the location from those TDOAS.
         Localization is performed in 2d or 3d according to the dimensions of self.receiver_locations (x,y) or (x,y,z)
         Note: if self.tdoas or self.receiver_locations is None, first calls self._estimate_delays() to estimate the time delays.
 
@@ -105,27 +114,29 @@ class SpatialEvent:
             - use_stored_tdoas: if True, uses the tdoas stored in self.tdoas to estimate the location.
                 If False, first calls self._estimate_delays() to estimate the tdoas.
                 default: True
-            - return_self: if True, returns the SpatialEvent object itself. This is used under the hood for parallelization.
 
         Returns:
-            Location estimate as cartesian coordinates (x,y) or (x,y,z) (units: meters)
+            Copy of self with updated .location_estimate as cartesian coordinates (x,y) or (x,y,z) (units: meters)
 
         Effects:
-            sets the value of self.location_estimate to the same value as the returned location
+            sets the value of self.location_estimate
         """
         # If no values are already stored, perform generalized cross correlation to estimate time delays
         # or if user wants to re-estimate the time delays, perform generalized cross correlation to estimate time delays
         if self.tdoas is None or self.cc_maxs is None or use_stored_tdoas is False:
-            self._estimate_delays()  # Stores the results in the the attributes self.cc_maxs and self.tdoas
+            # Stores the results in the the attributes self.cc_maxs and self.tdoas
+            # if it fails, they will be None
+            self._estimate_delays()
 
-        location_estimate = self._localize_after_cross_correlation(
-            localization_algorithm=localization_algorithm
-        )
-        # Sets the attributes self.location_estimate, self.receivers_used_for_localization, self.distance_residuals, self.residual_rms
-        if return_self:
-            return self
-        else:
-            return location_estimate
+        # if self.tdoas is still not set, don't attempt to localize (_estimate_delays was not successful)
+        if self.tdoas is not None:
+            # Sets the attributes self.location_estimate, self.receivers_used_for_localization,
+            # self.distance_residuals, and self.residual_rms
+            self._localize_after_cross_correlation(
+                localization_algorithm=localization_algorithm
+            )
+
+        return self
 
     def _estimate_delays(self):
         """Hidden method to estimate time delay of event relative to receiver_files[0] with gcc
@@ -155,11 +166,47 @@ class SpatialEvent:
         Effects:
             sets self.tdoas and self.cc_maxs with the same values as those returned
         """
-        reference_audio = Audio.from_file(
-            self.receiver_files[0],
-            offset=self.start_time - self.max_delay,
-            duration=self.duration + 2 * self.max_delay,
-        )
+
+        extracted_clip_duration = self.duration + 2 * self.max_delay
+
+        if self.receiver_start_time_offsets is None:
+            # use audio file metadata to determine correct starting positions within each file
+            assert (
+                self.start_timestamp is not None
+            ), "must specify .receiver_start_time_offsets or .start_timestamp. Both were None."
+            start_timestamp = self.start_timestamp
+            if isinstance(start_timestamp, pd.Timestamp):
+                start_timestamp = start_timestamp.to_pydatetime()
+
+            # we want to extract clips extending (max_delay) sec before and after the clip the CNN made the prediction on
+            extracted_clip_start_timestamp = start_timestamp - datetime.timedelta(
+                seconds=cast_np_to_native(self.max_delay)
+            )
+
+            # load audio from desired time period
+            reference_audio = Audio.from_file(
+                self.receiver_files[0],
+                start_timestamp=extracted_clip_start_timestamp,
+                duration=extracted_clip_duration,
+                # offset=self.start_time - self.max_delay,
+            )
+        else:
+            # load audio from desired time period
+            reference_audio = Audio.from_file(
+                self.receiver_files[0],
+                offset=self.receiver_start_time_offsets[0] - self.max_delay,
+                duration=extracted_clip_duration,
+            )
+
+        # make sure the audio clip is of the desired length
+        # TODO: this will give errors for clips starting at 0s since we can't get earlier audio;
+        # should we do something about that?
+        if not np.isclose(reference_audio.duration, extracted_clip_duration, atol=1e-3):
+            # don't try to localize
+            self.error_msg = "did not get audio clip of desired length"
+            self.tdoas = None
+            self.cc_maxs = None
+            return None, None
 
         # bandpass once now to avoid repeating operation for each receiver
         if self.bandpass_range is not None:
@@ -169,24 +216,39 @@ class SpatialEvent:
 
         # estimate time difference of arrival (tdoa) for each file relative to the first
         # skip the first because we don't need to cross correlate a file with itself
-        tdoas = [0]  # first file's delay to itself is zero
-        cc_maxs = [1]  # set first file's cc_max to 1
+        tdoas = []
+        cc_maxs = []
 
         # catch the receivers that have an issue and should be discarded
         # e.g. their file starts or end during the time-window, so estimate_delays is not possible
         bad_receivers_index = []
 
-        for index, file in enumerate(self.receiver_files[1:]):
-            audio2 = Audio.from_file(
-                file,
-                offset=self.start_time - self.max_delay,
-                duration=self.duration + 2 * self.max_delay,
-            )
+        for index, file in enumerate(self.receiver_files):
+            if index == 0:  # can skip reference audio cc with itself
+                tdoas.append(0)  # first file's delay to itself is zero
+                cc_maxs.append(1)  # set first file's cc_max to 1
+                continue
+
+            if self.receiver_start_time_offsets is None:
+                # use audio file metadata to determine correct starting positions within each file
+                audio2 = Audio.from_file(
+                    file,
+                    start_timestamp=extracted_clip_start_timestamp,
+                    duration=extracted_clip_duration,
+                )
+            else:
+                # use specified time offsets to extract the correct audio segment
+                audio2 = Audio.from_file(
+                    file,
+                    offset=self.receiver_start_time_offsets[index] - self.max_delay,
+                    duration=extracted_clip_duration,
+                )
+
             # catch edge cases where the audio lengths do not match.
             if (
                 abs(len(audio2.samples) - len(reference_audio.samples)) > 1
             ):  # allow for 1 sample difference
-                bad_receivers_index.append(index + 1)
+                bad_receivers_index.append(index)
             else:
                 tdoa, cc_max = audio.estimate_delay(
                     primary_audio=audio2,
@@ -239,43 +301,146 @@ class SpatialEvent:
         receiver_files = np.array(
             self.receiver_files
         )  # needs to be np array to access using a boolean mask
-        if self.cc_threshold is not None:
-            tdoas = tdoas[self.cc_maxs > self.cc_threshold]
-            locations = locations[self.cc_maxs > self.cc_threshold]
-            receiver_files = receiver_files[
-                self.cc_maxs > self.cc_threshold
-            ]  # fails is receiver_files is not a np.array
 
-        # assert there are enough receivers remaining to localize the event
-        if len(tdoas) < self.min_n_receivers - 1:
+        # apply the cc_threshold filter
+        # only keep receivers that have a cc_max above the cc_threshold
+        tdoas = tdoas[self.cc_maxs > self.cc_threshold]
+        locations = locations[self.cc_maxs > self.cc_threshold]
+        receiver_files = receiver_files[
+            self.cc_maxs > self.cc_threshold
+        ]  # fails if receiver_files is not a np.array
+
+        # If there aren't enough receivers, don't attempt localization.
+        if len(tdoas) < self.min_n_receivers:
             self.location_estimate = None
             self.receivers_used_for_localization = None
             self.distance_residuals = None
             self.residual_rms = None
-            return None
-
+            return self.location_estimate
         # Store which receivers were used for localization. The location is estimated only from these.
         self.receivers_used_for_localization = receiver_files
 
-        # Estimate location from receiver locations and relative Times of Arrival
+        # Estimate location from receiver locations and time differences of arrival
         self.location_estimate = localize(
             receiver_locations=locations,
             tdoas=tdoas,
             algorithm=localization_algorithm,
         )
 
-        # Store the distance residuals (only for the receivers used) as an attribute
-        self.distance_residuals = calculate_tdoa_residuals(
-            receiver_locations=locations,
-            tdoas=tdoas,
-            location_estimate=self.location_estimate,
-            speed_of_sound=self.speed_of_sound,
-        )
+        if self.location_estimate is not None:
+            # Store the distance residuals (only for the receivers used) as an attribute
+            self.distance_residuals = calculate_tdoa_residuals(
+                receiver_locations=locations,
+                tdoas=tdoas,
+                location_estimate=self.location_estimate,
+                speed_of_sound=self.speed_of_sound,
+            )
 
-        # Calculate root mean square of distance residuals and store as attribute
-        self.residual_rms = np.sqrt(np.mean(self.distance_residuals**2))
+            # Calculate root mean square of distance residuals and store as attribute
+            self.residual_rms = np.sqrt(np.mean(self.distance_residuals**2))
 
         return self.location_estimate
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        """Recover SpatialEvent from dictionary, eg loaded from json"""
+        array_keys = (
+            "receiver_locations",
+            "tdoas",
+            "cc_maxs",
+            "location_estimate",
+            "distance_residuals",
+            "receivers_used_for_localization",
+        )
+        s = cls(
+            receiver_files=dictionary["receiver_files"],
+            receiver_locations=dictionary["receiver_locations"],
+            max_delay=dictionary["max_delay"],
+            duration=dictionary["duration"],
+        )
+        for key in dictionary.keys():
+            val = dictionary[key]
+            if key == "start_timestamp":
+                val = pd.Timestamp(val)
+            if key in array_keys:
+                val = np.array(val)
+            s.__setattr__(key, val)
+        return s
+
+    def to_dict(self):
+        """SpatialEvent to json-able dictionary"""
+        d = self.__dict__.copy()
+        for key in d.keys():
+            if isinstance(d[key], np.ndarray):
+                d[key] = d[key].tolist()
+            if isinstance(d[key], pd.Timestamp):
+                d[key] = str(d[key])
+        return d
+
+
+def events_to_df(list_of_events):
+    """convert a list of SpatialEvent objects to pd DataFrame
+
+    Args:
+        list_of_events: list of SpatialEvent objects
+
+    Returns:
+        pd.DataFrame with columns for each attribute of a SpatialEvent object
+
+    See also: df_to_events, SpatialEvent.from_dict, SpatialEvent.to_dict
+    """
+    return pd.DataFrame([e.__dict__ for e in list_of_events])
+
+
+def df_to_events(df):
+    """convert a pd DataFrame to list of SpatialEvent objects
+
+    works best if df was created using `events_to_df`
+
+    Args:
+        df: pd.DataFrame with columns for each attribute of a SpatialEvent object
+
+    Returns:
+        list of SpatialEvent objects
+
+    See also: events_to_df, SpatialEvent.from_dict, SpatialEvent.to_dict
+    """
+    return [SpatialEvent.from_dict(df.loc[i].to_dict()) for i in df.index]
+
+
+class GetStartTimestamp:
+    def __init__(self) -> None:
+        self.cached_file = ""
+        self.cached_recording_start_time = None
+        # self.tz = pytz.timezone("UTC")
+
+    def __call__(self, file, start_time):
+        """extract start_timestamp from file metadata, return start_timestamp + start_time in seconds
+
+        Args:
+            file: str, path to audio file
+            start_time: float, time in seconds from start of file
+
+        Returns:
+            datetime.datetime: start timestamp parsed from audio file metadata + start_time
+        """
+        try:
+            if file == self.cached_file:
+                recording_start_dt = self.cached_recording_start_time
+            else:
+                recording_start_dt = Audio.from_file(file, duration=0.0001).metadata[
+                    "recording_start_time"
+                ]  # TODO: replace with audio.metadata_from_file after merging develop
+                self.cached_file = file
+                self.cached_recording_start_time = recording_start_dt
+        except Exception as exc:
+            raise Exception(
+                f"Failed to retrieve recording start time from metadata of file {file}."
+            ) from exc
+
+        return recording_start_dt + datetime.timedelta(
+            seconds=cast_np_to_native(start_time)
+        )
 
 
 class SynchronizedRecorderArray:
@@ -302,7 +467,6 @@ class SynchronizedRecorderArray:
     def __init__(
         self,
         file_coords,
-        start_timestamp=None,
         speed_of_sound=SPEED_OF_SOUND,
     ):
         """
@@ -314,11 +478,9 @@ class SynchronizedRecorderArray:
                 3d if columns are (x,y,z). When running .localize_detections() or .create_candidate_events(),
                 Each audio file in `detections` must have a corresponding
                 row in `file_coords` specifiying the location of the reciever that recorded the file.
-            start_timestamp: datetime object, optional. A datetime object specifying the start time of the first audio file in file_coords.
             speed_of_sound : float, optional. Speed of sound in meters per second. Default is 343.
         """
         self.file_coords = file_coords
-        self.start_timestamp = start_timestamp
         self.speed_of_sound = speed_of_sound
 
     def localize_detections(
@@ -501,10 +663,9 @@ class SynchronizedRecorderArray:
         # this calls estimate_delays under the hood
         from joblib import Parallel, delayed
 
+        # parallelize the localization of each event across cpus
         events = Parallel(n_jobs=num_workers)(
-            delayed(e.estimate_location)(
-                localization_algorithm=localization_algorithm, return_self=True
-            )
+            delayed(e.estimate_location)(localization_algorithm=localization_algorithm)
             for e in candidate_events
         )
 
@@ -556,19 +717,48 @@ class SynchronizedRecorderArray:
     ):
         """
         Takes the detections dictionary and groups detections that are within `max_receiver_dist` of each other.
-        args:
-            detections: a dictionary of detections, with multi-index (file,start_time,end_time), and
+
+        Args:
+            detections: a dictionary of detections, with multi-index (file,start_time,end_time,start_timestamp), and
                 one column per class with 0/1 values for non-detection/detection
-                The times in the index imply the same real world time across all files: eg 0 seconds assumes
-                that the audio files all started at the same time, not on different dates/times
+                where start_timestamp contains timzeone-aware datetime.datetime objects corresponding to start_time
+                - If `start_timestamp` index not present, attempts to automatically determine the
+                start_timestamps file from audio file metadata ('recording_start_time' field).
+                This will generally succeed with files generated by AudioMoth or other devices for which metadata parsing
+                is supported and recording start time is given in the metadata.
+
+                Example of adding `start_timestamp` to multi-index of detections df manually:
+                ```python
+                # assume we have a csv with columns file, start_time, end_time, class1, ...
+                # e.g., the output of and opensoundscape CNN prediction workflow
+                detections = pd.read_csv('my_opso_detections.csv',index_col=[0,1,2])
+                # let's assume all files started recording at the same time for this example:
+                import pytz
+                import datetime
+                tz = pytz.timezone('America/New_York')
+                detections = detections.reset_index(drop=False)
+                detections['start_timestamp']=[
+                    datetime.datetime(2024,1,1,10,0,0).astimezonoe(tz)+
+                    datetime.timedelta(detections.at[i,'start_time'])
+                    for i in detections.index
+                ]
+                # add the start_timestamp column into the multi-index
+                detections = detections.reset_index(drop=False).set_index(
+                    ["file", "start_time", "end_time", "start_timestamp"]
+                )
+                ```
+
             min_n_receivers: if fewer nearby receivers have a simultaneous detection, do not create candidate event
             max_receiver_dist: the maximum distance between recorders to consider a detection as a single event
             bandpass_ranges: dictionary of form {"class name": [low_f, high_f]} for audio bandpass filtering during
+
             max_delay: the maximum delay (in seconds) to consider between receivers for a single event
                 if None, defaults to max_receiver_dist / SPEED_OF_SOUND
-        returns:
+        Returns:
             a list of SpatialEvent objects to attempt to localize
         """
+        # TODO: cc threshold, cc filter, max_delay: just allow kwargs to SpatialEvent init?
+
         if max_delay is None:
             max_delay = max_receiver_dist / self.speed_of_sound
         # pre-generate a dictionary listing all close files for each audio file
@@ -588,6 +778,47 @@ class SynchronizedRecorderArray:
         # results in its own event containing nearby detections
         candidate_events = []  # list of SpatialEvents to try to localize
 
+        detections = detections.copy()  # don't change original
+
+        if "start_timestamp" in detections.index.names:
+            # check that the timestamps are localized datetime.datetime objects
+            dts = detections.index.get_level_values("start_timestamp")
+
+            def is_localized_dt(dt):
+                # is it a datetime.datetime object?
+                if not isinstance(dt, datetime.datetime):
+                    return False
+                # is it localized to a timezone?
+                if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                    return False
+                return True
+
+            if not all([is_localized_dt(dt) for dt in dts]):
+                raise ValueError(
+                    "start_timestamp index must contain timezone-localized datetime.datetime objects, but "
+                    "at least one value in the multi-index 'start_timestamp' column is not a localized datetime.datetime object. "
+                    "See SynchronizedRecorderArray.create_candidate_events() docstring for example."
+                )
+        else:
+            # try to determine start_timestamps from metadata of each audio file
+            try:
+                # initialize instance of helper class used to calculate timestamp from file metadata
+                # class rather than function to allow caching and re-using timestamp when file remains the same
+                get_start_ts = GetStartTimestamp()
+                detections["start_timestamp"] = [
+                    get_start_ts(file, start_time)
+                    for (file, start_time, _) in detections.index
+                ]
+                # add `start_timestamp` to multi-index
+                detections = detections.reset_index(drop=False).set_index(
+                    ["file", "start_time", "end_time", "start_timestamp"]
+                )
+            except Exception as e:
+                raise ValueError(
+                    "could not determine `start_timestamp`s from audio file metadata. Include `start_timestamp` in the multi-index of detections. "
+                    "See SynchronizedRecorderArray.create_candidate_events() docstring for example."
+                ) from e
+
         # iterate through all classes in detections (0/1) dataframe
         # with index (file,start_time,end_time), column for each class
         for cls_i in detections.columns:
@@ -602,11 +833,11 @@ class SynchronizedRecorderArray:
             # filter detection dataframe to select detections of this class
             det_cls = det_cls[det_cls[cls_i] > 0]
 
-            # iterate through each clip start time in the df of detections
-            # note: all clips with same start_time are assumed to start at the same real-world time!
-            # eg, should not be two recordings from different dates or times
-            # TODO: maybe use datetime objects instead of just a time like 0 seconds?
-            for time_i, dets_at_time_i in det_cls.groupby(level=1):
+            # iterate through each clip start_timestamp in the df of detections
+            for timestamp_i, dets_at_time_i in det_cls.groupby(level="start_timestamp"):
+                if len(dets_at_time_i) < min_n_receivers:
+                    continue
+
                 # list all files with detections of this class at the same time
                 files_w_dets = dets_at_time_i.reset_index()["file"].unique()
 
@@ -626,21 +857,26 @@ class SynchronizedRecorderArray:
                     # if enough receivers, create a SpatialEvent using this set of receivers
                     # +1 to count the reference receiver
                     if len(close_det_files) + 1 >= min_n_receivers:
+                        # SpatialEvent will include reference receiver + close recievers
                         receiver_files = [ref_file] + close_det_files
+
+                        # retrieve positions of each receiver
                         receiver_locations = [
                             self.file_coords.loc[r] for r in receiver_files
                         ]
-                        # find the clip end time
-                        clip = dets_at_time_i.loc[ref_file, time_i, :]
-                        clip_end = clip.reset_index()["end_time"].values[0]
-                        # specify a timestamp if we have one
-                        if self.start_timestamp is None:
-                            start_timestamp = None
-                        else:
-                            # timedelta doesn't like np types, fix issue #928
-                            start_timestamp = self.start_timestamp + datetime.timedelta(
-                                seconds=cast_np_to_native(time_i)
-                            )
+
+                        # subset detections to close recievers, and re-index to only 'file'
+                        close_dets = (
+                            dets_at_time_i.reset_index()
+                            .set_index("file")
+                            .loc[receiver_files]
+                        )
+
+                        duration = (
+                            close_dets.at[ref_file, "end_time"]
+                            - close_dets.at[ref_file, "start_time"]
+                        )
+
                         # create a SpatialEvent for this cluster of simultaneous detections
                         candidate_events.append(
                             SpatialEvent(
@@ -649,9 +885,14 @@ class SynchronizedRecorderArray:
                                 bandpass_range=bandpass_range,
                                 cc_threshold=cc_threshold,
                                 max_delay=max_delay,
-                                start_time=time_i,
-                                start_timestamp=start_timestamp,
-                                duration=clip_end - time_i,
+                                # find the start_time value for each clip, i.e. offset from the start of
+                                # the corresponding file to the start of the detection
+                                # if all audio files started at same time, this will be the same for all files
+                                receiver_start_time_offsets=close_dets[
+                                    "start_time"
+                                ].values,
+                                start_timestamp=timestamp_i,
+                                duration=duration,
                                 class_name=cls_i,
                                 cc_filter=cc_filter,
                             )
@@ -764,7 +1005,7 @@ def travel_time(source, receiver, speed_of_sound):
 
 def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND):
     """
-    Perform TDOA localization on a sound event.
+    Perform TDOA localization on a sound event. If there are not enough receivers to localize the event, return None.
     Args:
         receiver_locations: a list of [x,y,z] locations for each receiver
             locations should be in meters, e.g., the UTM coordinate system.
@@ -772,19 +1013,82 @@ def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND
             The times should be in seconds.
         speed_of_sound: speed of sound in m/s
         algorithm: the algorithm to use for localization
-            Options: 'soundfinder', 'gillette'
+            Options: 'soundfinder', 'gillette', 'least_squares'.
+            See the documentation for the functions soundfinder_localize, gillette_localize, and least_squares_localize for more detail on how each algorithm works.
     Returns:
-        The estimated source location in meters.
+        The estimated source location in meters, in the same number of dimensions as the receiver locations.
     """
+    # check that there are enough receivers to localize the event
+    ndim = len(receiver_locations[0])
+    if len(receiver_locations) < ndim + 1:
+        warnings.warn(
+            f"Only {len(receiver_locations)} receivers. Need at least {ndim+1} to localize in {ndim} dimensions."
+        )
+        return None
     if algorithm == "soundfinder":
         estimate = soundfinder_localize(receiver_locations, tdoas, speed_of_sound)
     elif algorithm == "gillette":
         estimate = gillette_localize(receiver_locations, tdoas, speed_of_sound)
+    elif algorithm == "least_squares":
+        estimate = least_squares_localize(receiver_locations, tdoas, speed_of_sound)
     else:
         raise ValueError(
-            f"Unknown algorithm: {algorithm}. Implemented for 'soundfinder' and 'gillette'"
+            f"Unknown algorithm: {algorithm}. Implemented for 'soundfinder', 'gillette' and 'least_squares'."
         )
     return estimate
+
+
+def least_squares_localize(
+    receiver_locations, arrival_times, speed_of_sound=SPEED_OF_SOUND
+):
+    """
+    Use a least squares optimizer to perform TDOA localization on a sound event, based on a set of TDOA times and receiver locations.
+    Args:
+        receiver_locations: a list of [x,y,z] locations for each receiver
+            locations should be in meters, e.g., the UTM coordinate system.
+        arrival_times: a list of TDOA times (onset times) for each recorder
+            The first receiver is the reference receiver, with arrival time 0.
+        speed of sound: speed of sound in m/s
+    Returns:
+        The solution (x,y,z) in meters. In the same number of dimensions as the receiver locations.
+    """
+
+    # check that these delays are with reference to one receiver (the reference receiver).
+    # We do this by checking that one of the arrival times is within float precision
+    # of 0 (i.e. arrival at the reference)
+    if not np.isclose(np.min(np.abs(arrival_times)), 0):
+        raise ValueError(
+            "Arrival times must be relative to a reference receiver. Therefore one arrival"
+            " time must be 0 (corresponding to arrival at the reference receiver) None of your "
+            "TDOAs are zero. Please check your arrival_times."
+        )
+
+    # make sure our inputs follow consistent format
+    receiver_locations = np.array(receiver_locations).astype("float64")
+    arrival_times = np.array(arrival_times).astype("float64")
+
+    # find which is the reference receiver and reorder, so reference receiver is first
+    ref_receiver = np.argmin(abs(arrival_times))
+    ordered_receivers = np.roll(receiver_locations, -ref_receiver, axis=0)
+    ordered_tdoas = np.roll(arrival_times, -ref_receiver, axis=0)
+    # define the function to minimize, i..e. the TDOA residuals
+
+    def fun(x, ordered_receivers, ordered_tdoas):
+        # calculate the predicted TDOAs for each receiver
+        time_of_flight = np.linalg.norm(ordered_receivers - x, axis=1) / speed_of_sound
+        # the observed TDOAs are all relative to the first receiver, so minus the first receiver's TDOA
+        predicted_tdoas = np.array(time_of_flight) - time_of_flight[0]
+
+        # calculate the difference between the predicted and observed TDOAs (i.e. TDOA residuals)
+        return np.array(predicted_tdoas) - ordered_tdoas
+
+    # initial guess for the source location is the mean of the receiver locations
+    x0 = np.mean(ordered_receivers, axis=0)
+
+    # run the optimization
+    res = least_squares(fun, x0, args=(ordered_receivers, ordered_tdoas))
+
+    return res.x
 
 
 def soundfinder_localize(

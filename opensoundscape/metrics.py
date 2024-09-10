@@ -137,7 +137,7 @@ def multi_target_metrics(targets, scores, class_names, threshold):
     """generate various metrics for a set of scores and labels (targets)
 
     Args:
-        targets: 0/1 lables in 2d array
+        targets: 0/1 labels in 2d array
         scores: continuous values in 2d array
         class_names: list of strings
         threshold: scores >= threshold result in prediction of 1,
@@ -224,7 +224,7 @@ def single_target_metrics(targets, scores):
     all other classes.
 
     Args:
-        targets: 0/1 lables in 2d array
+        targets: 0/1 labels in 2d array
         scores: continuous values in 2d array
 
     Returns:

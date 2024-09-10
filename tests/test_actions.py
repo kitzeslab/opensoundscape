@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from opensoundscape.audio import Audio
 from numpy.testing import assert_allclose
-from opensoundscape.preprocess import actions
+from opensoundscape.preprocess import actions, action_functions
 from opensoundscape.sample import AudioSample
 from PIL import Image
 import torch
@@ -66,39 +66,47 @@ def img():
     return Image.fromarray(x, mode="RGB")
 
 
+@pytest.fixture()
+def sample_df():
+    return pd.DataFrame(
+        index=["tests/audio/silence_10s.mp3", "tests/audio/silence_10s.mp3"],
+        data=[[0, 1], [1, 0]],
+    )
+
+
 ## Tests ##
 
 
 def test_audio_clip_loader_file(sample):
     action = actions.AudioClipLoader()
-    action.go(sample)
+    action.__call__(sample)
     assert sample.data.sample_rate == 44100
 
 
 def test_audio_clip_loader_resample(sample):
     action = actions.AudioClipLoader(sample_rate=32000)
-    action.go(sample)
+    action.__call__(sample)
     assert sample.data.sample_rate == 32000
 
 
 def test_audio_clip_loader_clip(sample_clip):
     action = actions.AudioClipLoader()
-    action.go(sample_clip)
+    action.__call__(sample_clip)
     assert math.isclose(sample_clip.data.duration, 2, abs_tol=1e-4)
 
 
 def test_action_trim(sample_audio):
     action = actions.AudioTrim(target_duration=1)
     sample_audio.target_duration = 2  # should be ignored
-    action.go(sample_audio)
+    action.__call__(sample_audio)
     assert math.isclose(sample_audio.data.duration, 1.0, abs_tol=1e-4)
 
 
 def test_action_random_trim(sample_audio):
     sample2 = copy.deepcopy(sample_audio)
     action = actions.AudioTrim(target_duration=0.001, random_trim=True)
-    action.go(sample_audio)
-    action.go(sample2)
+    action.__call__(sample_audio)
+    action.__call__(sample2)
     assert math.isclose(sample_audio.data.duration, 0.001, abs_tol=1e-4)
     # random trim should result in 2 different samples
     assert not math.isclose(sample_audio.start_time, sample2.start_time, abs_tol=1e-9)
@@ -108,38 +116,38 @@ def test_action_random_trim(sample_audio):
 def test_audio_trimmer_duration_None(sample_audio):
     """should not trim if target_duration=None"""
     action = actions.AudioTrim(target_duration=None)
-    action.go(sample_audio)
+    action.__call__(sample_audio)
     assert math.isclose(sample_audio.data.duration, 0.142086167800, abs_tol=1e-4)
 
 
 def test_audio_trimmer_raises_error_on_short_clip(sample_audio):
     action = actions.AudioTrim(target_duration=10, extend=False)
     with pytest.raises(ValueError):
-        action.go(sample_audio)
+        action.__call__(sample_audio)
 
 
 def test_audio_trimmer_extend_short_clip(sample_audio):
     action = actions.AudioTrim(target_duration=10)
-    action.go(sample_audio)  # extend=True is default
+    action.__call__(sample_audio)  # extend=True is default
     assert math.isclose(sample_audio.data.duration, 10, abs_tol=1e-4)
 
 
 def test_audio_random_gain(sample_audio):
     # should reduce 10x if -20dB gain
     original_max = max(sample_audio.data.samples)
-    action = actions.Action(actions.audio_random_gain, dB_range=[-20, -20])
-    action.go(sample_audio)
+    action = actions.Action(action_functions.audio_random_gain, dB_range=[-20, -20])
+    action.__call__(sample_audio)
     assert math.isclose(max(sample_audio.data.samples) * 10, original_max, abs_tol=1e-6)
 
 
 def test_audio_add_noise(sample_audio):
     """smoke test: does it run?"""
-    action = actions.Action(actions.audio_add_noise)
-    action.go(sample_audio)
+    action = actions.Action(action_functions.audio_add_noise)
+    action.__call__(sample_audio)
     action = actions.Action(
-        actions.audio_add_noise, noise_dB=-100, signal_dB=10, color="pink"
+        action_functions.audio_add_noise, noise_dB=-100, signal_dB=10, color="pink"
     )
-    action.go(sample_audio)
+    action.__call__(sample_audio)
 
 
 def test_spectrogram_to_tensor(sample, sample_audio):
@@ -150,32 +158,60 @@ def test_spectrogram_to_tensor(sample, sample_audio):
     sample.width = 30
     sample.channels = 3
 
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action.__call__(sample)  # converts .data from Spectrogram to Tensor
     assert isinstance(sample.data, torch.Tensor)
     assert list(sample.data.shape) == [3, 20, 30]  # note channels as dim0
 
 
 def test_spectrogram_to_tensor_range(sample, sample_audio):
-    """ensure that range is limited to 0,1 and values are scaled correctly"""
+    """ensure that range is limited to 0,1 and values are scaled correctly
+
+    compare values of image to expected values, for both use_skimage=True and False
+
+    use_skimage=True is the legacy behavior, and should be tested to ensure that it still
+    produces the same values. use_skimage=False uses torch, is faster, and produces slightly
+    different values
+    """
     action = actions.SpectrogramToTensor(range=(-80, 0))
-    sample.data = Spectrogram.from_audio(sample_audio.data)
+
     # these attributes normally get set in SpectrogramPreprocessor._generate_sample
     sample.height = 20
     sample.width = 30
     sample.channels = 1
 
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    # test default behavior using torch
+    sample.data = Spectrogram.from_audio(sample_audio.data)
+    action(sample)
     assert isinstance(sample.data, torch.Tensor)
     assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
     assert math.isclose(sample.data.min(), 0.0, abs_tol=1e-6) and sample.data.max() < 1
-    assert math.isclose(sample.data.mean(), 0.0442, abs_tol=1e-4)
+    assert math.isclose(sample.data.mean(), 0.040718697011470795, abs_tol=1e-6)
+
+    # and with lower db range
+    sample.data = Spectrogram.from_audio(sample_audio.data)
+    action.set(range=(-150, -90))
+    action(sample)
+    assert isinstance(sample.data, torch.Tensor)
+    assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
+    assert sample.data.min() > 0 and math.isclose(sample.data.max(), 1.0, abs_tol=1e-6)
+    assert math.isclose(sample.data.mean(), 0.8361802697181702, abs_tol=1e-6)
+
+    # test matching legacy behavior with use_skimage=True
+    action.set(use_skimage=True)
+    action.set(range=(-80, 0))
+    sample.data = Spectrogram.from_audio(sample_audio.data)
+    action(sample)  # converts .data from Spectrogram to Tensor
+    assert isinstance(sample.data, torch.Tensor)
+    assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
+    assert math.isclose(sample.data.min(), 0.0, abs_tol=1e-6) and sample.data.max() < 1
+    assert math.isclose(sample.data.mean(), 0.044159847293801575, abs_tol=1e-6)
 
     # repeat with lower range
-    action = actions.SpectrogramToTensor(range=(-150, -90))
+    action.set(range=(-150, -90))
     sample.data = Spectrogram.from_audio(sample_audio.data)
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action(sample)  # converts .data from Spectrogram to Tensor
     assert sample.data.min() > 0 and math.isclose(sample.data.max(), 1.0, abs_tol=1e-6)
-    assert math.isclose(sample.data.mean(), 0.8427, abs_tol=1e-4)
+    assert math.isclose(sample.data.mean(), 0.8427285774873222, abs_tol=1e-6)
 
 
 def test_spectrogram_to_tensor_retain_shape(sample, sample_audio):
@@ -192,63 +228,95 @@ def test_spectrogram_to_tensor_retain_shape(sample, sample_audio):
     sample.height = None
     sample.width = None
     sample.channels = 1
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action.__call__(sample)  # converts .data from Spectrogram to Tensor
 
     assert list(sample.data.shape) == [1] + spec_shape[0:2]  # note channels as dim0
 
     # repeat for just retaining height
     sample.data = spec
     sample.width = 19
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action.__call__(sample)  # converts .data from Spectrogram to Tensor
     assert list(sample.data.shape) == [1] + [spec_shape[0]] + [19]
 
     # repeat for just retaining width
     sample.data = spec
     sample.height = 21
     sample.width = None
-    action.go(sample)  # converts .data from Spectrogram to Tensor
+    action.__call__(sample)  # converts .data from Spectrogram to Tensor
     assert list(sample.data.shape) == [1] + [21] + [spec_shape[1]]
 
 
 def test_color_jitter(tensor):
     """test that color jitter changes the tensor so that channels differ"""
-    tensor = actions.torch_color_jitter(tensor)
+    tensor = action_functions.torch_color_jitter(tensor)
     assert not np.array_equal(tensor[0, :, :].numpy(), tensor[1, :, :].numpy())
 
 
 def test_scale_tensor(tensor):
     """scale_tensor with 0,1 parameters should have no impact"""
-    result = actions.scale_tensor(tensor, input_mean=0, input_std=1)
+    result = action_functions.scale_tensor(tensor, input_mean=0, input_std=1)
     assert np.array_equal(tensor.numpy(), result.numpy())
 
 
 def test_generic_action(sample, tensor):
-    """should be able to provide function to Action plus kwargs"""
+    """initialize the Action class with an arbitrary funciton and pass function args as kwargs
+
+    the additional args become action.params Series
+    """
     sample.data = tensor
-    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
-    action.go(sample)
+    action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
+    action.__call__(sample)
     assert sample.data.max() * 2 == tensor.max()
 
 
 def test_action_get_set():
-    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
     assert action.get("input_std") == 2
     action.set(input_mean=1)
     assert action.params.get("input_mean") == 1
 
 
-def test_unexpected_param_raises_error():
-    with pytest.raises(AssertionError):
-        actions.Action(actions.scale_tensor, not_a_param=0)
-    with pytest.raises(AssertionError):
-        action = actions.Action(actions.scale_tensor)
-        action.set(not_a_param=0)
-
-
 def test_modify_parameter_with_series_magic(tensor):
-    action = actions.Action(actions.scale_tensor, input_mean=0, input_std=2)
+    action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
     assert action.params["input_mean"] == 0
     assert action.params.input_mean == 0  # access with . syntax
     action.params.input_mean = 1  # set with . syntax
     assert action.params["input_mean"] == 1
-    action.go(tensor)
+    action.__call__(tensor)
+
+
+def test_base_action_to_from_dict():
+    action = actions.BaseAction(is_augmentation=True)
+    d = action.to_dict()
+    action2 = actions.BaseAction.from_dict(d)
+    assert action2.is_augmentation == action.is_augmentation
+    action3 = actions.action_from_dict(d)
+    assert action3.is_augmentation == action.is_augmentation
+
+
+def test_action_to_from_dict():
+    action = actions.Action(action_functions.scale_tensor, input_mean=0, input_std=2)
+    d = action.to_dict()
+    action2 = actions.Action.from_dict(d)
+    assert (action2.params.values == action.params.values).all()
+    assert action2.action_fn == action.action_fn
+    action3 = actions.action_from_dict(d)
+    assert (action3.params.values == action.params.values).all()
+    assert action3.action_fn == action.action_fn
+
+
+def test_overlay_to_from_dict(sample_df):
+    action = actions.Overlay(overlay_df=sample_df, update_labels=True)
+    d = action.to_dict()
+    action2 = actions.Overlay.from_dict(d)  # raises warning about not having overlay_df
+    # new action will have empty overlay_df and will be bypassed
+    assert action2.bypass == True
+    assert action2.overlay_df.empty
+
+
+def test_pcen(sample_audio):
+    sample_audio.data = Spectrogram.from_audio(sample_audio.data, dB_scale=False)
+    action = actions.Action(action_functions.pcen)
+    original_spec = copy.copy(sample_audio.data.spectrogram)
+    action(sample_audio)
+    assert not np.array_equal(sample_audio.data.spectrogram, original_spec)

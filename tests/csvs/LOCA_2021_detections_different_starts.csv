@@ -1,0 +1,7 @@
+file,start_time,end_time,zeep
+tests/audio/LOCA_2021_09_24_652_3.wav, 0.2, 0.5, 1
+tests/audio/LOCA_2021_09_24_652_4.wav, 0.2, 0.5, 1
+tests/audio/LOCA_2021_09_24_652_5.wav, 0.2, 0.5, 1
+tests/audio/LOCA_2021_09_24_652_6.wav, 0.2, 0.5, 1
+tests/audio/LOCA_2021_09_24_652_7.wav, 0.2, 0.5, 1
+tests/audio/LOCA_2021_09_24_652_8_late_start.wav, 0.1, 0.4, 1

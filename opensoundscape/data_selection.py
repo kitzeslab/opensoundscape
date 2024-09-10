@@ -1,4 +1,5 @@
 """tools for subsetting and resampling collections"""
+
 import itertools
 import pandas as pd
 
@@ -6,6 +7,7 @@ import pandas as pd
 def resample(
     df,
     n_samples_per_class,
+    n_samples_without_labels=0,
     upsample=True,
     downsample=True,
     with_replace=False,
@@ -16,10 +18,13 @@ def resample(
     args:
         df: dataframe with one-hot encoded labels: columns are classes, index is sample name/path
         n_samples_per_class: target number of samples per class
+        n_samples_without_labels: number of samples with all-0 labels to include in the returned df
+            [default: 0]. `upsample` and `downsample` flags are ignored for generating all-0 label samples.
         upsample: if True, duplicate samples for classes with <n samples to get to n samples
         downsample: if True, randomly sample classis with >n samples to get to n samples
         with_replace: flag to enable sampling of the same row more than once, default False
         random_state: passed to np.random calls. If None, random state is not fixed.
+
 
     Note: The algorithm assumes that the label df is single-label.
     If the label df is multi-label, some classes can end up over-represented.
@@ -32,6 +37,11 @@ def resample(
 
     if min(label_counts) < 1 and upsample:
         raise ValueError("Cannot upsample when some classes have zero samples")
+
+    if min(df.sum(1)) > 0 and n_samples_without_labels > 0:
+        raise ValueError(
+            f"Requested {n_samples_without_labels} samples without any labels, but all samples have labels"
+        )
 
     class_dfs = [None] * len(df.columns)
     for idx, unique_label in enumerate(df.columns):
@@ -63,6 +73,32 @@ def resample(
             class_dfs[idx] = pd.concat([repeat_df, random_df])
         else:
             class_dfs[idx] = random_df
+
+    # add samples without any labels, if desired (i.e. "negatives")
+    if n_samples_without_labels > 0:
+        sub_df = df[df.sum(1) == 0]
+        n_negatives = sub_df.shape[0]
+        num_replicates, remainder = divmod(n_samples_without_labels, n_negatives)
+
+        # should we consider the upsampling and downsampling flags here?
+        # We'll ignore them since the user specified n_samples_without_labels exactly
+        # if n_negatives < n_samples_without_labels and (not upsample):
+        #     # we don't want to upsample, so just keep these samples
+        #     class_dfs.append(sub_df)
+        # elif n_negatives > n_samples_without_labels and (not downsample):
+        #     # we don't want to downsample, so just keep all of samples
+        #     class_dfs.append(sub_df)
+
+        random_df = sub_df.sample(
+            n=remainder, replace=with_replace, random_state=random_state
+        )
+
+        # if upsampling, repeat all of the samples as many times as necessary
+        if num_replicates > 0:
+            repeat_df = pd.concat(itertools.repeat(sub_df, num_replicates))
+            class_dfs.append(pd.concat([repeat_df, random_df]))
+        else:
+            class_dfs.append(random_df)
 
     return pd.concat(class_dfs)
 
