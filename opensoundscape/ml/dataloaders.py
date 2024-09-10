@@ -7,6 +7,7 @@ from pathlib import Path
 from opensoundscape.utils import identity, _check_is_path
 from opensoundscape.ml.safe_dataset import SafeDataset
 from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
+from opensoundscape.annotations import CategoricalLabels
 
 
 class SafeAudioDataloader(torch.utils.data.DataLoader):
@@ -44,6 +45,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
                 - list of file paths
                 - Dataframe with file as index
                 - Dataframe with file, start_time, end_time of clips as index
+                - CategoricalLabels object
             preprocessor: preprocessor object, eg AudioPreprocessor or SpectrogramPreprocessor
             split_files_into_clips=True: use AudioSplittingDataset to automatically split
                 audio files into appropriate-lengthed clips
@@ -62,11 +64,17 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             DataLoader that returns lists of AudioSample objects when iterated
             (if collate_fn is identity)
         """
-        assert type(samples) in (list, np.ndarray, pd.DataFrame), (
+        assert type(samples) in (list, np.ndarray, pd.DataFrame, CategoricalLabels), (
             "`samples` must be either: "
-            "(a) list or np.array of files, or DataFrame with (b) file as Index or "
-            "(c) (file,start_time,end_time) as MultiIndex"
+            "(a) list or np.array of files, or DataFrame with (b) file as Index, "
+            "(c) (file,start_time,end_time) as MultiIndex, or "
+            "(d) CategoricalLabels object"
         )
+
+        if isinstance(samples, CategoricalLabels):
+            # extract sparse multihot label df
+            # TODO: check if sparse labels cause issues anywhere
+            samples = samples.mutihot_df_sparse
 
         # TODO: setting these attributes seems to be necessary when using Lightning,
         # even though we don't need them as attributes in the DataLoader

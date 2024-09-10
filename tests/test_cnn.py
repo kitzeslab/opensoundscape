@@ -642,21 +642,6 @@ def test_eval_raises_bad_labels(train_df):
         model.eval(train_df.values, scores.values)
 
 
-def test_split_resnet_feat_clf(train_df):
-    # TODO: will add attributes to cnn architectures
-    # specifying which layers are feature and which are classifier,
-    # to make this API more generic
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=2)
-    cnn.separate_resnet_feat_clf(model)
-    assert "feature" in model.optimizer_params["kwargs"]
-    model.optimizer_params["kwargs"]["feature"]["lr"] = 0.1
-    model.train(train_df, epochs=0, save_path="tests/models")
-    # shutil.rmtree("tests/models/")
-
-
-# test load_outdated_model?
-
-
 def test_train_no_validation(train_df):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=2)
     model.train(train_df, save_path="tests/models")

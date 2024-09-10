@@ -55,7 +55,6 @@ from opensoundscape.ml.loss import (
 from opensoundscape.ml.dataloaders import SafeAudioDataloader
 from opensoundscape.sample import collate_audio_samples
 
-
 import warnings
 
 
@@ -336,6 +335,10 @@ class BaseModule:
             - can set to -1 to restart learning rate schedule
             - can set to another value to start lr scheduler from an arbitrary position
 
+        Note: when used by lightning, self.optimizer and self.scheduler should not be modified
+        directly, lightning handles these internally. Lightning will call the method without
+        passing reset_optimizer or restart_scheduler, so default=False results in not modifying .optimizer or .scheduler
+
         Documentation:
         https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.core.LightningModule.html#lightning.pytorch.core.LightningModule.configure_optimizers
         Args:
@@ -359,7 +362,7 @@ class BaseModule:
             self.network.parameters(), **self.optimizer_params["kwargs"].copy()
         )
 
-        if self.optimizer is not None:
+        if hasattr(self, "optimizer") and self.optimizer is not None:
             # load the state dict of the previously existing optimizer,
             # updating the params references to match current instance of self.network
             try:
@@ -371,6 +374,7 @@ class BaseModule:
                     "attempt to load state dict of existing self.optimizer failed. "
                     "Optimizer will be initialized from scratch"
                 )
+            # TODO: write tests for lightning to check behavior of continued training
 
         # create learning rate scheduler
         # self.scheduler_params dictionary has "class" key and kwargs for init
@@ -1403,12 +1407,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         ### Input Validation ###
         # Validation of class list
-        class_err = """
-            Train and validation datasets must have same classes
-            and class order as model object. Consider using
-            `train_df=train_df[cnn.classes]` or `cnn.classes=train_df.columns`
-            before training.
-            """
         check_labels(train_df, self.classes)
         if validation_df is not None:
             check_labels(validation_df, self.classes)
