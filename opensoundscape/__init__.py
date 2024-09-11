@@ -31,3 +31,4 @@ from .sample import AudioSample
 from .annotations import BoxedAnnotations
 from .preprocess.utils import show_tensor, show_tensor_grid
 from .localization import SpatialEvent, SynchronizedRecorderArray
+from .utils import set_seed
