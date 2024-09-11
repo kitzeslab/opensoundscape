@@ -61,7 +61,7 @@ crowsetta = "==5.0.1"
 pandera = "<0.20"
 
 [tool.poetry.dev-dependencies]
-black = "~=24.3"
+black = "~24.3"
 pre-commit = ">=1.18"
 sphinx = ">=7.2.6"
 pytest = ">=5.1"
