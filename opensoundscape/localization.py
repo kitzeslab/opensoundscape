@@ -353,6 +353,7 @@ class SpatialEvent:
             receiver_locations=locations,
             tdoas=tdoas,
             algorithm=localization_algorithm,
+            speed_of_sound=self.speed_of_sound,
         )
 
         if self.location_estimate is not None:
@@ -602,7 +603,7 @@ class SynchronizedRecorderArray:
                 Maximum absolute value of time delay estimated during cross correlation of two signals
                 For instance, 0.2 means that the maximal cross-correlation in the range of
                 delays between -0.2 to 0.2 seconds will be used to estimate the time delay.
-                if None (default), the max delay is set to max_receiver_dist / SPEED_OF_SOUND
+                if None (default), the max delay is set to max_receiver_dist / self.speed_of_sound
             min_n_receivers : int
                 Minimum number of receivers that must detect an event for it to be localized
                 [default: 3]
@@ -781,7 +782,7 @@ class SynchronizedRecorderArray:
             bandpass_ranges: dictionary of form {"class name": [low_f, high_f]} for audio bandpass filtering during
 
             max_delay: the maximum delay (in seconds) to consider between receivers for a single event
-                if None, defaults to max_receiver_dist / SPEED_OF_SOUND
+                if None, defaults to max_receiver_dist / self.speed_of_sound
         Returns:
             a list of SpatialEvent objects to attempt to localize
         """
@@ -923,6 +924,7 @@ class SynchronizedRecorderArray:
                                 duration=duration,
                                 class_name=cls_i,
                                 cc_filter=cc_filter,
+                                speed_of_sound=self.speed_of_sound,
                             )
                         )
 
@@ -1031,7 +1033,7 @@ def travel_time(source, receiver, speed_of_sound):
     return distance / speed_of_sound
 
 
-def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND):
+def localize(receiver_locations, tdoas, algorithm, speed_of_sound):
     """
     Perform TDOA localization on a sound event. If there are not enough receivers to localize the event, return None.
     Args:
@@ -1066,9 +1068,7 @@ def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND
     return estimate
 
 
-def least_squares_localize(
-    receiver_locations, arrival_times, speed_of_sound=SPEED_OF_SOUND
-):
+def least_squares_localize(receiver_locations, arrival_times, speed_of_sound):
     """
     Use a least squares optimizer to perform TDOA localization on a sound event, based on a set of TDOA times and receiver locations.
     Args:
@@ -1122,7 +1122,7 @@ def least_squares_localize(
 def soundfinder_localize(
     receiver_locations,
     arrival_times,
-    speed_of_sound=SPEED_OF_SOUND,
+    speed_of_sound,
     invert_alg="gps",  # options: 'gps'
     center=True,  # True for original Sound Finder behavior
     pseudo=True,  # False for original Sound Finder
@@ -1304,7 +1304,7 @@ def soundfinder_localize(
             return u1[0:-1]
 
 
-def gillette_localize(receiver_locations, arrival_times, speed_of_sound=SPEED_OF_SOUND):
+def gillette_localize(receiver_locations, arrival_times, speed_of_sound):
     """
     Uses the Gillette and Silverman [1] localization algorithm to localize a sound event from a set of TDOAs.
     Args:
