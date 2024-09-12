@@ -27,15 +27,13 @@ from opensoundscape.preprocess.preprocessors import (
 from opensoundscape.preprocess import io
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.cnn_architectures import inception_v3
-from opensoundscape.ml.loss import ResampleLoss
-from opensoundscape.sample import collate_audio_samples, collate_audio_samples_to_dict
+from opensoundscape.sample import collate_audio_samples
 from opensoundscape.utils import identity
 from opensoundscape.logging import wandb_table
 
 from opensoundscape.ml.cam import CAM
 import pytorch_grad_cam
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from lightning.pytorch.callbacks import ModelCheckpoint
 
 
 from torchmetrics.classification import (
@@ -1450,6 +1448,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         """
 
         ### Input Validation ###
+        # Validation of class list
         check_labels(train_df, self.classes)
         if validation_df is not None:
             check_labels(validation_df, self.classes)
@@ -1460,6 +1459,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 "No validation set was provided. Model will be "
                 "evaluated using the performance on the training set."
             )
+
+        ## Initialization ##
 
         # Initialize attributes
         self.log_interval = log_interval
@@ -2226,9 +2227,7 @@ class BaseClassifier(SpectrogramClassifier):
     """
 
 
-def use_resample_loss(
-    model, train_df
-):  # TODO revisit how this work. Should be able to set loss_cls=ResampleLoss()
+def use_resample_loss(model, train_df):
     """Modify a model to use ResampleLoss for multi-target training
 
     ResampleLoss may perform better than BCE Loss for multitarget problems

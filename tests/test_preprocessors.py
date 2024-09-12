@@ -186,6 +186,22 @@ def test_trace_output(preprocessor, sample):
     assert isinstance(sample.trace["load_audio"], Audio)
 
 
+def test_catch_input_to_forward_is_dataframe(preprocessor):
+    # raises AssertionError if samples arg in forward is not pd.Series
+    # which might occur if user accessed a dataset with a list instead of a single index
+    # see issue 803: https://github.com/kitzeslab/opensoundscape/issues/803
+    with pytest.raises(AssertionError):
+        preprocessor.forward(pd.DataFrame({0: ["a"]}))
+
+
+def test_catch_input_to_forward_is_dataframe(preprocessor):
+    # raises AssertionError if samples arg in forward is not pd.Series
+    # which might occur if user accessed a dataset with a list instead of a single index
+    # see issue 803: https://github.com/kitzeslab/opensoundscape/issues/803
+    with pytest.raises(AssertionError):
+        preprocessor.forward(pd.DataFrame({0: ["a"]}))
+
+
 def test_audiopreprocessor(audiopreprocessor, sample):
     """should retain original sample rate"""
     s = audiopreprocessor.forward(sample).data
