@@ -1480,6 +1480,12 @@ class CategoricalLabels:
 
     @classmethod
     def from_multihot_df(cls, df):
+        """instantiate from dataframe of 0/1 labels across samples & classes
+
+        Args:
+            df (pd.DataFrame): dataframe with multi-index of 'file','start_time','end_time';
+                columns are class names, values are 0/1 labels
+        """
         # multihot df has multi-index of file, start_time, end_time; columns = classes
         labels_int = multi_hot_to_integer_labels(df.values)
         file = df.index.get_level_values("file")
