@@ -633,7 +633,7 @@ class SpectrogramModule(BaseModule):
                         f"(originally {self.preprocessor.channels})."
                     )
                     self.preprocessor.channels = arch_channels
-            except ChannelDimCheckError:
+            except:
                 # can we try to check if first layer expects input with channels=channels?
                 warnings.warn(
                     f"Failed to detect expected # input channels of this architecture."
