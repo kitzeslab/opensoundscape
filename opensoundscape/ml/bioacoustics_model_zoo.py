@@ -14,7 +14,10 @@ def list_models(**kwargs):
 
     see also: load(model)
     """
-    return torch.hub.list("kitzeslab/bioacoustics-model-zoo", trust_repo=True, **kwargs)
+    tag = "0.11.0"  # in the future, might be based on opensoundscape.__version__
+    return torch.hub.list(
+        f"kitzeslab/bioacoustics-model-zoo:{tag}", trust_repo=True, **kwargs
+    )
 
 
 def load(model, **kwargs):
@@ -22,6 +25,8 @@ def load(model, **kwargs):
     load a model from the [bioacoustics model zoo](https://github.com/kitzeslab/bioacoustics-model-zoo)
 
     see list_models() for a list of available models
+
+    chooses the repository tag based on the opensoundscape version
 
     Args:
         model: name of model to load, i.e. one listed by list_models()
@@ -39,6 +44,7 @@ def load(model, **kwargs):
     detailed instructions)
 
     """
+    tag = "0.11.0"  # in the future, might be based on opensoundscape.__version__
     return torch.hub.load(
-        "kitzeslab/bioacoustics-model-zoo", model, trust_repo=True, **kwargs
+        f"kitzeslab/bioacoustics-model-zoo:{tag}", model, trust_repo=True, **kwargs
     )
