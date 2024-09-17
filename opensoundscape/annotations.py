@@ -249,7 +249,7 @@ class BoxedAnnotations:
             else:
                 # None was passed to annotation_column
                 # we'll create an empty `annotation` column
-                df["annotation"] = np.nan
+                df.loc[:,"annotation"] = np.nan
 
             # rename Raven columns to standard opensoundscape names
             try:

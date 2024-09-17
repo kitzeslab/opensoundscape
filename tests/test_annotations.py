@@ -211,8 +211,8 @@ def test_load_raven_annotation_column_name(raven_file):
     assert a.df["annotation"].values[0] == "WOTH"
 
     # use different column number
-    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=1)
-    assert a.df["annotation"].values[0] == "1"
+    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=2)
+    assert a.df["annotation"].values[0] == "Spectrogram 1"
 
     # try using an out of bounds number - raises an exception
     with pytest.raises(KeyError):
@@ -270,8 +270,12 @@ def test_subset(boxed_annotations):
 
 
 def test_subset_to_nan(raven_file):
-    a = BoxedAnnotations.from_raven_files([raven_file], None)
+    a = BoxedAnnotations.from_raven_files([raven_file], "Species")
     assert len(a.subset([np.nan]).df) == 1
+    
+def test_subset_all_nan_to_nan(raven_file):
+    a = BoxedAnnotations.from_raven_files([raven_file], None)
+    assert len(a.subset([np.nan]).df) == len(a.df)
 
 
 def test_trim(boxed_annotations):
