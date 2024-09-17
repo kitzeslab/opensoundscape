@@ -208,41 +208,43 @@ class BoxedAnnotations:
             if df.empty:
                 warnings.warn(f"{raven_file} has zero rows.")
                 continue
-            
-            assert isinstance(annotation_column, (str,int,type(None))), "Annotation column index has to be a string, integer, or None."
-            
+
+            assert isinstance(
+                annotation_column, (str, int, type(None))
+            ), "Annotation column index has to be a string, integer, or None."
+
             if isinstance(annotation_column, str):
-               # annotation_column is a string that is present in the annotation file's header
+                # annotation_column is a string that is present in the annotation file's header
                 try:
                     df = df.rename(
                         columns={
                             annotation_column: "annotation",
                         },
-                        errors = 'raise'
+                        errors="raise",
                     )
                 except KeyError as e:
                     raise KeyError(
                         f"Specified column name, {annotation_column}, does not match any of the column names in the annotation file: "
                         f"{list(df.columns)}. "
                         f"Please provide an annotation column name that exists or None!"
-                    ) from e 
+                    ) from e
 
             elif isinstance(annotation_column, int):
                 # using the column number to specify which column contains annotations
-                # first column is 1, second is 2, etc 
+                # first column is 1, second is 2, etc
                 try:
                     df = df.rename(
                         columns={
                             df.columns[annotation_column - 1]: "annotation",
                         },
-                        errors = 'raise'
+                        errors="raise",
                     )
                 except KeyError as e:
                     raise KeyError(
                         f"Specified column index, {annotation_column}, exceeds the number of columns in annotation file, {len(df.columns)}. "
                         f"Please provide a number between 1 and {len(df.columns)}!"
                     ) from e
-            else:  
+            else:
                 # None was passed to annotation_column
                 # we'll create an empty `annotation` column
                 df["annotation"] = np.nan
