@@ -193,42 +193,32 @@ def test_load_raven_no_annotation_column(raven_file):
 
 def test_load_raven_annotation_column_name(raven_file):
     # specify the name of the annotation column
-    a = BoxedAnnotations.from_raven_files(
-        [raven_file], annotation_column="Species"
-    )
+    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column="Species")
     assert a.df["annotation"].values[0] == "WOTH"
 
     # use a different column
     a = BoxedAnnotations.from_raven_files([raven_file], annotation_column="View")
     assert a.df["annotation"].values[0] == "Spectrogram 1"
-    
+
     with pytest.raises(KeyError):
         # using a column name that doesn't exist shoud raise an error
         a = BoxedAnnotations.from_raven_files(
             [raven_file], annotation_column="notacolumn"
         )
-        
-     # now try integer index values
-    a = BoxedAnnotations.from_raven_files(
-        [raven_file], annotation_column=8
-    )
-    assert a.df["annotation"].values[0] == "WOTH" 
-    
-     # use different column number
-    a = BoxedAnnotations.from_raven_files(
-        [raven_file], annotation_column=1
-    )
+
+    # now try integer index values
+    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=8)
+    assert a.df["annotation"].values[0] == "WOTH"
+
+    # use different column number
+    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=1)
     assert a.df["annotation"].values[0] == "1"
-    
-     # try using an out of bounds number - raises an exception
+
+    # try using an out of bounds number - raises an exception
     with pytest.raises(KeyError):
-        a = BoxedAnnotations.from_raven_files(
-            [raven_file], annotation_column=25
-        )
+        a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=25)
     with pytest.raises(KeyError):
-        a = BoxedAnnotations.from_raven_files(
-            [raven_file], annotation_column=0
-        )
+        a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=0)
 
 
 def test_load_raven_annotations_empty(raven_file_empty):
