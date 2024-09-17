@@ -438,17 +438,6 @@ class BaseModule:
             )
         return loss
 
-    # previously used in eval(): #TODO add this validation
-    # maybe using at_train_start hook
-    # # check for invalid label values
-    # assert (
-    #     targets.max(axis=None) <= 1 and targets.min(axis=None) >= 0
-    # ), "Labels must in range [0,1], but found values outside range"
-
-    # # remove all samples with NaN for a prediction before evaluating
-    # targets = targets[~np.isnan(scores).any(axis=1), :]
-    # scores = scores[~np.isnan(scores).any(axis=1), :]
-
     def train_dataloader(
         self,
         samples,
@@ -1100,7 +1089,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             progress_bar=progress_bar,
         )
 
-        ### Apply activation layer ### #TODO: test speed vs. doing it in __call__ on batches
+        ### Apply activation layer ###
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
 
         # return DataFrame with same index/columns as prediction_dataset's df
