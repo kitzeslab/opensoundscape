@@ -8,6 +8,7 @@ from opensoundscape.preprocess.preprocessors import (
 from opensoundscape.preprocess.utils import PreprocessingError
 import warnings
 from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
+from opensoundscape.ml import datasets
 
 
 @pytest.fixture()
@@ -79,8 +80,10 @@ def test_audio_file_dataset(dataset_df, pre):
 
 
 def test_audio_file_dataset_no_reshape(dataset_df, pre):
-    """should return tensor and labels. Tensor is the same as the shape of the spectrogram"""
+    """should return tensor and labels. Tensor is the same as the shape of the spectrogram if height and width are None"""
     pre.bypass_augmentation = False
+    pre.height = None
+    pre.width = None
     dataset = AudioFileDataset(dataset_df, pre)
     sample1 = dataset[0]
     # should be the same shape as
@@ -249,3 +252,9 @@ def test_audio_splitting_dataset_overlap_rounding(dataset_df):
         )
         for x in dataset:
             assert len(x.data.samples) == 48000 * 2
+
+
+def test_get_item_with_list_index_raises_error(dataset_df, pre):
+    dataset = AudioFileDataset(dataset_df, pre)
+    with pytest.raises(datasets.InvalidIndexError):
+        dataset[[0, 1]]

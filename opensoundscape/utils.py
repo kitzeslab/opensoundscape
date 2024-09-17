@@ -6,8 +6,6 @@ import warnings
 from pathlib import Path
 import numpy as np
 import pandas as pd
-import pytz
-import soundfile
 import librosa
 from matplotlib.colors import LinearSegmentedColormap
 import torch
@@ -375,7 +373,7 @@ def generate_opacity_colormaps(
     return colormaps
 
 
-def set_seed(seed, verbose=True):
+def set_seed(seed, verbose=False):
     """Set random state across different libraries for reproducibility
 
     Args:
@@ -390,3 +388,9 @@ def set_seed(seed, verbose=True):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+
+def _check_is_path(path):
+    assert isinstance(path, str) or isinstance(
+        path, Path
+    ), f"Expected str or Path, got {type(path)}. Did you set the index correctly?"

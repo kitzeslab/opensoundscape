@@ -14,6 +14,13 @@ def test_audio_sample_from_series():
     assert s.labels["a"] == 0 and s.labels["b"] == 1
 
 
+def test_audio_series_returns_copy():
+    series = pd.Series(name=("path", 0, 1), index=["a", "b"], data=[0, 1])
+    s = sample.AudioSample.from_series(series)
+    s.labels["a"] = 1
+    assert s.labels["a"] == 1 and series["a"] == 0
+
+
 def test_audio_sample_categorical_labels():
     series = pd.Series(name=("path", 0, 1), index=["a", "b"], data=[0, 1])
     s = sample.AudioSample.from_series(series)

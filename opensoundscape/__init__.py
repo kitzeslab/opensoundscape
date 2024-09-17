@@ -21,7 +21,9 @@ from .preprocess import preprocessors, actions
 # expose some classes at the top level
 from .audio import Audio
 from .spectrogram import Spectrogram, MelSpectrogram
-from .ml.cnn import CNN, load_model
+
+from .ml.cnn import SpectrogramClassifier, CNN
+from .ml.lightning import LightningSpectrogramModule
 from .ml.datasets import AudioFileDataset, AudioSplittingDataset
 from .preprocess.actions import Action
 from .preprocess.preprocessors import SpectrogramPreprocessor, AudioPreprocessor
@@ -29,3 +31,4 @@ from .sample import AudioSample
 from .annotations import BoxedAnnotations
 from .preprocess.utils import show_tensor, show_tensor_grid
 from .localization import SpatialEvent, SynchronizedRecorderArray
+from .utils import set_seed

@@ -2,10 +2,12 @@ import torch
 import numpy as np
 import pandas as pd
 import warnings
+from pathlib import Path
 
-from opensoundscape.utils import identity
+from opensoundscape.utils import identity, _check_is_path
 from opensoundscape.ml.safe_dataset import SafeDataset
 from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
+from opensoundscape.annotations import CategoricalLabels
 
 
 class SafeAudioDataloader(torch.utils.data.DataLoader):
@@ -23,6 +25,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         raise_errors=False,
         collate_fn=identity,
         **kwargs,
+        # TODO: persistent_workers=True?
     ):
         """Create DataLoader for inference, wrapping a SafeDataset
 
@@ -42,6 +45,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
                 - list of file paths
                 - Dataframe with file as index
                 - Dataframe with file, start_time, end_time of clips as index
+                - CategoricalLabels object
             preprocessor: preprocessor object, eg AudioPreprocessor or SpectrogramPreprocessor
             split_files_into_clips=True: use AudioSplittingDataset to automatically split
                 audio files into appropriate-lengthed clips
@@ -50,28 +54,61 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             overlap_fraction: deprecated alias for clip_overlap_fraction
             bypass_augmentations: if True, don't apply any augmentations [default: True]
             raise_errors: if True, raise errors during preprocessing [default: False]
-            collate_fn: function to collate samples into batches [default: identity]
+            collate_fn: function to collate list of AudioSample objects into batches
+                [default: idenitty] returns list of AudioSample objects,
+                use collate_fn=opensoundscape.sample.collate_audio_samples to return
+                a tuple of (data, labels) tensors
             **kwargs: any arguments to torch.utils.data.DataLoader
 
         Returns:
             DataLoader that returns lists of AudioSample objects when iterated
             (if collate_fn is identity)
         """
-        assert type(samples) in (list, np.ndarray, pd.DataFrame), (
+        assert type(samples) in (list, np.ndarray, pd.DataFrame, CategoricalLabels), (
             "`samples` must be either: "
-            "(a) list or np.array of files, or DataFrame with (b) file as Index or "
-            "(c) (file,start_time,end_time) as MultiIndex"
+            "(a) list or np.array of files, or DataFrame with (b) file as Index, "
+            "(c) (file,start_time,end_time) as MultiIndex, or "
+            "(d) CategoricalLabels object"
         )
+
+        if isinstance(samples, CategoricalLabels):
+            # extract sparse multihot label df
+            # TODO: check if sparse labels cause issues anywhere
+            samples = samples.mutihot_df_sparse
+
+        # TODO: setting these attributes seems to be necessary when using Lightning,
+        # even though we don't need them as attributes in the DataLoader
+        # this could be confusing because user should not modify dl.preprocessor,
+        # it is used to initialize self.dataset only
+        self.samples = samples
+        """do not override or modify this attribute, as it will have no effect"""
+        self.preprocessor = preprocessor
+        """do not override or modify this attribute, as it will have no effect"""
+
+        # remove `dataset` kwarg possibly passed from Lightning
+        kwargs.pop("dataset", None)
 
         if overlap_fraction is not None:
             warnings.warn(
-                "`overlap_fraction` argument is deprecated. Use `clip_overlap_fraction` instead.",
+                "`overlap_fraction` argument is deprecated and will be removed in a future version. Use `clip_overlap_fraction` instead.",
                 DeprecationWarning,
             )
             assert (
                 clip_overlap_fraction is None
             ), "Cannot specify both overlap_fraction and clip_overlap_fraction"
             clip_overlap_fraction = overlap_fraction
+
+        # validate that file paths are correctly placed in the input index or list
+        if len(samples) > 0:
+            if isinstance(samples, pd.DataFrame):  # samples is a pd.DataFrame
+                if isinstance(samples.index, pd.core.indexes.multi.MultiIndex):
+                    # index is (file, start_time, end_time)
+                    first_path = samples.index.values[0][0]
+                else:  # index of df is just file path
+                    first_path = samples.index.values[0]
+            else:  # samples is a list of file path
+                first_path = samples[0]
+            _check_is_path(first_path)
 
         # set up prediction Dataset, considering three possible cases:
         # (c1) user provided multi-index df with file,start_time,end_time of clips
@@ -81,8 +118,12 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             type(samples) == pd.DataFrame
             and type(samples.index) == pd.core.indexes.multi.MultiIndex
         ):  # c1 user provided multi-index df with file,start_time,end_time of clips
+            # raise AssertionError if first item of multi-index is not str or Path
             dataset = AudioFileDataset(samples=samples, preprocessor=preprocessor)
-        elif split_files_into_clips:  # c2 user provided file list; split into
+        elif (
+            split_files_into_clips
+        ):  # c2 user provided file list; split each file into appropriate length clips
+            # raise AssertionError if first item is not str or Path
             dataset = AudioSplittingDataset(
                 samples=samples,
                 preprocessor=preprocessor,
@@ -91,8 +132,11 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
                 clip_step=clip_step,
                 final_clip=final_clip,
             )
-        else:  # c3 split_files_into_clips=False -> one sample & one prediction per file provided
+        else:  # c3 samples is list of files and
+            # split_files_into_clips=False -> one sample & one prediction per file provided
+            # eg, each file is a 5 second clips and the model expects 5 second clips
             dataset = AudioFileDataset(samples=samples, preprocessor=preprocessor)
+
         dataset.bypass_augmentations = bypass_augmentations
 
         if len(dataset) < 1:
@@ -113,7 +157,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         )
 
         # initialize the pytorch.utils.data.DataLoader
-        super(SafeAudioDataloader, self).__init__(
+        super().__init__(
             dataset=safe_dataset,
             collate_fn=collate_fn,
             **kwargs,

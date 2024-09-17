@@ -106,8 +106,9 @@ def apply_activation_layer(x, activation_layer=None):
     """
     if x is None:
         return None
+    if not isinstance(x, torch.Tensor):
+        x = torch.tensor(x)
 
-    x = torch.tensor(x)
     if activation_layer is None:  # scores [-inf,inf]
         pass
     elif activation_layer == "softmax":
@@ -168,10 +169,11 @@ def collate_audio_samples_to_tensors(batch):
 
 
 def check_labels(label_df, classes):
+    """check that classes and label_df.columns are the same, otherwise raise a helpful error"""
     class_err = """
             Train and validation datasets must have same classes
             and class order as model object. Consider using
-            `train_df=train_df[cnn.classes]` or `cnn.classes=train_df.columns` 
+            `train_df=train_df[cnn.classes]` or `cnn.change_classes(train_df.columns)` 
             before training.
             """
     assert list(classes) == list(label_df.columns), class_err
