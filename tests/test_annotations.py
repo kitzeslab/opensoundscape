@@ -163,7 +163,7 @@ def test_init_boxed_annotations_with_only_reqd_cols():
 
 
 def test_load_raven_annotations(raven_file):
-    ba = BoxedAnnotations.from_raven_files([raven_file])
+    ba = BoxedAnnotations.from_raven_files([raven_file], "Species")
     assert len(ba.df) == 10
     assert set(ba.df["annotation"]) == {"WOTH", "EATO", "LOWA", np.nan}
 
@@ -179,13 +179,13 @@ def test_concat_boxed_annotations(boxed_annotations):
 
 
 def test_load_raven_annotations_w_audio(raven_file):
-    ba = BoxedAnnotations.from_raven_files([raven_file], ["audio_path"])
+    ba = BoxedAnnotations.from_raven_files([raven_file], "Species", ["audio_path"])
     assert set(ba.df["annotation"]) == {"WOTH", "EATO", "LOWA", np.nan}
     assert ba.df["audio_file"].values[0] == "audio_path"
 
 
 def test_load_raven_no_annotation_column(raven_file):
-    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column_idx=None)
+    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=None)
     # we should now have a dataframe with a column "Species"
     assert len(a.df) == 10
     assert set(a.df["Species"]) == {"WOTH", "EATO", "LOWA", np.nan}
@@ -194,30 +194,52 @@ def test_load_raven_no_annotation_column(raven_file):
 def test_load_raven_annotation_column_name(raven_file):
     # specify the name of the annotation column
     a = BoxedAnnotations.from_raven_files(
-        [raven_file], annotation_column_name="Species"
+        [raven_file], annotation_column="Species"
     )
     assert a.df["annotation"].values[0] == "WOTH"
 
     # use a different column
-    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column_name="View")
+    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column="View")
     assert a.df["annotation"].values[0] == "Spectrogram 1"
-
-    # use a column that doesn't exist: annotations should be nan
+    
+    with pytest.raises(KeyError):
+        # using a column name that doesn't exist shoud raise an error
+        a = BoxedAnnotations.from_raven_files(
+            [raven_file], annotation_column="notacolumn"
+        )
+        
+     # now try integer index values
     a = BoxedAnnotations.from_raven_files(
-        [raven_file], annotation_column_name="notacolumn"
+        [raven_file], annotation_column=8
     )
-    assert a.df["annotation"].values[0] != a.df["annotation"].values[0]
+    assert a.df["annotation"].values[0] == "WOTH" 
+    
+     # use different column number
+    a = BoxedAnnotations.from_raven_files(
+        [raven_file], annotation_column=1
+    )
+    assert a.df["annotation"].values[0] == "1"
+    
+     # try using an out of bounds number - raises an exception
+    with pytest.raises(KeyError):
+        a = BoxedAnnotations.from_raven_files(
+            [raven_file], annotation_column=25
+        )
+    with pytest.raises(KeyError):
+        a = BoxedAnnotations.from_raven_files(
+            [raven_file], annotation_column=0
+        )
 
 
 def test_load_raven_annotations_empty(raven_file_empty):
-    a = BoxedAnnotations.from_raven_files([raven_file_empty])
+    a = BoxedAnnotations.from_raven_files([raven_file_empty], None)
     assert len(a.df) == 0
 
 
 def test_load_raven_annotations_different_columns(raven_file, raven_file_empty):
     # keep all extra columns
     ba = BoxedAnnotations.from_raven_files(
-        [raven_file, raven_file_empty], keep_extra_columns=True
+        [raven_file, raven_file_empty], None, keep_extra_columns=True
     )
     assert "distance" in list(ba.df.columns)
     assert "type" in list(ba.df.columns)
@@ -225,7 +247,7 @@ def test_load_raven_annotations_different_columns(raven_file, raven_file_empty):
 
     # keep one extra column
     ba = BoxedAnnotations.from_raven_files(
-        [raven_file, raven_file_empty], keep_extra_columns=["distance"]
+        [raven_file, raven_file_empty], None, keep_extra_columns=["distance"]
     )
     assert "distance" in list(ba.df.columns)
     assert not "type" in list(ba.df.columns)
@@ -235,7 +257,7 @@ def test_load_raven_annotations_different_columns(raven_file, raven_file_empty):
 
     # keep no extra column
     ba = BoxedAnnotations.from_raven_files(
-        [raven_file, raven_file_empty], keep_extra_columns=False
+        [raven_file, raven_file_empty], None, keep_extra_columns=False
     )
     assert not "distance" in list(ba.df.columns)
     assert not "type" in list(ba.df.columns)
@@ -258,7 +280,7 @@ def test_subset(boxed_annotations):
 
 
 def test_subset_to_nan(raven_file):
-    a = BoxedAnnotations.from_raven_files([raven_file])
+    a = BoxedAnnotations.from_raven_files([raven_file], None)
     assert len(a.subset([np.nan]).df) == 1
 
 
@@ -505,7 +527,7 @@ def test_clip_labels_exception(boxed_annotations):
     """raises GetDurationError because file length cannot be determined
     and full_duration is None
     """
-    boxed_annotations.audio_files = ["non existant file"]
+    boxed_annotations.audio_files = ["non existent file"]
     with pytest.raises(GetDurationError):
         labels = boxed_annotations.clip_labels(
             full_duration=None,
@@ -611,7 +633,7 @@ def test_multi_hot_to_categorical_and_back():
 
 # test robustness of raven methods for empty annotation file
 def test_raven_annotation_methods_empty(raven_file_empty):
-    a = BoxedAnnotations.from_raven_files([raven_file_empty])
+    a = BoxedAnnotations.from_raven_files([raven_file_empty], None)
 
     a.trim(0, 5)
     a.bandpass(0, 11025)
@@ -669,7 +691,7 @@ def test_clip_labels_with_empty_annotation_file(
     it should return a dataframe with rows for each clip and 0s for all labels
     """
     boxed_annotations = BoxedAnnotations.from_raven_files(
-        [raven_file_empty], [silence_10s_mp3_str]
+        [raven_file_empty], None, [silence_10s_mp3_str]
     )
 
     small_label_df = boxed_annotations.clip_labels(
@@ -687,7 +709,7 @@ def test_clip_labels_with_empty_annotation_file(
 
     # should also work when concatenating empty and non-empty annotation files
     boxed_annotations = BoxedAnnotations.from_raven_files(
-        [raven_file_empty, raven_file], [silence_10s_mp3_str, rugr_wav_str]
+        [raven_file_empty, raven_file], None, [silence_10s_mp3_str, rugr_wav_str]
     )
 
     small_label_df = boxed_annotations.clip_labels(
@@ -707,13 +729,13 @@ def test_to_raven_files_raises_if_no_audio_files(raven_file, save_path):
     with pytest.raises(ValueError):
         # don't save to a path with a .finalizer(), because the finalizer will complain
         # if the file isn't actually created
-        boxed_annotations = BoxedAnnotations.from_raven_files([raven_file])
+        boxed_annotations = BoxedAnnotations.from_raven_files([raven_file], None)
         boxed_annotations.to_raven_files(save_path)
 
 
 def test_warn_if_file_wont_get_raven_output(raven_file, saved_raven_file):
     # should also work when concatenating empty and non-empty annotation files
-    boxed_annotations = BoxedAnnotations.from_raven_files([raven_file], ["path1"])
+    boxed_annotations = BoxedAnnotations.from_raven_files([raven_file], None, ["path1"])
     with pytest.warns(UserWarning):
         boxed_annotations.to_raven_files(
             saved_raven_file.parent, audio_files=["audio_file"]
@@ -722,40 +744,40 @@ def test_warn_if_file_wont_get_raven_output(raven_file, saved_raven_file):
 
 def test_assert_audio_files_annotation_files_match():
     with pytest.raises(AssertionError):
-        BoxedAnnotations.from_raven_files(["path"], ["a", "b"])
+        BoxedAnnotations.from_raven_files(["path"], None, ["a", "b"])
 
 
 def test_assert_audio_files_annotation_files_empty():
     with pytest.raises(AssertionError):
-        BoxedAnnotations.from_raven_files([], [])
+        BoxedAnnotations.from_raven_files([], None, [])
 
 
 def test_from_raven_files(raven_file):
-    ba = BoxedAnnotations.from_raven_files([raven_file], ["path1"])
+    ba = BoxedAnnotations.from_raven_files([raven_file], None, ["path1"])
     assert ba.annotation_files[0] == raven_file
 
 
 def test_from_raven_files_pathlib(raven_file):
-    ba = BoxedAnnotations.from_raven_files([Path(raven_file)], [Path("path1")])
+    ba = BoxedAnnotations.from_raven_files([Path(raven_file)], None, [Path("path1")])
     assert str(ba.annotation_files[0]) == raven_file
 
 
 def test_from_raven_files_one_path(raven_file):
     """now works passing str or Path rather than list"""
-    ba = BoxedAnnotations.from_raven_files(raven_file, ["path1"])
+    ba = BoxedAnnotations.from_raven_files(raven_file, None, ["path1"])
     assert ba.annotation_files[0] == raven_file
     assert len(ba.annotation_files) == 1
-    ba = BoxedAnnotations.from_raven_files(Path(raven_file), ["path1"])
+    ba = BoxedAnnotations.from_raven_files(Path(raven_file), None, ["path1"])
     assert str(ba.annotation_files[0]) == raven_file
     assert len(ba.annotation_files) == 1
 
 
 def test_from_raven_files_one_audio_file(raven_file):
     """now works passing str or Path rather than list"""
-    ba = BoxedAnnotations.from_raven_files(raven_file, "path1")
+    ba = BoxedAnnotations.from_raven_files(raven_file, None, "path1")
     assert ba.audio_files[0] == "path1"
     assert len(ba.audio_files) == 1
-    ba = BoxedAnnotations.from_raven_files(Path(raven_file), Path("path1"))
+    ba = BoxedAnnotations.from_raven_files(Path(raven_file), None, Path("path1"))
     assert str(ba.audio_files[0]) == "path1"
     assert len(ba.audio_files) == 1
 
