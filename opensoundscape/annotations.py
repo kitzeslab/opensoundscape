@@ -234,9 +234,10 @@ class BoxedAnnotations:
             elif isinstance(annotation_column, int):
                 # using the column number to specify which column contains annotations
                 # first column is 1, second is 2, etc
-                if not 0 < annotation_column <= len(df): 
+                if not 0 < annotation_column <= len(df):
                     # ensure column number is within bounds
-                    raise IndexError(f"Specified column index, {annotation_column}, is out of bounds of the columns in the annotation file, {len(df.columns)}. Please provide a number between 1 and {len(df.columns)}!"
+                    raise IndexError(
+                        f"Specified column index, {annotation_column}, is out of bounds of the columns in the annotation file, {len(df.columns)}. Please provide a number between 1 and {len(df.columns)}!"
                     )
                 df = df.rename(
                     columns={
@@ -247,7 +248,7 @@ class BoxedAnnotations:
             else:
                 # None was passed to annotation_column
                 # we'll create an empty `annotation` column
-                df["annotation"] = pd.Series(dtype='object')
+                df["annotation"] = pd.Series(dtype="object")
 
             # rename Raven columns to standard opensoundscape names
             try:

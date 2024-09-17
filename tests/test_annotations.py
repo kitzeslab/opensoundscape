@@ -272,7 +272,8 @@ def test_subset(boxed_annotations):
 def test_subset_to_nan(raven_file):
     a = BoxedAnnotations.from_raven_files([raven_file], "Species")
     assert len(a.subset([np.nan]).df) == 1
-    
+
+
 def test_subset_all_nan_to_nan(raven_file):
     # test behavior where entire row is nan - previously was fragile
     a = BoxedAnnotations.from_raven_files([raven_file], None)
