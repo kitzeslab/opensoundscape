@@ -438,17 +438,6 @@ class BaseModule:
             )
         return loss
 
-    # previously used in eval(): #TODO add this validation
-    # maybe using at_train_start hook
-    # # check for invalid label values
-    # assert (
-    #     targets.max(axis=None) <= 1 and targets.min(axis=None) >= 0
-    # ), "Labels must in range [0,1], but found values outside range"
-
-    # # remove all samples with NaN for a prediction before evaluating
-    # targets = targets[~np.isnan(scores).any(axis=1), :]
-    # scores = scores[~np.isnan(scores).any(axis=1), :]
-
     def train_dataloader(
         self,
         samples,
@@ -562,7 +551,7 @@ class SpectrogramModule(BaseModule):
     ):
         super().__init__()
         self.classes = classes
-        self.single_target = single_target  # if True: predict only class w max score
+        self._single_target = single_target
         self.name = "SpectrogramModule"
 
         self.use_amp = False  # use automatic mixed precision
@@ -718,6 +707,25 @@ class SpectrogramModule(BaseModule):
     def classifier(self):
         """return the classifier layer of the network, based on .network.classifier_layer string"""
         return self.network.get_submodule(self.network.classifier_layer)
+
+    @property
+    def single_target(self):
+        return self._single_target
+
+    @single_target.setter
+    def single_target(self, st):
+        """Set single_target to True or False. If changed, re-initialize torch metrics
+
+        Args:
+            st: (bool) if True, uses softmax activation for evaluation, predicting only
+                class with max score. If False, uses sigmoid activation, predicting all classes
+                independently.
+        """
+        if not self._single_target == st:
+            self._log(f"Updating torchmetrics and loss_fn to match single_target={st}")
+            self._single_target = st
+            self._init_torch_metrics()
+            self.loss_fn = CrossEntropyLoss_hot() if st else BCEWithLogitsLoss_hot()
 
     def _init_torch_metrics(self):
         if self.single_target:
@@ -1100,7 +1108,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             progress_bar=progress_bar,
         )
 
-        ### Apply activation layer ### #TODO: test speed vs. doing it in __call__ on batches
+        ### Apply activation layer ###
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
 
         # return DataFrame with same index/columns as prediction_dataset's df
@@ -1638,7 +1646,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 try:
                     self.save(save_path, pickle=True)
                 except Exception as e:
-                    print(
+                    self._log(
                         "Saving pickled model failed. This may be beacuse the model is not picklable "
                         "e.g. if it contains a lambda function, generator, or other non-picklable object."
                     )

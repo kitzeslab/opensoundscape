@@ -31,26 +31,6 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
     def __call__(self, *args, **kwargs):
         """inherit __call__ method from LightningModule rather than SpectrogramModule"""
         return L.LightningModule.__call__(self, *args, **kwargs)
-        # """run inference on a dataloader using Trainer
-
-        # Args:
-        #     dataloader: DataLoader object that returns batches of AudioSamples
-        #         e.g. SafeAudioDataLoader
-        #     **kwargs: any additional arguments to pass to lightning.Trainer init
-        # """
-        # trainer = L.Trainer(**kwargs)
-        # pred_scores = torch.cat(trainer.predict(self, dataloader))
-
-        # if len(pred_scores) > 0:
-        #     pred_scores = np.array(pred_scores)
-        #     # replace scores with nan for samples that failed in preprocessing
-        #     # (we predicted on substitute-samples rather than
-        #     # skipping the samples that failed preprocessing)
-        #     pred_scores[dataloader.dataset._invalid_indices, :] = np.nan
-        # else:
-        #     pred_scores = None
-
-        # return pred_scores
 
     def forward(self, samples):
         """standard Lightning method defining action to take on each batch for inference
@@ -138,7 +118,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         save_path=".",  # TODO: TypeError: unsupported format string passed to NoneType.__format__ if None is passed
         invalid_samples_log="./invalid_training_samples.log",
         raise_errors=False,
-        wandb_session=None,  # can also pass logger = kwarg with any Lightning logger
+        wandb_session=None,
         checkpoint_path=None,
         **kwargs,
     ):
@@ -181,6 +161,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
                 if True, raise errors when preprocessing fails
                 if False, just log the errors to unsafe_samples_log
             wandb_session: a wandb session to log to
+                (Note: can also pass `logger` kwarg with any Lightning logger object)
                 - pass the value returned by wandb.init() to progress log to a
                 Weights and Biases run
                 - if None, does not log to wandb
@@ -190,7 +171,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
                 wandb.login(key=api_key) #find your api_key at https://wandb.ai/settings
                 session = wandb.init(enitity='mygroup',project='project1',name='first_run')
                 ...
-                model.train(...,wandb_session=session)
+                model.fit_with_trainer(...,wandb_session=session)
                 session.finish()
                 ```
             **kwargs: any arguments to pytorch_lightning.Trainer(), such as
