@@ -4,7 +4,6 @@ from . import annotations
 from . import audio
 from . import data_selection
 from . import utils
-from . import localization
 from . import metrics
 from . import ribbit
 from . import sample
@@ -13,6 +12,7 @@ from . import spectrogram
 from . import ml
 from . import preprocess
 from . import logging
+from . import localization
 
 # expose some modules at the top level
 from .ml import cnn, bioacoustics_model_zoo, cnn_architectures

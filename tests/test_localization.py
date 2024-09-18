@@ -6,6 +6,7 @@ import datetime
 import pytz
 
 from opensoundscape import localization
+from opensoundscape.localization import localization_algorithms
 
 
 @pytest.fixture()
@@ -83,31 +84,33 @@ def close(x, y, tol):
 
 
 def test_cal_speed_of_sound():
-    assert close(localization.calc_speed_of_sound(20), 343, 1)
+    assert close(localization_algorithms.calc_speed_of_sound(20), 343, 1)
 
 
 def test_lorentz_ip_3():
-    assert localization.lorentz_ip([1, 1, 2], [1, 1, 2]) == -2
+    assert localization_algorithms.lorentz_ip([1, 1, 2], [1, 1, 2]) == -2
 
 
 def test_lorentz_ip_4():
-    assert localization.lorentz_ip([1, 1, 1, 2], [1, 1, 1, 2]) == -1
+    assert localization_algorithms.lorentz_ip([1, 1, 1, 2], [1, 1, 1, 2]) == -1
 
 
 def test_lorentz_ip_self():
-    assert localization.lorentz_ip([1, 1, 1, 2]) == -1
+    assert localization_algorithms.lorentz_ip([1, 1, 1, 2]) == -1
 
 
 def test_travel_time():
     source = [0, 0, 0]
     receiver = [0, 0, 1]
-    assert close(localization.travel_time(source, receiver, 343), 1 / 343, 0.0001)
+    assert close(
+        localization_algorithms.travel_time(source, receiver, 343), 1 / 343, 0.0001
+    )
 
 
 def test_soundfinder_localize_2d():
     reciever_locations = [[0, 0], [0, 20], [20, 20], [20, 0]]
     arrival_times = [1, 1, 1, 1]
-    estimate = localization.soundfinder_localize(
+    estimate = localization_algorithms.soundfinder_localize(
         reciever_locations,
         arrival_times,
     )
@@ -117,7 +120,7 @@ def test_soundfinder_localize_2d():
 def test_soundfinder_3d():
     reciever_locations = [[0, 0, 0], [0, 20, 1], [20, 20, -1], [20, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
-    estimate = localization.soundfinder_localize(
+    estimate = localization_algorithms.soundfinder_localize(
         reciever_locations,
         arrival_times,
     )
@@ -131,7 +134,7 @@ def test_soundfinder_lstsq():
     reciever_locations = [[0, 0, 0], [0, 20, 1], [20, 20, -1], [20, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
     with pytest.raises(NotImplementedError):
-        estimate = localization.soundfinder_localize(
+        estimate = localization_algorithms.soundfinder_localize(
             reciever_locations, arrival_times, invert_alg="lstsq"
         )
     # assert close(
@@ -142,7 +145,7 @@ def test_soundfinder_lstsq():
 def test_soundfinder_nocenter():
     reciever_locations = [[100, 0, 0], [100, 20, 1], [120, 20, -1], [120, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
-    estimate = localization.soundfinder_localize(
+    estimate = localization_algorithms.soundfinder_localize(
         reciever_locations,
         arrival_times,
         center=False,  # True for original Sound Finder behavior
@@ -158,7 +161,7 @@ def test_gillette_localize_raises():
 
     # check this raises a ValueError because none of the arrival times are zero
     with pytest.raises(ValueError):
-        localization.gillette_localize(reciever_locations, arrival_times)
+        localization_algorithms.gillette_localize(reciever_locations, arrival_times)
 
 
 def test_gillette_localize_2d():
@@ -171,7 +174,7 @@ def test_gillette_localize_2d():
     )
     tdoas = time_of_flight - np.min(time_of_flight)
 
-    estimated_pos = localization.gillette_localize(receiver_locations, tdoas)
+    estimated_pos = localization_algorithms.gillette_localize(receiver_locations, tdoas)
 
     assert np.allclose(estimated_pos, sound_source, rtol=0.1)
 
@@ -190,7 +193,9 @@ def test_gillette_localize_3d():
     for ref_index in range(len(time_of_flight)):
         tdoas = time_of_flight - time_of_flight[ref_index]
 
-        estimated_pos = localization.gillette_localize(receiver_locations, tdoas)
+        estimated_pos = localization_algorithms.gillette_localize(
+            receiver_locations, tdoas
+        )
 
         assert np.allclose(estimated_pos, sound_source, atol=2.5)
 
@@ -198,7 +203,7 @@ def test_gillette_localize_3d():
 def test_soundfinder_nopseudo():
     reciever_locations = [[0, 0, 0], [0, 20, 1], [20, 20, -1], [20, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
-    estimate = localization.soundfinder_localize(
+    estimate = localization_algorithms.soundfinder_localize(
         reciever_locations,
         arrival_times,
         invert_alg="gps",  # options: 'lstsq', 'gps'
@@ -224,7 +229,9 @@ def test_least_squares_optimize():
     for ref_index in range(len(time_of_flight)):
         tdoas = time_of_flight - time_of_flight[ref_index]
 
-        estimated_pos = localization.least_squares_localize(receiver_locations, tdoas)
+        estimated_pos = localization_algorithms.least_squares_localize(
+            receiver_locations, tdoas
+        )
 
         assert np.allclose(estimated_pos, sound_source, atol=2.5)
 
