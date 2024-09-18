@@ -6,8 +6,11 @@ import pandas as pd
 import pytest
 import shutil
 import torch
+import torchmetrics
 
 import warnings
+
+import torchmetrics.classification
 
 import opensoundscape
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
@@ -130,7 +133,9 @@ def test_save_load_pickel(train_df):
 
 
 def test_train_single_target(train_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0, single_target=True)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, single_target=True
+    )
     model.train(
         train_df,
         train_df,
@@ -281,8 +286,9 @@ def test_train_resample_loss(train_df):
 
 
 def test_train_one_class(train_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0], sample_duration=5.0)
-    model.single_target = True
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0], sample_duration=5.0, single_target=True
+    )
     model.train(
         train_df[[0]],
         train_df[[0]],
@@ -293,6 +299,35 @@ def test_train_one_class(train_df):
         num_workers=0,
     )
     shutil.rmtree("tests/models/")
+
+
+def test_single_target_setter():
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    assert model.single_target is False
+    assert model._single_target == False
+    assert isinstance(model.loss_fn, torch.nn.BCEWithLogitsLoss)
+    assert isinstance(
+        model.torch_metrics["map"],
+        torchmetrics.classification.MultilabelAveragePrecision,
+    )
+    # use setter of property
+    model.single_target = True
+    assert model.single_target is True
+    assert model._single_target == True
+    assert isinstance(model.loss_fn, torch.nn.CrossEntropyLoss)
+    assert isinstance(
+        model.torch_metrics["map"],
+        torchmetrics.classification.MulticlassAveragePrecision,
+    )
+    # switch back to multi-target
+    model.single_target = False
+    assert model.single_target is False
+    assert model._single_target == False
+    assert isinstance(model.loss_fn, torch.nn.BCEWithLogitsLoss)
+    assert isinstance(
+        model.torch_metrics["map"],
+        torchmetrics.classification.MultilabelAveragePrecision,
+    )
 
 
 def test_single_target_prediction(test_df):
