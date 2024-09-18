@@ -11,6 +11,44 @@ from opensoundscape.annotations import CategoricalLabels
 
 
 class SafeAudioDataloader(torch.utils.data.DataLoader):
+    """Create DataLoader for inference, wrapping a SafeDataset
+
+    SafeDataset contains AudioFileDataset or AudioSampleDataset depending on sample type
+
+    During inference, we allow the user to pass any of 3 things to samples:
+    - list of file paths
+    - Dataframe with file as index
+    - Dataframe with file, start_time, end_time of clips as index
+
+    If file as index, default split_files_into_clips=True means that it will
+    automatically determine the number of clips that can be created from the file
+    (with overlap between subsequent clips based on overlap_fraction)
+
+    Args:
+        samples: any of the following:
+            - list of file paths
+            - Dataframe with file as index
+            - Dataframe with file, start_time, end_time of clips as index
+            - CategoricalLabels object
+        preprocessor: preprocessor object, eg AudioPreprocessor or SpectrogramPreprocessor
+        split_files_into_clips=True: use AudioSplittingDataset to automatically split
+            audio files into appropriate-lengthed clips
+        clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+            see `opensoundscape.utils.generate_clip_times_df`
+        overlap_fraction: deprecated alias for clip_overlap_fraction
+        bypass_augmentations: if True, don't apply any augmentations [default: True]
+        raise_errors: if True, raise errors during preprocessing [default: False]
+        collate_fn: function to collate list of AudioSample objects into batches
+            [default: idenitty] returns list of AudioSample objects,
+            use collate_fn=opensoundscape.sample.collate_audio_samples to return
+            a tuple of (data, labels) tensors
+        **kwargs: any arguments to torch.utils.data.DataLoader
+
+    Returns:
+        DataLoader that returns lists of AudioSample objects when iterated
+        (if collate_fn is identity)
+    """
+
     def __init__(
         self,
         samples,
@@ -27,43 +65,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         **kwargs,
         # TODO: persistent_workers=True?
     ):
-        """Create DataLoader for inference, wrapping a SafeDataset
 
-        SafeDataset contains AudioFileDataset or AudioSampleDataset depending on sample type
-
-        During inference, we allow the user to pass any of 3 things to samples:
-        - list of file paths
-        - Dataframe with file as index
-        - Dataframe with file, start_time, end_time of clips as index
-
-        If file as index, default split_files_into_clips=True means that it will
-        automatically determine the number of clips that can be created from the file
-        (with overlap between subsequent clips based on overlap_fraction)
-
-        Args:
-            samples: any of the following:
-                - list of file paths
-                - Dataframe with file as index
-                - Dataframe with file, start_time, end_time of clips as index
-                - CategoricalLabels object
-            preprocessor: preprocessor object, eg AudioPreprocessor or SpectrogramPreprocessor
-            split_files_into_clips=True: use AudioSplittingDataset to automatically split
-                audio files into appropriate-lengthed clips
-            clip_overlap_fraction, clip_overlap, clip_step, final_clip:
-                see `opensoundscape.utils.generate_clip_times_df`
-            overlap_fraction: deprecated alias for clip_overlap_fraction
-            bypass_augmentations: if True, don't apply any augmentations [default: True]
-            raise_errors: if True, raise errors during preprocessing [default: False]
-            collate_fn: function to collate list of AudioSample objects into batches
-                [default: idenitty] returns list of AudioSample objects,
-                use collate_fn=opensoundscape.sample.collate_audio_samples to return
-                a tuple of (data, labels) tensors
-            **kwargs: any arguments to torch.utils.data.DataLoader
-
-        Returns:
-            DataLoader that returns lists of AudioSample objects when iterated
-            (if collate_fn is identity)
-        """
         assert type(samples) in (list, np.ndarray, pd.DataFrame, CategoricalLabels), (
             "`samples` must be either: "
             "(a) list or np.array of files, or DataFrame with (b) file as Index, "
