@@ -464,6 +464,80 @@ class Audio:
             metadata=metadata,
         )
 
+    def trim_by_datetime(
+        self, start_datetime, end_datetime=None, duration=None, out_of_bounds_error=True
+    ):
+        """trim Audio object using the embeded datetime in .metadata['recording_start_time']
+
+        Args:
+            start_datetime: _localized_ datetime object for start of extracted clip
+                e.g. pytz.timezone('UTC').localize(datetime(2020,4,4,10,25,15))
+            end_datetime: _localized_ datetime object for end of extracted clip
+                e.g. pytz.timezone('UTC').localize(datetime(2020,4,4,10,25,45))
+            duration: duration in seconds of the extracted clip
+                - specify exactly one of duration or end_datetime
+            out_of_bounds_error: behavior when end_datetime is beyond end of audio or
+                start_datetime is before start of audio
+                - [default: True] raises error
+                - if False, just trim to the available audio
+
+        Returns:
+            a new Audio object containing samples from start_datetime to end_datetime
+            (or less if start and end are out of bounds and out_of_bounds_error is False)
+        """
+        # user must past either end_datetime or duration
+        if end_datetime is None and duration is None:
+            raise ValueError("Must specify either end_datetime or duration")
+        # make sure the metadata contains localized datetime in 'recording_start_time'
+        if "recording_start_time" not in self.metadata:
+            raise ValueError(
+                "Cannot trim by datetime because 'recording_start_time' not found in metadata"
+            )
+        if not isinstance(self.metadata["recording_start_time"], datetime.datetime):
+            raise ValueError(
+                "Cannot trim by datetime because 'recording_start_time' is not a datetime object"
+            )
+        if self.metadata["recording_start_time"].tzinfo is None:
+            raise ValueError(
+                """Cannot trim by datetime because 'recording_start_time' is not localized to a
+                timezone. See Audio.trim_by_datetime docstring for valid example."""
+            )
+        if (
+            not isinstance(start_datetime, datetime.datetime)
+        ) or start_datetime.tzinfo is None:
+            raise ValueError("start_datetime must be a localized datetime object")
+        # if duration is specified, calculate end_datetime by adding duration to start_datetime
+        if duration is not None:
+            assert end_datetime is None, "do not specify both duration and end_datetime"
+            end_datetime = start_datetime + datetime.timedelta(seconds=duration)
+
+        # calculate seconds from start of audio recording to the desired start position
+        start_seconds = (
+            start_datetime - self.metadata["recording_start_time"]
+        ).total_seconds()
+        if start_seconds < 0:
+            if out_of_bounds_error:
+                raise AudioOutOfBoundsError(
+                    f"start_datetime was before the beginning of the Audio file ({self.metadata['recording_start_time']})"
+                )
+            else:
+                # instead of raising an error, just start from the beginning of the audio file
+                start_seconds = 0
+
+        # calculate seconds from start of audio recording to the desired end position
+        end_seconds = (
+            end_datetime - self.metadata["recording_start_time"]
+        ).total_seconds()
+        if end_seconds > self.duration:
+            if out_of_bounds_error:
+                raise AudioOutOfBoundsError(
+                    f"The targeted end time was after the end of the Audio file"
+                )
+            # else, with out_of_bounds_error=False, end_seconds will be beyond the end of the file and
+            # audio.trim will just get the audio until the end of the file
+
+        return self.trim(start_seconds, end_seconds)
+
     def loop(self, length=None, n=None):
         """Extend audio file by looping it
 
