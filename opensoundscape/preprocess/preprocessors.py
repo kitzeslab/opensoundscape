@@ -657,6 +657,44 @@ class AudioPreprocessor(BasePreprocessor):
         )
 
 
+@register_preprocessor_cls
+class AudioAugmentationPreprocessor(AudioPreprocessor):
+    """AudioPreprocessor that applies augmentations to audio samples during training"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # random gain
+        # useful for softening focal recordings (xeno-canto)
+        # generally bypass for soundscape recordings
+        random_gain_action = actions.Action(
+            action_functions.audio_random_gain, is_augmentation=True, dB_range=(-40, 0)
+        )
+        self.insert_action("random_gain", random_gain_action)
+
+        # add noise
+        add_noise_action = actions.Action(
+            action_functions.audio_add_noise,
+            is_augmentation=True,
+            noise_dB=(-80, -40),
+        )
+        self.insert_action("add_noise", add_noise_action)
+
+        # random time wrap: shift sample in time, moving end to beginning
+        random_wrap_action = actions.Action(
+            action_functions.random_wrap_audio,
+            is_augmentation=True,
+            probability=0.75,
+        )
+        self.insert_action("random_wrap", random_wrap_action)
+
+        # time mask: randomly mask short time segments with noise
+        time_mask_action = actions.Action(
+            action_functions.audio_time_mask, is_augmentation=True
+        )
+        self.insert_action("time_mask", time_mask_action)
+
+
 class NoiseReduceAudioPreprocessor(AudioPreprocessor):
     def __init__(
         self,

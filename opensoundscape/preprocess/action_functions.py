@@ -9,7 +9,7 @@ import librosa
 import torch
 import torchvision
 
-from opensoundscape.audio import Audio, mix
+from opensoundscape.audio import Audio, mix, concat
 from opensoundscape.preprocess import tensor_augment, io
 
 ACTION_FN_DICT = dict()
@@ -268,3 +268,114 @@ def tensor_add_noise(tensor, std=1):
 @register_action_fn
 def pcen(s, **kwargs):
     return s._spawn(spectrogram=librosa.pcen(S=s.spectrogram, **kwargs))
+
+
+@register_action_fn
+def random_wrap_audio(audio, probability=0.5, max_shift=None):
+    """Randomly splits the audio into two parts, swapping their order
+
+    useful as a "time shift" augmentation when extra audio beyond the bounds is not available
+
+    Args:
+        audio: an Audio object
+        probability: probability of performing the augmentation
+        max_shift: max number of seconds to shift, default None means no limit
+    """
+    if random.random() > probability:
+        # don't augment
+        return audio
+
+    # if max_shift is None, allow splitting anywhere
+    max_shift = max_shift or audio.duration
+    # split audio into two parts
+    split_time = random.uniform(0, max_shift)
+    audio1 = audio.trim(0, split_time)
+    audio2 = audio.trim(split_time, audio.duration)
+    return concat([audio2, audio1])
+
+
+@register_action_fn
+def audio_time_mask(
+    audio, max_masks=10, max_width=0.02, noise_dBFS=-15, noise_color="white"
+):
+    """randomly replace time slices with  noise
+
+    Args:
+        audio: input Audio object
+        max_masks: maximum number of white noise time masks [default: 10]
+        max_width: maximum size of bars as fraction of sample width [default: 0.02]
+        noise_dBFS & noise_color: see Audio.noise() `dBFS` and `color` args
+
+    Returns:
+        augmented Audio object
+    """
+
+    # convert max_width from fraction of sample to seconds
+    max_width_seconds = audio.duration * max_width
+
+    # generate white noise segments and random start times
+    from opensoundscape.audio import Audio
+    import numpy as np
+
+    n_masks = np.random.randint(0, max_masks + 1)
+    mask_lens = np.random.uniform(0, max_width_seconds, n_masks)
+    # randomly choose start positions by divvying up the non-masked space
+    unmasked_time = audio.duration - mask_lens.sum()
+    splits = [0] + list(np.sort(np.random.uniform(0, 1, n_masks) * unmasked_time))
+    unmasked_segment_lens = np.array(splits[1:]) - np.array(splits[:-1])
+    unmasked_segment_starts = [0]
+    t = 0
+    for i in range(n_masks):
+        # skip forward by unmasked length + mask len
+        t += unmasked_segment_lens[i] + mask_lens[i]
+        unmasked_segment_starts.append(t)
+    # doesn't include the last one, we'll just get the end of the sample instead
+    unmasked_segment_ends = list(
+        np.array(unmasked_segment_starts[:-1]) + np.array(unmasked_segment_lens)
+    )
+
+    samples = []
+    for i in range(n_masks):
+        samples.extend(
+            audio.trim(unmasked_segment_starts[i], unmasked_segment_ends[i]).samples
+        )
+        samples.extend(
+            Audio.noise(
+                duration=mask_lens[i],
+                sample_rate=audio.sample_rate,
+                color=noise_color,
+                dBFS=noise_dBFS,
+            ).samples
+        )
+    # add the last segment of original audio, making sure we end up with correct total number of samples
+    samples.extend(audio.samples[len(samples) - len(audio.samples) :])
+
+    return audio._spawn(samples=samples)
+
+
+@register_action_fn
+def frequency_mask(tensor, max_masks=3, max_width=0.2):
+    """add random horizontal bars over Tensor
+
+    Args:
+        tensor: input Torch.tensor sample
+        max_masks: max number of horizontal bars [default: 3]
+        max_width: maximum size of horizontal bars as fraction of sample height
+
+    Returns:
+        augmented tensor
+    """
+
+    # convert max_width from fraction of sample to pixels
+    max_width_px = int(tensor.shape[-2] * max_width)
+
+    # add "batch" dimension expected by tensor_augment
+    tensor = tensor.unsqueeze(0)
+
+    # perform transform
+    tensor = tensor_augment.freq_mask(tensor, F=max_width_px, max_masks=max_masks)
+
+    # remove "batch" dimension
+    tensor = tensor.squeeze(0)
+
+    return tensor
