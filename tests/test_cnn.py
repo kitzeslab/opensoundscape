@@ -6,8 +6,11 @@ import pandas as pd
 import pytest
 import shutil
 import torch
+import torchmetrics
 
 import warnings
+
+import torchmetrics.classification
 
 import opensoundscape
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
@@ -53,6 +56,8 @@ def train_df():
 @pytest.fixture()
 def train_df_clips(train_df):
     clip_df = make_clip_df(train_df.index.values, clip_duration=1.0)
+    clip_df[0] = np.random.choice([0, 1], size=len(clip_df))
+    clip_df[1] = np.random.choice([0, 1], size=len(clip_df))
     return clip_df
 
 
@@ -130,8 +135,9 @@ def test_save_load_pickel(train_df):
 
 
 def test_train_single_target(train_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
-    model.single_target = True
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, single_target=True
+    )
     model.train(
         train_df,
         train_df,
@@ -149,6 +155,26 @@ def test_train_multi_target(train_df):
     model.train(
         train_df,
         train_df,
+        save_path="tests/models",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    shutil.rmtree("tests/models/")
+
+
+def test_train_on_clip_df(train_df_clips):
+    """
+    test training a model when Audio files are long/unsplit
+    and a dataframe provides clip-level labels. Training
+    should internally load a relevant clip from the audio
+    file and get its labels from the dataframe
+    """
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=1.0)
+    model.train(
+        train_df_clips,
+        train_df_clips,
         save_path="tests/models",
         epochs=1,
         batch_size=2,
@@ -282,8 +308,11 @@ def test_train_resample_loss(train_df):
 
 
 def test_train_one_class(train_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0], sample_duration=5.0)
-    model.single_target = True
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0],
+        sample_duration=5.0,
+    )
     model.train(
         train_df[[0]],
         train_df[[0]],
@@ -296,11 +325,41 @@ def test_train_one_class(train_df):
     shutil.rmtree("tests/models/")
 
 
-def test_single_target_prediction(test_df):
+def test_single_target_setter():
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    assert model.single_target is False
+    assert model._single_target == False
+    assert isinstance(model.loss_fn, torch.nn.BCEWithLogitsLoss)
+    assert isinstance(
+        model.torch_metrics["map"],
+        torchmetrics.classification.MultilabelAveragePrecision,
+    )
+    # use setter of property
     model.single_target = True
-    scores = model.predict(test_df)
-    assert len(scores) == 2
+    assert model.single_target is True
+    assert model._single_target == True
+    assert isinstance(model.loss_fn, torch.nn.CrossEntropyLoss)
+    assert isinstance(
+        model.torch_metrics["map"],
+        torchmetrics.classification.MulticlassAveragePrecision,
+    )
+    # switch back to multi-target
+    model.single_target = False
+    assert model.single_target is False
+    assert model._single_target == False
+    assert isinstance(model.loss_fn, torch.nn.BCEWithLogitsLoss)
+    assert isinstance(
+        model.torch_metrics["map"],
+        torchmetrics.classification.MultilabelAveragePrecision,
+    )
+
+
+def test_single_target_prediction(train_df_clips):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=1.0)
+    model.single_target = True
+    scores = model.predict(train_df_clips)
+    assert len(scores) == 20
+    model.eval(train_df_clips.values, scores.values)
 
 
 def test_predict_on_list_of_files(test_df):
@@ -448,28 +507,6 @@ def test_train_predict_architecture(train_df):
         model = cnn.CNN(architecture=arch, classes=[0, 1], sample_duration=2)
         model.predict(train_df, num_workers=0)
         assert model.preprocessor.channels == num_channels
-
-
-def test_train_on_clip_df(train_df):
-    """
-    test training a model when Audio files are long/unsplit
-    and a dataframe provides clip-level labels. Training
-    should internally load a relevant clip from the audio
-    file and get its labels from the dataframe
-    """
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=2)
-    train_df = make_clip_df(train_df.index.values, clip_duration=2)
-    train_df[0] = np.random.choice([0, 1], size=10)
-    train_df[1] = np.random.choice([0, 1], size=10)
-    model.train(
-        train_df,
-        train_df,
-        save_path="tests/models/",
-        epochs=1,
-        batch_size=2,
-        save_interval=10,
-        num_workers=0,
-    )
 
 
 def test_train_bad_index(train_df):
