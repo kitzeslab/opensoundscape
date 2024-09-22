@@ -189,6 +189,7 @@ def test_load_raven_no_annotation_column(raven_file):
     # we should now have a dataframe with a column "Species"
     assert len(a.df) == 10
     assert set(a.df["Species"]) == {"WOTH", "EATO", "LOWA", np.nan}
+    assert a.df["annotation"].isna().all()
 
 
 def test_load_raven_annotation_column_name(raven_file):
@@ -207,7 +208,7 @@ def test_load_raven_annotation_column_name(raven_file):
         )
 
     # now try integer index values
-    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=8)
+    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=7)
     assert a.df["annotation"].values[0] == "WOTH"
 
     # use different column number
@@ -218,7 +219,7 @@ def test_load_raven_annotation_column_name(raven_file):
     with pytest.raises(IndexError):
         a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=25)
     with pytest.raises(IndexError):
-        a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=0)
+        a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=-1)
 
 
 def test_load_raven_annotations_empty(raven_file_empty):

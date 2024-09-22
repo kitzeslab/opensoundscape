@@ -134,7 +134,7 @@ class BoxedAnnotations:
                 object's `.df` will have an `annotation` column with nan values!
                 - if a string is passed, the column with this name will be used as the annotations.
                 - if an integer is passed, the column at that position will be used as the annotation column.
-                NOTE: column positions are ordered increasingly starting at 1.
+                NOTE: column positions are ordered increasingly starting at 0.
             audio_files: (list) optionally specify audio files corresponding to each
                 raven file (length should match raven_files) Eg ['path1.txt','path2.txt']
                 - if None (default), .clip_labels() will not be able to
@@ -234,14 +234,15 @@ class BoxedAnnotations:
             elif isinstance(annotation_column, int):
                 # using the column number to specify which column contains annotations
                 # first column is 1, second is 2, etc
-                if not 0 < annotation_column <= len(df):
+                if not 0 <= annotation_column < len(df):
                     # ensure column number is within bounds
                     raise IndexError(
-                        f"Specified column index, {annotation_column}, is out of bounds of the columns in the annotation file, {len(df.columns)}. Please provide a number between 1 and {len(df.columns)}!"
+                        f"Specified column index, {annotation_column}, is out of bounds of the columns in the annotation file. Please provide a number between 0 and {len(df.columns)-1}! "
+                        f"Please keep in mind Python uses zero-based indexing, meaning the column numbers start at 0."
                     )
                 df = df.rename(
                     columns={
-                        df.columns[annotation_column - 1]: "annotation",
+                        df.columns[annotation_column]: "annotation",
                     },
                     errors="raise",
                 )
