@@ -645,3 +645,11 @@ def test_df_to_events(LOCA_2021_aru_coords, LOCA_2021_detections):
         assert (event.tdoas == recovered_events[i].tdoas).all()
         assert (event.location_estimate == recovered_events[i].location_estimate).all()
         assert (event.cc_maxs == recovered_events[i].cc_maxs).all()
+
+
+def test_SpatialGrid():
+    # Verify that the SpatialGrid class creates the correct grid
+    receivers = np.array([[0, 0], [0, 10], [10, 0], [10, 10]])
+    grid = localization.SpatialGrid(receivers, resolution=1, margin=0)
+    # verify there are the right number of grid points
+    assert len(grid.grid) == 100

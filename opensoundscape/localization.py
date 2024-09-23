@@ -9,7 +9,7 @@ from opensoundscape.audio import Audio
 from opensoundscape import audio
 from opensoundscape.utils import cast_np_to_native
 from scipy.optimize import least_squares
-
+from scipy.spatial import ConvexHull
 
 # define defaults for physical constants
 SPEED_OF_SOUND = 343  # default value in meters per second
@@ -470,6 +470,75 @@ class GetStartTimestamp:
         return recording_start_dt + datetime.timedelta(
             seconds=cast_np_to_native(start_time)
         )
+
+
+class SpatialGrid:
+    """
+    Class for creating a grid of points for localizing sound events with methods that use grid search.
+    """
+
+    def __init__(self, recorder_positions, resolution=1, margin=0):
+        """
+        Initialize a SpatialGrid object
+
+        Args:
+            recorder_positions: list of [x,y] or [x,y,z] positions of each recorder in meters
+            resolution: resolution of the grid in meters. Default is 1.
+            margin: margin around the convex hull of the grid in meters. Will only attempt to localize events that are inside the grid + margin.
+                    A negative margin will shrink the grid. Default is 0.
+
+        """
+        self.recorder_positions = np.array(recorder_positions)
+        self.resolution = resolution
+        self.margin = margin
+        self.dimensions = self.recorder_positions.shape[1]
+        self.grid = self._make_grid()
+
+    def _make_grid(self):
+        """
+        Create a grid of points for localizing sound events
+
+        Returns:
+            grid: a list of [x,y] or [x,y,z] positions of each point in the grid
+        """
+
+        # make a grid of all the points between the min and max possible coordinates of the recorder positions
+        x = np.arange(
+            np.floor(np.min(self.recorder_positions[:, 0])) - self.margin,
+            np.ceil(np.max(self.recorder_positions[:, 0])) + self.margin,
+            self.resolution,
+        )
+        y = np.arange(
+            np.floor(np.min(self.recorder_positions[:, 1])) - self.margin,
+            np.ceil(np.max(self.recorder_positions[:, 1])) + self.margin,
+            self.resolution,
+        )
+
+        if self.dimensions == 2:
+            grid = np.array(np.meshgrid(x, y)).T.reshape(-1, 2)
+        else:
+            z = np.arange(
+                np.floor(np.min(self.recorder_positions[:, 2])) - self.margin,
+                np.ceil(np.max(self.recorder_positions[:, 2])) + self.margin,
+                self.resolution,
+            )
+            grid = np.array(np.meshgrid(x, y, z)).T.reshape(-1, 3)
+
+        hull = ConvexHull(self.recorder_positions)
+        # only keep the points that are inside the convex hull of the recorder positions
+        # self.hull is the ConvexHull object of the recorder positions
+        # self.hull.equations is the equation of the hyperplane of each face of the convex hull
+        # apply the equation of each face to the grid points to check if they are inside the convex hull
+        eps = 1e-6
+        # add a small epsilon to the margin to ensure that points on the edge of the convex hull are included
+        mask = np.all(
+            hull.equations[:, :-1].dot(grid.T) + hull.equations[:, -1][:, None]
+            <= self.margin + eps,
+            axis=0,
+        )
+        grid = grid[mask]
+
+        return grid
 
 
 class SynchronizedRecorderArray:
