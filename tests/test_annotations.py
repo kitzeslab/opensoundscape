@@ -212,7 +212,7 @@ def test_load_raven_annotation_column_name(raven_file):
     assert a.df["annotation"].values[0] == "WOTH"
 
     # use different column number
-    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=2)
+    a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=1)
     assert a.df["annotation"].values[0] == "Spectrogram 1"
 
     # try using an out of bounds number - raises an exception
