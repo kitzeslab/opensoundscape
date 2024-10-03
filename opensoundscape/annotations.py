@@ -430,6 +430,9 @@ class BoxedAnnotations:
     @classmethod
     def from_csv(cls, path):
         """load csv from path and creates BoxedAnnotations object
+
+        Note: the .annotation_files and .audio_files attributes will be none
+
         Args:
             path: file path of csv.
                 see __init__() docstring for required column names
@@ -919,7 +922,7 @@ class BoxedAnnotations:
         output_df = clip_df.copy()
 
         # how we store labels depends on `multihot` argument, either
-        # multi-hot or lists of integer class indices
+        # multi-hot 2d array of 0/1 or lists of integer class indices
         if return_type == "multihot":
             # add columns for each class with 0s. We will add 1s in the loop below
             output_df[classes] = False
@@ -927,17 +930,16 @@ class BoxedAnnotations:
             # add the annotations by adding class index positions to appropriate rows
             for class_name in classes:
                 # get just the annotations for this class
-                class_df = df[df["annotation"] == class_name]
-                for _, row in class_df.iterrows():
-                    annotation_start = row["start_time"]
-                    annotation_end = row["end_time"]
-                    # find the overlapping rows, gets the multi-index back
+                class_annotations = df[df["annotation"] == class_name]
+                for _, row in class_annotations.iterrows():
+                    # find the rows sufficiently overlapped by this annotation, gets the multi-index back
                     df_idxs = find_overlapping_idxs_in_clip_df(
-                        annotation_start,
-                        annotation_end,
-                        clip_df,
-                        min_label_overlap,
-                        min_label_fraction,
+                        file=row["audio_file"],
+                        annotation_start=row["start_time"],
+                        annotation_end=row["end_time"],
+                        clip_df=clip_df,
+                        min_label_overlap=min_label_overlap,
+                        min_label_fraction=min_label_fraction,
                     )
                     if len(df_idxs) > 0:
                         output_df.loc[df_idxs, class_name] = True
@@ -948,17 +950,16 @@ class BoxedAnnotations:
             # add the annotations by adding the integer class indices to row label lists
             for class_idx, class_name in enumerate(classes):
                 # get just the annotations for this class
-                class_df = df[df["annotation"] == class_name]
-                for _, row in class_df.iterrows():
-                    annotation_start = row["start_time"]
-                    annotation_end = row["end_time"]
+                class_annotations = df[df["annotation"] == class_name]
+                for _, row in class_annotations.iterrows():
                     # find the rows that overlap with the annotation enough in time
                     df_idxs = find_overlapping_idxs_in_clip_df(
-                        annotation_start,
-                        annotation_end,
-                        clip_df,
-                        min_label_overlap,
-                        min_label_fraction,
+                        file=row["audio_file"],
+                        annotation_start=row["start_time"],
+                        annotation_end=row["end_time"],
+                        clip_df=clip_df,
+                        min_label_overlap=min_label_overlap,
+                        min_label_fraction=min_label_fraction,
                     )
 
                     for idx in df_idxs:
@@ -1026,7 +1027,7 @@ class BoxedAnnotations:
                 'classes': returns a dataframe with 'labels' column containing lists of
                     class names for each clip
                 'CategoricalLabels': returns a CategoricalLabels object
-            **kwargs (such as overlap_fraction, final_clip) are passed to
+            **kwargs (such as clip_step, final_clip) are passed to
                 opensoundscape.utils.generate_clip_times_df() via make_clip_df()
         Returns: depends on `return_type` argument
             'multihot': [default] returns a dataframe with a column for each class
@@ -1346,6 +1347,7 @@ def _df_to_crowsetta_bboxes(df):
 
 
 def find_overlapping_idxs_in_clip_df(
+    file,
     annotation_start,
     annotation_end,
     clip_df,
@@ -1355,6 +1357,7 @@ def find_overlapping_idxs_in_clip_df(
     """
     Finds the (file, start_time, end_time) index values for the rows in the clip_df that overlap with the annotation_start and annotation_end
     Args:
+        file: audio file path/name the annotation corresponds to; clip_df is filtered to this file
         annotation_start: start time of the annotation
         annotation_end: end time of the annotation
         clip_df: dataframe with multi-index ['file', 'start_time', 'end_time']
@@ -1375,6 +1378,8 @@ def find_overlapping_idxs_in_clip_df(
          Returns:
         [(file, start_time, end_time)]) Multi-index values for the rows in the clip_df that overlap with the annotation_start and annotation_end.
     """
+    # filter to rows corresponding to this file
+    clip_df = clip_df.loc[clip_df.index.get_level_values(0) == file]
     # ignore all rows that start after the annotation ends. Start is level 1 of multi-index
     clip_df = clip_df.loc[clip_df.index.get_level_values(1) < annotation_end]
     # and all rows that end before the annotation starts. End is level 2 of multi-index

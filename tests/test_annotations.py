@@ -16,8 +16,18 @@ def raven_file():
 
 
 @pytest.fixture()
+def audio_2min():
+    return "tests/audio/MSD-0003_20180427_2minstart00.wav"
+
+
+@pytest.fixture()
 def raven_file_empty():
     return "tests/raven_annots/EmptyExample.Table.1.selections.txt"
+
+
+@pytest.fixture()
+def audio_silence():
+    return "tests/audio/silence_10s.mp3"
 
 
 @pytest.fixture()
@@ -397,6 +407,42 @@ def test_labels_on_index_overlap(boxed_annotations):
         clip_df, class_subset=["a"], min_label_overlap=0.25
     )
     assert np.array_equal(labels.values, np.array([[1, 1, 0, 0, 0]]).transpose())
+
+
+def test_clip_labels_with_audio_file(
+    raven_file, audio_2min, raven_file_empty, audio_silence
+):
+    """test that clip_labels works properly with multiple audio+raven files
+
+    checks that Issue #1061 is resolved
+    """
+    boxed_annotations = BoxedAnnotations.from_raven_files(
+        raven_files=[raven_file, raven_file_empty],
+        audio_files=[audio_2min, audio_silence],
+    )
+    labels = boxed_annotations.clip_labels(
+        full_duration=None, clip_duration=5, clip_overlap=0, min_label_overlap=0
+    )
+    # should get back 2 min & 10 s audio file labels for 5s clips
+    assert len(labels) == 24 + 2
+    # no label on silent audio!
+    assert labels.head(0).sum().sum() == 0
+    # check for correct clip labels
+    assert np.array_equal(
+        labels.head(6).values,
+        np.array(
+            [
+                [False, False, False],
+                [False, False, False],
+                [True, True, False],
+                [True, True, False],
+                [True, True, True],
+                [False, True, False],
+            ]
+        ),
+    )
+    # no labels after 20 seconds in 2 min audio
+    assert labels.tail(-6).sum().sum() == 0
 
 
 def test_clip_labels(boxed_annotations):
