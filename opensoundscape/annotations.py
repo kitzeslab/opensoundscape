@@ -118,9 +118,8 @@ class BoxedAnnotations:
     def from_raven_files(
         cls,
         raven_files,
+        annotation_column,
         audio_files=None,
-        annotation_column_idx=8,
-        annotation_column_name=None,
         keep_extra_columns=True,
         column_mapping_dict=None,
     ):
@@ -129,22 +128,18 @@ class BoxedAnnotations:
         Args:
             raven_files: list or iterable of raven .txt file paths (as str or pathlib.Path),
                 or a single file path (str or pathlib.Path). Eg ['path1.txt','path2.txt']
+            annotation_column: string name or integer position of column containing annotations
+                - pass `None` to load the Raven file without explicitly
+                assigning a column as the annotation column. The resulting
+                object's `.df` will have an `annotation` column with nan values!
+                - if a string is passed, the column with this name will be used as the annotations.
+                - if an integer is passed, the column at that position will be used as the annotation column.
+                NOTE: column positions are ordered increasingly starting at 0.
             audio_files: (list) optionally specify audio files corresponding to each
                 raven file (length should match raven_files) Eg ['path1.txt','path2.txt']
                 - if None (default), .clip_labels() will not be able to
                 check the duration of each audio file, and will raise an error
                 unless `full_duration` is passed as an argument
-            annotation_column_idx: (int) position of column containing annotations
-                - [default: 8] will be correct if the first user-created column
-                in Raven contains annotations. First column is 1, second is 2 etc.
-                - pass `None` to load the raven file without explicitly
-                assigning a column as the annotation column. The resulting
-                object's `.df` will have an `annotation` column with nan values!
-                NOTE: If `annotation_column_name` is passed, this argument is ignored.
-            annotation_column_name: (str) name of the column containing annotations
-                - default: None will use annotation-column_idx to find the annotation column
-                - if not None, this value overrides annotation_column_idx, and the column with
-                this name will be used as the annotations.
             keep_extra_columns: keep or discard extra Raven file columns
                 (always keeps start_time, end_time, low_f, high_f, annotation
                 audio_file). [default: True]
@@ -153,7 +148,7 @@ class BoxedAnnotations:
                 - or iterable of specific columns to keep
             column_mapping_dict: dictionary mapping Raven column names to
                 desired column names in the output dataframe. The columns of the
-                laoded Raven file are renamed according to this dictionary. The resulting
+                loaded Raven file are renamed according to this dictionary. The resulting
                 dataframe must contain: ['start_time','end_time','low_f','high_f']
                 [default: None]
                 If None (or for any unspecified columns), will use the standard column names:
@@ -215,31 +210,46 @@ class BoxedAnnotations:
             if df.empty:
                 warnings.warn(f"{raven_file} has zero rows.")
                 continue
-            if annotation_column_name is not None:
-                # annotation_column_name argument takes precedence over
-                # annotation_column_idx. If it is passed, we use it and ignore
-                # annotation_column_idx!
-                if annotation_column_name in list(df.columns):
+
+            assert isinstance(
+                annotation_column, (str, int, type(None))
+            ), "Annotation column index has to be a string, integer, or None."
+
+            if isinstance(annotation_column, str):
+                # annotation_column is a string that is present in the annotation file's header
+                try:
                     df = df.rename(
                         columns={
-                            annotation_column_name: "annotation",
-                        }
+                            annotation_column: "annotation",
+                        },
+                        errors="raise",
                     )
-                else:
-                    # to be flexible, we'll give nan values if the column is missing
-                    df["annotation"] = np.nan
+                except KeyError as e:
+                    raise KeyError(
+                        f"Specified column name, {annotation_column}, does not match any of the column names in the annotation file: "
+                        f"{list(df.columns)}. "
+                        f"Please provide an annotation column name that exists or None!"
+                    ) from e
 
-            elif annotation_column_idx is not None:
-                # use the column number to specify which column contains annotations
-                # first column is 1, second is 2, etc (default: 8th column)
+            elif isinstance(annotation_column, int):
+                # using the column number to specify which column contains annotations
+                # first column is 1, second is 2, etc
+                if not 0 <= annotation_column < len(df):
+                    # ensure column number is within bounds
+                    raise IndexError(
+                        f"Specified column index, {annotation_column}, is out of bounds of the columns in the annotation file. Please provide a number between 0 and {len(df.columns)-1}! "
+                        f"Please keep in mind Python uses zero-based indexing, meaning the column numbers start at 0."
+                    )
                 df = df.rename(
                     columns={
-                        df.columns[annotation_column_idx - 1]: "annotation",
-                    }
+                        df.columns[annotation_column]: "annotation",
+                    },
+                    errors="raise",
                 )
-            else:  # None was passed to annotation_column_idx
+            else:
+                # None was passed to annotation_column
                 # we'll create an empty `annotation` column
-                df["annotation"] = np.nan
+                df["annotation"] = pd.Series(dtype="object")
 
             # rename Raven columns to standard opensoundscape names
             try:
