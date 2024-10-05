@@ -122,6 +122,7 @@ class BoxedAnnotations:
         audio_files=None,
         keep_extra_columns=True,
         column_mapping_dict=None,
+        warn_no_annotations=False,
     ):
         """load annotations from Raven .txt files
 
@@ -159,6 +160,8 @@ class BoxedAnnotations:
                         "High Freq (Hz)": "high_f",
                     }
                 This dictionary will be updated with any user-specified mappings.
+            warn_no_annotations: [default: False] if True, will issue a warning
+                if a Raven file has zero rows (meaning no annotations present).
 
         Returns:
             BoxedAnnotations object containing annotations from the Raven files
@@ -207,7 +210,7 @@ class BoxedAnnotations:
 
         for i, raven_file in enumerate(raven_files):
             df = pd.read_csv(raven_file, delimiter="\t")
-            if df.empty:
+            if df.empty and warn_no_annotations:
                 warnings.warn(f"{raven_file} has zero rows.")
                 continue
 

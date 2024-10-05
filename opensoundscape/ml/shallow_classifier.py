@@ -70,6 +70,9 @@ def quick_fit(
 
     Assumes all data can fit in memory, so that one step includes all data (i.e. step=epoch)
 
+    Defaults are for multi-target label problems and assume train_labels is an array of 0/1
+    of shape (n_samples, n_classes)
+
     Args:
         model: a torch.nn.Module object to train
 
@@ -136,12 +139,20 @@ def quick_fit(
                 print(
                     f"Epoch {step+1}/{steps}, Loss: {loss.item()}, Val Loss: {val_loss.item()}"
                 )
-                print(
-                    f"val AU ROC: {average_precision_score(validation_labels.detach().numpy(),val_outputs.detach().numpy()):0.3f}"
-                )
-                print(
-                    f"val MAP: {roc_auc_score(validation_labels.detach().numpy(),val_outputs.detach().numpy()):0.3f}"
-                )
+                try:
+                    auroc = average_precision_score(
+                        validation_labels.detach().numpy(), val_outputs.detach().numpy()
+                    )
+                except:
+                    auroc = float("nan")
+                try:
+                    map = average_precision_score(
+                        validation_labels.detach().numpy(), val_outputs.detach().numpy()
+                    )
+                except:
+                    map = float("nan")
+                print(f"val AU ROC: {auroc:0.3f}")
+                print(f"val MAP: {map:0.3f}")
     print("Training complete")
 
 
@@ -156,12 +167,18 @@ def augmented_embed(
     """Embed samples using augmentation during preprocessing
 
     Args:
-        embedding_model: a model with an embed() method that takes a dataframe and returns embeddings
-        (e.g. a pretrained opensoundscape model or Bioacoustics Model Zoo model like Perch, BirdNET, HawkEars)
+        embedding_model: a model with an embed() method that takes a dataframe and returns
+        embeddings (e.g. a pretrained opensoundscape model or Bioacoustics Model Zoo model like
+        Perch, BirdNET, HawkEars)
+
         sample_df: dataframe with samples to embed
+
         n_augmentation_variants: number of augmented variants to generate for each sample
+
         batch_size: batch size for embedding; default 1
+
         num_workers: number of workers for embedding; default 0
+
         device: torch.device to use; default is torch.device('cpu')
 
     Returns:

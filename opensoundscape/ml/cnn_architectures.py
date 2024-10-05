@@ -658,10 +658,8 @@ def change_fc_output_size(
     """Modify the number of output nodes of a fully connected layer
 
     Args:
-        fc: the fully connected layer of the model that should
-            be modified
-        num_classes:
-            number of output nodes for the new fc
+        fc: the fully connected layer of the model that should be modified
+        num_classes: number of output nodes for the new fc
     """
     assert num_classes > 0, "num_classes must be > 0"
     num_ftrs = fc.in_features
