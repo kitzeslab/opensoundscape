@@ -98,10 +98,12 @@ Suggested citation:
    tutorials/audio
    tutorials/spectrogram
    tutorials/annotations
-   tutorials/preprocess_audio_dataset
-   tutorials/train_cnn
-   tutorials/customize_cnn_training
    tutorials/predict_with_cnn
+   tutorials/train_cnn
+   tutorials/transfer_learning
+   tutorials/training_birdnet_and_perch
+   tutorials/customize_cnn_training
+   tutorials/preprocess_audio_dataset
    tutorials/acoustic_localization
    tutorials/signal_processing
 
