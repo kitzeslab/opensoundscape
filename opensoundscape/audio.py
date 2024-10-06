@@ -396,7 +396,7 @@ class Audio:
             resample_type=resample_type,
         )
 
-    def trim(self, start_time, end_time):
+    def trim(self, start_time, end_time, out_of_bounds_mode="ignore"):
         """Trim Audio object in time
 
         If start_time is less than zero, output starts from time 0
@@ -405,18 +405,26 @@ class Audio:
         Args:
             start_time: time in seconds for start of extracted clip
             end_time: time in seconds for end of extracted clip
+            out_of_bounds_mode: behavior if requested time period is not fully contained
+                within the audio file. Options:
+                - 'ignore': return any available audio with no warning/error [default]
+                - 'warn': generate a warning
+                - 'raise': raise an AudioOutOfBoundsError
 
         Returns:
             a new Audio object containing samples from start_time to end_time
             - metadata is updated to reflect new start time and duration
 
         see also: trim_samples() to trim using sample positions instead of times
+        and trim_with_timestamps() to trim using localized datetime.datetime objects
         """
-        start_sample = max(0, self._get_sample_index(start_time))
+        start_sample = self._get_sample_index(start_time)
         end_sample = self._get_sample_index(end_time)
-        return self.trim_samples(start_sample, end_sample)
+        return self.trim_samples(
+            start_sample, end_sample, out_of_bounds_mode=out_of_bounds_mode
+        )
 
-    def trim_samples(self, start_sample, end_sample):
+    def trim_samples(self, start_sample, end_sample, out_of_bounds_mode="ignore"):
         """Trim Audio object by sample indices
 
         resulting sample array contains self.samples[start_sample:end_sample]
@@ -427,18 +435,36 @@ class Audio:
         Args:
             start_sample: sample index for start of extracted clip, inclusive
             end_sample: sample index for end of extracted clip, exlusive
+            out_of_bounds_mode: behavior if requested time period is not fully contained
+                within the audio file. Options:
+                - 'ignore': return any available audio with no warning/error [default]
+                - 'warn': generate a warning
+                - 'raise': raise an AudioOutOfBoundsError
 
         Returns:
             a new Audio object containing samples from start_sample to end_sample
             - metadata is updated to reflect new start time and duration
 
         see also: trim() to trim using time in seconds instead of sample positions
+        and trim_with_timestamps() to trim using localized datetime.datetime objects
         """
         assert (
             end_sample >= start_sample
         ), f"end_sample ({end_sample}) must be >= start_sample ({start_sample})"
 
-        start_sample = max(0, start_sample)
+        error_msg = f"Requested sample range [{start_sample},{end_sample}] is not fully contained within the audio file"
+        if end_sample > len(self.samples):
+            if out_of_bounds_mode == "raise":
+                raise AudioOutOfBoundsError(error_msg)
+            elif out_of_bounds_mode == "warn":
+                warnings.warn(error_msg)
+            # end_sample = len(self.samples) not needed, ok to slice beyond end of list
+        if start_sample < 0:
+            if out_of_bounds_mode == "raise":
+                raise AudioOutOfBoundsError(error_msg)
+            elif out_of_bounds_mode == "warn":
+                warnings.warn(error_msg)
+            start_sample = 0
 
         # list slicing is exclusive of the end index but inclusive of the start index
         # if end_sample is beyond the end of the sample, does not raise error just
@@ -463,6 +489,50 @@ class Audio:
             samples=samples_trimmed,
             metadata=metadata,
         )
+
+    def trim_with_timestamps(
+        self, start_timestamp, end_timestamp, out_of_bounds_mode="warn"
+    ):
+        """Trim Audio object by localized datetime.datetime timestamps
+
+        requires that .metadata['recording_start_time'] is a localized datetime.datetime object
+
+        Args:
+            start_timestamp: localized datetime.datetime object for start of extracted clip
+            end_timestamp: localized datetime.datetime object for end of extracted clip
+            out_of_bounds_mode: behavior if requested time period is not fully contained
+                within the audio file. Options:
+                - 'ignore': return any available audio with no warning/error [default]
+                - 'warn': generate a warning
+                - 'raise': raise an AudioOutOfBoundsError
+
+        Returns:
+            a new Audio object containing samples from start_timestamp to end_timestamp
+            - metadata is updated to reflect new start time and duration
+        """
+        if "recording_start_time" not in self.metadata:
+            raise ValueError(
+                "metadata must contain 'recording_start_time' to use trim_with_timestamps"
+            )
+
+        assert isinstance(
+            self.metadata["recording_start_time"], datetime.datetime
+        ), "metadata['recording_start_time'] must be a datetime.datetime object"
+        assert isinstance(start_timestamp, datetime.datetime) and isinstance(
+            end_timestamp, datetime.datetime
+        ), "start_timestamp and end_timestamp must be localized datetime.datetime objects"
+        assert (
+            start_timestamp.tzinfo is not None and end_timestamp.tzinfo is not None
+        ), "start_timestamp and end_timestamp must be localized datetime.datetime objects, but tzinfo is None"
+
+        start_time = (
+            start_timestamp - self.metadata["recording_start_time"]
+        ).total_seconds()
+        end_time = (
+            end_timestamp - self.metadata["recording_start_time"]
+        ).total_seconds()
+
+        return self.trim(start_time, end_time, out_of_bounds_mode=out_of_bounds_mode)
 
     def loop(self, length=None, n=None):
         """Extend audio file by looping it

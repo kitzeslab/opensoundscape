@@ -434,8 +434,15 @@ def test_trim_updates_metadata(metadata_wav_str):
 
 def test_trim_from_negative_time(silence_10s_mp3_str):
     """correct behavior is to trim from time zero"""
-    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(-1, 5)
-    assert math.isclose(audio.duration, 5, abs_tol=1e-5)
+    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    a = audio.trim(-1, 5)
+    assert math.isclose(a.duration, 5, abs_tol=1e-5)
+
+    with pytest.warns(UserWarning):
+        audio.trim(-1, 5, out_of_bounds_mode="warn")
+
+    with pytest.raises(AudioOutOfBoundsError):
+        audio.trim(-1, 5, out_of_bounds_mode="raise")
 
 
 def test_trim_samples(silence_10s_mp3_str):
@@ -456,7 +463,25 @@ def test_trim_samples(silence_10s_mp3_str):
 
 def test_trim_past_end_of_clip(silence_10s_mp3_str):
     """correct behavior is to trim to the end of the clip"""
-    audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000).trim(9, 11)
+    a = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    audio = a.trim(9, 11)
+    assert math.isclose(audio.duration, 1, abs_tol=1e-5)
+
+    with pytest.warns(UserWarning):
+        a.trim(9, 11, out_of_bounds_mode="warn")
+
+    with pytest.raises(AudioOutOfBoundsError):
+        a.trim(9, 11, out_of_bounds_mode="raise")
+
+
+def test_trim_with_datetime(silence_10s_mp3_str):
+    a = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
+    a.metadata["recording_start_time"] = datetime.datetime(
+        2022, 1, 1, 0, 0, 0, tzinfo=pytz.utc
+    )
+    start = datetime.datetime(2022, 1, 1, 0, 0, 1, tzinfo=pytz.utc)
+    end = datetime.datetime(2022, 1, 1, 0, 0, 2, tzinfo=pytz.utc)
+    audio = a.trim_with_timestamps(start, end)
     assert math.isclose(audio.duration, 1, abs_tol=1e-5)
 
 
