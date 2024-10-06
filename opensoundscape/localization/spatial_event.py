@@ -8,6 +8,7 @@ from opensoundscape import audio
 from opensoundscape.utils import cast_np_to_native
 from opensoundscape.localization.localization_algorithms import SPEED_OF_SOUND
 from opensoundscape.localization import localization_algorithms
+from opensoundscape.localization.position_estimate import PositionEstimate
 
 
 class SpatialEvent:
@@ -40,7 +41,7 @@ class SpatialEvent:
             receiver_files: list of audio files, one for each receiver
             receiver_locations: list of [x,y] or [x,y,z] positions of each receiver in meters
             max_delay: maximum time delay (in seconds) to consider for time-delay-of-arrival estimate. Cannot be longer than 1/2 the duration.
-            receiver_start_time_offsets: list of start_time of detection (seconds) for each receiver
+            receiver_start_time_offsets: list of start_time of detection (seconds) for each receiver relative to start of audio file
                 - if all audio files started at the same real-world time, this value will be the same for all recievers
                 - for example, 5.0 means the detection window starts 5 seconds after the beginning of the Audio file
                 (the detection window's duration in seconds is given by the `duration` argument and is the same across recievers)
@@ -61,7 +62,8 @@ class SpatialEvent:
             estimate_location:
                 - Estimates the tdoas using cross_correlation if not already estimated.
                 - Estimates the location of the event using the tdoas and receiver locations.
-                - Returns the location estimate as a tuple of cartesian coordinates (x,y) or (x,y,z)
+                - returns a PositionEstimate object with .location_estimate and other attributes
+                    (if localization is not successful, .location_estimate is None)
 
         Editable Attributes:
             These are parameters that can be set before calling estimate_location()
@@ -80,13 +82,10 @@ class SpatialEvent:
             start_timestamp: start time of detection as datetime.datetime
             duration: length in seconds of the event
             class_name: name of detection's class
+
         Computed Attributes:
             tdoas: time delay at each receiver (computed by _estimate_delays())
             cc_maxs: max of cross correlation for each time delay (computed by _estimate_delays())
-            location_estimate: spatial position estimate (computed by estimate_location())
-            distance_residuals: distance residuals in meters (computed by estimate_location())
-            receivers_used_for_localization: list of receivers used for localization during estimate_location()
-            residual_rms: root mean square of distance residuals (computed by estimate_location())
         """
         # editable attributes
         self.min_n_receivers = min_n_receivers
@@ -113,12 +112,6 @@ class SpatialEvent:
         # computed attributes
         self.tdoas = None  # time delay at each receiver
         self.cc_maxs = None  # max of cross correlation for each time delay
-        self.location_estimate = None  # cartesian location estimate in meters
-        self.distance_residuals = None  # distance residuals in meters
-        self.receivers_used_for_localization = (
-            None  # list of receivers used for localization
-        )
-        self.residual_rms = None
 
     def estimate_location(
         self,
@@ -126,25 +119,30 @@ class SpatialEvent:
         use_stored_tdoas=True,
     ):
         """
-        Estimate spatial location of this event. Modifies attributes in place.
+        Estimate spatial location of this event.
 
-        This method first estimates the time delays (TDOAS) using cross-correlation, then estimates the location from those TDOAS.
-        Localization is performed in 2d or 3d according to the dimensions of self.receiver_locations (x,y) or (x,y,z)
-        Note: if self.tdoas or self.receiver_locations is None, first calls self._estimate_delays() to estimate the time delays.
+        This method first estimates the time delays (TDOAS) using cross-correlation, then estimates
+        the location from those TDOAS. Localization is performed in 2d or 3d according to the
+        dimensions of self.receiver_locations (x,y) or (x,y,z) Note: if self.tdoas or
+        self.receiver_locations is None, first calls self._estimate_delays() to estimate the time
+        delays.
 
-        If you want to change some parameters of the localization (e.g. try a different cc_threshold, or bandpass_range), you can set the appropriate attribute (e.g. self.cc_threshold = 0.01) before calling self.estimate_location().
+        If you want to change some parameters of the localization (e.g. try a different
+        cc_threshold, or bandpass_range), you can set the appropriate attribute (e.g.
+        self.cc_threshold = 0.01) before calling self.estimate_location().
 
         Args:
-            - localization_algorithm: algorithm to use for estimating the location of a sound event from the locations and time delays of a set of detections. Options are 'gillette' or 'soundfinder'. Default is 'gillette'.
-            - use_stored_tdoas: if True, uses the tdoas stored in self.tdoas to estimate the location.
-                If False, first calls self._estimate_delays() to estimate the tdoas.
-                default: True
+            - localization_algorithm: algorithm to use for estimating the location of a sound event
+              from the locations and time delays of a set of detections. Options are 'gillette' or
+              'soundfinder'. Default is 'gillette'.
+            - use_stored_tdoas: if True, uses the tdoas stored in self.tdoas to estimate the
+              location.
+                If False, first calls self._estimate_delays() to estimate the tdoas. default: True
 
         Returns:
-            Copy of self with updated .location_estimate as cartesian coordinates (x,y) or (x,y,z) (units: meters)
-
-        Effects:
-            sets the value of self.location_estimate
+            PositionEstimate object with .location_estimate and other attributes
+            - if localization is not successful, .location_estimate attribute of returned object is
+              None
         """
         # If no values are already stored, perform generalized cross correlation to estimate time delays
         # or if user wants to re-estimate the time delays, perform generalized cross correlation to estimate time delays
@@ -154,14 +152,13 @@ class SpatialEvent:
             self._estimate_delays()
 
         # if self.tdoas is still not set, don't attempt to localize (_estimate_delays was not successful)
-        if self.tdoas is not None:
-            # Sets the attributes self.location_estimate, self.receivers_used_for_localization,
-            # self.distance_residuals, and self.residual_rms
-            self._localize_after_cross_correlation(
+        if self.tdoas is None:
+            return PositionEstimate(location_estimate=None)
+        else:
+            # creates a PositionEstimate object with .location_setimate and other attributes
+            return self._localize_after_cross_correlation(
                 localization_algorithm=localization_algorithm
             )
-
-        return self
 
     def _estimate_delays(self):
         """Hidden method to estimate time delay of event relative to receiver_files[0] with gcc
@@ -323,9 +320,8 @@ class SpatialEvent:
         # delay truly represents two recordings of the same sound event)
         tdoas = self.tdoas
         locations = self.receiver_locations
-        receiver_files = np.array(
-            self.receiver_files
-        )  # needs to be np array to access using a boolean mask
+        # needs to be np array to access using a boolean mask
+        receiver_files = np.array(self.receiver_files)
 
         # apply the cc_threshold filter
         # only keep receivers that have a cc_max above the cc_threshold
@@ -337,35 +333,37 @@ class SpatialEvent:
 
         # If there aren't enough receivers, don't attempt localization.
         if len(tdoas) < self.min_n_receivers:
-            self.location_estimate = None
-            self.receivers_used_for_localization = None
-            self.distance_residuals = None
-            self.residual_rms = None
-            return self.location_estimate
-        # Store which receivers were used for localization. The location is estimated only from these.
-        self.receivers_used_for_localization = receiver_files
+            return PositionEstimate(location_estimate=None)
 
         # Estimate location from receiver locations and time differences of arrival
-        self.location_estimate = localization_algorithms.localize(
+        location_estimate = localization_algorithms.localize(
             receiver_locations=locations,
             tdoas=tdoas,
             algorithm=localization_algorithm,
             speed_of_sound=self.speed_of_sound,
         )
 
-        if self.location_estimate is not None:
+        if location_estimate is not None:
             # Store the distance residuals (only for the receivers used) as an attribute
-            self.distance_residuals = calculate_tdoa_residuals(
+            distance_residuals = calculate_tdoa_residuals(
                 receiver_locations=locations,
                 tdoas=tdoas,
-                location_estimate=self.location_estimate,
+                location_estimate=location_estimate,
                 speed_of_sound=self.speed_of_sound,
             )
 
-            # Calculate root mean square of distance residuals and store as attribute
-            self.residual_rms = np.sqrt(np.mean(self.distance_residuals**2))
-
-        return self.location_estimate
+        return PositionEstimate(
+            location_estimate=location_estimate,
+            class_name=self.class_name,
+            receiver_files=receiver_files,
+            receiver_locations=locations,
+            tdoas=tdoas,
+            cc_maxs=self.cc_maxs[self.cc_maxs > self.cc_threshold],
+            start_timestamp=self.start_timestamp,
+            receiver_start_time_offsets=self.receiver_start_time_offsets,
+            duration=self.duration,
+            distance_residuals=distance_residuals,
+        )
 
     @classmethod
     def from_dict(cls, dictionary):

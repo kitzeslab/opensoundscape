@@ -245,10 +245,10 @@ class Audio:
                 is not full contained within the audio file
                 Example of creating localized timestamp:
                 ```
-                import pytz; from datetime import datetime;
+                {import pytz; from datetime import datetime;
                 local_timestamp = datetime(2020,12,25,23,59,59)
                 local_timezone = pytz.timezone('US/Eastern')
-                timestamp = local_timezone.localize(local_timestamp)
+                timestamp = local_timezone.localize(local_timestamp)}
                 ```
             out_of_bounds_mode:
                 - 'warn': generate a warning [default]

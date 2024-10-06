@@ -15,3 +15,6 @@ docs/tutorials/rana_sierrae_2022
 lightning_logs/
 docs/tutorials/*.ckpt
 docs/tutorials/BirdNET*
+docs/tutorials/*.WAV
+docs/tutorials/*.csv
+

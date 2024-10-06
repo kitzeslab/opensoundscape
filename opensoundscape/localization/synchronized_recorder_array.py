@@ -203,9 +203,11 @@ class SynchronizedRecorderArray:
             num_workers : int, optional. Number of workers to use for parallelization. Default is 1 (no parallelization)
 
         Returns:
-            A list of localized events, each of which is a SpatialEvent object.
-            If return_unlocalized is True, returns:
-                        2 lists: list of localized events, list of un-localized events
+            If return_unlocalized is False,
+                returns a list of localized positons, each of which is a PositionEstimate
+                object with a .location_estimate attribute (= None if localization failed)
+            If return_unlocalized is True, returns 2 lists:
+                list of localized positions, list of un-localized positions
 
         [1] M. D. Gillette and H. F. Silverman, "A Linear Closed-Form Algorithm for Source Localization
         From Time-Differences of Arrival," IEEE Signal Processing Letters
@@ -239,10 +241,10 @@ class SynchronizedRecorderArray:
             bandpass_ranges = {cls: None for cls in detections.columns}
 
         # initialize list to store events that successfully localize
-        localized_events = []
+        unlocalized_positions = []
 
         # list that will store events that cannot be localized (e.g. too few receivers, high residual)
-        unlocalized_events = []
+        localized_positions = []
 
         # create list of SpatialEvents, each SpatialEvent will be used to estimate a location
         # each SpatialEvent consists of a receiver with a detection, and every other receivers within max_receiver_dist, that also have a detection
@@ -264,23 +266,23 @@ class SynchronizedRecorderArray:
         from joblib import Parallel, delayed
 
         # parallelize the localization of each event across cpus
-        events = Parallel(n_jobs=num_workers)(
+        position_estimates = Parallel(n_jobs=num_workers)(
             delayed(e.estimate_location)(localization_algorithm=localization_algorithm)
             for e in candidate_events
         )
 
         # list of events that were not successfully localized
         # (e.g. too few receivers, too few receivers after applying cc_threshold or high residual in localization)
-        unlocalized_events = [
+        localized_positions = [
             e
-            for e in events
+            for e in position_estimates
             if (e.location_estimate is None or e.residual_rms > residual_threshold)
         ]
 
         # list of events that were successfully localized
-        localized_events = [
+        unlocalized_positions = [
             e
-            for e in events
+            for e in position_estimates
             if (
                 e.location_estimate is not None and e.residual_rms <= residual_threshold
             )
@@ -288,9 +290,9 @@ class SynchronizedRecorderArray:
 
         # return_unlocalized can be used for troubleshooting, and working out why some events were not localized
         if return_unlocalized:
-            return localized_events, unlocalized_events
+            return unlocalized_positions, localized_positions
         else:
-            return localized_events
+            return unlocalized_positions
 
     def check_files_missing_coordinates(self, detections):
         """

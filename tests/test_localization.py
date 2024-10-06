@@ -610,10 +610,53 @@ def test_spatial_event_to_from_dict(LOCA_2021_aru_coords):
     assert event.cc_filter == new_event.cc_filter
 
 
-def test_df_to_events(LOCA_2021_aru_coords, LOCA_2021_detections):
-    # test that a dataframe of detections can be converted to a list of SpatialEvents
+def test_position_estimate_to_from_dict():
+    # test that a PositionEstimate can be serialized to a dictionary and then re-instantiated
+    position_estimate = localization.PositionEstimate(
+        location_estimate=np.array([10, 15]),
+        start_timestamp=datetime.datetime(
+            2021, 9, 24, 6, 52, 0, 200_000, tzinfo=pytz.UTC
+        ),
+        class_name="zeep",
+        receiver_files=np.array(["file1", "file2"]),
+        tdoas=np.array([0, 0.0325]),
+        cc_maxs=np.array([1, 0.8]),
+        receiver_locations=np.array([[0, 0], [0, 20]]),
+        receiver_start_time_offsets=np.array([0.2, 0.2]),
+        duration=0.3,
+        distance_residuals=np.array([0.1, 0.2]),
+    )
+
+    position_estimate_dict = position_estimate.to_dict()
+    assert isinstance(position_estimate_dict, dict)
+
+    new_position_estimate = localization.PositionEstimate.from_dict(
+        position_estimate_dict
+    )
+
+    for attr in [
+        "location_estimate",
+        "start_timestamp",
+        "class_name",
+        "receiver_files",
+        "tdoas",
+        "cc_maxs",
+        "receiver_locations",
+        "receiver_start_time_offsets",
+        "duration",
+        "distance_residuals",
+    ]:
+        val = getattr(position_estimate, attr)
+        if isinstance(val, np.ndarray):
+            assert np.array_equal(val, getattr(new_position_estimate, attr))
+        else:
+            assert val == getattr(new_position_estimate, attr)
+
+
+def test_df_to_positions(LOCA_2021_aru_coords, LOCA_2021_detections):
+    # test that a dataframe of detections can be converted to a list of PositionEstimates
     array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
-    events = array.localize_detections(
+    positions = array.localize_detections(
         detections=LOCA_2021_detections,
         localization_algorithm="gillette",
         cc_filter="phat",
@@ -621,30 +664,29 @@ def test_df_to_events(LOCA_2021_aru_coords, LOCA_2021_detections):
         max_receiver_dist=30,
         min_n_receivers=4,
     )
-    df = localization.events_to_df(events)
+    df = localization.position_estimate.positions_to_df(positions)
     assert isinstance(df, pd.DataFrame)
 
     # try to recover the events
-    recovered_events = localization.df_to_events(df)
+    recovered_positions = localization.position_estimate.df_to_positions(df)
 
-    for i, event in enumerate(events):
-        assert event.start_timestamp == recovered_events[i].start_timestamp
+    for i, event in enumerate(positions):
+        assert event.start_timestamp == recovered_positions[i].start_timestamp
         assert (
             event.receiver_start_time_offsets
-            == recovered_events[i].receiver_start_time_offsets
+            == recovered_positions[i].receiver_start_time_offsets
         ).all()
-        assert event.receiver_files == recovered_events[i].receiver_files
+        assert (event.receiver_files == recovered_positions[i].receiver_files).all()
         # compare equality of two arrays that can contain nan
         assert np.array_equal(
             event.receiver_locations,
-            recovered_events[i].receiver_locations,
+            recovered_positions[i].receiver_locations,
             equal_nan=True,
         )
-        assert event.max_delay == recovered_events[i].max_delay
-        assert event.duration == recovered_events[i].duration
-        assert event.class_name == recovered_events[i].class_name
-        assert event.bandpass_range == recovered_events[i].bandpass_range
-        assert event.cc_filter == recovered_events[i].cc_filter
-        assert (event.tdoas == recovered_events[i].tdoas).all()
-        assert (event.location_estimate == recovered_events[i].location_estimate).all()
-        assert (event.cc_maxs == recovered_events[i].cc_maxs).all()
+        assert event.duration == recovered_positions[i].duration
+        assert event.class_name == recovered_positions[i].class_name
+        assert (event.tdoas == recovered_positions[i].tdoas).all()
+        assert (
+            event.location_estimate == recovered_positions[i].location_estimate
+        ).all()
+        assert (event.cc_maxs == recovered_positions[i].cc_maxs).all()
