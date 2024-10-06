@@ -12,11 +12,11 @@ import warnings
 from opensoundscape.preprocess import actions, action_functions, io
 from opensoundscape.preprocess.actions import (
     Action,
-    Overlay,
     AudioClipLoader,
     AudioTrim,
     SpectrogramToTensor,
 )
+from opensoundscape.preprocess.overlay import Overlay
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 from opensoundscape.spectrogram import Spectrogram
 from opensoundscape.audio import Audio
