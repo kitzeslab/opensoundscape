@@ -1,7 +1,7 @@
 import random
 import warnings
 import numpy as np
-
+import pandas as pd
 import torchvision
 
 from opensoundscape.preprocess.actions import (
@@ -10,6 +10,7 @@ from opensoundscape.preprocess.actions import (
 )
 from opensoundscape.sample import AudioSample
 from opensoundscape.preprocess.utils import PreprocessingError
+from opensoundscape.preprocess.actions import register_action_fn
 
 
 @register_action_cls
@@ -39,6 +40,8 @@ class Overlay(Action):
     """
 
     def __init__(self, is_augmentation=True, **kwargs):
+        if "fn" in kwargs:
+            kwargs.pop("fn")
         super(Overlay, self).__init__(
             overlay,
             is_augmentation=is_augmentation,
@@ -68,7 +71,7 @@ class Overlay(Action):
         self.overlay_df = overlay_df
         self.params = self.params.drop("overlay_df")  # removes it from params Series
 
-    def go(self, sample, **kwargs):
+    def __call__(self, sample, **kwargs):
         self.action_fn(
             sample,
             overlay_df=self.overlay_df,
@@ -77,19 +80,25 @@ class Overlay(Action):
 
     def to_dict(self):
         # don't save self.overlay_df since it might be huge and is not json friendly
-        # user will have to specify it after using from_dict
-        return super().to_dict(ignore_attributes=("overlay_df"))
+        # also don't save criterion_fn, will default to always_true on reload
+        # user will have to specify these after using from_dict
+        d = super().to_dict(ignore_attributes=("overlay_df"))
+        d["params"].pop("criterion_fn")
+        return d
 
     @classmethod
     def from_dict(cls, dict):
+        # two attributes of the Overlay class are not json-friendly and not saved with to_dict;
+        # we instead initialize with an empty overlay_df and set criterion_fn to always_true
+        # we also initialize the Overlay action with bypass=True so that it is inactive by default
+        dict["params"]["overlay_df"] = pd.DataFrame()
+        dict["params"]["criterion_fn"] = always_true
         instance = super().from_dict(dict)
-        instance.overlay_df = None
-        # since we don't have an overlay df, set this action to bypass mode
         instance.bypass = True
         warnings.warn(
-            "Overlay class's .overlay_df will be None after loading from dict. Reset and set .bypass to False to use Overlay."
+            "Overlay class's .overlay_df will be None after loading from dict and `.criterion_fn` will be always_true(). "
+            "Reset these attributes and set .bypass to False to use Overlay after loading with from_dict()."
         )
-        assert isinstance(instance, cls)  # make sure its not the parent type?
         return instance
 
 
@@ -97,6 +106,7 @@ def always_true(x):
     return True
 
 
+@register_action_fn
 def overlay(
     sample,
     overlay_df,

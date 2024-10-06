@@ -118,33 +118,29 @@ class BoxedAnnotations:
     def from_raven_files(
         cls,
         raven_files,
+        annotation_column,
         audio_files=None,
-        annotation_column_idx=8,
-        annotation_column_name=None,
         keep_extra_columns=True,
         column_mapping_dict=None,
+        warn_no_annotations=False,
     ):
         """load annotations from Raven .txt files
 
         Args:
             raven_files: list or iterable of raven .txt file paths (as str or pathlib.Path),
                 or a single file path (str or pathlib.Path). Eg ['path1.txt','path2.txt']
+            annotation_column: string name or integer position of column containing annotations
+                - pass `None` to load the Raven file without explicitly
+                assigning a column as the annotation column. The resulting
+                object's `.df` will have an `annotation` column with nan values!
+                - if a string is passed, the column with this name will be used as the annotations.
+                - if an integer is passed, the column at that position will be used as the annotation column.
+                NOTE: column positions are ordered increasingly starting at 0.
             audio_files: (list) optionally specify audio files corresponding to each
                 raven file (length should match raven_files) Eg ['path1.txt','path2.txt']
                 - if None (default), .clip_labels() will not be able to
                 check the duration of each audio file, and will raise an error
                 unless `full_duration` is passed as an argument
-            annotation_column_idx: (int) position of column containing annotations
-                - [default: 8] will be correct if the first user-created column
-                in Raven contains annotations. First column is 1, second is 2 etc.
-                - pass `None` to load the raven file without explicitly
-                assigning a column as the annotation column. The resulting
-                object's `.df` will have an `annotation` column with nan values!
-                NOTE: If `annotation_column_name` is passed, this argument is ignored.
-            annotation_column_name: (str) name of the column containing annotations
-                - default: None will use annotation-column_idx to find the annotation column
-                - if not None, this value overrides annotation_column_idx, and the column with
-                this name will be used as the annotations.
             keep_extra_columns: keep or discard extra Raven file columns
                 (always keeps start_time, end_time, low_f, high_f, annotation
                 audio_file). [default: True]
@@ -153,7 +149,7 @@ class BoxedAnnotations:
                 - or iterable of specific columns to keep
             column_mapping_dict: dictionary mapping Raven column names to
                 desired column names in the output dataframe. The columns of the
-                laoded Raven file are renamed according to this dictionary. The resulting
+                loaded Raven file are renamed according to this dictionary. The resulting
                 dataframe must contain: ['start_time','end_time','low_f','high_f']
                 [default: None]
                 If None (or for any unspecified columns), will use the standard column names:
@@ -164,6 +160,8 @@ class BoxedAnnotations:
                         "High Freq (Hz)": "high_f",
                     }
                 This dictionary will be updated with any user-specified mappings.
+            warn_no_annotations: [default: False] if True, will issue a warning
+                if a Raven file has zero rows (meaning no annotations present).
 
         Returns:
             BoxedAnnotations object containing annotations from the Raven files
@@ -212,34 +210,49 @@ class BoxedAnnotations:
 
         for i, raven_file in enumerate(raven_files):
             df = pd.read_csv(raven_file, delimiter="\t")
-            if df.empty:
+            if df.empty and warn_no_annotations:
                 warnings.warn(f"{raven_file} has zero rows.")
                 continue
-            if annotation_column_name is not None:
-                # annotation_column_name argument takes precedence over
-                # annotation_column_idx. If it is passed, we use it and ignore
-                # annotation_column_idx!
-                if annotation_column_name in list(df.columns):
+
+            assert isinstance(
+                annotation_column, (str, int, type(None))
+            ), "Annotation column index has to be a string, integer, or None."
+
+            if isinstance(annotation_column, str):
+                # annotation_column is a string that is present in the annotation file's header
+                try:
                     df = df.rename(
                         columns={
-                            annotation_column_name: "annotation",
-                        }
+                            annotation_column: "annotation",
+                        },
+                        errors="raise",
                     )
-                else:
-                    # to be flexible, we'll give nan values if the column is missing
-                    df["annotation"] = np.nan
+                except KeyError as e:
+                    raise KeyError(
+                        f"Specified column name, {annotation_column}, does not match any of the column names in the annotation file: "
+                        f"{list(df.columns)}. "
+                        f"Please provide an annotation column name that exists or None!"
+                    ) from e
 
-            elif annotation_column_idx is not None:
-                # use the column number to specify which column contains annotations
-                # first column is 1, second is 2, etc (default: 8th column)
+            elif isinstance(annotation_column, int):
+                # using the column number to specify which column contains annotations
+                # first column is 1, second is 2, etc
+                if not 0 <= annotation_column < len(df):
+                    # ensure column number is within bounds
+                    raise IndexError(
+                        f"Specified column index, {annotation_column}, is out of bounds of the columns in the annotation file. Please provide a number between 0 and {len(df.columns)-1}! "
+                        f"Please keep in mind Python uses zero-based indexing, meaning the column numbers start at 0."
+                    )
                 df = df.rename(
                     columns={
-                        df.columns[annotation_column_idx - 1]: "annotation",
-                    }
+                        df.columns[annotation_column]: "annotation",
+                    },
+                    errors="raise",
                 )
-            else:  # None was passed to annotation_column_idx
+            else:
+                # None was passed to annotation_column
                 # we'll create an empty `annotation` column
-                df["annotation"] = np.nan
+                df["annotation"] = pd.Series(dtype="object")
 
             # rename Raven columns to standard opensoundscape names
             try:
@@ -420,6 +433,9 @@ class BoxedAnnotations:
     @classmethod
     def from_csv(cls, path):
         """load csv from path and creates BoxedAnnotations object
+
+        Note: the .annotation_files and .audio_files attributes will be none
+
         Args:
             path: file path of csv.
                 see __init__() docstring for required column names
@@ -909,7 +925,7 @@ class BoxedAnnotations:
         output_df = clip_df.copy()
 
         # how we store labels depends on `multihot` argument, either
-        # multi-hot or lists of integer class indices
+        # multi-hot 2d array of 0/1 or lists of integer class indices
         if return_type == "multihot":
             # add columns for each class with 0s. We will add 1s in the loop below
             output_df[classes] = False
@@ -917,17 +933,16 @@ class BoxedAnnotations:
             # add the annotations by adding class index positions to appropriate rows
             for class_name in classes:
                 # get just the annotations for this class
-                class_df = df[df["annotation"] == class_name]
-                for _, row in class_df.iterrows():
-                    annotation_start = row["start_time"]
-                    annotation_end = row["end_time"]
-                    # find the overlapping rows, gets the multi-index back
+                class_annotations = df[df["annotation"] == class_name]
+                for _, row in class_annotations.iterrows():
+                    # find the rows sufficiently overlapped by this annotation, gets the multi-index back
                     df_idxs = find_overlapping_idxs_in_clip_df(
-                        annotation_start,
-                        annotation_end,
-                        clip_df,
-                        min_label_overlap,
-                        min_label_fraction,
+                        file=row["audio_file"],
+                        annotation_start=row["start_time"],
+                        annotation_end=row["end_time"],
+                        clip_df=clip_df,
+                        min_label_overlap=min_label_overlap,
+                        min_label_fraction=min_label_fraction,
                     )
                     if len(df_idxs) > 0:
                         output_df.loc[df_idxs, class_name] = True
@@ -938,17 +953,16 @@ class BoxedAnnotations:
             # add the annotations by adding the integer class indices to row label lists
             for class_idx, class_name in enumerate(classes):
                 # get just the annotations for this class
-                class_df = df[df["annotation"] == class_name]
-                for _, row in class_df.iterrows():
-                    annotation_start = row["start_time"]
-                    annotation_end = row["end_time"]
+                class_annotations = df[df["annotation"] == class_name]
+                for _, row in class_annotations.iterrows():
                     # find the rows that overlap with the annotation enough in time
                     df_idxs = find_overlapping_idxs_in_clip_df(
-                        annotation_start,
-                        annotation_end,
-                        clip_df,
-                        min_label_overlap,
-                        min_label_fraction,
+                        file=row["audio_file"],
+                        annotation_start=row["start_time"],
+                        annotation_end=row["end_time"],
+                        clip_df=clip_df,
+                        min_label_overlap=min_label_overlap,
+                        min_label_fraction=min_label_fraction,
                     )
 
                     for idx in df_idxs:
@@ -1016,7 +1030,7 @@ class BoxedAnnotations:
                 'classes': returns a dataframe with 'labels' column containing lists of
                     class names for each clip
                 'CategoricalLabels': returns a CategoricalLabels object
-            **kwargs (such as overlap_fraction, final_clip) are passed to
+            **kwargs (such as clip_step, final_clip) are passed to
                 opensoundscape.utils.generate_clip_times_df() via make_clip_df()
         Returns: depends on `return_type` argument
             'multihot': [default] returns a dataframe with a column for each class
@@ -1336,6 +1350,7 @@ def _df_to_crowsetta_bboxes(df):
 
 
 def find_overlapping_idxs_in_clip_df(
+    file,
     annotation_start,
     annotation_end,
     clip_df,
@@ -1345,6 +1360,7 @@ def find_overlapping_idxs_in_clip_df(
     """
     Finds the (file, start_time, end_time) index values for the rows in the clip_df that overlap with the annotation_start and annotation_end
     Args:
+        file: audio file path/name the annotation corresponds to; clip_df is filtered to this file
         annotation_start: start time of the annotation
         annotation_end: end time of the annotation
         clip_df: dataframe with multi-index ['file', 'start_time', 'end_time']
@@ -1365,6 +1381,8 @@ def find_overlapping_idxs_in_clip_df(
          Returns:
         [(file, start_time, end_time)]) Multi-index values for the rows in the clip_df that overlap with the annotation_start and annotation_end.
     """
+    # filter to rows corresponding to this file
+    clip_df = clip_df.loc[clip_df.index.get_level_values(0) == file]
     # ignore all rows that start after the annotation ends. Start is level 1 of multi-index
     clip_df = clip_df.loc[clip_df.index.get_level_values(1) < annotation_end]
     # and all rows that end before the annotation starts. End is level 2 of multi-index

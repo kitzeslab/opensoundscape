@@ -88,6 +88,26 @@ model = CNN(architecture='resnet18', sample_duration=2, classes=class_list)
 model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
 ```
 
+## Train a custom classifier on BirdNET or Perch
+assumes you have train_df and validation_df: class label dfs, same as previous example
+```
+from opensoundscape.ml import bioacoustics_model_zoo as bmz
+
+# load a model from the model zoo
+model = bmz.load('BirdNET')
+# or model = bmz.load('Perch')
+
+# define classes for your custom classifier
+model.change_classes(train_df.columns)
+
+# fit the trainable PyTorch classifier (`model.network`) on your labels
+# (only trains a classification head, not the entire BirdNET model)
+model.train(train_df,validation_df,num_augmentation_variants=4)
+
+# run inference using your custom classifier
+model.predict(validation_df)
+```
+
 ## Train a CNN with labeled audio data (one label per audio file):
 ```python
 from opensoundscape import CNN

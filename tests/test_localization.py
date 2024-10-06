@@ -113,6 +113,7 @@ def test_soundfinder_localize_2d():
     estimate = localization_algorithms.soundfinder_localize(
         reciever_locations,
         arrival_times,
+        speed_of_sound=343,
     )
     assert close(np.linalg.norm(np.array(estimate[0:2]) - np.array([10, 10])), 0, 0.01)
 
@@ -123,6 +124,7 @@ def test_soundfinder_3d():
     estimate = localization_algorithms.soundfinder_localize(
         reciever_locations,
         arrival_times,
+        speed_of_sound=343,
     )
     assert close(
         np.linalg.norm(np.array(estimate[0:3]) - np.array([10, 10, 0])), 0, 0.1
@@ -135,7 +137,7 @@ def test_soundfinder_lstsq():
     arrival_times = [1, 1, 1, 1]
     with pytest.raises(NotImplementedError):
         estimate = localization_algorithms.soundfinder_localize(
-            reciever_locations, arrival_times, invert_alg="lstsq"
+            reciever_locations, arrival_times, invert_alg="lstsq", speed_of_sound=343
         )
     # assert close(
     #     np.linalg.norm(np.array(estimate[0:3]) - np.array([10, 10, 0])), 0, 0.1
@@ -149,6 +151,7 @@ def test_soundfinder_nocenter():
         reciever_locations,
         arrival_times,
         center=False,  # True for original Sound Finder behavior
+        speed_of_sound=343,
     )
     assert close(
         np.linalg.norm(np.array(estimate[0:3]) - np.array([110, 10, 0])), 0, 0.1
@@ -161,7 +164,9 @@ def test_gillette_localize_raises():
 
     # check this raises a ValueError because none of the arrival times are zero
     with pytest.raises(ValueError):
-        localization_algorithms.gillette_localize(reciever_locations, arrival_times)
+        localization_algorithms.gillette_localize(
+            reciever_locations, arrival_times, speed_of_sound=343
+        )
 
 
 def test_gillette_localize_2d():
@@ -174,7 +179,9 @@ def test_gillette_localize_2d():
     )
     tdoas = time_of_flight - np.min(time_of_flight)
 
-    estimated_pos = localization_algorithms.gillette_localize(receiver_locations, tdoas)
+    estimated_pos = localization_algorithms.gillette_localize(
+        receiver_locations, tdoas, speed_of_sound=speed_of_sound
+    )
 
     assert np.allclose(estimated_pos, sound_source, rtol=0.1)
 
@@ -194,7 +201,7 @@ def test_gillette_localize_3d():
         tdoas = time_of_flight - time_of_flight[ref_index]
 
         estimated_pos = localization_algorithms.gillette_localize(
-            receiver_locations, tdoas
+            receiver_locations, tdoas, speed_of_sound=speed_of_sound
         )
 
         assert np.allclose(estimated_pos, sound_source, atol=2.5)
@@ -209,6 +216,7 @@ def test_soundfinder_nopseudo():
         invert_alg="gps",  # options: 'lstsq', 'gps'
         center=True,  # True for original Sound Finder behavior
         pseudo=False,  # False for original Sound Finder
+        speed_of_sound=343,
     )
     assert close(
         np.linalg.norm(np.array(estimate[0:3]) - np.array([10, 10, 0])), 0, 0.1
@@ -230,7 +238,7 @@ def test_least_squares_optimize():
         tdoas = time_of_flight - time_of_flight[ref_index]
 
         estimated_pos = localization_algorithms.least_squares_localize(
-            receiver_locations, tdoas
+            receiver_locations, tdoas, speed_of_sound=speed_of_sound
         )
 
         assert np.allclose(estimated_pos, sound_source, atol=2.5)

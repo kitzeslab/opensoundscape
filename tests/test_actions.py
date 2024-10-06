@@ -11,6 +11,7 @@ from opensoundscape.sample import AudioSample
 from PIL import Image
 import torch
 from opensoundscape.spectrogram import Spectrogram
+from opensoundscape.preprocess.overlay import Overlay
 
 ## Fixtures: prepare objects that can be used by tests ##
 
@@ -306,9 +307,10 @@ def test_action_to_from_dict():
 
 
 def test_overlay_to_from_dict(sample_df):
-    action = actions.Overlay(overlay_df=sample_df, update_labels=True)
+    action = Overlay(overlay_df=sample_df, update_labels=True)
     d = action.to_dict()
-    action2 = actions.Overlay.from_dict(d)  # raises warning about not having overlay_df
+
+    action2 = Overlay.from_dict(d)  # raises warning about not having overlay_df
     # new action will have empty overlay_df and will be bypassed
     assert action2.bypass == True
     assert action2.overlay_df.empty

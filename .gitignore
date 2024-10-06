@@ -11,5 +11,7 @@ docs/tutorials/annotated_data
 .vscode
 docs/tutorials/wandb
 untracked/
-docs/tutorials/annotated_data
+docs/tutorials/rana_sierrae_2022
 lightning_logs/
+docs/tutorials/*.ckpt
+docs/tutorials/BirdNET*
