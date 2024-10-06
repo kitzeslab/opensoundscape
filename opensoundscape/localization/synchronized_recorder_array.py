@@ -77,7 +77,8 @@ class SynchronizedRecorderArray:
                 3d if columns are (x,y,z). When running .localize_detections() or .create_candidate_events(),
                 Each audio file in `detections` must have a corresponding
                 row in `file_coords` specifiying the location of the reciever that recorded the file.
-            speed_of_sound : float, optional. Speed of sound in meters per second. Default is 343.
+            speed_of_sound : float, optional. Speed of sound in meters per second.
+                Default: opensoundscape.localization.localization_algorithms.SPEED_OF_SOUND
         """
         self.file_coords = file_coords
         self.speed_of_sound = speed_of_sound
@@ -173,7 +174,7 @@ class SynchronizedRecorderArray:
                 Maximum absolute value of time delay estimated during cross correlation of two signals
                 For instance, 0.2 means that the maximal cross-correlation in the range of
                 delays between -0.2 to 0.2 seconds will be used to estimate the time delay.
-                if None (default), the max delay is set to max_receiver_dist / SPEED_OF_SOUND
+                if None (default), the max delay is set to max_receiver_dist / self.speed_of_sound
             min_n_receivers : int
                 Minimum number of receivers that must detect an event for it to be localized
                 [default: 3]
@@ -352,7 +353,7 @@ class SynchronizedRecorderArray:
             bandpass_ranges: dictionary of form {"class name": [low_f, high_f]} for audio bandpass filtering during
 
             max_delay: the maximum delay (in seconds) to consider between receivers for a single event
-                if None, defaults to max_receiver_dist / SPEED_OF_SOUND
+                if None, defaults to max_receiver_dist / self.speed_of_sound
         Returns:
             a list of SpatialEvent objects to attempt to localize
         """

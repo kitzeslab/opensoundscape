@@ -54,6 +54,8 @@ class SpatialEvent:
             cc_threshold: float. This acts as a minimum threshold for cross correlation. If the cross correlation at the estimated time delay is is below this value, the corresponding time delay is discarded and not used during localization.
                 NOTE: The scale of the cross correlation values depends on the cc_filter used.
                 default: None. Do not discard any time delays.
+            speed_of_sound: float, optional. Speed of sound in meters per second.
+                Default: opensoundscape.localization.localization_algorithms.SPEED_OF_SOUND
 
         Methods:
             estimate_location:
@@ -348,6 +350,7 @@ class SpatialEvent:
             receiver_locations=locations,
             tdoas=tdoas,
             algorithm=localization_algorithm,
+            speed_of_sound=self.speed_of_sound,
         )
 
         if self.location_estimate is not None:

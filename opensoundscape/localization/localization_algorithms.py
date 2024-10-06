@@ -74,7 +74,7 @@ def travel_time(source, receiver, speed_of_sound):
     return distance / speed_of_sound
 
 
-def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND):
+def localize(receiver_locations, tdoas, algorithm, speed_of_sound):
     """
     Perform TDOA localization on a sound event. If there are not enough receivers to localize the event, return None.
     Args:
@@ -109,9 +109,7 @@ def localize(receiver_locations, tdoas, algorithm, speed_of_sound=SPEED_OF_SOUND
     return estimate
 
 
-def least_squares_localize(
-    receiver_locations, arrival_times, speed_of_sound=SPEED_OF_SOUND
-):
+def least_squares_localize(receiver_locations, arrival_times, speed_of_sound):
     """
     Use a least squares optimizer to perform TDOA localization on a sound event, based on a set of TDOA times and receiver locations.
     Args:
@@ -165,7 +163,7 @@ def least_squares_localize(
 def soundfinder_localize(
     receiver_locations,
     arrival_times,
-    speed_of_sound=SPEED_OF_SOUND,
+    speed_of_sound,
     invert_alg="gps",  # options: 'gps'
     center=True,  # True for original Sound Finder behavior
     pseudo=True,  # False for original Sound Finder
@@ -347,7 +345,7 @@ def soundfinder_localize(
             return u1[0:-1]
 
 
-def gillette_localize(receiver_locations, arrival_times, speed_of_sound=SPEED_OF_SOUND):
+def gillette_localize(receiver_locations, arrival_times, speed_of_sound):
     """
     Uses the Gillette and Silverman [1] localization algorithm to localize a sound event from a set of TDOAs.
     Args:
