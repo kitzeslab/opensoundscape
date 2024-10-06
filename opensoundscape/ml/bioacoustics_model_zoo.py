@@ -14,7 +14,7 @@ def list_models(**kwargs):
 
     see also: load(model)
     """
-    tag = "0.11.0"  # in the future, might be based on opensoundscape.__version__
+    tag = "0.11.0.dev1"  # in the future, might be based on opensoundscape.__version__
     return torch.hub.list(
         f"kitzeslab/bioacoustics-model-zoo:{tag}", trust_repo=True, **kwargs
     )
@@ -45,10 +45,15 @@ def load(model, tag=None, **kwargs):
     (see https://github.com/kitzeslab/bioacoustics-model-zoo landing page for
     detailed instructions)
 
+    > Note on Error "module not found: bioacoustics_model_zoo" when using multiprocessing (num_workers>0):
+    if you get an error to this effect, please install the bioacoustics_model_zoo as a package in your python environment:
+    > `pip install git+https://github.com/kitzeslab/bioacoustics-model-zoo@0.11.0.dev1`
+    > as the torch.hub api seems to have trouble with multiprocessing for some model classes.
+
     """
     if tag is None:
         # in the future, might be based on opensoundscape.__version__
-        tag = "0.11.0"
+        tag = "0.11.0.dev1"
     return torch.hub.load(
         f"kitzeslab/bioacoustics-model-zoo:{tag}", model, trust_repo=True, **kwargs
     )
