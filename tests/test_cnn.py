@@ -28,9 +28,6 @@ from opensoundscape.ml.cam import CAM
 from opensoundscape.utils import make_clip_df
 
 
-# TODO add tests for training on clip df
-
-
 @pytest.fixture()
 def model_save_path(request):
     path = Path("tests/models/temp.model")
@@ -366,6 +363,14 @@ def test_predict_on_list_of_files(test_df):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     scores = model.predict(test_df.index.values)
     assert len(scores) == 2
+
+
+def test_predict_and_embed_on_df_with_file_index(train_df):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    scores = model.predict(train_df)
+    emb = model.embed(train_df)
+    assert len(scores) == 4
+    assert len(emb) == 4
 
 
 def test_predict_on_empty_list():
