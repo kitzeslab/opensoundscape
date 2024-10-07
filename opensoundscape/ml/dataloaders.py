@@ -75,10 +75,9 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
 
         if isinstance(samples, CategoricalLabels):
             # extract sparse multihot label df
-            # TODO: check if sparse labels cause issues anywhere
             samples = samples.mutihot_df_sparse
 
-        # TODO: setting these attributes seems to be necessary when using Lightning,
+        # setting these attributes seems to be necessary when using Lightning,
         # even though we don't need them as attributes in the DataLoader
         # this could be confusing because user should not modify dl.preprocessor,
         # it is used to initialize self.dataset only

@@ -139,8 +139,6 @@ class AudioFileDataset(torch.utils.data.Dataset):
             bypass_augmentations=bypass_augmentations,
         )
 
-    # TODO figure out what breaks when we use the sparse pandas df, and where to convert to dense
-
     def __len__(self):
         return self.label_df.shape[0]
 

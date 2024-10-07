@@ -814,6 +814,7 @@ class BoxedAnnotations:
         min_label_fraction=None,
         class_subset=None,
         return_type="multihot",
+        keep_duplicates=False,
         warn_no_annotations=False,
     ):
         """create a dataframe of clip labels based on given starts/ends.
@@ -870,6 +871,9 @@ class BoxedAnnotations:
                 'classes': returns a dataframe with 'labels' column containing lists of
                     class names for each clip
                 'CategoricalLabels': returns a CategoricalLabels object
+            keep_duplicates: [default: False] if True, allows multiple annotations
+                of a class to be retained for a single clip; e.g. labels ['a','a','b].
+                Ignored if return_type is 'multihot'
             warn_no_annotations: bool [default:False] if True, raises warnings for
                 any files in clip_df with no corresponding annotations in self.df
 
@@ -966,12 +970,19 @@ class BoxedAnnotations:
                     )
 
                     for idx in df_idxs:
+                        # add the string class name or integer class index to the appropriate rows' labels
+                        # if the class name is already in the list, don't add it again
+                        # unless keep_duplicates is True
                         if return_type == "classes":
-                            # add the string class name to the appropriate rows' labels
-                            output_df.at[idx, "labels"].append(class_name)
+                            if keep_duplicates or (
+                                class_name not in output_df.at[idx, "labels"]
+                            ):
+                                output_df.at[idx, "labels"].append(class_name)
                         else:
-                            # add this class's integer index to the appropriate rows' labels
-                            output_df.at[idx, "labels"].append(class_idx)
+                            if keep_duplicates or (
+                                class_idx not in output_df.at[idx, "labels"]
+                            ):
+                                output_df.at[idx, "labels"].append(class_idx)
 
             if return_type == "CategoricalLabels":
                 return CategoricalLabels.from_categorical_labels_df(
@@ -989,6 +1000,7 @@ class BoxedAnnotations:
         class_subset=None,
         audio_files=None,
         return_type="multihot",
+        keep_duplicates=False,
         **kwargs,
     ):
         """Generate one-hot labels for clips of fixed duration
@@ -1030,6 +1042,9 @@ class BoxedAnnotations:
                 'classes': returns a dataframe with 'labels' column containing lists of
                     class names for each clip
                 'CategoricalLabels': returns a CategoricalLabels object
+            keep_duplicates: [default: False] if True, allows multiple annotations
+                of a class to be retained for a single clip; e.g. labels ['a','a','b].
+                Ignored if return_type is 'multihot'.
             **kwargs (such as clip_step, final_clip) are passed to
                 opensoundscape.utils.generate_clip_times_df() via make_clip_df()
         Returns: depends on `return_type` argument
@@ -1095,9 +1110,8 @@ class BoxedAnnotations:
             min_label_overlap=min_label_overlap,
             min_label_fraction=min_label_fraction,
             return_type=return_type,
+            keep_duplicates=keep_duplicates,
         )
-
-        # TODO: add tests for all return types, only have 'multihot' now
 
     def convert_labels(self, conversion_table):
         """modify annotations according to a conversion table

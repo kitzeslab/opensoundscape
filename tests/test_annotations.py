@@ -129,19 +129,19 @@ def boxed_annotations_2_files():
 
 
 @pytest.fixture()
-def boxed_annotations_2_files():
+def boxed_annotations_double_ann():
     df = pd.DataFrame(
         data={
-            "audio_file": ["audio_file.wav"] * 2 + ["audio2.wav"],
-            "annotation_file": ["ann.txt"] * 2 + ["ann2.txt"],
-            "start_time": [0, 3, 4],
-            "end_time": [1, 5, 5],
-            "low_f": [0, 500, 1000],
-            "high_f": [100, 1200, 1500],
-            "annotation": ["a", "b", None],
+            "audio_file": ["audio_file.wav"] * 2,
+            "annotation_file": ["ann.txt"] * 2,
+            "start_time": [0, 1],
+            "end_time": [3, 2],
+            "low_f": [0, 500],
+            "high_f": [100, 1200],
+            "annotation": ["a", "a"],
         }
     )
-    return BoxedAnnotations(df)
+    return BoxedAnnotations(df, audio_files=["audio_file.wav"])
 
 
 @pytest.fixture()
@@ -508,6 +508,32 @@ def test_clip_labels_overlap_fraction(boxed_annotations):
         min_label_fraction=0.5,  # means that any clip with at least 50% overlap will be labeled
     )
     assert np.array_equal(labels.values, np.array([[1, 0, 0, 0, 0]]).transpose())
+
+
+def test_clip_labels_no_double_count(boxed_annotations_double_ann):
+    # test that labels are not double counted
+    labels = boxed_annotations_double_ann.clip_labels(
+        full_duration=10,
+        clip_duration=5.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=0,
+    )
+    assert np.array_equal(labels.values, np.array([[1, 0]]).transpose())
+
+
+def test_clip_labels_count_duplicate(boxed_annotations_double_ann):
+    # test that labels are included multiple times when keep_duplicates=True
+    labels, classes = boxed_annotations_double_ann.clip_labels(
+        full_duration=10,
+        clip_duration=5.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=0,
+        keep_duplicates=True,
+        return_type="classes",
+    )
+    assert labels["labels"].to_list() == [["a", "a"], []]
 
 
 def test_clip_labels_no_overlaps(boxed_annotations):
