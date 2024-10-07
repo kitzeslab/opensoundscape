@@ -789,7 +789,18 @@ def test_generate_cams_methods(test_df):
         _ = model.generate_cams(test_df, method=method_str)
 
 
-# TODO: should we test the default target layer doesn't cause errors for each architecture in cnn_architectures?
+def test_generate_cam_all_architectures(test_df):
+    for arch_name in cnn_architectures.ARCH_DICT.keys():
+        try:
+            arch = cnn_architectures.ARCH_DICT[arch_name](
+                num_classes=2, num_channels=1, weights=None
+            )
+            model = cnn.CNN(
+                architecture=arch, classes=[0, 1], sample_duration=5.0, channels=1
+            )
+            _ = model.generate_cams(test_df.head(1))
+        except Exception as e:
+            raise Exception(f"{arch_name} failed") from e
 
 
 def test_generate_cams_target_layers(test_df):
