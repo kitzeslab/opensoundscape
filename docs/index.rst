@@ -85,6 +85,7 @@ Suggested citation:
 
    installation/mac_and_linux.md
    installation/windows.md
+   installation/from_yml.md
    installation/jupyter.md
    installation/google_colab.md
    installation/contributors.md
