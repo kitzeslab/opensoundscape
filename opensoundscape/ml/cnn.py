@@ -211,7 +211,6 @@ class BaseModule:
         batch_size = len(batch_tensors)
 
         # automatic mixed precision
-        # TODO: add tests with self.use_amp=True
         # can get rid of if/else blocks and use enabled=true
         # once mps is supported https://github.com/pytorch/pytorch/pull/99272
 
@@ -290,7 +289,6 @@ class BaseModule:
                 batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
             )
             # when on_epoch=True, compute() is called to reset the metric at epoch end
-            # TODO: log this somehow when not in lightning_mode?
 
         return loss
 

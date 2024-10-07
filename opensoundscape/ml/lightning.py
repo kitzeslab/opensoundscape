@@ -178,6 +178,9 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
                 accelerator, precision, logger, accumulate_grad_batches, etc.
                 Note: the `max_epochs` kwarg is overridden by the `epochs` argument
 
+        Returns:
+            a trained pytorch_lightning.Trainer object
+
         Effects:
             If wandb_session is provided, logs progress and samples to Weights
             and Biases. A random set of training and validation samples
@@ -434,7 +437,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             num_workers=num_workers,
             raise_errors=raise_errors,
             **dataloader_kwargs,
-        )  # TODO: add test for kwargs
+        )
 
         # check for matching class list
         if len(dataloader.dataset.dataset.classes) > 0 and list(self.classes) != list(
@@ -444,6 +447,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
                 "The columns of input samples df differ from `model.classes`."
             )
 
+        # Could re-add logging samples to wandb table:
         # if wandb_session is not None:
         #     # update the run config with information about the model
         #     wandb_session.config.update(self._generate_wandb_config())
@@ -469,11 +473,10 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
 
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
-        # TODO: add test for kwargs
         trainer = L.Trainer(**lightning_trainer_kwargs)
         pred_scores = torch.vstack(trainer.predict(self, dataloader))
 
-        ### Apply activation layer ### #TODO: test speed vs. doing it in __call__ on batches
+        ### Apply activation layer ###
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
 
         # return DataFrame with same index/columns as prediction_dataset's df
