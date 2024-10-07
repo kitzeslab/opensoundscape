@@ -530,12 +530,6 @@ class Audio:
         assert isinstance(
             self.metadata["recording_start_time"], datetime.datetime
         ), "metadata['recording_start_time'] must be a datetime.datetime object"
-        assert isinstance(start_timestamp, datetime.datetime) and isinstance(
-            end_timestamp, datetime.datetime
-        ), "start_timestamp and end_timestamp must be localized datetime.datetime objects"
-        assert (
-            start_timestamp.tzinfo is not None and end_timestamp.tzinfo is not None
-        ), "start_timestamp and end_timestamp must be localized datetime.datetime objects, but tzinfo is None"
 
         # if duration is specified, calculate end_datetime by adding duration to start_datetime
         if duration is not None:
@@ -543,6 +537,13 @@ class Audio:
                 end_timestamp is None
             ), "do not specify both duration and end_datetime"
             end_timestamp = start_timestamp + datetime.timedelta(seconds=duration)
+
+        assert isinstance(start_timestamp, datetime.datetime) and isinstance(
+            end_timestamp, datetime.datetime
+        ), "start_timestamp and end_timestamp must be localized datetime.datetime objects"
+        assert (
+            start_timestamp.tzinfo is not None and end_timestamp.tzinfo is not None
+        ), "start_timestamp and end_timestamp must be localized datetime.datetime objects, but tzinfo is None"
 
         start_seconds = (
             start_timestamp - self.metadata["recording_start_time"]

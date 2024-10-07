@@ -419,6 +419,7 @@ def test_clip_labels_with_audio_file(
     boxed_annotations = BoxedAnnotations.from_raven_files(
         raven_files=[raven_file, raven_file_empty],
         audio_files=[audio_2min, audio_silence],
+        annotation_column="Species",
     )
     labels = boxed_annotations.clip_labels(
         full_duration=None, clip_duration=5, clip_overlap=0, min_label_overlap=0
@@ -982,17 +983,17 @@ def test_find_overlapping_idxs_in_clip_df(boxed_annotations):
     clip_df = clip_df.set_index(["audio_file", "start_time", "end_time"])
     # annotation overlaps with 1 time-window
     idxs = annotations.find_overlapping_idxs_in_clip_df(
-        0, 1, clip_df, min_label_overlap=0.25
+        "audio_file.wav", 0, 1, clip_df, min_label_overlap=0.25
     )
     assert len(idxs) == 1
     # annotation overlaps with 2 time-windows
     idxs = annotations.find_overlapping_idxs_in_clip_df(
-        0, 1.3, clip_df, min_label_overlap=0.25
+        "audio_file.wav", 0, 1.3, clip_df, min_label_overlap=0.25
     )
     assert len(idxs) == 2
     # annotation-overlaps with no time-windows
     idxs = annotations.find_overlapping_idxs_in_clip_df(
-        1000, 1001, clip_df, min_label_overlap=0.25
+        "audio_file.wav", 1000, 1001, clip_df, min_label_overlap=0.25
     )
     assert len(idxs) == 0
 
