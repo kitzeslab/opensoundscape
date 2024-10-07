@@ -231,15 +231,6 @@ class BaseModule:
         #     self.scaler.update()
         #     self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
 
-        # # compute and log any metrics in self.torch_metrics
-        # # TODO: consider using validation set names rather than integer index
-        # # (would have to store a set of names for the validation set)
-        # batch_metrics = {
-        #     f"train_{name}": metric.to(self.device)(
-        #         output.detach(), batch_labels.detach().int()
-        #     ).cpu()
-        #     for name, metric in self.torch_metrics.items()
-        # }
         # if self.use_amp is False, GradScaler with enabled=False should have no effect
         # TODO: use amp with mps once supported https://github.com/pytorch/pytorch/issues/88415
         if "mps" in str(self.device):
@@ -276,10 +267,6 @@ class BaseModule:
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-
-        # compute and log any metrics in self.torch_metrics
-        # TODO: consider using validation set names rather than integer index
-        # (would have to store a set of names for the validation set)
 
         # single-target torchmetrics expect labels as integer class indices rather than one-hot
         y = batch_labels.argmax(dim=1) if self.single_target else batch_labels
@@ -733,13 +720,14 @@ class SpectrogramModule(BaseModule):
                 "map": MulticlassAveragePrecision(
                     len(self.classes), validate_args=False, thresholds=50
                 ),
+                # .log() doesn't allow logging lists of values, so we don't
+                # log class-by-class metrics.
                 # "class_ap": MulticlassAveragePrecision(
                 #     len(self.classes),
                 #     validate_args=False,
                 #     average=None,
                 #     thresholds=50,
                 # ),
-                # TODO: .log() doesn't allow logging lists of values - how should we log per-class metrics?
                 "auroc": MulticlassAUROC(
                     len(self.classes),
                     validate_args=False,
@@ -747,7 +735,10 @@ class SpectrogramModule(BaseModule):
                     average="macro",
                 ),
                 # "class_auroc": MulticlassAUROC(
-                #     len(self.classes), validate_args=False, thresholds=50, average=None
+                #     len(self.classes),
+                #     validate_args=False,
+                #     average=None,
+                #     thresholds=50,
                 # ),
             }
             self.score_metric = "auroc"
@@ -1064,8 +1055,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             raise_errors=raise_errors,
             **kwargs,
         )
-        # TODO: could remove most of these and use kwargs,
-        # but might want to explicitly expose to user
 
         # check for matching class list
         if len(dataloader.dataset.dataset.classes) > 0 and list(self.classes) != list(
@@ -1101,7 +1090,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
-        # TODO: allow arbitrary **kwargs to be passed to __call__?
         pred_scores = self.__call__(
             dataloader=dataloader,
             wandb_session=wandb_session,
@@ -2003,7 +1991,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         ## INITIALIZE CAMS AND DATALOADER ##
         # move model to device
-        # TODO: choose cuda or not in pytorch_grad_cam methods
         self.network.to(self.device)
         self.network.eval()
 
@@ -2391,15 +2378,6 @@ class InceptionV3(SpectrogramClassifier):
         #     self.scaler.update()
         #     self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
 
-        # # compute and log any metrics in self.torch_metrics
-        # # TODO: consider using validation set names rather than integer index
-        # # (would have to store a set of names for the validation set)
-        # batch_metrics = {
-        #     f"train_{name}": metric.to(self.device)(
-        #         output.detach(), batch_labels.detach().int()
-        #     ).cpu()
-        #     for name, metric in self.torch_metrics.items()
-        # }
         # if self.use_amp is False, GradScaler with enabled=False should have no effect
         if "mps" in str(self.device):
             use_amp = False  # Not using amp: not implemented for mps as of 2024-07-11

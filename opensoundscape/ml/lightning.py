@@ -270,6 +270,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             num_workers=num_workers,
             raise_errors=raise_errors,
         )
+
         # TODO: enable multiple validation sets
         val_loader = self.predict_dataloader(
             samples=validation_df,
@@ -294,9 +295,12 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         else:
             kwargs["callbacks"] = [checkpoint_callback]
 
-        # Train
+        ## Train ##
+
+        # initialize lightning.Trainer with user args
         trainer = L.Trainer(**kwargs)
 
+        # train
         # if checkpoint_path is provided, resumes training from training state of checkpoint path
         trainer.fit(self, train_dataloader, val_loader, ckpt_path=checkpoint_path)
         print("Training complete")
