@@ -12,7 +12,7 @@ import concurrent.futures
 from opensoundscape import Audio
 from opensoundscape.localization.audiomoth_sync import (
     correct_sample_rate,
-    process_pps_file,
+    process_metadata,
 )
 
 ## parameters to modify ##
@@ -68,7 +68,7 @@ def sync_entire_folder(folder):
             pps_file = file.parent / str(file.stem + PPS_SUFFIX)
             assert pps_file.exists()
 
-            processed_pps_df = process_pps_file(
+            processed_pps_df = process_metadata(
                 pps_file, cpu_clock_counter_col=cpu_clock_counter_col
             )
 
