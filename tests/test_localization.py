@@ -7,6 +7,7 @@ import pytz
 
 from opensoundscape import localization
 from opensoundscape.localization import localization_algorithms
+from opensoundscape.audio import Audio
 
 
 @pytest.fixture()
@@ -22,6 +23,11 @@ def file_coords_csv():
 @pytest.fixture()
 def predictions_csv():
     return "tests/csvs/localizer_preds.csv"
+
+
+@pytest.fixture()
+def audiomoth_gps_files():
+    return ("tests/audio/audiomoth_gps.wav", "tests/audio/audiomoth_gps.csv")
 
 
 @pytest.fixture()
@@ -690,3 +696,18 @@ def test_df_to_positions(LOCA_2021_aru_coords, LOCA_2021_detections):
             event.location_estimate == recovered_positions[i].location_estimate
         ).all()
         assert (event.cc_maxs == recovered_positions[i].cc_maxs).all()
+
+
+def test_resample_audiomoth_file_with_pps(audiomoth_gps_files):
+    audio_file, pps_file = audiomoth_gps_files
+    # create correspondence between GPS timestamps and WAV file sample positions
+    pps = pd.read_csv(pps_file, index_col=0)
+    samples_timestamps = localization.audiomoth_sync.associate_pps_samples_timestamps(
+        pps
+    )
+
+    # Resample the audio second-by-second using the GPS timestamps to achieve nominal samping rate
+    resampled_audio = localization.audiomoth_sync.correct_sample_rate(
+        Audio.from_file(audio_file), samples_timestamps, desired_sr=48000
+    )
+    assert len(resampled_audio.samples) == 48000 * 2

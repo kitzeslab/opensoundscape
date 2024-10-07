@@ -7,23 +7,25 @@ interpolating from the original samples and using GPS timestamps.
 
 Example:
 ```python
-audio_file = '/path/to/20240801_103000.WAV'
-csv_file = '/path/to/20240801_103000.CSV'
+audio = Audio.from_file('/path/to/20240801_103000.WAV')
+pps_table = pps_table = pd.read_csv('/path/to/20240801_103000.CSV', index_col=0)
 
 # create correspondence between GPS timestamps and WAV file sample positions
-processed_pps_df = process_metadata(csv_file)
+sample_timestamp_table = associate_pps_samples_timestamps(csv_file)
 
 # Resample the audio second-by-second using the GPS timestamps to achieve nominal samping rate
 resampled_audio = correct_sample_rate(
-    Audio.from_file(audio_file), processed_pps_df, desired_sr=48000
+    audio, sample_timestamp_table, desired_sr=48000
 )
 
 # save
-processed_pps_df.to_csv('samples_and_timestamps.csv')
+sample_timestamp_table.to_csv('samples_and_timestamps.csv')
 resampled_audio.save('resampled_audio.wav')
 ```
 
 See also:` tutorials/audiomoth_sync.py` for an example of syncing an entire dataset
+
+NOTE: This module is in _beta_. Report issues to the opensoundscape GitHub repository.
 """
 
 import warnings
@@ -64,8 +66,8 @@ def parse_RMC_time_to_datetime(timestamp: str) -> datetime:
     return tz.localize(datetime.strptime(timestamp, stamp_format))
 
 
-def process_metadata(
-    path, expected_sr=48000, sr_tol=50, cpu_clock_counter_col="TIMER_COUNT"
+def associate_pps_samples_timestamps(
+    pps_table, expected_sr=48000, sr_tol=50, cpu_clock_counter_col="TIMER_COUNT"
 ) -> pd.DataFrame:
     """
     Using the CSV File from Audiomoth GPS firmware, creates a table aligning GPS_TIME_SEC values
@@ -113,7 +115,8 @@ def process_metadata(
     at the correct time.
 
     Args:
-        path: path to the .CSV metadata file written by AudioMoth GPS firmware
+        pps_table: dataframe containing the .CSV metadata file written by AudioMoth GPS firmware
+            Set first column as index, e.g. `pps_table = pd.read_csv(path, index_col=0)`.
             (one CSV file has PPS data for a one WAV audio file)
 
         expected_sr: expected sample rate of the input audio
@@ -130,7 +133,6 @@ def process_metadata(
 
         columns: ["PPS","SAMPLES_WRITTEN", "GPS_TIME_SEC", "GPS_TIME_STR", "CPU_CLOCK_COUNTER"]
     """
-    pps_table = pd.read_csv(path, index_col=0)
 
     samples_written = []
     gps_times_str = []
@@ -264,9 +266,10 @@ def process_metadata(
         # also save the cpu counter position in case higher precision sync is desired
         counter_positions.append(cpu_clock_counter)
 
-    print(
-        f"There were {len(pps_pings_with_no_RMC)} PPS pings without corresponding RMC data in {path}"
-    )
+    if len(pps_pings_with_no_RMC) > 0:
+        print(
+            f"{len(pps_pings_with_no_RMC)} PPS pings did not have corresponding RMC data"
+        )
 
     return pd.DataFrame(
         zip(
@@ -288,7 +291,7 @@ def process_metadata(
 
 def correct_sample_rate(
     audio,
-    processed_pps_df,
+    sample_timestamp_df,
     desired_sr,
     expected_sr=48000,
     interpolation_method="nearest",
@@ -307,9 +310,9 @@ def correct_sample_rate(
 
     Args:
         - audio: Audio objecte
-        - processed_pps_df: a dataframe of samples written to the wav file and the corresponding RMC
-          time.
-            2 columns:  SAMPLES_WRITTEN and RMC_TIME
+        - sample_timestamp_df: a dataframe of samples written to the wav file and the corresponding RMC
+          time, typically created with associate_pps_samples_timestamps()
+            must contain 2 required columns:  SAMPLES_WRITTEN and RMC_TIME
         - desired_sr:   the desired sample_rate for the files.
         - expected_sr: the expected sample rate of the input;
             gives warning if input sr differs by more than sr_warning_tolerance Hz on any interval
@@ -331,13 +334,13 @@ def correct_sample_rate(
 
     # We will resample the audio piece by piece, taking the samples recorded between each sequential
     # pair of accurate GPS timestamps and resampling to the nominal sampling rate
-    for i in processed_pps_df.index[1:]:
+    for i in sample_timestamp_df.index[1:]:
         # don't do first row - there are 0 samples written so far!
         # find start and stop sample indices in the WAV file taken between RMC_TIME of the previous and current row
         # the samples we want are [previous row SAMPLES WRITTEN, this row SAMPLES_WRITTEN)
         # ie [include, exclude); python's `list[a:b]` syntax provides the desired slice [a,b)
-        this_row = processed_pps_df.loc[i]
-        previous_row = processed_pps_df.loc[i - 1]
+        this_row = sample_timestamp_df.loc[i]
+        previous_row = sample_timestamp_df.loc[i - 1]
         end_sample_exclude = this_row["SAMPLES_WRITTEN"]
         start_sample = previous_row["SAMPLES_WRITTEN"]
 
@@ -373,7 +376,7 @@ def correct_sample_rate(
     # create new audio object with same metadata as the original
     new_audio = audio._spawn(samples=samples_out, sample_rate=desired_sr)
     # update the 'recording_start_time' in audio.metadata to the accurate timestamp
-    start_time = processed_pps_df.loc[0, "GPS_TIME_STR"]
+    start_time = sample_timestamp_df.loc[0, "GPS_TIME_STR"]
     if new_audio.metadata is None:
         new_audio.metadata = {}
     new_audio.metadata["recording_start_time"] = parse_RMC_time_to_datetime(start_time)
