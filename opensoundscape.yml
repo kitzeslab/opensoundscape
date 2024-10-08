@@ -1,4 +1,4 @@
-name: opso_dev
+name: opensoundscape_v0-11-0
 channels:
   - defaults
 dependencies:
