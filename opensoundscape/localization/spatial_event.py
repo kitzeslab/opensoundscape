@@ -160,6 +160,32 @@ class SpatialEvent:
                 localization_algorithm=localization_algorithm
             )
 
+    def _calculate_receiver_start_time_offsets(self):
+        """attempt to calculate starting position (second) from audio file to this event
+
+        uses self.start_timestamp and self.receiver_files, which should point to audio files
+        with localized start timestamps in the metadata field `recording_start_time`
+        (when parsed with audio.parse_metadata(path))
+
+        Effects:
+            sets self.receiver_start_time_offsets with the calculated values
+        """
+        event_start_timestamp = self.start_timestamp
+        if isinstance(event_start_timestamp, pd.Timestamp):
+            event_start_timestamp = event_start_timestamp.to_pydatetime()
+
+        # get the start timestamp for each audio file
+        file_start_timestamp = [
+            audio.parse_metadata(file)["recording_start_time"]
+            for file in self.receiver_files
+        ]
+
+        # then, calculate the offset from the event start time to each file's start time
+        self.receiver_start_time_offsets = [
+            (event_start_timestamp - receiver_start_timestamp).total_seconds()
+            for receiver_start_timestamp in file_start_timestamp
+        ]
+
     def _estimate_delays(self):
         """Hidden method to estimate time delay of event relative to receiver_files[0] with gcc
 
@@ -192,37 +218,22 @@ class SpatialEvent:
         extracted_clip_duration = self.duration + 2 * self.max_delay
 
         if self.receiver_start_time_offsets is None:
-            # use audio file metadata to determine correct starting positions within each file
             assert (
                 self.start_timestamp is not None
-            ), "must specify .receiver_start_time_offsets or .start_timestamp. Both were None."
-            start_timestamp = self.start_timestamp
-            if isinstance(start_timestamp, pd.Timestamp):
-                start_timestamp = start_timestamp.to_pydatetime()
+            ), "must set .receiver_start_time_offsets or .start_timestamp. Both were None."
+            # sets the .receiver_start_time_offsets using start_timestamp and receiver start times
+            self._calculate_receiver_start_time_offsets()
 
-            # we want to extract clips extending (max_delay) sec before and after the clip the CNN made the prediction on
-            extracted_clip_start_timestamp = start_timestamp - datetime.timedelta(
-                seconds=cast_np_to_native(self.max_delay)
-            )
-
-            # load audio from desired time period
-            reference_audio = Audio.from_file(
-                self.receiver_files[0],
-                start_timestamp=extracted_clip_start_timestamp,
-                duration=extracted_clip_duration,
-                # offset=self.start_time - self.max_delay,
-            )
-        else:
-            # load audio from desired time period
-            reference_audio = Audio.from_file(
-                self.receiver_files[0],
-                offset=self.receiver_start_time_offsets[0] - self.max_delay,
-                duration=extracted_clip_duration,
-            )
+        # load audio from desired time period
+        reference_audio = Audio.from_file(
+            self.receiver_files[0],
+            offset=self.receiver_start_time_offsets[0] - self.max_delay,
+            duration=extracted_clip_duration,
+        )
 
         # make sure the audio clip is of the desired length
-        # TODO: this will give errors for clips starting at 0s since we can't get earlier audio;
-        # should we do something about that?
+        # Note: this will give errors for clips starting at 0s since we can't get earlier audio;
+        # alternatively, we could pad the audio with zeros
         if not np.isclose(reference_audio.duration, extracted_clip_duration, atol=1e-3):
             # don't try to localize
             self.error_msg = "did not get audio clip of desired length"
@@ -251,20 +262,12 @@ class SpatialEvent:
                 cc_maxs.append(1)  # set first file's cc_max to 1
                 continue
 
-            if self.receiver_start_time_offsets is None:
-                # use audio file metadata to determine correct starting positions within each file
-                audio2 = Audio.from_file(
-                    file,
-                    start_timestamp=extracted_clip_start_timestamp,
-                    duration=extracted_clip_duration,
-                )
-            else:
-                # use specified time offsets to extract the correct audio segment
-                audio2 = Audio.from_file(
-                    file,
-                    offset=self.receiver_start_time_offsets[index] - self.max_delay,
-                    duration=extracted_clip_duration,
-                )
+            # use specified time offsets to extract the correct audio segment
+            audio2 = Audio.from_file(
+                file,
+                offset=self.receiver_start_time_offsets[index] - self.max_delay,
+                duration=extracted_clip_duration,
+            )
 
             # catch edge cases where the audio lengths do not match.
             if (

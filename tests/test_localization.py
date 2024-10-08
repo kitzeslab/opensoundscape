@@ -268,7 +268,7 @@ def test_localization_pipeline(file_coords_csv, predictions):
     file_coords = pd.read_csv(file_coords_csv, index_col=0)
 
     array = localization.SynchronizedRecorderArray(file_coords=file_coords)
-    localized_events, _ = array.localize_detections(
+    position_estimates, _ = array.localize_detections(
         detections=predictions,
         min_n_receivers=4,
         max_receiver_dist=100,
@@ -278,7 +278,13 @@ def test_localization_pipeline(file_coords_csv, predictions):
     # the audio files were generated according to the "true" event location:
     true_x = 10
     true_y = 15
-    assert len(localized_events) == 5
+    assert len(position_estimates) == 5
+
+    for position in position_estimates:
+        assert math.isclose(position.location_estimate[0], true_x, abs_tol=2)
+        assert math.isclose(position.location_estimate[1], true_y, abs_tol=2)
+
+    # test load_audio_segments, loading with 1s before and after the event start/end
 
     for event in localized_events:
         assert math.isclose(event.location_estimate[0], true_x, abs_tol=2)
