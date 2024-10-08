@@ -6,6 +6,8 @@ import datetime
 import pytz
 
 from opensoundscape import localization
+from opensoundscape.localization import localization_algorithms
+from opensoundscape.audio import Audio
 
 
 @pytest.fixture()
@@ -21,6 +23,11 @@ def file_coords_csv():
 @pytest.fixture()
 def predictions_csv():
     return "tests/csvs/localizer_preds.csv"
+
+
+@pytest.fixture()
+def audiomoth_gps_files():
+    return ("tests/audio/audiomoth_gps.wav", "tests/audio/audiomoth_gps.csv")
 
 
 @pytest.fixture()
@@ -83,31 +90,33 @@ def close(x, y, tol):
 
 
 def test_cal_speed_of_sound():
-    assert close(localization.calc_speed_of_sound(20), 343, 1)
+    assert close(localization_algorithms.calc_speed_of_sound(20), 343, 1)
 
 
 def test_lorentz_ip_3():
-    assert localization.lorentz_ip([1, 1, 2], [1, 1, 2]) == -2
+    assert localization_algorithms.lorentz_ip([1, 1, 2], [1, 1, 2]) == -2
 
 
 def test_lorentz_ip_4():
-    assert localization.lorentz_ip([1, 1, 1, 2], [1, 1, 1, 2]) == -1
+    assert localization_algorithms.lorentz_ip([1, 1, 1, 2], [1, 1, 1, 2]) == -1
 
 
 def test_lorentz_ip_self():
-    assert localization.lorentz_ip([1, 1, 1, 2]) == -1
+    assert localization_algorithms.lorentz_ip([1, 1, 1, 2]) == -1
 
 
 def test_travel_time():
     source = [0, 0, 0]
     receiver = [0, 0, 1]
-    assert close(localization.travel_time(source, receiver, 343), 1 / 343, 0.0001)
+    assert close(
+        localization_algorithms.travel_time(source, receiver, 343), 1 / 343, 0.0001
+    )
 
 
 def test_soundfinder_localize_2d():
     reciever_locations = [[0, 0], [0, 20], [20, 20], [20, 0]]
     arrival_times = [1, 1, 1, 1]
-    estimate = localization.soundfinder_localize(
+    estimate = localization_algorithms.soundfinder_localize(
         reciever_locations,
         arrival_times,
         speed_of_sound=343,
@@ -118,7 +127,7 @@ def test_soundfinder_localize_2d():
 def test_soundfinder_3d():
     reciever_locations = [[0, 0, 0], [0, 20, 1], [20, 20, -1], [20, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
-    estimate = localization.soundfinder_localize(
+    estimate = localization_algorithms.soundfinder_localize(
         reciever_locations,
         arrival_times,
         speed_of_sound=343,
@@ -133,7 +142,7 @@ def test_soundfinder_lstsq():
     reciever_locations = [[0, 0, 0], [0, 20, 1], [20, 20, -1], [20, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
     with pytest.raises(NotImplementedError):
-        estimate = localization.soundfinder_localize(
+        estimate = localization_algorithms.soundfinder_localize(
             reciever_locations, arrival_times, invert_alg="lstsq", speed_of_sound=343
         )
     # assert close(
@@ -144,7 +153,7 @@ def test_soundfinder_lstsq():
 def test_soundfinder_nocenter():
     reciever_locations = [[100, 0, 0], [100, 20, 1], [120, 20, -1], [120, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
-    estimate = localization.soundfinder_localize(
+    estimate = localization_algorithms.soundfinder_localize(
         reciever_locations,
         arrival_times,
         center=False,  # True for original Sound Finder behavior
@@ -161,7 +170,7 @@ def test_gillette_localize_raises():
 
     # check this raises a ValueError because none of the arrival times are zero
     with pytest.raises(ValueError):
-        localization.gillette_localize(
+        localization_algorithms.gillette_localize(
             reciever_locations, arrival_times, speed_of_sound=343
         )
 
@@ -176,7 +185,7 @@ def test_gillette_localize_2d():
     )
     tdoas = time_of_flight - np.min(time_of_flight)
 
-    estimated_pos = localization.gillette_localize(
+    estimated_pos = localization_algorithms.gillette_localize(
         receiver_locations, tdoas, speed_of_sound=speed_of_sound
     )
 
@@ -197,7 +206,7 @@ def test_gillette_localize_3d():
     for ref_index in range(len(time_of_flight)):
         tdoas = time_of_flight - time_of_flight[ref_index]
 
-        estimated_pos = localization.gillette_localize(
+        estimated_pos = localization_algorithms.gillette_localize(
             receiver_locations, tdoas, speed_of_sound=speed_of_sound
         )
 
@@ -207,7 +216,7 @@ def test_gillette_localize_3d():
 def test_soundfinder_nopseudo():
     reciever_locations = [[0, 0, 0], [0, 20, 1], [20, 20, -1], [20, 0, 0.1]]
     arrival_times = [1, 1, 1, 1]
-    estimate = localization.soundfinder_localize(
+    estimate = localization_algorithms.soundfinder_localize(
         reciever_locations,
         arrival_times,
         invert_alg="gps",  # options: 'lstsq', 'gps'
@@ -234,7 +243,7 @@ def test_least_squares_optimize():
     for ref_index in range(len(time_of_flight)):
         tdoas = time_of_flight - time_of_flight[ref_index]
 
-        estimated_pos = localization.least_squares_localize(
+        estimated_pos = localization_algorithms.least_squares_localize(
             receiver_locations, tdoas, speed_of_sound=speed_of_sound
         )
 
@@ -259,7 +268,7 @@ def test_localization_pipeline(file_coords_csv, predictions):
     file_coords = pd.read_csv(file_coords_csv, index_col=0)
 
     array = localization.SynchronizedRecorderArray(file_coords=file_coords)
-    localized_events, _ = array.localize_detections(
+    position_estimates, _ = array.localize_detections(
         detections=predictions,
         min_n_receivers=4,
         max_receiver_dist=100,
@@ -269,11 +278,22 @@ def test_localization_pipeline(file_coords_csv, predictions):
     # the audio files were generated according to the "true" event location:
     true_x = 10
     true_y = 15
-    assert len(localized_events) == 5
+    assert len(position_estimates) == 5
 
-    for event in localized_events:
-        assert math.isclose(event.location_estimate[0], true_x, abs_tol=2)
-        assert math.isclose(event.location_estimate[1], true_y, abs_tol=2)
+    for position in position_estimates:
+        assert math.isclose(position.location_estimate[0], true_x, abs_tol=2)
+        assert math.isclose(position.location_estimate[1], true_y, abs_tol=2)
+
+    # test load_audio_segments, loading with 1s before and after the event start/end
+
+    with pytest.warns(UserWarning):  # warning for extending beyond edges of audio
+        audio_list = position_estimates[0].load_aligned_audio_segments(
+            start_offset=1, end_offset=1
+        )
+    assert len(audio_list) == 5
+    # event is 1s long, so we should have 3s total (slightly less for others
+    # due to tdoa offsets and extending beyond file edges)
+    assert np.isclose(audio_list[0].duration, 3, atol=1e-5)
 
 
 def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detections):
@@ -607,10 +627,53 @@ def test_spatial_event_to_from_dict(LOCA_2021_aru_coords):
     assert event.cc_filter == new_event.cc_filter
 
 
-def test_df_to_events(LOCA_2021_aru_coords, LOCA_2021_detections):
-    # test that a dataframe of detections can be converted to a list of SpatialEvents
+def test_position_estimate_to_from_dict():
+    # test that a PositionEstimate can be serialized to a dictionary and then re-instantiated
+    position_estimate = localization.PositionEstimate(
+        location_estimate=np.array([10, 15]),
+        start_timestamp=datetime.datetime(
+            2021, 9, 24, 6, 52, 0, 200_000, tzinfo=pytz.UTC
+        ),
+        class_name="zeep",
+        receiver_files=np.array(["file1", "file2"]),
+        tdoas=np.array([0, 0.0325]),
+        cc_maxs=np.array([1, 0.8]),
+        receiver_locations=np.array([[0, 0], [0, 20]]),
+        receiver_start_time_offsets=np.array([0.2, 0.2]),
+        duration=0.3,
+        distance_residuals=np.array([0.1, 0.2]),
+    )
+
+    position_estimate_dict = position_estimate.to_dict()
+    assert isinstance(position_estimate_dict, dict)
+
+    new_position_estimate = localization.PositionEstimate.from_dict(
+        position_estimate_dict
+    )
+
+    for attr in [
+        "location_estimate",
+        "start_timestamp",
+        "class_name",
+        "receiver_files",
+        "tdoas",
+        "cc_maxs",
+        "receiver_locations",
+        "receiver_start_time_offsets",
+        "duration",
+        "distance_residuals",
+    ]:
+        val = getattr(position_estimate, attr)
+        if isinstance(val, np.ndarray):
+            assert np.array_equal(val, getattr(new_position_estimate, attr))
+        else:
+            assert val == getattr(new_position_estimate, attr)
+
+
+def test_df_to_positions(LOCA_2021_aru_coords, LOCA_2021_detections):
+    # test that a dataframe of detections can be converted to a list of PositionEstimates
     array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
-    events = array.localize_detections(
+    positions = array.localize_detections(
         detections=LOCA_2021_detections,
         localization_algorithm="gillette",
         cc_filter="phat",
@@ -618,30 +681,44 @@ def test_df_to_events(LOCA_2021_aru_coords, LOCA_2021_detections):
         max_receiver_dist=30,
         min_n_receivers=4,
     )
-    df = localization.events_to_df(events)
+    df = localization.position_estimate.positions_to_df(positions)
     assert isinstance(df, pd.DataFrame)
 
     # try to recover the events
-    recovered_events = localization.df_to_events(df)
+    recovered_positions = localization.position_estimate.df_to_positions(df)
 
-    for i, event in enumerate(events):
-        assert event.start_timestamp == recovered_events[i].start_timestamp
+    for i, event in enumerate(positions):
+        assert event.start_timestamp == recovered_positions[i].start_timestamp
         assert (
             event.receiver_start_time_offsets
-            == recovered_events[i].receiver_start_time_offsets
+            == recovered_positions[i].receiver_start_time_offsets
         ).all()
-        assert event.receiver_files == recovered_events[i].receiver_files
+        assert (event.receiver_files == recovered_positions[i].receiver_files).all()
         # compare equality of two arrays that can contain nan
         assert np.array_equal(
             event.receiver_locations,
-            recovered_events[i].receiver_locations,
+            recovered_positions[i].receiver_locations,
             equal_nan=True,
         )
-        assert event.max_delay == recovered_events[i].max_delay
-        assert event.duration == recovered_events[i].duration
-        assert event.class_name == recovered_events[i].class_name
-        assert event.bandpass_range == recovered_events[i].bandpass_range
-        assert event.cc_filter == recovered_events[i].cc_filter
-        assert (event.tdoas == recovered_events[i].tdoas).all()
-        assert (event.location_estimate == recovered_events[i].location_estimate).all()
-        assert (event.cc_maxs == recovered_events[i].cc_maxs).all()
+        assert event.duration == recovered_positions[i].duration
+        assert event.class_name == recovered_positions[i].class_name
+        assert (event.tdoas == recovered_positions[i].tdoas).all()
+        assert (
+            event.location_estimate == recovered_positions[i].location_estimate
+        ).all()
+        assert (event.cc_maxs == recovered_positions[i].cc_maxs).all()
+
+
+def test_resample_audiomoth_file_with_pps(audiomoth_gps_files):
+    audio_file, pps_file = audiomoth_gps_files
+    # create correspondence between GPS timestamps and WAV file sample positions
+    pps = pd.read_csv(pps_file, index_col=0)
+    samples_timestamps = localization.audiomoth_sync.associate_pps_samples_timestamps(
+        pps
+    )
+
+    # Resample the audio second-by-second using the GPS timestamps to achieve nominal samping rate
+    resampled_audio = localization.audiomoth_sync.correct_sample_rate(
+        Audio.from_file(audio_file), samples_timestamps, desired_sr=48000
+    )
+    assert len(resampled_audio.samples) == 48000 * 2

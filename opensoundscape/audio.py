@@ -245,10 +245,10 @@ class Audio:
                 is not full contained within the audio file
                 Example of creating localized timestamp:
                 ```
-                import pytz; from datetime import datetime;
+                {import pytz; from datetime import datetime;
                 local_timestamp = datetime(2020,12,25,23,59,59)
                 local_timezone = pytz.timezone('US/Eastern')
-                timestamp = local_timezone.localize(local_timestamp)
+                timestamp = local_timezone.localize(local_timestamp)}
                 ```
             out_of_bounds_mode:
                 - 'warn': generate a warning [default]
@@ -491,7 +491,11 @@ class Audio:
         )
 
     def trim_with_timestamps(
-        self, start_timestamp, end_timestamp, out_of_bounds_mode="warn"
+        self,
+        start_timestamp,
+        end_timestamp=None,
+        duration=None,
+        out_of_bounds_mode="warn",
     ):
         """Trim Audio object by localized datetime.datetime timestamps
 
@@ -499,7 +503,11 @@ class Audio:
 
         Args:
             start_timestamp: localized datetime.datetime object for start of extracted clip
+                e.g. datetime(2020,4,4,10,25,15,tzinfo=pytz.UTC)
             end_timestamp: localized datetime.datetime object for end of extracted clip
+                e.g. datetime(2020,4,4,10,25,20,tzinfo=pytz.UTC)
+            duration: duration in seconds of the extracted clip
+                - specify exactly one of duration or end_datetime
             out_of_bounds_mode: behavior if requested time period is not fully contained
                 within the audio file. Options:
                 - 'ignore': return any available audio with no warning/error [default]
@@ -510,6 +518,10 @@ class Audio:
             a new Audio object containing samples from start_timestamp to end_timestamp
             - metadata is updated to reflect new start time and duration
         """
+        # user must past either end_datetime or duration
+        if end_timestamp is None and duration is None:
+            raise ValueError("Must specify either end_datetime or duration")
+
         if "recording_start_time" not in self.metadata:
             raise ValueError(
                 "metadata must contain 'recording_start_time' to use trim_with_timestamps"
@@ -518,6 +530,14 @@ class Audio:
         assert isinstance(
             self.metadata["recording_start_time"], datetime.datetime
         ), "metadata['recording_start_time'] must be a datetime.datetime object"
+
+        # if duration is specified, calculate end_datetime by adding duration to start_datetime
+        if duration is not None:
+            assert (
+                end_timestamp is None
+            ), "do not specify both duration and end_datetime"
+            end_timestamp = start_timestamp + datetime.timedelta(seconds=duration)
+
         assert isinstance(start_timestamp, datetime.datetime) and isinstance(
             end_timestamp, datetime.datetime
         ), "start_timestamp and end_timestamp must be localized datetime.datetime objects"
@@ -525,14 +545,16 @@ class Audio:
             start_timestamp.tzinfo is not None and end_timestamp.tzinfo is not None
         ), "start_timestamp and end_timestamp must be localized datetime.datetime objects, but tzinfo is None"
 
-        start_time = (
+        start_seconds = (
             start_timestamp - self.metadata["recording_start_time"]
         ).total_seconds()
-        end_time = (
+        end_seconds = (
             end_timestamp - self.metadata["recording_start_time"]
         ).total_seconds()
 
-        return self.trim(start_time, end_time, out_of_bounds_mode=out_of_bounds_mode)
+        return self.trim(
+            start_seconds, end_seconds, out_of_bounds_mode=out_of_bounds_mode
+        )
 
     def loop(self, length=None, n=None):
         """Extend audio file by looping it

@@ -432,6 +432,59 @@ def test_trim_updates_metadata(metadata_wav_str):
     assert a2.metadata["duration"] == 1
 
 
+def test_trim_with_timestamps_metadata(metadata_wav_str):
+    a = Audio.from_file(metadata_wav_str)
+    start_time = a.metadata["recording_start_time"]
+    a2 = a.trim_with_timestamps(
+        start_time + datetime.timedelta(seconds=1),
+        start_time + datetime.timedelta(seconds=2),
+    )
+    assert a2.metadata["recording_start_time"] == start_time + datetime.timedelta(
+        seconds=1
+    )
+    assert a2.metadata["duration"] == 1
+    assert a2.duration == 1
+
+    # repeat with `duration` argument:
+    a3 = a.trim_with_timestamps(start_time + datetime.timedelta(seconds=1), duration=1)
+    assert a3.metadata["recording_start_time"] == start_time + datetime.timedelta(
+        seconds=1
+    )
+    assert a3.metadata["duration"] == 1
+    assert a3.duration == 1
+
+
+def test_trim_with_timestamps_raises_error_if_tz_is_not_localized(metadata_wav_str):
+    # check that it raises error if tz is not localized
+    a = Audio.from_file(metadata_wav_str)
+    with pytest.raises(AssertionError):
+        a.trim_with_timestamps(
+            datetime.datetime.now(), duration=1, out_of_bounds_mode="ignore"
+        )
+
+
+def test_trim_timestamps_raises_out_of_bounds_error(metadata_wav_str):
+    # raises error if requested time is out of bounds and out_of_bounds_error is True
+    a = Audio.from_file(metadata_wav_str)
+    start_time = a.metadata["recording_start_time"]
+    with pytest.raises(AudioOutOfBoundsError):
+        # start too early
+        a.trim_with_timestamps(
+            start_time - datetime.timedelta(seconds=3),
+            duration=1,
+            out_of_bounds_mode="raise",
+        )
+    with pytest.raises(AudioOutOfBoundsError):
+        # end too late
+        a.trim_with_timestamps(start_time, duration=1000, out_of_bounds_mode="raise")
+    # no error if out_of_bounds_error is False
+    a.trim_with_timestamps(
+        start_time - datetime.timedelta(seconds=3),
+        duration=1000,
+        out_of_bounds_mode="ignore",
+    )
+
+
 def test_trim_from_negative_time(silence_10s_mp3_str):
     """correct behavior is to trim from time zero"""
     audio = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
