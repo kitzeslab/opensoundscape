@@ -520,7 +520,7 @@ class BoxedAnnotations:
         # make list of unique files, while retaining order
         # we will create one selection table for each file
         # this list may contain NaN, which we handle below
-        unique_files = [] if audio_files is None else list(dict.fromkeys(audio_files))
+        unique_files = [] if audio_files is None else unique(audio_files)
 
         # If file names are not unique, raise an Exception
         # otherwise, multiple selection table files with the same name would be
@@ -1072,7 +1072,8 @@ class BoxedAnnotations:
             else:
                 audio_files = self.audio_files
 
-        audio_files = list(set(audio_files))  # remove duplicates
+        # make unique list, retain order
+        audio_files = unique(audio_files)
 
         # generate list of start and end times for each clip
         # if user passes None for full_duration, try to get the duration from each audio file
@@ -1238,7 +1239,7 @@ def categorical_to_multi_hot(labels, classes=None, sparse=False):
         class_subset: list of classes corresponding to columns in the array
     """
     if classes is None:
-        classes = list(set(itertools.chain(*labels)))
+        classes = unique(itertools.chain(*labels))  # retain order
 
     label_idx_dict = {l: i for i, l in enumerate(classes)}
     vals = []
@@ -1472,10 +1473,9 @@ class CategoricalLabels:
             multihot_df_dense: dense dataframe of multi-hot labels
         """
         # labels can be list of lists of class names or list of lists of integer class indices
-        if (
-            classes is None
-        ):  # if classes are not provided, infer them from unique set of labels
-            classes = list(set(chain(*labels)))
+        # if classes are not provided, infer them from unique set of labels
+        if classes is None:
+            classes = unique(chain(*labels))
         self.classes = list(classes)
         # convert from lists of string class names to lists of integer class indices
         if (
@@ -1601,3 +1601,8 @@ class CategoricalLabels:
             list(zip(self.df["file"], self.df["start_time"], self.df["end_time"])),
             names=["file", "start_time", "end_time"],
         )
+
+
+def unique(list):
+    """return unique elements of a list, retaining order"""
+    return list(dict.fromkeys(list))
