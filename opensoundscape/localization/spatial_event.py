@@ -486,3 +486,18 @@ def calculate_tdoa_residuals(
 
     # convert residuals from units of time (s) to distance (m) via speed of sound
     return time_residuals * speed_of_sound
+
+
+def localize_events_parallel(events, num_workers, localization_algorithm):
+
+    # perform gcc to estimate relative time of arrival at each receiver
+    # estimate locations of sound event using time delays and receiver locations
+    # this calls estimate_delays under the hood
+    from joblib import Parallel, delayed
+
+    # parallelize the localization of each event across cpus
+    # return list of PositionEstimate objects
+    return Parallel(n_jobs=num_workers)(
+        delayed(e.estimate_location)(localization_algorithm=localization_algorithm)
+        for e in events
+    )
