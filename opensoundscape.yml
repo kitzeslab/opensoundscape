@@ -163,7 +163,7 @@ dependencies:
       - onnx==1.16.2
       - onnxscript==0.1.0.dev20240823
       - opencv-python==4.10.0.84
-      - opensoundscape==0.10.2
+      - opensoundscape==0.11.0
       - overrides==7.7.0
       - packaging==24.1
       - pandas==2.2.2
