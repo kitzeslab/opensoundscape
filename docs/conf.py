@@ -11,10 +11,10 @@
 import os
 import sys
 
-# local import for linking to GitHub source code
-from sphinx_linkcode import make_linkcode_resolve
-
 sys.path.insert(0, os.path.abspath("../"))
+
+# local import for linking to GitHub source code
+from docs.sphinx_linkcode import make_linkcode_resolve
 
 
 # -- Project information -----------------------------------------------------
@@ -113,6 +113,8 @@ autodoc_mock_imports = [
     "PIL",
     "tqdm",
     "noisereduce",
+    "torchmetrics",
+    "lightning",
 ]
 
 master_doc = "index"
