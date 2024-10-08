@@ -112,6 +112,7 @@ autodoc_mock_imports = [
     "pillow",
     "PIL",
     "tqdm",
+    "noisereduce",
 ]
 
 master_doc = "index"
