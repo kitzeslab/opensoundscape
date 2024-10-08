@@ -1603,6 +1603,6 @@ class CategoricalLabels:
         )
 
 
-def unique(list):
+def unique(x):
     """return unique elements of a list, retaining order"""
-    return list(dict.fromkeys(list))
+    return list(dict.fromkeys(x))
