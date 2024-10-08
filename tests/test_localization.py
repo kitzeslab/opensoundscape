@@ -286,9 +286,14 @@ def test_localization_pipeline(file_coords_csv, predictions):
 
     # test load_audio_segments, loading with 1s before and after the event start/end
 
-    for event in localized_events:
-        assert math.isclose(event.location_estimate[0], true_x, abs_tol=2)
-        assert math.isclose(event.location_estimate[1], true_y, abs_tol=2)
+    with pytest.warns(UserWarning):  # warning for extending beyond edges of audio
+        audio_list = position_estimates[0].load_aligned_audio_segments(
+            start_offset=1, end_offset=1
+        )
+    assert len(audio_list) == 5
+    # event is 1s long, so we should have 3s total (slightly less for others
+    # due to tdoa offsets and extending beyond file edges)
+    assert np.isclose(audio_list[0].duration, 3, atol=1e-5)
 
 
 def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detections):

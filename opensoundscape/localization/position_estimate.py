@@ -62,6 +62,7 @@ class PositionEstimate:
     def from_dict(cls, dictionary):
         """Recover PositionEstimate from dictionary, eg loaded from json"""
         array_keys = (
+            "receiver_files",
             "receiver_locations",
             "tdoas",
             "cc_maxs",
@@ -84,6 +85,48 @@ class PositionEstimate:
             if isinstance(d[key], pd.Timestamp):
                 d[key] = str(d[key])
         return d
+
+    def load_aligned_audio_segments(self, start_offset=0, end_offset=0):
+        """Load audio segments from each receiver at start times offset by tdoas
+
+        This is useful for checking for correct alignment: the sound source should be aligned across
+        all receivers if the tdoas (time differences of arrival) are correct.
+
+        Note: requires self.receiver_start_time_offsets to determine starting position for each file
+
+        Args:
+            start_offset: float, amount of time before start of event to include in audio segment
+            end_offset: float, amount of time after end of event to include in audio segment
+
+        Returns:
+            list of Audio objects, one for each receiver
+
+        Example:
+
+        ```python
+        low_f = 1000 # Hz
+        high_f = 5000 # Hz
+        all_audio = position_estimate.load_aligned_audio_segments()
+        all_audio[0].show_widget()
+        all_specs= [Spectrogram.from_audio(a).bandpass(low_f,high_f) for a in all_audio]
+        [s.plot() for s in all_specs]
+        ```
+        """
+        from opensoundscape.audio import Audio
+
+        all_audio = []
+        for i, audio_path in enumerate(self.receiver_files):
+            start = self.receiver_start_time_offsets[i] + self.tdoas[i] - start_offset
+            all_audio.append(
+                Audio.from_file(
+                    audio_path,
+                    offset=start,
+                    duration=self.duration + start_offset + end_offset,
+                    out_of_bounds_mode="warn",
+                )
+            )
+
+        return all_audio
 
 
 def positions_to_df(list_of_events):
