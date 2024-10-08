@@ -36,16 +36,15 @@ def numpy_dtype_constructor(loader, node):
 
 # Create custom loader and dumper classes
 class CustomYamlLoader(yaml.Loader):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_constructor("!numpy_dtype", numpy_dtype_constructor)
 
 
 class CustomYamlDumper(yaml.Dumper):
-    pass
-
-
-# Register the custom representer and constructor with the custom classes
-CustomYamlDumper.add_representer(np.dtype, numpy_dtype_representer)
-CustomYamlLoader.add_constructor("!numpy_dtype", numpy_dtype_constructor)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_representer(np.dtype, numpy_dtype_representer)
 
 
 class NumpyTypeEncoder(json.JSONEncoder):
