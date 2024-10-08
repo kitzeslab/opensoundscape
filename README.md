@@ -9,8 +9,9 @@ OpenSoundscape includes utilities which can be strung together to create data an
 
 * load and manipulate audio files
 * create and manipulate spectrograms
-* train convolutional neural networks (CNNs) on spectrograms with PyTorch
+* train deep learning models to recognize sounds
 * run pre-trained CNNs to detect vocalizations
+* tune pre-trained CNNs to custom classification tasks
 * detect periodic vocalizations with RIBBIT
 * load and manipulate Raven annotations
 * estimate the location of sound sources from synchronized recordings
@@ -49,7 +50,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 
 #### How do I install OpenSoundscape?
 
-* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.10.2`. 
+* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.11.0`. 
 * To use OpenSoundscape in Jupyter Notebooks (e.g. for tutorials), follow the installation instructions for your operating system, then follow the "Jupyter" instructions.
 * Contributors and advanced users can also use Poetry to install OpenSoundscape using the "Contributor" instructions
 
@@ -61,7 +62,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 * Most computer cluster users should follow the Linux installation instructions
 
 
-### Use Audio and Spectrogram classes
+### Use Audio and Spectrogram classes to inspect audio data
 ```python
 from opensoundscape import Audio, Spectrogram
 
@@ -85,7 +86,27 @@ path = '/path/to/audiomoth_file.WAV' #an AudioMoth recording
 Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 ```
 
-### Use a pre-trained CNN to make predictions on long audio files
+### Load and use a model from the Bioacoustics Model Zoo
+The [Bioacoustics Model Zoo](https://github.com/kitzeslab/bioacoustics-model-zoo) hosts models in a respository that can be accessed via `torch.hub` and are compatible with OpenSoundscape. Load up a model and apply it to your own audio right away:
+
+```python
+from opensoundscape.ml import bioacoustics_model_zoo as bmz
+
+#list available models
+print(bmz.list_models())
+
+#generate class predictions and embedding vectors with Perch
+perch = bmz.load("Perch")
+scores = perch.predict(files)
+embeddings = perch.generate_embeddings(files)
+
+#...or BirdNET
+birdnet = bmz.load("BirdNET")
+scores = birdnet.predict(files)
+embeddings = birdnet.generate_embeddings(files)
+```
+
+### Load a pre-trained CNN from a local file, and make predictions on long audio files
 ```python
 from opensoundscape import load_model
 
@@ -113,7 +134,7 @@ all_annotations = BoxedAnnotations.from_raven_files(raven_file_paths,audio_file_
 class_list = ['IBWO','BLJA']
 
 # create labels for fixed-duration (2 second) clips 
-labels = all_annotations.one_hot_clip_labels(
+labels = all_annotations.clip_labels(
   cip_duration=2,
   clip_overlap=0,
   min_label_overlap=0.25,
@@ -125,20 +146,25 @@ train_df, validation_df = train_test_split(labels, test_size=0.3)
 
 # create a CNN and train on the labeled data
 model = CNN(architecture='resnet18', sample_duration=2, classes=class_list)
+
+# train the model to recognize the classes of interest in audio data
 model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
 ```
 
-### Train a CNN with labeled audio data (one label per audio file):
+### Train a custom classifier on BirdNET or Perch embeddings
+
 ```python
-from opensoundscape import CNN
-from sklearn.model_selection import train_test_split
+from opensoundscape.ml import bioacoustics_model_zoo as bmz
 
-#load a DataFrame of one-hot audio clip labels
-df = pd.read_csv('my_labels.csv') #index: paths; columns: classes
-train_df, validation_df = train_test_split(df,test_size=0.2)
+# load a model from the model zoo
+model = bmz.load('BirdNET') #or bmz.load('Perch')
 
-#create a CNN and train on 2-second spectrograms for 20 epochs
-model = CNN('resnet18', classes=df.columns, sample_duration=2.0)
-model.train(train_df, validation_df, epochs=20)
-#the best model is automatically saved to a file `./best.model`
+# define classes for your custom classifier
+model.change_classes(train_df.columns)
+
+# fit the trainable PyTorch classifier on your labels
+model.train(train_df,val_df,num_augmentation_variants=4,batch_size=64)
+
+# run inference using your custom classifier on audio data
+model.predict(audio_files)
 ```

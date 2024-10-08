@@ -224,9 +224,9 @@ def test_gcc():
     a[start:end] = 3  # impulse
     a += np.random.rand(1000)  # add noise
     b = np.zeros(1000)
-    b[
-        start - delay : end - delay
-    ] = 3  # signal b is identical to a, but delayed by delay samples
+    b[start - delay : end - delay] = (
+        3  # signal b is identical to a, but delayed by delay samples
+    )
     b += np.random.rand(1000)  # add noise
 
     for cc_filter in ["cc", "phat", "roth", "scot", "ht"]:

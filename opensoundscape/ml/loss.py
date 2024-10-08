@@ -1,5 +1,6 @@
 """loss function classes to use with opensoundscape models
 """
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,11 +15,11 @@ class BCEWithLogitsLoss_hot(nn.BCEWithLogitsLoss):
     """
 
     def __init__(self, **kwargs):
-        super(BCEWithLogitsLoss_hot, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     def forward(self, x, target):
         target = target.float()
-        return super(BCEWithLogitsLoss_hot, self).forward(x, target)
+        return super().forward(x, target)
 
 
 class CrossEntropyLoss_hot(nn.CrossEntropyLoss):
@@ -32,13 +33,13 @@ class CrossEntropyLoss_hot(nn.CrossEntropyLoss):
     """
 
     def __init__(self, **kwargs):
-        super(CrossEntropyLoss_hot, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     def forward(self, x, target):
         if not (target.sum(1).all() and target.sum(1).max() == 1):
             raise ValueError("labels must be single-target for CrossEntropyLoss")
         target = target.argmax(1)
-        return super(CrossEntropyLoss_hot, self).forward(x, target)
+        return super().forward(x, target)
 
 
 def reduce_loss(loss, reduction):
@@ -112,7 +113,7 @@ def binary_cross_entropy(pred, label, weight=None, reduction="mean", avg_factor=
 
 class ResampleLoss(nn.Module):
     def __init__(self, class_freq, reduction="mean", loss_weight=1.0):
-        super(ResampleLoss, self).__init__()
+        super().__init__()
 
         self.loss_weight = loss_weight
         self.reduction = reduction

@@ -9,7 +9,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 
 ### How do I install OpenSoundscape?
 
-* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.10.2`. 
+* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.11.0. 
 * To use OpenSoundscape in Jupyter Notebooks (e.g. for tutorials), follow the installation instructions for your operating system, then follow the "Jupyter" instructions.
 * Contributors and advanced users can also use Poetry to install OpenSoundscape using the "Contributor" instructions
 
@@ -73,7 +73,7 @@ all_annotations = BoxedAnnotations.from_raven_files(raven_file_paths,audio_file_
 class_list = ['IBWO','BLJA']
 
 # create labels for fixed-duration (2 second) clips 
-labels = all_annotations.one_hot_clip_labels(
+labels = all_annotations.clip_labels(
   cip_duration=2,
   clip_overlap=0,
   min_label_overlap=0.25,
@@ -86,6 +86,26 @@ train_df, validation_df = train_test_split(labels, test_size=0.3)
 # create a CNN and train on the labeled data
 model = CNN(architecture='resnet18', sample_duration=2, classes=class_list)
 model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
+```
+
+## Train a custom classifier on BirdNET or Perch
+assumes you have train_df and validation_df: class label dfs, same as previous example
+```
+from opensoundscape.ml import bioacoustics_model_zoo as bmz
+
+# load a model from the model zoo
+model = bmz.load('BirdNET')
+# or model = bmz.load('Perch')
+
+# define classes for your custom classifier
+model.change_classes(train_df.columns)
+
+# fit the trainable PyTorch classifier (`model.network`) on your labels
+# (only trains a classification head, not the entire BirdNET model)
+model.train(train_df,validation_df,num_augmentation_variants=4)
+
+# run inference using your custom classifier
+model.predict(validation_df)
 ```
 
 ## Train a CNN with labeled audio data (one label per audio file):

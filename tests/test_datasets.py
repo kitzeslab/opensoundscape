@@ -1,10 +1,14 @@
 import pytest
 import numpy as np
 import pandas as pd
-from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
+from opensoundscape.preprocess.preprocessors import (
+    SpectrogramPreprocessor,
+    AudioPreprocessor,
+)
 from opensoundscape.preprocess.utils import PreprocessingError
 import warnings
 from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
+from opensoundscape.ml import datasets
 
 
 @pytest.fixture()
@@ -76,8 +80,10 @@ def test_audio_file_dataset(dataset_df, pre):
 
 
 def test_audio_file_dataset_no_reshape(dataset_df, pre):
-    """should return tensor and labels. Tensor is the same as the shape of the spectrogram"""
+    """should return tensor and labels. Tensor is the same as the shape of the spectrogram if height and width are None"""
     pre.bypass_augmentation = False
+    pre.height = None
+    pre.width = None
     dataset = AudioFileDataset(dataset_df, pre)
     sample1 = dataset[0]
     # should be the same shape as
@@ -219,8 +225,36 @@ def test_audio_splitting_dataset(dataset_df, pre):
 
 
 def test_audio_splitting_dataset_overlap(dataset_df, pre):
-    dataset = AudioSplittingDataset(dataset_df, pre, overlap_fraction=0.5)
+    dataset = AudioSplittingDataset(dataset_df, pre, clip_overlap_fraction=0.5)
     assert len(dataset) == 18
 
     # load a sample
     dataset[17]
+
+
+def test_audio_splitting_dataset_overlap_rounding(dataset_df):
+    audio_pre = AudioPreprocessor(sample_duration=2.0, sample_rate=48000)
+    # issue #945 some overlap fractions like .1 caused rounding errors
+    # modified AudioSample.from_series to round duration
+    dataset = AudioSplittingDataset(
+        dataset_df, audio_pre, clip_overlap_fraction=0.1, final_clip=None
+    )
+    for x in dataset:
+        assert len(x.data.samples) == 48000 * 2
+
+    # old behavior, not extending or trimming clips, produces incorrect lengths:
+    # we don't necessarily need this to fail, but confirms that this test is actually
+    # testing a case where it would fail if the fix was not implemented
+    audio_pre.pipeline.trim_audio.bypass = True
+    with pytest.raises(AssertionError):
+        dataset = AudioSplittingDataset(
+            dataset_df, audio_pre, clip_overlap_fraction=0.1, final_clip=None
+        )
+        for x in dataset:
+            assert len(x.data.samples) == 48000 * 2
+
+
+def test_get_item_with_list_index_raises_error(dataset_df, pre):
+    dataset = AudioFileDataset(dataset_df, pre)
+    with pytest.raises(datasets.InvalidIndexError):
+        dataset[[0, 1]]

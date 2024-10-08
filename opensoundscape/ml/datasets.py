@@ -1,4 +1,5 @@
 """Preprocessors: pd.Series child with an action sequence & forward method"""
+
 import warnings
 import copy
 from pathlib import Path
@@ -9,6 +10,10 @@ import torch
 
 from opensoundscape.utils import make_clip_df
 from opensoundscape.sample import AudioSample
+
+
+class InvalidIndexError(Exception):
+    pass
 
 
 class AudioFileDataset(torch.utils.data.Dataset):
@@ -52,7 +57,11 @@ class AudioFileDataset(torch.utils.data.Dataset):
         ## Input Validation ##
 
         # validate type of samples: list, np array, or df
-        assert type(samples) in (list, np.ndarray, pd.DataFrame,), (
+        assert type(samples) in (
+            list,
+            np.ndarray,
+            pd.DataFrame,
+        ), (
             f"samples must be type list/np.ndarray of file paths, "
             f"or pd.DataFrame with index containing path (or multi-index of "
             f"path, start_time, end_time). Got {type(samples)}."
@@ -93,10 +102,54 @@ class AudioFileDataset(torch.utils.data.Dataset):
         # if True skips Actions with .is_augmentation=True
         self.bypass_augmentations = bypass_augmentations
 
+    @classmethod
+    def from_categorical_df(
+        cls, categorical_labels, preprocessor, class_list, bypass_augmentations=False
+    ):
+        """Create AudioFileDataset from a DataFrame with a column listing categorical labels
+
+        e.g. where df['labels'] = [['a','b'], [], ['a','c']]
+
+        Args:
+            categorical_labels: DataFrame with index (file) or (file, start_time, end_time) and 'label'
+                column containing lists of labels or integers corresponding to class names
+            preprocessor: Preprocessor object
+            bypass_augmentations: if True, skip augmentations with .is_augmentation=True
+
+        Returns:
+            AudioFileDataset object
+        """
+        from opensoundscape.annotations import (
+            categorical_to_multi_hot,
+            multi_hot_to_categorical,
+        )
+
+        multihot_labels_sp = categorical_to_multi_hot(
+            categorical_labels["labels"], class_list, sparse=True
+        )
+        sparse_df = pd.DataFrame.sparse.from_spmatrix(
+            multihot_labels_sp,
+            index=categorical_labels.index,
+            columns=categorical_labels.columns,
+        )
+
+        return cls(
+            samples=sparse_df,
+            preprocessor=preprocessor,
+            bypass_augmentations=bypass_augmentations,
+        )
+
     def __len__(self):
         return self.label_df.shape[0]
 
     def __getitem__(self, idx, break_on_key=None, break_on_type=None):
+        if not isinstance(idx, int):
+            raise InvalidIndexError(
+                f"idx must be an integer, got {type(idx)}. "
+                f"This could happen if you specified a custom sampler that results in returning "
+                "lists of indices rather than a single index. AudioFiledataset.__getitem__ "
+                "requires that idx is a single integer index."
+            )
         sample = AudioSample.from_series(self.label_df.iloc[idx])
 
         # preprocessor.forward will raise PreprocessingError if something fails
@@ -161,13 +214,12 @@ class AudioSplittingDataset(AudioFileDataset):
     automatically split longer files into clips (providing only the file paths).
 
     Args:
-        see AudioFileDataset and make_clip_df
+        samples and preprocessor are passed to AudioFileDataset.__init__
+        **kwargs are passed to opensoundscape.utils.make_clip_df
     """
 
-    def __init__(self, samples, preprocessor, overlap_fraction=0, final_clip=None):
-        super(AudioSplittingDataset, self).__init__(
-            samples=samples, preprocessor=preprocessor
-        )
+    def __init__(self, samples, preprocessor, **kwargs):
+        super().__init__(samples=samples, preprocessor=preprocessor)
 
         self.has_clips = True
 
@@ -177,7 +229,6 @@ class AudioSplittingDataset(AudioFileDataset):
         self.label_df, self.invalid_samples = make_clip_df(
             files=samples,
             clip_duration=preprocessor.sample_duration,
-            clip_overlap=overlap_fraction * preprocessor.sample_duration,
-            final_clip=final_clip,
             return_invalid_samples=True,
+            **kwargs,
         )

@@ -85,6 +85,7 @@ Suggested citation:
 
    installation/mac_and_linux.md
    installation/windows.md
+   installation/from_yml.md
    installation/jupyter.md
    installation/google_colab.md
    installation/contributors.md
@@ -98,10 +99,13 @@ Suggested citation:
    tutorials/audio
    tutorials/spectrogram
    tutorials/annotations
-   tutorials/preprocess_audio_dataset
-   tutorials/train_cnn
-   tutorials/customize_cnn_training
    tutorials/predict_with_cnn
+   tutorials/train_cnn
+   tutorials/transfer_learning
+   tutorials/training_birdnet_and_perch
+   tutorials/training_with_lightning
+   tutorials/customize_cnn_training
+   tutorials/preprocess_audio_dataset
    tutorials/acoustic_localization
    tutorials/signal_processing
 
@@ -119,11 +123,11 @@ Suggested citation:
    classifier_guide/retrain_cnn
    
 .. toctree::
-   :maxdepth: 1
-   :hidden:
-   :caption: Codebase Documentation
+   :maxdepth: 4
+   :caption: API Documentation
 
-   api/modules
+   source/opensoundscape
+
 
 
 .. toctree::

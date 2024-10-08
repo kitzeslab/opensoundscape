@@ -10,3 +10,11 @@ docs/tutorials/woodcock_labeled_data
 docs/tutorials/annotated_data
 .vscode
 docs/tutorials/wandb
+untracked/
+docs/tutorials/rana_sierrae_2022
+lightning_logs/
+docs/tutorials/*.ckpt
+docs/tutorials/BirdNET*
+docs/tutorials/*.WAV
+docs/tutorials/*.csv
+

@@ -28,7 +28,7 @@ def test_freeze_params():
 
 
 def test_resnet18():
-    arch = cnn_architectures.resnet18(0, weights="DEFAULT")
+    arch = cnn_architectures.resnet18(num_classes=2, weights="DEFAULT")
     assert isinstance(arch, torch.nn.Module)
 
 

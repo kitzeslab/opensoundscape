@@ -11,10 +11,10 @@
 import os
 import sys
 
-# local import for linking to GitHub source code
-from sphinx_linkcode import make_linkcode_resolve
-
 sys.path.insert(0, os.path.abspath("../"))
+
+# local import for linking to GitHub source code
+from docs.sphinx_linkcode import make_linkcode_resolve
 
 
 # -- Project information -----------------------------------------------------
@@ -24,7 +24,7 @@ copyright = "2024 Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilna
 author = "Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilnani, Alexandra Syunkova, Leonardo Viotti, Santiago Ruiz Guzman, Justin Kitzes"
 
 # The full version, including alpha/beta/rc tags
-release = "0.10.2"
+release = "0.11.0"
 
 
 # -- General configuration ---------------------------------------------------
@@ -107,10 +107,14 @@ autodoc_mock_imports = [
     "wandb",
     "pytorch_grad_cam",
     "aru_metadata_parser",
+    "crowsetta",
     "pytz",
     "pillow",
     "PIL",
     "tqdm",
+    "noisereduce",
+    "torchmetrics",
+    "lightning",
 ]
 
 master_doc = "index"
