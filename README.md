@@ -9,8 +9,9 @@ OpenSoundscape includes utilities which can be strung together to create data an
 
 * load and manipulate audio files
 * create and manipulate spectrograms
-* train convolutional neural networks (CNNs) on spectrograms with PyTorch
+* train deep learning models to recognize sounds
 * run pre-trained CNNs to detect vocalizations
+* tune pre-trained CNNs to custom classification tasks
 * detect periodic vocalizations with RIBBIT
 * load and manipulate Raven annotations
 * estimate the location of sound sources from synchronized recordings
@@ -148,4 +149,22 @@ model = CNN(architecture='resnet18', sample_duration=2, classes=class_list)
 
 # train the model to recognize the classes of interest in audio data
 model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
+```
+
+### Train a custom classifier on BirdNET or Perch embeddings
+
+```python
+from opensoundscape.ml import bioacoustics_model_zoo as bmz
+
+# load a model from the model zoo
+model = bmz.load('BirdNET') #or bmz.load('Perch')
+
+# define classes for your custom classifier
+model.change_classes(train_df.columns)
+
+# fit the trainable PyTorch classifier on your labels
+model.train(train_df,val_df,num_augmentation_variants=4,batch_size=64)
+
+# run inference using your custom classifier on audio data
+model.predict(audio_files)
 ```
