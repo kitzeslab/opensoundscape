@@ -103,6 +103,7 @@ Suggested citation:
    tutorials/train_cnn
    tutorials/transfer_learning
    tutorials/training_birdnet_and_perch
+   tutorials/training_with_lightning
    tutorials/customize_cnn_training
    tutorials/preprocess_audio_dataset
    tutorials/acoustic_localization
@@ -122,11 +123,11 @@ Suggested citation:
    classifier_guide/retrain_cnn
    
 .. toctree::
-   :maxdepth: 1
-   :hidden:
-   :caption: Codebase Documentation
+   :maxdepth: 4
+   :caption: API Documentation
 
-   api/modules
+   source/opensoundscape
+
 
 
 .. toctree::
