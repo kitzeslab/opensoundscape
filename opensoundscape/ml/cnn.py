@@ -157,6 +157,7 @@ class BaseModule:
                 "momentum": 0.9,
                 "weight_decay": 0.0005,
             },
+            "classifier_lr": None,  # optionally specify different lr for classifier layer
         }
         """optimizer settings: dictionary with "class" and "kwargs" to class.__init__
         
@@ -349,6 +350,35 @@ class BaseModule:
         optimizer = self.optimizer_params["class"](
             self.network.parameters(), **self.optimizer_params["kwargs"].copy()
         )
+
+        if self.optimizer_params["classifier_lr"] is not None:
+            # customize the learning rate of the classifier layer
+            try:
+                classifier_params = list(self.classifier.parameters())
+                # for some reason, I get tensor mismatch if I check whether
+                # parameters are in list. Instead, compare the objects' ids.
+                # see https://discuss.pytorch.org/t/confused-by-runtimeerror-when-checking-for-parameter-in-list/211308
+                classifier_param_ids = {id(p) for p in classifier_params}
+            except Exception as e:
+                raise ValueError(
+                    "Could not access self.classifier.parameters(). "
+                    "Make sure self.classifier propoerty returns a torch.nn.Module object."
+                ) from e
+            # remove these parameters from their current group
+            for param_group in optimizer.param_groups:
+                param_group["params"] = [
+                    p
+                    for p in param_group["params"]
+                    if id(p) not in classifier_param_ids
+                ]
+
+            # add them to a new group with custom learning rate
+            optimizer.add_param_group(
+                {
+                    "params": classifier_params,
+                    "lr": self.optimizer_params["classifier_lr"],
+                }
+            )
 
         if hasattr(self, "optimizer") and self.optimizer is not None:
             # load the state dict of the previously existing optimizer,

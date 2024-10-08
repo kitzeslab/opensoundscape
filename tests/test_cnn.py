@@ -181,6 +181,24 @@ def test_train_on_clip_df(train_df_clips):
     shutil.rmtree("tests/models/")
 
 
+def test_classifier_custom_lr(train_df):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model.optimizer_params["kwargs"]["lr"] = 0.001
+    model.optimizer_params["classifier_lr"] = 0.02
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models",
+        epochs=0,
+    )
+    assert model.optimizer.param_groups[0]["lr"] == 0.001
+    assert next(model.network.parameters()) in model.optimizer.param_groups[0]["params"]
+    assert model.optimizer.param_groups[1]["lr"] == 0.02
+    assert (
+        next(model.classifier.parameters()) in model.optimizer.param_groups[1]["params"]
+    )
+
+
 def test_reset_or_keep_optimizer_and_scheduler(train_df):
     import copy
     from opensoundscape.utils import set_seed
