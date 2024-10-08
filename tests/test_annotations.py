@@ -430,11 +430,9 @@ def test_clip_labels_with_audio_file(
     assert labels.head(0).sum().sum() == 0
     # check for correct clip labels
     assert np.array_equal(
-        labels.head(6).values,
+        labels.head(4).values,
         np.array(
             [
-                [False, False, False],
-                [False, False, False],
                 [True, True, False],
                 [True, True, False],
                 [True, True, True],
@@ -442,8 +440,8 @@ def test_clip_labels_with_audio_file(
             ]
         ),
     )
-    # no labels after 20 seconds in 2 min audio
-    assert labels.tail(-6).sum().sum() == 0
+    # no labels after 20 seconds in 2 min audio or in empty audio
+    assert labels.tail(-4).sum().sum() == 0
 
 
 def test_clip_labels(boxed_annotations):

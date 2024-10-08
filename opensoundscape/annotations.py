@@ -517,9 +517,10 @@ class BoxedAnnotations:
                     """
                 )
 
+        # make list of unique files, while retaining order
         # we will create one selection table for each file
         # this list may contain NaN, which we handle below
-        unique_files = list(set(audio_files))
+        unique_files = [] if audio_files is None else list(dict.fromkeys(audio_files))
 
         # If file names are not unique, raise an Exception
         # otherwise, multiple selection table files with the same name would be
