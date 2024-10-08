@@ -106,10 +106,9 @@ class PositionEstimate:
         ```python
         low_f = 1000 # Hz
         high_f = 5000 # Hz
-        all_audio = position_estimate.load_aligned_audio_segments()
-        all_audio[0].show_widget()
-        all_specs= [Spectrogram.from_audio(a).bandpass(low_f,high_f) for a in all_audio]
-        [s.plot() for s in all_specs]
+        audio_segments = example.load_aligned_audio_segments()
+        specs = [Spectrogram.from_audio(a).bandpass(low_f,high_f) for a in audio_segments]
+        plt.pcolormesh(np.vstack([s.spectrogram for s in specs]),cmap='Greys')
         ```
         """
         from opensoundscape.audio import Audio
