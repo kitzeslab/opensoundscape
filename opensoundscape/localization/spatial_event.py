@@ -330,9 +330,7 @@ class SpatialEvent:
         # only keep receivers that have a cc_max above the cc_threshold
         tdoas = tdoas[self.cc_maxs > self.cc_threshold]
         locations = locations[self.cc_maxs > self.cc_threshold]
-        receiver_files = receiver_files[
-            self.cc_maxs > self.cc_threshold
-        ]  # fails if receiver_files is not a np.array
+        receiver_files = receiver_files[self.cc_maxs > self.cc_threshold]
 
         # If there aren't enough receivers, don't attempt localization.
         if len(tdoas) < self.min_n_receivers:
@@ -346,8 +344,9 @@ class SpatialEvent:
             speed_of_sound=self.speed_of_sound,
         )
 
+        # Store the distance residuals (only for the receivers used) in PositionEstimate
+        distance_residuals = None
         if location_estimate is not None:
-            # Store the distance residuals (only for the receivers used) as an attribute
             distance_residuals = calculate_tdoa_residuals(
                 receiver_locations=locations,
                 tdoas=tdoas,
