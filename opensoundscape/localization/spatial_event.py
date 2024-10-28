@@ -202,7 +202,7 @@ class SpatialEvent:
                 If None, defaults to self.max_delay
             bandpass_range: bandpass audio to [low, high] frequencies in Hz before
                 cross correlation
-                If None, defaults to self.bandpass_range=
+                If None, defaults to self.bandpass_range
 
         Returns:
             list of time delays, list of max cross correlation values
@@ -241,12 +241,6 @@ class SpatialEvent:
             self.cc_maxs = None
             return None, None
 
-        # bandpass once now to avoid repeating operation for each receiver
-        if self.bandpass_range is not None:
-            reference_audio = reference_audio.bandpass(
-                low_f=self.bandpass_range[0], high_f=self.bandpass_range[1], order=9
-            )
-
         # estimate time difference of arrival (tdoa) for each file relative to the first
         # skip the first because we don't need to cross correlate a file with itself
         tdoas = []
@@ -270,19 +264,17 @@ class SpatialEvent:
             )
 
             # catch edge cases where the audio lengths do not match.
-            if (
-                abs(len(audio2.samples) - len(reference_audio.samples)) > 1
-            ):  # allow for 1 sample difference
+            # allow for 1 sample difference
+            if abs(len(audio2.samples) - len(reference_audio.samples)) > 1:
                 bad_receivers_index.append(index)
             else:
                 tdoa, cc_max = audio.estimate_delay(
                     primary_audio=audio2,
                     reference_audio=reference_audio,
                     max_delay=self.max_delay,
-                    bandpass_range=self.bandpass_range,
+                    frequency_range=self.bandpass_range,
                     cc_filter=self.cc_filter,
                     return_cc_max=True,
-                    skip_ref_bandpass=True,
                 )
                 tdoas.append(tdoa)
                 cc_maxs.append(cc_max)
