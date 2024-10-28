@@ -457,13 +457,22 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
     return np.array(starts) / sample_rate, np.array(lengths) / sample_rate
 
 
-def gcc(x, y, cc_filter="phat", epsilon=0.001):
+def gcc(
+    x,
+    y,
+    cc_filter="phat",
+    frequency_range=None,
+    sample_rate=None,
+    epsilon=0.001,
+):
     """
     Generalized cross correlation of two signals
 
-    Computes a generalized cross correlation in frequency response.
+    Computes a generalized cross correlation in frequency space.
 
-    The generalized cross correlation algorithm described in Knapp and Carter [1].
+    This implementation also allows restricting the frequency range considered by GCC.
+
+    The generalized cross correlation algorithm is described in Knapp and Carter [1].
 
     In the case of cc_filter='cc', gcc simplifies to cross correlation and is equivalent to
     scipy.signal.correlate and numpy.correlate.
@@ -480,6 +489,13 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
             'ht' - Hannan and Thomson
             'cc' - normal cross correlation with no filter
             'cc_norm' - normal cross correlation normalized by the length and amplitude of the signal
+        frequency_range: tuple of (low, high) frequencies to keep in the GCC.
+            If None, all frequencies are kept.
+            first or second value can be None if no lower or upper limit is desired
+            Note: retaining high frequencies near the Nyquist frequency sometimes results
+                in spurious cross correlation values at 0 or at the beginning/end of the signal
+                when using 'phat' and 'scot' methods.
+        sample_rate: sample rate of the signals. Required if using frequency_range.
         epsilon: small value used to ensure denominator when applying a filter is non-zero.
 
     Returns:
@@ -511,6 +527,26 @@ def gcc(x, y, cc_filter="phat", epsilon=0.001):
     # Take the real Fast Fourier Transform of the signals
     X = torch.fft.rfft(x, n=n_fast)
     Y = torch.fft.rfft(y, n=n_fast)
+
+    # remove frequency content outside range of interest here
+    # freqs = dict(fft_freqs:indices)
+    if frequency_range is not None:
+        assert sample_rate is not None, "must pass sample_rate to use bandpass_range"
+        freqs = torch.fft.rfftfreq(n_fast, 1 / sample_rate)
+        if frequency_range[0] is not None:
+            # find index of fft closest to lower frequency bound
+            low_f_idx = torch.argmin(torch.abs(freqs - frequency_range[0]))
+            # remove frequency content _below_ this index, not including it
+            X[0:low_f_idx] = 0
+        if frequency_range[1] is not None:
+            # find index of fft closest to upper frequency bound
+            high_f_index = (
+                None
+                if frequency_range[1] is None
+                else torch.argmin(torch.abs(freqs - frequency_range[1]))
+            )
+            # remove frequency content _above_ this index, not including it
+            X[high_f_index + 1 :] = 0
 
     # multiply one by the complex conjugate of the other
     Gxy = X * torch.conj(Y)

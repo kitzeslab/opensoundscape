@@ -223,10 +223,9 @@ def test_gcc():
     a = np.zeros(1000)
     a[start:end] = 3  # impulse
     a += np.random.rand(1000)  # add noise
+    # signal b is identical to a, but delayed by `delay` samples
     b = np.zeros(1000)
-    b[start - delay : end - delay] = (
-        3  # signal b is identical to a, but delayed by delay samples
-    )
+    b[start - delay : end - delay] = 3
     b += np.random.rand(1000)  # add noise
 
     for cc_filter in ["cc", "phat", "roth", "scot", "ht"]:
@@ -235,6 +234,12 @@ def test_gcc():
         gccs = sp.gcc(a, b, cc_filter=cc_filter)
         # assert that the argmax is the correct delay
         lags = scipy.signal.correlation_lags(len(a), len(b))
+        assert lags[np.argmax(gccs)] == delay
+
+        # repeat with frequency range argument
+        gccs = sp.gcc(
+            a, b, cc_filter=cc_filter, frequency_range=(100, 3000), sample_rate=5000
+        )
         assert lags[np.argmax(gccs)] == delay
 
 
