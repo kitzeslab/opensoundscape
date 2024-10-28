@@ -600,6 +600,7 @@ def tdoa(
     cc_filter="phat",
     sample_rate=1,
     return_max=False,
+    frequency_range=None,
 ):
     """Estimate time difference of arrival between two signals
 
@@ -616,14 +617,20 @@ def tdoa(
         signal: np.array or list object containing the signal of interest
         reference_signal: np.array or list containing the reference signal. Both audio recordings must be time-synchronized.
         max_delay: maximum possible tdoa (seconds) between the two signals. Cannot be longer than 1/2 the duration of the signal.
-        The tdoa returned will be between -max_delay and +max_delay.
-        cc_filter: see gcc()
-        sample_rate: sample rate (Hz) of signals; both signals must have same sample rate
-        return_max: if True, returns the maximum value of the generalized cross correlation
-
+            The tdoa returned will be between -max_delay and +max_delay.
             For example, if max_delay=0.5, the tdoa returned will be the delay between -0.5 and +0.5 seconds, that maximizes the cross-correlation.
             This is useful if you know the maximum possible delay between the two signals, and want to ignore any tdoas outside of that range.
             e.g. if receivers are 100m apart, and the speed of sound is 340m/s, then the maximum possible delay is 0.294 seconds.
+        cc_filter: see gcc()
+        sample_rate: sample rate (Hz) of signals; both signals must have same sample rate
+        return_max: if True, returns the maximum value of the generalized cross correlation
+        frequency_range: tuple of (low, high) frequencies in Hz to keep in the GCC.
+            If None, all frequencies are kept.
+            first or second value can be None if no lower or upper limit is desired
+            Note: retaining high frequencies near the Nyquist frequency sometimes results
+                in spurious cross correlation values at 0 or at the beginning/end of the signal
+                when using 'phat' and 'scot' methods.
+
     Returns:
         estimated delay from reference signal to signal, in seconds
         (note that default samping rate is 1.0 samples/second)
@@ -652,7 +659,13 @@ def tdoa(
     signal = signal[start:end]
 
     # compute the generalized cross correlation between the signals
-    cc = gcc(signal, reference_signal, cc_filter=cc_filter)
+    cc = gcc(
+        signal,
+        reference_signal,
+        cc_filter=cc_filter,
+        frequency_range=frequency_range,
+        sample_rate=sample_rate,
+    )
 
     # filter to only the 'valid' part of the cross correlation, where the signals overlap fully
     cc = cc[len(signal) - 1 : -len(signal) + 1]
@@ -663,7 +676,6 @@ def tdoa(
 
     # convert lag to time delay
     tdoa = (lag / sample_rate) - max_delay
-    max_cc = np.max(cc)
 
     if return_max:
         return tdoa, np.max(cc)

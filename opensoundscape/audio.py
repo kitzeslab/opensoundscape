@@ -1258,11 +1258,9 @@ def estimate_delay(
     primary_audio,
     reference_audio,
     max_delay,
-    bandpass_range=None,
-    bandpass_order=9,
+    frequency_range=None,
     cc_filter="phat",
     return_cc_max=False,
-    skip_ref_bandpass=False,
 ):
     """
     Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal. The audio objects must be time-synchronized.
@@ -1276,15 +1274,16 @@ def estimate_delay(
         reference_audio: audio object containing the reference signal.
         max_delay: maximum time delay to consider, in seconds. Must be less than the duration of the primary audio.
             (see `opensoundscape.signal_processing.tdoa`)
-        bandpass_range: if None, no bandpass filter is performed
-            otherwise [low_f,high_f]
-        bandpass_order: order of Butterworth bandpass filter
+        frequency_range: tuple of (low_f, high_f) frequencies in Hz to use in the generalized cross correlation.
+            If None, all frequencies are kept.
+            First or second value can be None if no lower or upper limit is desired
+            Note: retaining high frequencies near the Nyquist frequency sometimes results
+                in spurious cross correlation values at 0 or at the beginning/end of the signal
+                when using 'phat' and 'scot' methods.
         cc_filter: generalized cross correlation type, see
             opensoundscape.signal_processing.gcc() [default: 'phat']
         return_cc_max: if True, returns cross correlation max value as second argument
             (see `opensoundscape.signal_processing.tdoa`)
-        skip_ref_bandpass: [default: False] if True, skip the bandpass operation for the
-            reference_audio object, only apply it to `audio`
     Returns:
         estimated time delay (seconds) from reference_audio to audio
 
@@ -1298,13 +1297,6 @@ def estimate_delay(
     if reference_audio.sample_rate != sr:
         reference_audio = reference_audio.resample(sr)
 
-    # apply audio-domain butterworth bandpass filter if desired
-    if bandpass_range is not None:
-        l, h = bandpass_range  # extract low and high frequencies
-        primary_audio = primary_audio.bandpass(l, h, bandpass_order)
-        if not skip_ref_bandpass:
-            reference_audio = reference_audio.bandpass(l, h, bandpass_order)
-
     # estimate time delay from reference_audio to audio using generalized cross correlation
     return tdoa(
         primary_audio.samples,
@@ -1313,6 +1305,7 @@ def estimate_delay(
         cc_filter=cc_filter,
         sample_rate=sr,
         return_max=return_cc_max,
+        frequency_range=frequency_range,
     )
 
 
