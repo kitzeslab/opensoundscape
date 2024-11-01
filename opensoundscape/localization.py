@@ -87,6 +87,7 @@ class SpatialEvent:
 
         # Initialize attributes
         self.tdoas = None  # time delay at each receiver
+        self.cc_matrix = None  # cross correlation matrix
         self.cc_maxs = None  # max of cross correlation for each time delay
         self.location_estimate = None  # cartesian location estimate in meters
         self.distance_residuals = None  # distance residuals in meters
@@ -341,6 +342,10 @@ class SpatialEvent:
 
         return self.location_estimate
 
+    @property
+    def cc_maxs(self):
+        return self._cc_maxs
+
     @classmethod
     def from_dict(cls, dictionary):
         """Recover SpatialEvent from dictionary, eg loaded from json"""
@@ -445,25 +450,38 @@ class GetStartTimestamp:
 
 class SpatialGrid:
     """
-    Class for creating a grid of points for localizing sound events with methods that use grid search.
+    Class for creating a grid of points for localizing sound events with methods that use a grid search approach.
     """
 
-    def __init__(self, recorder_positions, resolution=1, margin=0):
+    def __init__(
+        self,
+        recorder_positions,
+        sample_rate,
+        resolution=1,
+        margin=0,
+        speed_of_sound=SPEED_OF_SOUND,
+    ):
         """
         Initialize a SpatialGrid object
 
         Args:
             recorder_positions: list of [x,y] or [x,y,z] positions of each recorder in meters
+            sample_rate: sample rate of the audio in Hz.
             resolution: resolution of the grid in meters. Default is 1.
             margin: margin around the convex hull of the grid in meters. Will only attempt to localize events that are inside the grid + margin.
                     A negative margin will shrink the grid. Default is 0.
+            speed_of_sound: speed of sound in meters per second. Default is 343 m/s.
+
 
         """
         self.recorder_positions = np.array(recorder_positions)
+        self.sample_rate = sample_rate
         self.resolution = resolution
         self.margin = margin
         self.dimensions = self.recorder_positions.shape[1]
+        self.speed_of_sound = speed_of_sound
         self.grid = self._make_grid()
+        self.tdoa_grid = self._make_tdoa_grid()
 
     def _make_grid(self):
         """
@@ -510,6 +528,26 @@ class SpatialGrid:
         grid = grid[mask]
 
         return grid
+
+    def _make_tdoa_grid(self):
+        """
+        Create an array containing the expected TDOAs for every recorder, for every recorder position in the grid.
+
+        Returns:
+            delays_grid: a grid, where each point has the matrix of TDOAs for each recorder position
+        """
+        # calculate the time delays for each point in the grid
+        delays_grid = []
+        for point in self.grid:
+            delays = (
+                np.linalg.norm(self.recorder_positions - point, axis=1)
+                / self.speed_of_sound
+            )
+            # now make a matrix of all the relative delays between each pair of recorders
+            # this is a matrix where the i,j-th element is the delay between recorder i and recorder j. With recorder i as the reference.
+            delays = delays - delays[:, None]
+            delays_grid.append(delays)
+        return np.array(delays_grid)
 
 
 class SynchronizedRecorderArray:
