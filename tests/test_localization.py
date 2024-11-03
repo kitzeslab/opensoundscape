@@ -586,6 +586,30 @@ def test_localize_too_few_receivers(LOCA_2021_aru_coords, LOCA_2021_detections):
     assert len(unlocalized_events) == 6
 
 
+def test_cc_threshold_mask_receivers(LOCA_2021_aru_coords, LOCA_2021_detections):
+    """when some receivers are filtered out based on cc threshold,
+    they should not be included in attributes like .receiver_start_time_offsets
+    """
+    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    localized_positions, unlocalized_events = array.localize_detections(
+        detections=LOCA_2021_detections,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        localization_algorithm="gillette",
+        cc_filter="phat",
+        cc_threshold=0.05,
+        return_unlocalized=True,
+    )
+    e = localized_positions[0]
+    assert len(e.receiver_start_time_offsets) == 4
+    assert e.receiver_start_time_offsets[0] == 0.2
+    assert len(e.receiver_files) == 4
+    assert len(e.receiver_locations) == 4
+    assert len(e.tdoas) == 4
+    assert len(e.cc_maxs) == 4
+    assert len(e.distance_residuals) == 4
+
+
 def test_spatial_event_to_from_dict(LOCA_2021_aru_coords):
     # test that a SpatialEvent can be serialized to a dictionary and then re-instantiated
     max_delay = 0.04
@@ -614,7 +638,9 @@ def test_spatial_event_to_from_dict(LOCA_2021_aru_coords):
     new_event = localization.SpatialEvent.from_dict(event_dict)
 
     assert event.start_timestamp == new_event.start_timestamp
-    assert event.receiver_start_time_offsets == new_event.receiver_start_time_offsets
+    assert (
+        event.receiver_start_time_offsets == new_event.receiver_start_time_offsets
+    ).all()
     assert (event.receiver_files == new_event.receiver_files).all()
     # compare equality of two arrays that can contain nan
     assert np.array_equal(

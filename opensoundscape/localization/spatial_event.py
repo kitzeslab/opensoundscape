@@ -96,12 +96,15 @@ class SpatialEvent:
         self.speed_of_sound = speed_of_sound
 
         # static attributes
-        self.receiver_files = receiver_files
+        self.receiver_files = np.array(receiver_files)
         self.receiver_locations = np.array(receiver_locations)
         self.start_timestamp = start_timestamp
         self.duration = duration
         self.class_name = class_name
-        self.receiver_start_time_offsets = receiver_start_time_offsets
+        if receiver_start_time_offsets is not None:  # cast to np array
+            self.receiver_start_time_offsets = np.array(receiver_start_time_offsets)
+        else:  # not provided; keep None value
+            self.receiver_start_time_offsets = None
 
         # Verify that max_delay is not longer than the duration of the audio and raise a value error if it is
         if self.max_delay >= self.duration:
@@ -315,14 +318,12 @@ class SpatialEvent:
         # delay truly represents two recordings of the same sound event)
         tdoas = self.tdoas
         locations = self.receiver_locations
-        # needs to be np array to access using a boolean mask
-        receiver_files = np.array(self.receiver_files)
 
         # apply the cc_threshold filter
         # only keep receivers that have a cc_max above the cc_threshold
-        tdoas = tdoas[self.cc_maxs > self.cc_threshold]
-        locations = locations[self.cc_maxs > self.cc_threshold]
-        receiver_files = receiver_files[self.cc_maxs > self.cc_threshold]
+        rec_mask = self.cc_maxs > self.cc_threshold
+        tdoas = tdoas[rec_mask]
+        locations = locations[rec_mask]
 
         # If there aren't enough receivers, don't attempt localization.
         if len(tdoas) < self.min_n_receivers:
@@ -349,12 +350,12 @@ class SpatialEvent:
         return PositionEstimate(
             location_estimate=location_estimate,
             class_name=self.class_name,
-            receiver_files=receiver_files,
+            receiver_files=self.receiver_files[rec_mask],
             receiver_locations=locations,
             tdoas=tdoas,
-            cc_maxs=self.cc_maxs[self.cc_maxs > self.cc_threshold],
+            cc_maxs=self.cc_maxs[rec_mask],
             start_timestamp=self.start_timestamp,
-            receiver_start_time_offsets=self.receiver_start_time_offsets,
+            receiver_start_time_offsets=self.receiver_start_time_offsets[rec_mask],
             duration=self.duration,
             distance_residuals=distance_residuals,
         )
