@@ -140,7 +140,7 @@ def quick_fit(
                     f"Epoch {step+1}/{steps}, Loss: {loss.item()}, Val Loss: {val_loss.item()}"
                 )
                 try:
-                    auroc = average_precision_score(
+                    auroc = roc_auc_score(
                         validation_labels.detach().numpy(), val_outputs.detach().numpy()
                     )
                 except:
