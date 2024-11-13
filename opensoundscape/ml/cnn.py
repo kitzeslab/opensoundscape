@@ -1650,7 +1650,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                     pickle_path = f"{self.save_path}/best.pickle"
                     self._log(f"New best model saved to {save_path}", level=2)
                     self.save(save_path, pickle=False)
-                    self.save(pickle_path, pickle=False)
+                    self.save(pickle_path, pickle=True)
 
             # save pickled model every n epochs
             # pickled model file allows us to resume training
