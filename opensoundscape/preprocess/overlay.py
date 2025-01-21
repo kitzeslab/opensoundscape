@@ -227,7 +227,7 @@ def overlay(
             # lets pick a sample based on rules
             if overlay_class is None:
                 # choose any file from the overlay_df
-                overlay_path = random.choice(overlay_df.index)
+                overlay_path = random.choice(list(overlay_df.index))
 
             elif overlay_class == "different":
                 # Select a random file containing none of the classes this file contains
