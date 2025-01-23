@@ -1185,7 +1185,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 - a single file path as str or pathlib.Path
             see .predict() documentation for other args
             **kwargs: any arguments to inference_dataloader_cls.__init__
-                (default class is SafeAudioDataloader)
+                except samples (uses `samples`) and collate_fn (uses `identity`)
+                (Note: default class is SafeAudioDataloader)
 
         Returns:
             a list of AudioSample objects
@@ -1201,7 +1202,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         ```
         """
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(samples, **kwargs)
+        dataloader = self.predict_dataloader(samples, collate_fn=identity, **kwargs)
 
         # move model to device
         try:

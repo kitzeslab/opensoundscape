@@ -745,6 +745,16 @@ def test_generate_cams(test_df):
     assert samples[0].cam.activation_maps is None
 
 
+def test_generate_samples(test_df):
+    """should return list of AudioSample objects"""
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    samples = model.generate_samples(test_df)
+    assert len(samples) == 2
+    assert type(samples[0]) == AudioSample
+    assert type(samples[0].data) == torch.Tensor
+    assert type(samples[0].labels) == pd.Series
+
+
 def test_generate_cams_batch_size(test_df):
     """smoke test for batch size > 1"""
     model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
