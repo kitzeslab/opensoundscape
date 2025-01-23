@@ -237,11 +237,13 @@ class BoxedAnnotations:
             elif isinstance(annotation_column, int):
                 # using the column number to specify which column contains annotations
                 # first column is 1, second is 2, etc
-                if not 0 <= annotation_column < len(df):
+                if not 0 <= annotation_column < len(df.columns):
                     # ensure column number is within bounds
                     raise IndexError(
-                        f"Specified column index, {annotation_column}, is out of bounds of the columns in the annotation file. Please provide a number between 0 and {len(df.columns)-1}! "
-                        f"Please keep in mind Python uses zero-based indexing, meaning the column numbers start at 0."
+                        f"""Specified annotation column index ({annotation_column}) is out of bounds
+                        of the columns in the annotation file. Please provide a number between 0 and
+                        {len(df.columns)-1}! Please keep in mind Python uses zero-based indexing,
+                        meaning the column numbers start at 0."""
                     )
                 df = df.rename(
                     columns={
