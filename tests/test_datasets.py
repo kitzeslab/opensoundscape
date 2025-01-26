@@ -178,6 +178,7 @@ def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
     """duplicate indices of overlay_df are now removed, resolving
     a bug that caused duplicated indices to return 2-d labels.
     """
+    # test with update_labels=True
     overlay_df = pd.concat([overlay_df, overlay_df])
     overlay_pre = SpectrogramPreprocessor(2.0, overlay_df=overlay_df)
     dataset = AudioFileDataset(dataset_df, overlay_pre)
@@ -185,6 +186,10 @@ def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
     dataset.preprocessor.pipeline.overlay.set(update_labels=True)
     sample = dataset[0]
     assert np.array_equal(sample.labels.values, [1, 1])
+    # test with update_labels=False
+    dataset.preprocessor.pipeline.overlay.set(update_labels=False)
+    sample = dataset[0]
+    assert np.array_equal(sample.labels.values, [1, 0])
 
 
 def test_overlay_criterion_fn(dataset_df, overlay_pre):

@@ -549,7 +549,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
                     Overlay(
                         is_augmentation=True,
                         overlay_df=pd.DataFrame() if overlay_df is None else overlay_df,
-                        update_labels=False,
+                        update_labels=True,
                     )
                 ),
                 # add vertical (time) and horizontal (frequency) masking bars
