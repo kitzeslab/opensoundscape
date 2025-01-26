@@ -9,11 +9,9 @@ import numpy as np
 import pandas as pd
 import os
 import copy
-import types
 
 import torch
 import torch.nn.functional as F
-import wandb
 from tqdm.autonotebook import tqdm
 
 import opensoundscape
@@ -184,7 +182,7 @@ class BaseModule:
         
         for example, to use Cosine Annealing, set:
         ```python
-        self.scheduler_params = {
+        model.lr_scheduler_params = {
             "class": torch.optim.lr_scheduler.CosineAnnealingLR,
             "kwargs":{
                 "T_max": n_epochs,
@@ -212,61 +210,34 @@ class BaseModule:
         batch_size = len(batch_tensors)
 
         # automatic mixed precision
-        # can get rid of if/else blocks and use enabled=true
-        # once mps is supported https://github.com/pytorch/pytorch/pull/99272
-
-        # self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
-        # with torch.autocast(
-        #     device_type=self.device, dtype=torch.float16, enabled=self.use_amp
-        # ):
-        #     output = self.network(input)
-        #     loss = self.loss_fn(output, batch_labels)
-
-        # if not self.lightning_mode:
-        #     # if not using Lightning, we manually call
-        #     # loss.backward() and optimizer.step()
-        #     # Lightning does this behind the scenes
-        #     self.scaler.scale(loss).backward()
-        #     self.scaler.step(self.optimizer)
-        #     self.scaler.update()
-        #     self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
-
-        # if self.use_amp is False, GradScaler with enabled=False should have no effect
-        # TODO: use amp with mps once supported https://github.com/pytorch/pytorch/issues/88415
-        if "mps" in str(self.device):
-            use_amp = False  # Not using amp: not implemented for mps as of 2024-07-11
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        if "cuda" in str(self.device):
+            device_type = "cuda"
+            dtype = torch.float16
         else:
-            use_amp = self.use_amp
-
-        if use_amp:  # as of 7/11/24, torch.autocast is not supported for mps
-            self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
-            if "cuda" in str(self.device):
-                device_type = "cuda"
-                dtype = torch.float16
-            else:
-                device_type = "cpu"
-                dtype = torch.bfloat16
-            with torch.autocast(device_type=device_type, dtype=dtype):
-                output = self.network(batch_tensors)
-                loss = self.loss_fn(output, batch_labels)
-            if not self.lightning_mode:
-                # if not using Lightning, we manually call
-                # loss.backward() and optimizer.step()
-                # Lightning does this behind the scenes
-                self.scaler.scale(loss).backward()
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-                self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
-        else:
+            device_type = "cpu"
+            dtype = torch.bfloat16
+        with torch.autocast(device_type=device_type, dtype=dtype):
             output = self.network(batch_tensors)
             loss = self.loss_fn(output, batch_labels)
-            if not self.lightning_mode:
-                # if not using Lightning, we manually call
-                # loss.backward() and optimizer.step()
-                # Lightning does this behind the scenes
-                loss.backward()
-                self.optimizer.step()
-                self.optimizer.zero_grad()
+        if not self.lightning_mode:
+            # if not using Lightning, we manually call
+            # loss.backward() and optimizer.step()
+            # Lightning does this behind the scenes
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
+        # else:
+        #     output = self.network(batch_tensors)
+        #     loss = self.loss_fn(output, batch_labels)
+        #     if not self.lightning_mode:
+        #         # if not using Lightning, we manually call
+        #         # loss.backward() and optimizer.step()
+        #         # Lightning does this behind the scenes
+        #         loss.backward()
+        #         self.optimizer.step()
+        #         self.optimizer.zero_grad()
 
         # single-target torchmetrics expect labels as integer class indices rather than one-hot
         y = batch_labels.argmax(dim=1) if self.single_target else batch_labels

@@ -271,7 +271,7 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df):
     shutil.rmtree("tests/models/")
 
 
-def test_train_amp(train_df):
+def test_train_amp_cpu(train_df):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     # first test with cpu
     model.device = "cpu"
@@ -286,24 +286,47 @@ def test_train_amp(train_df):
         num_workers=0,
     )
     model.predict(train_df)
+    shutil.rmtree("tests/models/")
 
+
+def test_train_amp_mps(train_df):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     # if cuda is available, test with cuda
     if torch.cuda.is_available():
-        model.device = "cuda"
-        model.use_amp = True
-        model.train(
-            train_df,
-            train_df,
-            save_path="tests/models",
-            epochs=1,
-            batch_size=2,
-            save_interval=10,
-            num_workers=0,
-        )
-        model.predict(train_df)
+        assert model.device.type == "cuda"
+    else:
+        return  # cannot test cuda
+    model.use_amp = True
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    model.predict(train_df)
+    shutil.rmtree("tests/models/")
 
-    # add mps once amp is supported
 
+def test_train_amp_mps(train_df):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    if torch.mps.is_available():
+        assert model.device.type == "mps"
+    else:
+        return  # cannot test mps on this machine
+    model.use_amp = True
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    model.predict(train_df)
     shutil.rmtree("tests/models/")
 
 
