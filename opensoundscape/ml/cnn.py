@@ -972,7 +972,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         wandb_session=None,
         return_invalid_samples=False,
         progress_bar=True,
-        **kwargs,
+        audio_root=None,
+        **dataloader_kwargs,
     ):
         """Generate predictions on a set of samples
 
@@ -1022,7 +1023,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 containing file paths of samples that caused errors during preprocessing
                 [default: False]
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
-            **kwargs: additional arguments to self.predict_dataloader()
+            audio_root: optionally pass a root directory (pathlib.Path or str)
+                - `audio_root` is prepended to each file path
+                - if None (default), samples must contain full paths to files
+            **dataloader_kwargs: additional arguments to self.predict_dataloader()
 
         Returns:
             df of post-activation_layer scores
@@ -1046,6 +1050,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             for that sample will be np.nan
 
         """
+        if audio_root is not None:  # add this to dataloader keyword arguments
+            dataloader_kwargs.update(dict(audio_root=audio_root))
         # create dataloader to generate batches of AudioSamples
         dataloader = self.predict_dataloader(
             samples,
@@ -1059,7 +1065,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
-            **kwargs,
+            **dataloader_kwargs,
         )
 
         # check for matching class list
@@ -1149,7 +1155,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         samples,
         invalid_samples_log=None,
         return_invalid_samples=False,
-        **kwargs,
+        audio_root=None,
+        **dataloader_kwargs,
     ):
         """
         Generate AudioSample objects. Input options same as .predict()
@@ -1162,7 +1169,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 - a list (or np.ndarray) of audio file paths
                 - a single file path as str or pathlib.Path
             see .predict() documentation for other args
-            **kwargs: any arguments to inference_dataloader_cls.__init__
+            **dataloader_kwargs: any arguments to inference_dataloader_cls.__init__
                 except samples (uses `samples`) and collate_fn (uses `identity`)
                 (Note: default class is SafeAudioDataloader)
 
@@ -1179,8 +1186,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         show_tensor_grid(tensors,columns=3)
         ```
         """
+        if audio_root is not None:  # add this to dataloader keyword arguments
+            dataloader_kwargs.update(dict(audio_root=audio_root))
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(samples, collate_fn=identity, **kwargs)
+        dataloader = self.predict_dataloader(
+            samples, collate_fn=identity, **dataloader_kwargs
+        )
 
         # move model to device
         try:
@@ -1411,6 +1422,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         raise_errors=False,
         wandb_session=None,
         progress_bar=True,
+        audio_root=None,
+        **dataloader_kwargs,
     ):
         """train the model on samples from train_dataset
 
@@ -1472,8 +1485,11 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 model.train(...,wandb_session=session)
                 session.finish()
                 ```
+            audio_root: optionally pass a root directory (pathlib.Path or str)
+                - `audio_root` is prepended to each file path
+                - if None (default), samples must contain full paths to files
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
-
+            **dataloader_kwargs: additional arguments passed to train_dataloader()
         Effects:
             If wandb_session is provided, logs progress and samples to Weights
             and Biases. A random set of training and validation samples
@@ -1495,6 +1511,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 "No validation set was provided. Model will be "
                 "evaluated using the performance on the training set."
             )
+
+        if audio_root is not None:  # add this to dataloader keyword arguments
+            dataloader_kwargs.update(dict(audio_root=audio_root))
 
         ## Initialization ##
 
@@ -1566,6 +1585,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
+            **dataloader_kwargs,
         )
 
         ######################
@@ -1611,6 +1631,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                         batch_size=batch_size,
                         num_workers=num_workers,
                         raise_errors=raise_errors,
+                        **dataloader_kwargs,
                     )
                     self.valid_metrics[self.current_epoch] = val_metrics
                     score = val_metrics[self.score_metric]  # overall score
@@ -2149,7 +2170,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         return_preds=False,
         avgpool=True,
         return_dfs=True,
-        **kwargs,
+        audio_root=None,
+        **dataloader_kwargs,
     ):
         """
         Generate embeddings (intermediate layer outputs) for audio files/clips
@@ -2176,12 +2198,17 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 .predict(). if False, returns np.array of embeddings [default: True]. If
                 avg_pool=False, overrides to return np.array since we can't have a df with >2
                 dimensions
-            kwargs are passed to self.predict_dataloader()
+            audio_root: optionally pass a root directory (pathlib.Path or str)
+                - `audio_root` is prepended to each file path
+                - if None (default), samples must contain full paths to files
+            dataloader_kwargs are passed to self.predict_dataloader()
 
         Returns: (embeddings, preds) if return_preds=True or embeddings if return_preds=False
             types are pd.DataFrame if return_dfs=True, or np.array if return_dfs=False
 
         """
+        if audio_root is not None:
+            dataloader_kwargs.update(dict(audio_root=audio_root))
         if not avgpool:  # cannot create a DataFrame with >2 dimensions
             return_dfs = False
 
@@ -2201,7 +2228,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(samples, **kwargs)
+        dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
 
         # run inference, returns (scores, intermediate_outputs)
         preds, embeddings = self(

@@ -76,7 +76,6 @@ class BasePreprocessor:
     in the pipeline to produce a sample.
 
     Args:
-        action_dict: dictionary of name:Action actions to perform sequentially
         sample_duration: length of audio samples to generate (seconds)
     """
 
