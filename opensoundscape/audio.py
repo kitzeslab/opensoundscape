@@ -875,12 +875,18 @@ class Audio:
 
         if metadata_format is not None and self.metadata is not None:
             if fmt not in [".WAV", ".AIFF"]:
+                # detailed metadata will not be written to file!
                 if not suppress_warnings:
                     warnings.warn(
                         "Saving metadata is only supported for WAV and AIFF formats"
                     )
             else:  # we can write metadata for WAV and AIFF
-                _write_metadata(self.metadata, metadata_format, path)
+                write_metadata(
+                    self.metadata,
+                    metadata_format,
+                    path,
+                    suppress_warnings=suppress_warnings,
+                )
 
     def split(self, clip_duration, **kwargs):
         """Split Audio into even-lengthed clips
@@ -1449,8 +1455,10 @@ def parse_metadata(path):
     return metadata
 
 
-def _write_metadata(metadata, metadata_format, path):
+def write_metadata(metadata, metadata_format, path, suppress_warnings=False):
     """write metadata using one of the supported formats
+
+    Currently, only supports writing to .WAV and .AIFF.
 
     metadata fields containing empty strings `''` will be replaced by a string
     containing a single space `' '` as a workaround to
@@ -1461,7 +1469,14 @@ def _write_metadata(metadata, metadata_format, path):
         metadata_format: one of 'opso','opso_metadata_v0.1','soundfile'
             (see Audio.wave documentation)
         path: file path to save metadata in with soundfile
+        suppress_warnings: if True, does not warn user when writing to unsupported format
     """
+    suffix = Path(path).suffix.upper()
+    assert suffix in [
+        ".WAV",
+        ".AIFF",
+    ], f"Only supports writing to .WAV and .AIFF. Suffix was {suffix}"
+
     metadata = metadata.copy()  # avoid changing the existing object
     if metadata_format == "soundfile":
         pass  # just write the metadata as is
