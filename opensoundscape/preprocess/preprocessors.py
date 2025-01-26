@@ -665,11 +665,12 @@ class AudioAugmentationPreprocessor(AudioPreprocessor):
         super().__init__(**kwargs)
 
         # random gain
-        # useful for softening focal recordings (xeno-canto)
-        # generally bypass for soundscape recordings
+        # when training data is much louder than application, e.g. xeno-canto focal recordings,
+        # large gain reduction such as dB_range=(-40, -10) may be useful
         random_gain_action = actions.Action(
-            action_functions.audio_random_gain, is_augmentation=True, dB_range=(-40, 0)
+            action_functions.audio_random_gain, is_augmentation=True, dB_range=(-5, 0)
         )
+        random_gain_action.bypass = True
         self.insert_action("random_gain", random_gain_action)
 
         # add noise
