@@ -140,7 +140,7 @@ class_list = ['IBWO','BLJA']
 
 # create labels for fixed-duration (2 second) clips 
 labels = all_annotations.clip_labels(
-  cip_duration=2,
+  clip_duration=2,
   clip_overlap=0,
   min_label_overlap=0.25,
   class_subset=class_list
