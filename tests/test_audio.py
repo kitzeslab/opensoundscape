@@ -1030,7 +1030,7 @@ def test_from_url_multichannel_to_mono():
 
     downloads a 2-channel audio file and sums to 1, ensuring resolution of #837
     """
-    Audio.from_url("https://xeno-canto.org/830406/download")
+    Audio.from_url("https://tinyurl.com/birds60s")
 
 
 def test_multichannelaudio_init():
