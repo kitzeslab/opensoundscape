@@ -619,8 +619,11 @@ def test_save_and_load_model_custom_arch(model_save_path):
     classes = [0, 1]
 
     @cnn_architectures.register_arch
-    def my_alexnet_generator(num_classes, num_channels):
-        return alexnet(num_classes, num_channels=num_channels)
+    def my_alexnet_generator(
+        num_classes, num_channels, weights="DEFAULT", freeze_feature_extractor=False
+    ):
+        # for example, we ignore the freeze_feature_extractor argument in the generator
+        return alexnet(num_classes, num_channels=num_channels, weights=weights)
 
     arch = my_alexnet_generator(2, 1)
     arch.constructor_name = "my_alexnet_generator"
