@@ -1206,13 +1206,22 @@ class BoxedAnnotations:
     def concat(cls, list_of_boxed_annotations):
         """concatenate a list of BoxedAnnotations objects into one"""
         dfs = [ba.df for ba in list_of_boxed_annotations]
-        return cls(pd.concat(dfs).reset_index(drop=True))
-
-    @classmethod
-    def concat(cls, list_of_boxed_annotations):
-        """concatenate a list of BoxedAnnotations objects into one"""
-        dfs = [ba.df for ba in list_of_boxed_annotations]
-        return cls(pd.concat(dfs).reset_index(drop=True))
+        audio_files = []
+        annotation_files = []
+        for ba in list_of_boxed_annotations:
+            if ba.audio_files is not None:
+                audio_files.extend(ba.audio_files)
+            if ba.annotation_files is not None:
+                annotation_files.extend(ba.annotation_files)
+        if len(audio_files) == 0:
+            audio_files = None
+        if len(annotation_files) == 0:
+            annotation_files = None
+        return cls(
+            pd.concat(dfs).reset_index(drop=True),
+            audio_files=audio_files,
+            annotation_files=annotation_files,
+        )
 
 
 def diff(base_annotations, comparison_annotations):

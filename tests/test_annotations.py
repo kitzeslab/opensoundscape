@@ -112,8 +112,8 @@ def boxed_annotations():
     )
     return BoxedAnnotations(
         df,
-        audio_files=["audio_file.wav"] * 3,
-        annotation_files=["audio_file.annotations.txt"] * 3,
+        audio_files=["audio_file.wav"],
+        annotation_files=["audio_file.annotations.txt"],
     )
 
 
@@ -191,6 +191,16 @@ def test_load_raven_annotations(raven_file):
 def test_concat_boxed_annotations(boxed_annotations):
     joined = BoxedAnnotations.concat([boxed_annotations] * 3)
     assert len(joined.df) == 9
+    assert len(joined.audio_files) == 3
+    assert len(joined.annotation_files) == 3
+
+    # handles scenario where audio_files and/or annotation_files are None
+    boxed_annotations.annotation_files = None
+    boxed_annotations.audio_files = None
+    joined = BoxedAnnotations.concat([boxed_annotations] * 3)
+    assert len(joined.df) == 9
+    assert joined.audio_files is None
+    assert joined.annotation_files is None
 
 
 def test_load_raven_annotations_w_audio(raven_file):
