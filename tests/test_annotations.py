@@ -16,6 +16,11 @@ def raven_file():
 
 
 @pytest.fixture()
+def raven_file_Annotation_col():
+    return "tests/raven_annots/raven_with_Annotation_col.txt"
+
+
+@pytest.fixture()
 def audio_2min():
     return "tests/audio/MSD-0003_20180427_2minstart00.wav"
 
@@ -230,6 +235,37 @@ def test_load_raven_annotation_column_name(raven_file):
         a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=25)
     with pytest.raises(IndexError):
         a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=-1)
+
+
+def test_from_raven_files_list_of_annotation_column(
+    raven_file, raven_file_Annotation_col
+):
+    ba = BoxedAnnotations.from_raven_files(
+        [raven_file, raven_file_Annotation_col],
+        annotation_column=["Species", "Annotation"],
+    )
+    assert "CSWA" in ba.unique_labels() and "WOTH" in ba.unique_labels()
+
+    # also allowed to be a tuple
+    ba = BoxedAnnotations.from_raven_files(
+        [raven_file, raven_file_Annotation_col],
+        annotation_column=("Species", "Annotation"),
+    )
+    assert "CSWA" in ba.unique_labels() and "WOTH" in ba.unique_labels()
+
+    # raises an exception if no matching column is found
+    with pytest.raises(KeyError):
+        ba = BoxedAnnotations.from_raven_files(
+            [raven_file, raven_file_Annotation_col],
+            annotation_column=["Species", "notacolumn"],
+        )
+
+    # raises an exception if multiple matching columns are found
+    with pytest.raises(KeyError):
+        ba = BoxedAnnotations.from_raven_files(
+            [raven_file, raven_file_Annotation_col],
+            annotation_column=["Species", "Selection"],
+        )
 
 
 def test_load_raven_annotations_empty(raven_file_empty):
