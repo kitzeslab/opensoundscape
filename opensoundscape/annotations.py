@@ -129,13 +129,16 @@ class BoxedAnnotations:
         Args:
             raven_files: list or iterable of raven .txt file paths (as str or pathlib.Path),
                 or a single file path (str or pathlib.Path). Eg ['path1.txt','path2.txt']
-            annotation_column: string name or integer position of column containing annotations
+            annotation_column: column name(s) or integer position to use as the annotations
                 - pass `None` to load the Raven file without explicitly
                 assigning a column as the annotation column. The resulting
                 object's `.df` will have an `annotation` column with nan values!
                 - if a string is passed, the column with this name will be used as the annotations.
                 - if an integer is passed, the column at that position will be used as the annotation column.
-                NOTE: column positions are ordered increasingly starting at 0.
+                    NOTE: column positions are ordered increasingly starting at 0.
+                - if a list/tuple is passed, find a column matching any value in the list
+                    NOTE: if multiple columns match, an error will be raised
+                    Example: ['annotation','label','Species'] will find a column with any of these names
             audio_files: (list) optionally specify audio files corresponding to each
                 raven file (length should match raven_files) Eg ['path1.txt','path2.txt']
                 - if None (default), .clip_labels() will not be able to
@@ -195,6 +198,10 @@ class BoxedAnnotations:
             but their lengths did not match.
             """
 
+        assert isinstance(
+            annotation_column, (str, int, type(None), list, tuple)
+        ), "Annotation column index has to be a string, integer, list, tuple, or None."
+
         all_file_dfs = []
 
         # mapping of Raven file columns to standard opensoundscape names
@@ -214,10 +221,7 @@ class BoxedAnnotations:
                 warnings.warn(f"{raven_file} has zero rows.")
                 continue
 
-            assert isinstance(
-                annotation_column, (str, int, type(None))
-            ), "Annotation column index has to be a string, integer, or None."
-
+            # handle varioius options for specifying the annotation column
             if isinstance(annotation_column, str):
                 # annotation_column is a string that is present in the annotation file's header
                 try:
@@ -251,6 +255,32 @@ class BoxedAnnotations:
                     },
                     errors="raise",
                 )
+            elif isinstance(annotation_column, (list, tuple)):
+                annotation_column = list(annotation_column)
+                # make sure exactly one value from annotation_column is in the df.columns
+                matching_cols = [col for col in annotation_column if col in df.columns]
+                if len(matching_cols) == 0:
+                    raise KeyError(
+                        f"None of the specified annotation columns, {annotation_column}, "
+                        f"match any of the column names in the annotation file: {list(df.columns)} "
+                        f"when attempting to load {raven_file}. "
+                        f"Please ensure all raven files contain one of the specified annotation_column values."
+                    )
+                elif len(matching_cols) > 1:
+                    raise KeyError(
+                        f"Multiple columns in the annotation file match the specified annotation columns: "
+                        f"{matching_cols}. when attempting to load {raven_file}. "
+                        "Please ensure only one column in each raven file matches a value listed in annotation_columns"
+                    )
+                else:
+                    # rename the column to 'annotation'
+                    df = df.rename(
+                        columns={
+                            matching_cols[0]: "annotation",
+                        },
+                        errors="raise",
+                    )
+
             else:
                 # None was passed to annotation_column
                 # we'll create an empty `annotation` column
