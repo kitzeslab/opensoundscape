@@ -912,11 +912,17 @@ def test_to_and_from_crowsetta(boxed_annotations_2_files):
     assert len(anns) == 2
 
     # back to BoxedAnnotations format
-    ba2 = BoxedAnnotations.from_crowsetta(anns)
+    ba2 = BoxedAnnotations.from_crowsetta(
+        anns, audio_files=ba.audio_files, annotation_files=ba.annotation_files
+    )
 
-    # order of annotations is not retained
+    # Note: order of annotations is not retained
     # because of the .groupby call
     assert set(ba2.df.annotation) == set([None, "a", "b"])
+
+    # should contain .audio_files and .annotation_files
+    assert ba2.annotation_files == ba.annotation_files
+    assert ba2.audio_files == ba.audio_files
 
     # test 'sequence' mode:
     anns = ba.to_crowsetta(mode="sequence")
@@ -924,7 +930,13 @@ def test_to_and_from_crowsetta(boxed_annotations_2_files):
     assert type(anns[0].seq) == crowsetta.Sequence
 
     # back to BoxedAnnotations format
-    ba3 = BoxedAnnotations.from_crowsetta(anns)
+    ba3 = BoxedAnnotations.from_crowsetta(
+        anns, audio_files=ba.audio_files, annotation_files=ba.annotation_files
+    )
+
+    # should contain .audio_files and .annotation_files
+    assert ba2.annotation_files == ba.annotation_files
+    assert ba2.audio_files == ba.audio_files
 
     # order of annotations is not retained
     # because of the .groupby call

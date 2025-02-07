@@ -411,12 +411,23 @@ class BoxedAnnotations:
         )
 
     @classmethod
-    def from_crowsetta(cls, annotations):
-        """
-        crowsetta.Annotation object or list of Annotation objects
-        - the objects _either_ have .bbox: list of BBox objects,
-        OR .seq: Sequence object with list of values for
-            onset/offset (or sample onset/offset), labels
+    def from_crowsetta(cls, annotations, audio_files=None, annotation_files=None):
+        """create BoxedAnnotations from crowsetta.Annotation object or list of Annotation objects
+
+
+        Args:
+            annotations: crowsetta.Annotation object or list of objects
+                the objects _either_ have
+                `.bbox`: list of BBox objects, OR
+                `.seq`: Sequence object with list of values for onset/offset
+                    (or sample onset/offset), labels
+            audio_files: optionally, pass list of the annotated audio files
+                (this might include files with zero annotations)
+            annotation_files: optionally, pass list of files containing annotations
+
+        Returns:
+            BoxedAnnotations object containing the annotations in .df,
+            and possibly containing the provided .audio_files and .annotation_files lists
 
         Note: if an empty list is passed, creates empty BoxedAnnotations object
         """
@@ -461,7 +472,11 @@ class BoxedAnnotations:
                     ba.df["annotation_id"] = ann_i  # keep record of annotation number
                     boxed_anns.append(ba)
 
-        return cls.concat(boxed_anns)
+        ba = cls.concat(boxed_anns)
+        ba.audio_files = audio_files
+        ba.annotation_files = annotation_files
+
+        return ba
 
     @classmethod
     def from_csv(cls, path):
