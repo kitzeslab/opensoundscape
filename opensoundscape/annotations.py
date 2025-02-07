@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 import warnings
 import crowsetta
+from sklearn.model_selection import train_test_split
 
 from opensoundscape.utils import (
     overlap,
@@ -1222,6 +1223,50 @@ class BoxedAnnotations:
             audio_files=audio_files,
             annotation_files=annotation_files,
         )
+
+    def train_test_split(self, **kwargs):
+        """split annotations into train and test sets
+
+        Splits annotations into train and test sets by audio file, not by row,
+        such that all annotations for a given audio file are in either the train
+        or test set. This is useful for ensuring that the same audio files are
+        not present in both the train and test sets, which could lead to data leakage.
+
+        Note that because self.audio_files is used, this approach retains audio files that
+        do not have any annotations (which would not be true if the bounding box .df table
+        were split based on the audio file column)
+
+        self.audio_files must be set to the list of annotated audio files
+
+        Args:
+            see sklearn.model_selection.train_test_split for arguments
+            (test_size, train_size, random_state, shuffle, stratify)
+        """
+        assert (
+            self.audio_files is not None
+        ), ".audio_files was None. Please set the .audio_files attribute to use BoxedAnnotations.train_test_split"
+        # pair up audio and annotation files
+        train_idx, test_idx = train_test_split(range(len(self.audio_files)), **kwargs)
+        train_files = np.array(self.audio_files)[train_idx]
+        test_files = np.array(self.audio_files)[test_idx]
+        train_ann_files = np.array(self.annotation_files)[train_idx]
+        test_ann_files = np.array(self.annotation_files)[test_idx]
+
+        # find class dynamically so that this method works if BoxedAnnotations is subclassed
+        cls = type(self)
+        train_anns = cls(
+            self.df[self.df.audio_file.apply(lambda x: x in train_files)].reset_index(),
+            annotation_files=train_ann_files,
+            audio_files=train_files,
+        )
+
+        test_anns = cls(
+            self.df[self.df.audio_file.apply(lambda x: x in test_files)].reset_index(),
+            annotation_files=test_ann_files,
+            audio_files=test_files,
+        )
+
+        return train_anns, test_anns
 
 
 def diff(base_annotations, comparison_annotations):

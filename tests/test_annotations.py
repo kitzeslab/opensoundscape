@@ -130,7 +130,11 @@ def boxed_annotations_2_files():
             "annotation": ["a", "b", None],
         }
     )
-    return BoxedAnnotations(df)
+    return BoxedAnnotations(
+        df,
+        audio_files=["audio_file.wav", "audio2.wav"],
+        annotation_files=["ann.txt", "ann2.txt"],
+    )
 
 
 @pytest.fixture()
@@ -1132,3 +1136,15 @@ def test_categorical_labels_from_multihot_df():
     assert cl.classes == ["class0", "class1"]
     assert cl.labels == [[0], [1], [0, 1]]
     assert cl.class_labels == [["class0"], ["class1"], ["class0", "class1"]]
+
+
+def test_train_test_split(boxed_annotations_2_files):
+    train, test = boxed_annotations_2_files.train_test_split(
+        train_size=0.5, random_state=0
+    )
+    assert len(train.audio_files) == 1
+    assert len(test.audio_files) == 1
+    assert train.audio_files[0] != test.audio_files[0]
+    assert len(train.df) + len(test.df) == len(boxed_annotations_2_files.df)
+    assert isinstance(train, BoxedAnnotations)
+    assert isinstance(test, BoxedAnnotations)
