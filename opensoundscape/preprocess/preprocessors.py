@@ -84,8 +84,17 @@ class BasePreprocessor:
         self.pipeline = pd.Series({}, dtype=object)
         self.sample_duration = sample_duration
 
-    def __repr__(self):
-        return f"Preprocessor with pipeline:\n{self.pipeline}"
+    # def __repr__(self):
+    #     return f"Preprocessor with pipeline:\n{self.pipeline}"
+
+    def _repr_html_(self):
+        top_str = f"Preprocessor with pipeline:"
+        out = f"<b>{top_str}</b>"
+
+        for i, action in self.pipeline.items():
+            out += _action_html(i, action)
+
+        return out
 
     def insert_action(self, action_index, action, after_key=None, before_key=None):
         """insert an action in specific specific position
@@ -783,3 +792,42 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
                 noisereduce_kwargs=noisereduce_kwargs,
             ),
         )
+
+
+def replace_nones(value):
+    if value != value:
+        return "nan"
+    elif value is None:
+        return "None"
+    else:
+        return str(value)
+
+
+from IPython.display import display, HTML
+
+
+def _action_html(title, action):
+
+    # Check if .bypass attribute is True to set text color to grey
+    text_color = "#CCCCCC" if action.bypass == True else "black"
+
+    # Format object attributes with one key-value pair per line
+    content = "<br>".join(
+        [
+            f"<strong>{key}:</strong> {replace_nones(value)}"
+            for key, value in action.params.items()
+        ]
+    )
+
+    suffix = " (Bypassed)" if action.bypass else ""
+    html_code = f"""
+
+    <details style="margin: 2px 0;">
+      <summary style="font-size: 12px; cursor: pointer; margin: 2px 0; color: {text_color};">{title+suffix}</summary>
+      <div style="padding: 2px 0; border-left: 2px solid #007acc; margin: 2px 0 0 12px; font-size: 10px; color: {text_color};">
+        {content}
+      </div>
+    </details>
+    
+    """
+    return html_code
