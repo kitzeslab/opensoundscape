@@ -59,6 +59,18 @@ def train_df_clips(train_df):
 
 
 @pytest.fixture()
+def train_df_relative():
+    clip_df = make_clip_df(
+        ["silence_10s.mp3", "silence_10s.mp3"],
+        clip_duration=1.0,
+        audio_root="tests/audio/",
+    )
+    clip_df[0] = np.random.choice([0, 1], size=len(clip_df))
+    clip_df[1] = np.random.choice([0, 1], size=len(clip_df))
+    return clip_df
+
+
+@pytest.fixture()
 def test_df():
     return pd.DataFrame(index=["tests/audio/silence_10s.mp3"])
 
@@ -177,6 +189,27 @@ def test_train_on_clip_df(train_df_clips):
         batch_size=2,
         save_interval=10,
         num_workers=0,
+    )
+    shutil.rmtree("tests/models/")
+
+
+def test_train_with_audio_root(train_df_relative):
+    """
+    test training a model when Audio files are long/unsplit
+    and a dataframe provides clip-level labels. Training
+    should internally load a relevant clip from the audio
+    file and get its labels from the dataframe
+    """
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=1.0)
+    model.train(
+        train_df_relative,
+        train_df_relative,
+        save_path="tests/models",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+        audio_root="tests/audio",
     )
     shutil.rmtree("tests/models/")
 
@@ -403,6 +436,12 @@ def test_single_target_prediction(train_df_clips):
 def test_predict_on_list_of_files(test_df):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     scores = model.predict(test_df.index.values)
+    assert len(scores) == 2
+
+
+def test_predict_with_audio_root():
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    scores = model.predict(["silence_10s.mp3"], audio_root="tests/audio/")
     assert len(scores) == 2
 
 

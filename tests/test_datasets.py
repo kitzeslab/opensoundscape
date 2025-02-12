@@ -26,6 +26,13 @@ def short_file_df():
 
 
 @pytest.fixture()
+def relative_path_df():
+    paths = ["audio/veryshort.wav"]
+    labels = [[0, 1]]
+    return pd.DataFrame(index=paths, data=labels, columns=[0, 1])
+
+
+@pytest.fixture()
 def bad_good_df():
     paths = ["tests/audio/veryshort.wav", "tests/audio/silence_10s.mp3"]
     labels = [[1, 0], [1, 0]]
@@ -74,6 +81,17 @@ def test_audio_file_dataset(dataset_df, pre):
     pre.width = 224
     pre.channels = 3
     dataset = AudioFileDataset(dataset_df, pre)
+    sample1 = dataset[0]
+    assert sample1.data.numpy().shape == (3, 224, 224)
+    assert dataset[0].labels.values.shape == (2,)
+
+
+def test_audio_root(relative_path_df, pre):
+    pre.bypass_augmentation = True
+    pre.height = 224
+    pre.width = 224
+    pre.channels = 3
+    dataset = AudioFileDataset(relative_path_df, pre, audio_root="tests/")
     sample1 = dataset[0]
     assert sample1.data.numpy().shape == (3, 224, 224)
     assert dataset[0].labels.values.shape == (2,)

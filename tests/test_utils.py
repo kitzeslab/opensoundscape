@@ -192,6 +192,21 @@ def test_make_clip_df(silence_10s_mp3_str):
     assert len(invalid_samples) == 1
 
 
+def test_make_clip_df_audio_root():
+    """many corner cases / alternatives are tested for audio.split()
+
+    by default, notafile.wav makes 1 row with nan as start_time and end_time
+    (controlled by raise_exceptions argument)
+    """
+    clip_df, invalid_samples = utils.make_clip_df(
+        files=["silence_10s.mp3"],
+        clip_duration=5.0,
+        return_invalid_samples=True,
+        audio_root="tests/audio/",
+    )
+    assert len(clip_df) == 2
+
+
 def test_make_clip_df_raise(silence_10s_mp3_str):
     """many corner cases / alternatives are tested for audio.split()"""
     with pytest.raises(utils.GetDurationError):
