@@ -1,0 +1,2 @@
+Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	Annotation	
+1	Spectrogram 1	1	1.897648165999982	4.110570810999974	1326.3	3266.5	CSWA
