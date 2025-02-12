@@ -84,11 +84,11 @@ class BasePreprocessor:
         self.pipeline = pd.Series({}, dtype=object)
         self.sample_duration = sample_duration
 
-    # def __repr__(self):
-    #     return f"Preprocessor with pipeline:\n{self.pipeline}"
+    def __repr__(self):
+        return f"Preprocessor with pipeline:\n{self.pipeline}"
 
     def _repr_html_(self):
-        top_str = f"Preprocessor with pipeline:"
+        top_str = f"{type(self).__name__} with pipeline:"
         out = f"<b>{top_str}</b>"
 
         for i, action in self.pipeline.items():
@@ -809,7 +809,16 @@ from IPython.display import display, HTML
 def _action_html(title, action):
 
     # Check if .bypass attribute is True to set text color to grey
-    text_color = "#CCCCCC" if action.bypass == True else "black"
+    if action.bypass:
+        if action.is_augmentation:
+            text_color = "#80a3ba"
+        else:
+            text_color = "#CCCCCC"
+    else:
+        if action.is_augmentation:
+            text_color = "#1a608f"
+        else:
+            text_color = "#000000"
 
     # Format object attributes with one key-value pair per line
     content = "<br>".join(
@@ -820,6 +829,8 @@ def _action_html(title, action):
     )
 
     suffix = " (Bypassed)" if action.bypass else ""
+    if action.is_augmentation:
+        suffix += " (Augmentation)"
     html_code = f"""
 
     <details style="margin: 2px 0;">
