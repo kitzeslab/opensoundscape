@@ -823,9 +823,8 @@ class Audio:
         self,
         path,
         metadata_format="opso",
-        soundfile_subtype=None,
-        soundfile_format=None,
         suppress_warnings=False,
+        **sf_kwargs,
     ):
         """Save Audio to file
 
@@ -849,21 +848,34 @@ class Audio:
                     ["title","copyright","software","artist","comment","date",
                      "album","license","tracknumber","genre"]
                 - None: does not save metadata to file
-            soundfile_subtype: soundfile audio subtype choice, see soundfile.write
-                or list options with soundfile.available_subtypes()
-            soundfile_format: soundfile audio format choice, see soundfile.write
+
             suppress_warnings: if True, will not warn user when unable to
                 save metadata [default: False]
+
+            **sf_kwargs: additional keyword arguments to pass to soundfile.write(). See the docstring of
+                soundfile.write() or soundfile.SoundFile for details.
+
+        Examples:
+
+        Basic saving with default metadata format:
+        `audio.save("output.wav")` or `audio.save("output.mp3")`
+
+        Save a specific format and subtype, such as OPUS:
+        (use soundfile.list_formats() and soundfile.list_subtypes() to see available formats and subtypes)
+        `audio.save("output.ogg", format="OGG", subtype="OPUS")`
+
+        Specify bitrate:
+        soundfinder >= v0.13.1  supports variable bitrate and compression level for mp3 / OPUS formats:
+        `audio.save("output.mp3", bitrate_mode="VARIABLE", compression_level=0.8)`
+
+        # change sample rate before saving:
+        `audio.resample(44100).save("output.wav")`
         """
         fmt = Path(path).suffix.upper()
 
         try:
             soundfile.write(
-                file=path,
-                data=self.samples,
-                samplerate=self.sample_rate,
-                subtype=soundfile_subtype,
-                format=soundfile_format,
+                file=path, data=self.samples, samplerate=self.sample_rate, **sf_kwargs
             )
         except ValueError as exc:
             raise NotImplementedError(

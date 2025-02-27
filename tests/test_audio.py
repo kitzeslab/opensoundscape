@@ -130,6 +130,18 @@ def saved_mp3(request, tmp_dir):
 
 
 @pytest.fixture()
+def saved_ogg(request, tmp_dir):
+    path = Path(f"{tmp_dir}/saved.ogg")
+
+    def fin():
+        if path.exists():
+            path.unlink()
+
+    request.addfinalizer(fin)
+    return path
+
+
+@pytest.fixture()
 def stereo_wav_str():
     return "tests/audio/stereo.wav"
 
@@ -729,6 +741,28 @@ def test_save_mp3(silence_10s_mp3_str, saved_mp3):
         # only supported by libsndfile>=1.1.0, which is not available yet
         # on ubuntu as of Dec 2022. So, we just give the user a helpful error.
         pass
+
+
+def test_save_specific_subtype(silence_10s_mp3_str, saved_ogg):
+    Audio.from_file(silence_10s_mp3_str, sample_rate=16000).save(
+        saved_ogg, format="OGG", subtype="OPUS"
+    )
+    assert saved_ogg.exists()
+    Audio.from_file(saved_ogg)  # make sure we can still load it as audio
+
+
+def test_save_specific_compression_level(silence_10s_mp3_str, saved_mp3):
+    Audio.from_file(silence_10s_mp3_str).save(saved_mp3, compression_level=0.8)
+    assert saved_mp3.exists()
+    Audio.from_file(saved_mp3)  # make sure we can still load it as audio
+
+
+def test_save_specific_bitrate_mode(silence_10s_mp3_str, saved_mp3):
+    Audio.from_file(silence_10s_mp3_str).save(
+        saved_mp3, compression_level=0.8, bitrate_mode="CONSTANT"
+    )
+    assert saved_mp3.exists()
+    Audio.from_file(saved_mp3)  # make sure we can still load it as audio
 
 
 def test_audio_constructor_should_fail_on_file(veryshort_wav_str):
