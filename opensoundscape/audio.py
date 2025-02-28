@@ -2087,4 +2087,3 @@ class MultiChannelAudio(Audio):
         if clip_range is not None:
             new_samples = np.clip(new_samples, clip_range[0], clip_range[1])
         return self._spawn(samples=new_samples)
-
