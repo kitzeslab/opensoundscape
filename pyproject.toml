@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "opensoundscape"
-version = "0.11.0"
+version = "0.12.0"
 description = "Open source, scalable acoustic classification for ecology and conservation"
 authors = [
   "Sam Lapp <sammlapp@gmail.com>",

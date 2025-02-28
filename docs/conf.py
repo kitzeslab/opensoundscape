@@ -24,7 +24,7 @@ copyright = "2024 Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilna
 author = "Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilnani, Alexandra Syunkova, Leonardo Viotti, Santiago Ruiz Guzman, Justin Kitzes"
 
 # The full version, including alpha/beta/rc tags
-release = "0.11.0"
+release = "0.12.0"
 
 
 # -- General configuration ---------------------------------------------------
