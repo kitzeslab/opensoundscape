@@ -88,7 +88,7 @@ style_nav_header_background = "#2980B9"
 
 # Mock libraries we don't want to install on RTD
 autodoc_mock_imports = [
-    "sample_data",  # weird opso module that sets class to itself - skip in automodule
+    "opensoundscape.sample_data",  # weird opso module that sets class to itself - skip in automodule
     "docopt",
     "pandas",
     "librosa",
