@@ -83,6 +83,9 @@ class CAM:
 
         Returns:
             numpy array of shape [w, h, 3] representing the image with CAM heatmaps
+            if mode is None, returns the original sample
+            if show_base is False, returns just the heatmaps
+            if mode is None _and_ show_base is False, returns None
         """
         if show_base:  # plot image of sample
             from opensoundscape.preprocess.utils import process_tensor_for_display
@@ -142,7 +145,7 @@ class CAM:
                 )
 
             elif mode is None:
-                pass
+                continue
             else:
                 raise ValueError(
                     f"unsupported mode {mode}: choose "
@@ -170,7 +173,7 @@ class CAM:
         # Convert back to uint8 format
         overlayed_image = np.clip(overlayed_image * 255, 0, 255).astype(np.uint8)
 
-        return overlayed_image  # TODO: handle show_base=False
+        return overlayed_image
 
     def plot(
         self,
@@ -185,6 +188,8 @@ class CAM:
         gbp_normalization_q=99,
     ):
         """Plot per-class activation maps, guided back propogations, or their products
+
+        Do not pass both mode=None and show_base=False.
 
         Args:
             class_subset, mode, show_base, alpha, color_cycle, gbp_normalization_q: see create_rgb_heatmaps
