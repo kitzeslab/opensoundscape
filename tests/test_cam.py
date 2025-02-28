@@ -11,7 +11,7 @@ import pandas as pd
 
 @pytest.fixture()
 def cam():
-    base = torch.rand(3, 224, 224)
+    base = torch.rand(1, 224, 224)
     activation_maps = pd.Series(
         {i: np.random.uniform(0, 1, [224, 224]) for i in range(2)}
     )

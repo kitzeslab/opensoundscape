@@ -7,8 +7,17 @@ import torch
 import os
 import warnings
 from matplotlib.patches import Patch
+import cv2
 
 from opensoundscape.utils import generate_opacity_colormaps
+
+import numpy as np
+
+
+def normalize_q(x, q=99):
+    """Normalize x such that q-th percentile value is 1.0"""
+    divisor = np.percentile(x, q)
+    return x / (divisor + 1e-8)  # Avoid division by zero
 
 
 class CAM:
@@ -76,14 +85,16 @@ class CAM:
             numpy array of shape [w, h, 3] representing the image with CAM heatmaps
         """
         if show_base:  # plot image of sample
-            # remove the first (batch) dimension
-            # move the first dimension (Nchannels) to last dimension for imshow
-            base_image = -self.base_image.permute(1, 2, 0)
-            # if not 3 channels, average over channels and copy to 3 RGB channels
-            if base_image.shape[2] != 3:
-                base_image = base_image.mean(2).unsqueeze(2).tile([1, 1, 3])
-            # ax.imshow(base_image, alpha=1)
-            overlayed_image = np.array(base_image * 255, dtype=np.uint8)
+            from opensoundscape.preprocess.utils import process_tensor_for_display
+
+            # Normalize base image if needed
+            base_np = process_tensor_for_display(self.base_image, invert=True)
+            # copy channel dim 2 from 1 channel to 3 channels
+            if base_np.shape[2] == 1:
+                base_np = np.repeat(base_np, 3, axis=2)
+            overlayed_image = base_np.astype(np.float32)
+            base_np = base_np - np.min(base_np)
+            base_np = base_np / np.max(base_np)
         else:
             overlayed_image = None
 
@@ -94,11 +105,6 @@ class CAM:
                 if mode == "activation"
                 else self.gbp_maps.keys()
             )
-
-        def normalize_q(x):
-            """normalize x such that q'th percentile value is 1.0"""
-            devisor = np.percentile(x, gbp_normalization_q)
-            return x / devisor
 
         # generate matplotlib color maps using specified color cycle
         colormaps = generate_opacity_colormaps(color_cycle)
@@ -118,7 +124,7 @@ class CAM:
                     f"passed target class {target_class}, which is"
                     "not a class indexed in self.gbp_maps!"
                 )
-                overlay = normalize_q(self.gbp_maps[target_class])
+                overlay = normalize_q(self.gbp_maps[target_class], gbp_normalization_q)
             elif mode == "backprop_and_activation":
                 assert self.activation_maps is not None
                 assert self.gbp_maps is not None
@@ -131,7 +137,9 @@ class CAM:
                 )
                 # we combine them using the product of the two maps
                 am = self.activation_maps[target_class]
-                overlay = am * (normalize_q(self.gbp_maps[target_class]))
+                overlay = am * normalize_q(
+                    self.gbp_maps[target_class], gbp_normalization_q
+                )
 
             elif mode is None:
                 pass
@@ -141,32 +149,28 @@ class CAM:
                     "'activation', 'backprop', or 'backprop_and_activation'."
                 )
 
-            if mode is not None:
-                colormap = colormaps[i % len(colormaps)]  # cycle through color list
-                # Converts to RGB and scale to [0, 255]
-                heatmap_rgb = colormap(overlay)[:, :, :3] * 255
+            # make blank image if overlayed_image is None
+            if overlayed_image is None:
+                overlayed_image = np.zeros([*overlay.shape, 3], dtype=np.float32)
+            # Normalize and apply colormap
+            normalized_overlay = overlay
+            colormap = colormaps[i % len(colormaps)]
+            heatmap_rgba = colormap(normalized_overlay)  # Shape: (H, W, 4)
 
-                # scale by gain
-                heatmap_rgb = heatmap_rgb
+            # Convert to uint8 and separate channels
+            heatmap_rgb = heatmap_rgba[:, :, :3]
+            heatmap_alpha = heatmap_rgba[:, :, 3] * alpha
 
-                # clip to [0, 255]
-                heatmap_rgb = np.clip(heatmap_rgb, 0, 255)
+            for c in range(3):  # Apply per channel
+                overlayed_image[:, :, c] = (
+                    overlayed_image[:, :, c] * (1 - heatmap_alpha)
+                    + heatmap_rgb[:, :, c] * heatmap_alpha
+                )
 
-                # strength vs original image controlled by alpha parameter
-                mask = overlay * alpha
+        # Convert back to uint8 format
+        overlayed_image = np.clip(overlayed_image * 255, 0, 255).astype(np.uint8)
 
-                # copy overlay to 3 channels in 3rd dimension
-                mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
-
-                # use overlay as mask to combine heatmap with image
-                if overlayed_image is None:  # if no base image, just use heatmap
-                    overlayed_image = heatmap_rgb * mask
-                else:
-                    overlayed_image = heatmap_rgb * mask + overlayed_image * (1 - mask)
-
-        overlayed_image = np.array(overlayed_image, dtype=np.uint8)
-
-        return overlayed_image
+        return overlayed_image  # TODO: handle show_base=False
 
     def plot(
         self,
