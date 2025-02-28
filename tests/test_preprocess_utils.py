@@ -15,6 +15,7 @@ def test_get_args():
         "channel": None,
         "transform_from_zero_centered": True,
         "invert": False,
+        "cmap": None,
     }
     assert args == expected_args
 
