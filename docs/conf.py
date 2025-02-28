@@ -115,6 +115,7 @@ autodoc_mock_imports = [
     "noisereduce",
     "torchmetrics",
     "lightning",
+    "cv2",
 ]
 
 master_doc = "index"
