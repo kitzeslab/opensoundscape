@@ -42,7 +42,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
             an object of BasePreprocessor or its children which defines
             the operations to perform on input samples
         audio_root:
-            optionally pass a root directory (pathlib.Path or str) to prepended to each file path
+            optionally pass a root directory (pathlib.Path or str) to prepend to each file path
             - if None (default), samples must contain full paths to files
 
     Returns:
