@@ -59,6 +59,18 @@ def train_df_clips(train_df):
 
 
 @pytest.fixture()
+def train_df_relative():
+    clip_df = make_clip_df(
+        ["silence_10s.mp3", "silence_10s.mp3"],
+        clip_duration=1.0,
+        audio_root="tests/audio/",
+    )
+    clip_df[0] = np.random.choice([0, 1], size=len(clip_df))
+    clip_df[1] = np.random.choice([0, 1], size=len(clip_df))
+    return clip_df
+
+
+@pytest.fixture()
 def test_df():
     return pd.DataFrame(index=["tests/audio/silence_10s.mp3"])
 
@@ -181,6 +193,27 @@ def test_train_on_clip_df(train_df_clips):
     shutil.rmtree("tests/models/")
 
 
+def test_train_with_audio_root(train_df_relative):
+    """
+    test training a model when Audio files are long/unsplit
+    and a dataframe provides clip-level labels. Training
+    should internally load a relevant clip from the audio
+    file and get its labels from the dataframe
+    """
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=1.0)
+    model.train(
+        train_df_relative,
+        train_df_relative,
+        save_path="tests/models",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+        audio_root="tests/audio",
+    )
+    shutil.rmtree("tests/models/")
+
+
 def test_classifier_custom_lr(train_df):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     model.optimizer_params["kwargs"]["lr"] = 0.001
@@ -271,7 +304,7 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df):
     shutil.rmtree("tests/models/")
 
 
-def test_train_amp(train_df):
+def test_train_amp_cpu(train_df):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     # first test with cpu
     model.device = "cpu"
@@ -286,24 +319,47 @@ def test_train_amp(train_df):
         num_workers=0,
     )
     model.predict(train_df)
+    shutil.rmtree("tests/models/")
 
+
+def test_train_amp_mps(train_df):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     # if cuda is available, test with cuda
     if torch.cuda.is_available():
-        model.device = "cuda"
-        model.use_amp = True
-        model.train(
-            train_df,
-            train_df,
-            save_path="tests/models",
-            epochs=1,
-            batch_size=2,
-            save_interval=10,
-            num_workers=0,
-        )
-        model.predict(train_df)
+        assert model.device.type == "cuda"
+    else:
+        return  # cannot test cuda
+    model.use_amp = True
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    model.predict(train_df)
+    shutil.rmtree("tests/models/")
 
-    # add mps once amp is supported
 
+def test_train_amp_mps(train_df):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    if torch.mps.is_available():
+        assert model.device.type == "mps"
+    else:
+        return  # cannot test mps on this machine
+    model.use_amp = True
+    model.train(
+        train_df,
+        train_df,
+        save_path="tests/models",
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    model.predict(train_df)
     shutil.rmtree("tests/models/")
 
 
@@ -380,6 +436,12 @@ def test_single_target_prediction(train_df_clips):
 def test_predict_on_list_of_files(test_df):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     scores = model.predict(test_df.index.values)
+    assert len(scores) == 2
+
+
+def test_predict_with_audio_root():
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    scores = model.predict(["silence_10s.mp3"], audio_root="tests/audio/")
     assert len(scores) == 2
 
 
@@ -596,8 +658,11 @@ def test_save_and_load_model_custom_arch(model_save_path):
     classes = [0, 1]
 
     @cnn_architectures.register_arch
-    def my_alexnet_generator(num_classes, num_channels):
-        return alexnet(num_classes, num_channels=num_channels)
+    def my_alexnet_generator(
+        num_classes, num_channels, weights="DEFAULT", freeze_feature_extractor=False
+    ):
+        # for example, we ignore the freeze_feature_extractor argument in the generator
+        return alexnet(num_classes, num_channels=num_channels, weights=weights)
 
     arch = my_alexnet_generator(2, 1)
     arch.constructor_name = "my_alexnet_generator"
@@ -743,6 +808,16 @@ def test_generate_cams(test_df):
     samples = model.generate_cams(test_df, guided_backprop=True, method=None)
     assert type(samples[0].cam.gbp_maps) == pd.Series
     assert samples[0].cam.activation_maps is None
+
+
+def test_generate_samples(test_df):
+    """should return list of AudioSample objects"""
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    samples = model.generate_samples(test_df)
+    assert len(samples) == 2
+    assert type(samples[0]) == AudioSample
+    assert type(samples[0].data) == torch.Tensor
+    assert type(samples[0].labels) == pd.Series
 
 
 def test_generate_cams_batch_size(test_df):

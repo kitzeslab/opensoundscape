@@ -586,6 +586,30 @@ def test_localize_too_few_receivers(LOCA_2021_aru_coords, LOCA_2021_detections):
     assert len(unlocalized_events) == 6
 
 
+def test_cc_threshold_mask_receivers(LOCA_2021_aru_coords, LOCA_2021_detections):
+    """when some receivers are filtered out based on cc threshold,
+    they should not be included in attributes like .receiver_start_time_offsets
+    """
+    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    localized_positions, unlocalized_events = array.localize_detections(
+        detections=LOCA_2021_detections,
+        min_n_receivers=4,
+        max_receiver_dist=30,
+        localization_algorithm="gillette",
+        cc_filter="phat",
+        cc_threshold=0.05,
+        return_unlocalized=True,
+    )
+    e = localized_positions[0]
+    assert len(e.receiver_start_time_offsets) == 4
+    assert e.receiver_start_time_offsets[0] == 0.2
+    assert len(e.receiver_files) == 4
+    assert len(e.receiver_locations) == 4
+    assert len(e.tdoas) == 4
+    assert len(e.cc_maxs) == 4
+    assert len(e.distance_residuals) == 4
+
+
 def test_spatial_event_to_from_dict(LOCA_2021_aru_coords):
     # test that a SpatialEvent can be serialized to a dictionary and then re-instantiated
     max_delay = 0.04
@@ -614,7 +638,9 @@ def test_spatial_event_to_from_dict(LOCA_2021_aru_coords):
     new_event = localization.SpatialEvent.from_dict(event_dict)
 
     assert event.start_timestamp == new_event.start_timestamp
-    assert event.receiver_start_time_offsets == new_event.receiver_start_time_offsets
+    assert (
+        event.receiver_start_time_offsets == new_event.receiver_start_time_offsets
+    ).all()
     assert (event.receiver_files == new_event.receiver_files).all()
     # compare equality of two arrays that can contain nan
     assert np.array_equal(
@@ -625,6 +651,31 @@ def test_spatial_event_to_from_dict(LOCA_2021_aru_coords):
     assert event.class_name == new_event.class_name
     assert event.bandpass_range == new_event.bandpass_range
     assert event.cc_filter == new_event.cc_filter
+
+
+def test_spatial_event_localize_not_enough_receivers():
+    # should get empty values but should not raise exception
+    # when trying to localize with too few receivers (e.g. 2)
+    event = localization.SpatialEvent(
+        receiver_files=["file1", "file2"],
+        receiver_locations=np.array([[0, 0], [0, 20]]),
+        max_delay=0.04,
+        receiver_start_time_offsets=np.array([0.2, 0.2]),
+        duration=0.3,
+        class_name="zeep",
+        bandpass_range=(5000, 10000),
+        cc_filter="phat",
+        start_timestamp=datetime.datetime(
+            2021, 9, 24, 6, 52, 0, 200_000, tzinfo=pytz.UTC
+        ),
+    )
+    event.tdoas = np.array([0, 0.0325])
+    event.cc_maxs = np.array([1, 0.8])
+    position_estimate = event._localize_after_cross_correlation(
+        localization_algorithm="gillette"
+    )
+    assert position_estimate.location_estimate is None
+    assert position_estimate.distance_residuals is None
 
 
 def test_position_estimate_to_from_dict():

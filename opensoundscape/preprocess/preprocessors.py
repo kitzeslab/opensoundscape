@@ -76,7 +76,6 @@ class BasePreprocessor:
     in the pipeline to produce a sample.
 
     Args:
-        action_dict: dictionary of name:Action actions to perform sequentially
         sample_duration: length of audio samples to generate (seconds)
     """
 
@@ -86,6 +85,15 @@ class BasePreprocessor:
 
     def __repr__(self):
         return f"Preprocessor with pipeline:\n{self.pipeline}"
+
+    def _repr_html_(self):
+        top_str = f"{type(self).__name__} with pipeline:"
+        out = f"<b>{top_str}</b>"
+
+        for i, action in self.pipeline.items():
+            out += _action_html(i, action)
+
+        return out
 
     def insert_action(self, action_index, action, after_key=None, before_key=None):
         """insert an action in specific specific position
@@ -549,7 +557,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
                     Overlay(
                         is_augmentation=True,
                         overlay_df=pd.DataFrame() if overlay_df is None else overlay_df,
-                        update_labels=False,
+                        update_labels=True,
                     )
                 ),
                 # add vertical (time) and horizontal (frequency) masking bars
@@ -665,11 +673,12 @@ class AudioAugmentationPreprocessor(AudioPreprocessor):
         super().__init__(**kwargs)
 
         # random gain
-        # useful for softening focal recordings (xeno-canto)
-        # generally bypass for soundscape recordings
+        # when training data is much louder than application, e.g. xeno-canto focal recordings,
+        # large gain reduction such as dB_range=(-40, -10) may be useful
         random_gain_action = actions.Action(
-            action_functions.audio_random_gain, is_augmentation=True, dB_range=(-40, 0)
+            action_functions.audio_random_gain, is_augmentation=True, dB_range=(-5, 0)
         )
+        random_gain_action.bypass = True
         self.insert_action("random_gain", random_gain_action)
 
         # add noise
@@ -782,3 +791,53 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
                 noisereduce_kwargs=noisereduce_kwargs,
             ),
         )
+
+
+def replace_nones(value):
+    if value != value:
+        return "nan"
+    elif value is None:
+        return "None"
+    else:
+        return str(value)
+
+
+from IPython.display import display, HTML
+
+
+def _action_html(title, action):
+
+    # Check if .bypass attribute is True to set text color to grey
+    if action.bypass:
+        if action.is_augmentation:
+            text_color = "#80a3ba"
+        else:
+            text_color = "#CCCCCC"
+    else:
+        if action.is_augmentation:
+            text_color = "#1a608f"
+        else:
+            text_color = "#000000"
+
+    # Format object attributes with one key-value pair per line
+    content = "<br>".join(
+        [
+            f"<strong>{key}:</strong> {replace_nones(value)}"
+            for key, value in action.params.items()
+        ]
+    )
+
+    suffix = " (Bypassed)" if action.bypass else ""
+    if action.is_augmentation:
+        suffix += " (Augmentation)"
+    html_code = f"""
+
+    <details style="margin: 2px 0;">
+      <summary style="font-size: 12px; cursor: pointer; margin: 2px 0; color: {text_color};">{title+suffix}</summary>
+      <div style="padding: 2px 0; border-left: 2px solid #007acc; margin: 2px 0 0 12px; font-size: 10px; color: {text_color};">
+        {content}
+      </div>
+    </details>
+    
+    """
+    return html_code

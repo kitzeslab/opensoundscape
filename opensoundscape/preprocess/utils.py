@@ -28,17 +28,9 @@ def get_reqd_args(func):
     ]
 
 
-def show_tensor(tensor, channel=None, transform_from_zero_centered=True, invert=False):
-    """helper function for displaying a sample as an image
-
-    Args:
-        tensor: torch.Tensor of shape [c,w,h] with values centered around zero
-        channel: specify an integer to plot only one channel, otherwise will
-            attempt to plot all channels
-        transform_from_zero_centered: if True, transforms values from [-1,1] to [0,1]
-        invert:
-            if true, flips value range via x=1-x
-    """
+def process_tensor_for_display(
+    tensor, channel=None, transform_from_zero_centered=True, invert=False
+):
 
     tensor = copy.deepcopy(tensor)
 
@@ -48,20 +40,50 @@ def show_tensor(tensor, channel=None, transform_from_zero_centered=True, invert=
     if invert:
         tensor = 1 - tensor
 
-    if channel is not None or tensor.shape[0] == 1:
-        cmap = "Greys"
-    else:
-        cmap = None
-
-    # this avoids stretching the color range to the min/max of the tensor
-    normalize = matplotlib.colors.Normalize(vmin=0, vmax=1)
-
-    sample = (
-        tensor.detach().numpy().transpose([1, 2, 0])
-    )  # re-arrange dimensions for img plotting
+    # re-arrange dimensions for img plotting
+    sample = tensor.detach().numpy().transpose([1, 2, 0])
 
     if channel is not None:
         sample = sample[:, :, channel]
+
+    return sample
+
+
+def show_tensor(
+    tensor,
+    channel=None,
+    transform_from_zero_centered=True,
+    invert=False,
+    cmap=None,
+):
+    """helper function for displaying a sample as an image
+
+    Args:
+        tensor: torch.Tensor of shape [c,w,h] with values centered around zero
+        channel: specify an integer to plot only one channel, otherwise will
+            attempt to plot all channels
+        transform_from_zero_centered: if True, transforms values from [-1,1] to [0,1]
+        invert:
+            if true, flips value range via x=1-x
+        cmap: matplotlib colormap passed to plt.imshow()
+            - if None, will choose 'Greys' if only one channel
+    """
+    sample = process_tensor_for_display(
+        tensor,
+        channel=channel,
+        transform_from_zero_centered=transform_from_zero_centered,
+        invert=invert,
+    )
+
+    if cmap is None:
+        # choose greyscale if only one channel
+        if channel is not None or tensor.shape[0] == 1:
+            cmap = "Greys"
+        else:
+            cmap = None
+
+    # this avoids stretching the color range to the min/max of the tensor
+    normalize = matplotlib.colors.Normalize(vmin=0, vmax=1)
 
     plt.imshow(sample, cmap=cmap, norm=normalize)
 

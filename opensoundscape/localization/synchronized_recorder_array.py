@@ -514,6 +514,7 @@ class SynchronizedRecorderArray:
                                 bandpass_range=bandpass_range,
                                 cc_threshold=cc_threshold,
                                 max_delay=max_delay,
+                                min_n_receivers=min_n_receivers,
                                 # find the start_time value for each clip, i.e. offset from the start of
                                 # the corresponding file to the start of the detection
                                 # if all audio files started at same time, this will be the same for all files
@@ -524,6 +525,7 @@ class SynchronizedRecorderArray:
                                 duration=duration,
                                 class_name=cls_i,
                                 cc_filter=cc_filter,
+                                speed_of_sound=self.speed_of_sound,
                             )
                         )
 

@@ -9,11 +9,9 @@ import numpy as np
 import pandas as pd
 import os
 import copy
-import types
 
 import torch
 import torch.nn.functional as F
-import wandb
 from tqdm.autonotebook import tqdm
 
 import opensoundscape
@@ -184,7 +182,7 @@ class BaseModule:
         
         for example, to use Cosine Annealing, set:
         ```python
-        self.scheduler_params = {
+        model.lr_scheduler_params = {
             "class": torch.optim.lr_scheduler.CosineAnnealingLR,
             "kwargs":{
                 "T_max": n_epochs,
@@ -212,61 +210,34 @@ class BaseModule:
         batch_size = len(batch_tensors)
 
         # automatic mixed precision
-        # can get rid of if/else blocks and use enabled=true
-        # once mps is supported https://github.com/pytorch/pytorch/pull/99272
-
-        # self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
-        # with torch.autocast(
-        #     device_type=self.device, dtype=torch.float16, enabled=self.use_amp
-        # ):
-        #     output = self.network(input)
-        #     loss = self.loss_fn(output, batch_labels)
-
-        # if not self.lightning_mode:
-        #     # if not using Lightning, we manually call
-        #     # loss.backward() and optimizer.step()
-        #     # Lightning does this behind the scenes
-        #     self.scaler.scale(loss).backward()
-        #     self.scaler.step(self.optimizer)
-        #     self.scaler.update()
-        #     self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
-
-        # if self.use_amp is False, GradScaler with enabled=False should have no effect
-        # TODO: use amp with mps once supported https://github.com/pytorch/pytorch/issues/88415
-        if "mps" in str(self.device):
-            use_amp = False  # Not using amp: not implemented for mps as of 2024-07-11
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        if "cuda" in str(self.device):
+            device_type = "cuda"
+            dtype = torch.float16
         else:
-            use_amp = self.use_amp
-
-        if use_amp:  # as of 7/11/24, torch.autocast is not supported for mps
-            self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
-            if "cuda" in str(self.device):
-                device_type = "cuda"
-                dtype = torch.float16
-            else:
-                device_type = "cpu"
-                dtype = torch.bfloat16
-            with torch.autocast(device_type=device_type, dtype=dtype):
-                output = self.network(batch_tensors)
-                loss = self.loss_fn(output, batch_labels)
-            if not self.lightning_mode:
-                # if not using Lightning, we manually call
-                # loss.backward() and optimizer.step()
-                # Lightning does this behind the scenes
-                self.scaler.scale(loss).backward()
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-                self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
-        else:
+            device_type = "cpu"
+            dtype = torch.bfloat16
+        with torch.autocast(device_type=device_type, dtype=dtype):
             output = self.network(batch_tensors)
             loss = self.loss_fn(output, batch_labels)
-            if not self.lightning_mode:
-                # if not using Lightning, we manually call
-                # loss.backward() and optimizer.step()
-                # Lightning does this behind the scenes
-                loss.backward()
-                self.optimizer.step()
-                self.optimizer.zero_grad()
+        if not self.lightning_mode:
+            # if not using Lightning, we manually call
+            # loss.backward() and optimizer.step()
+            # Lightning does this behind the scenes
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
+        # else:
+        #     output = self.network(batch_tensors)
+        #     loss = self.loss_fn(output, batch_labels)
+        #     if not self.lightning_mode:
+        #         # if not using Lightning, we manually call
+        #         # loss.backward() and optimizer.step()
+        #         # Lightning does this behind the scenes
+        #         loss.backward()
+        #         self.optimizer.step()
+        #         self.optimizer.zero_grad()
 
         # single-target torchmetrics expect labels as integer class indices rather than one-hot
         y = batch_labels.argmax(dim=1) if self.single_target else batch_labels
@@ -294,6 +265,14 @@ class BaseModule:
         return loss
 
     # def predict_step(self, batch): #runs forward() if we don't override default
+
+    @property
+    def classifier_params(self):
+        """return the parameters of the classifier layer of the network
+
+        override this method if the classifier parameters should be retrieved in a different way
+        """
+        return self.classifier.parameters()
 
     def configure_optimizers(
         self,
@@ -337,6 +316,7 @@ class BaseModule:
             dictionary with keys "optimizer" and "scheduler" containing the
             optimizer and learning rate scheduler objects to use during training
         """
+
         if reset_optimizer:
             self.optimizer = None
         if restart_scheduler:
@@ -354,28 +334,26 @@ class BaseModule:
         if self.optimizer_params["classifier_lr"] is not None:
             # customize the learning rate of the classifier layer
             try:
-                classifier_params = list(self.classifier.parameters())
-                # for some reason, I get tensor mismatch if I check whether
-                # parameters are in list. Instead, compare the objects' ids.
+                # Cannot check `param in param_list`. Instead, compare the objects' ids.
                 # see https://discuss.pytorch.org/t/confused-by-runtimeerror-when-checking-for-parameter-in-list/211308
-                classifier_param_ids = {id(p) for p in classifier_params}
+                classifier_param_ids = {id(p) for p in self.classifier_params}
+                # remove these parameters from their current group
+                for param_group in optimizer.param_groups:
+                    param_group["params"] = [
+                        p
+                        for p in param_group["params"]
+                        if id(p) not in classifier_param_ids
+                    ]
             except Exception as e:
                 raise ValueError(
                     "Could not access self.classifier.parameters(). "
                     "Make sure self.classifier propoerty returns a torch.nn.Module object."
                 ) from e
-            # remove these parameters from their current group
-            for param_group in optimizer.param_groups:
-                param_group["params"] = [
-                    p
-                    for p in param_group["params"]
-                    if id(p) not in classifier_param_ids
-                ]
 
             # add them to a new group with custom learning rate
             optimizer.add_param_group(
                 {
-                    "params": classifier_params,
+                    "params": self.classifier_params,
                     "lr": self.optimizer_params["classifier_lr"],
                 }
             )
@@ -994,7 +972,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         wandb_session=None,
         return_invalid_samples=False,
         progress_bar=True,
-        **kwargs,
+        audio_root=None,
+        **dataloader_kwargs,
     ):
         """Generate predictions on a set of samples
 
@@ -1044,7 +1023,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 containing file paths of samples that caused errors during preprocessing
                 [default: False]
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
-            **kwargs: additional arguments to self.predict_dataloader()
+            audio_root: optionally pass a root directory (pathlib.Path or str)
+                - `audio_root` is prepended to each file path
+                - if None (default), samples must contain full paths to files
+            **dataloader_kwargs: additional arguments to self.predict_dataloader()
 
         Returns:
             df of post-activation_layer scores
@@ -1068,6 +1050,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             for that sample will be np.nan
 
         """
+        if audio_root is not None:  # add this to dataloader keyword arguments
+            dataloader_kwargs.update(dict(audio_root=audio_root))
         # create dataloader to generate batches of AudioSamples
         dataloader = self.predict_dataloader(
             samples,
@@ -1081,7 +1065,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
-            **kwargs,
+            **dataloader_kwargs,
         )
 
         # check for matching class list
@@ -1171,7 +1155,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         samples,
         invalid_samples_log=None,
         return_invalid_samples=False,
-        **kwargs,
+        audio_root=None,
+        **dataloader_kwargs,
     ):
         """
         Generate AudioSample objects. Input options same as .predict()
@@ -1184,8 +1169,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 - a list (or np.ndarray) of audio file paths
                 - a single file path as str or pathlib.Path
             see .predict() documentation for other args
-            **kwargs: any arguments to inference_dataloader_cls.__init__
-                (default class is SafeAudioDataloader)
+            **dataloader_kwargs: any arguments to inference_dataloader_cls.__init__
+                except samples (uses `samples`) and collate_fn (uses `identity`)
+                (Note: default class is SafeAudioDataloader)
 
         Returns:
             a list of AudioSample objects
@@ -1200,8 +1186,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         show_tensor_grid(tensors,columns=3)
         ```
         """
+        if audio_root is not None:  # add this to dataloader keyword arguments
+            dataloader_kwargs.update(dict(audio_root=audio_root))
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(samples, **kwargs)
+        dataloader = self.predict_dataloader(
+            samples, collate_fn=identity, **dataloader_kwargs
+        )
 
         # move model to device
         try:
@@ -1432,6 +1422,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         raise_errors=False,
         wandb_session=None,
         progress_bar=True,
+        audio_root=None,
+        **dataloader_kwargs,
     ):
         """train the model on samples from train_dataset
 
@@ -1493,8 +1485,11 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 model.train(...,wandb_session=session)
                 session.finish()
                 ```
+            audio_root: optionally pass a root directory (pathlib.Path or str)
+                - `audio_root` is prepended to each file path
+                - if None (default), samples must contain full paths to files
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
-
+            **dataloader_kwargs: additional arguments passed to train_dataloader()
         Effects:
             If wandb_session is provided, logs progress and samples to Weights
             and Biases. A random set of training and validation samples
@@ -1516,6 +1511,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 "No validation set was provided. Model will be "
                 "evaluated using the performance on the training set."
             )
+
+        if audio_root is not None:  # add this to dataloader keyword arguments
+            dataloader_kwargs.update(dict(audio_root=audio_root))
 
         ## Initialization ##
 
@@ -1587,6 +1585,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
+            **dataloader_kwargs,
         )
 
         ######################
@@ -1632,6 +1631,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                         batch_size=batch_size,
                         num_workers=num_workers,
                         raise_errors=raise_errors,
+                        **dataloader_kwargs,
                     )
                     self.valid_metrics[self.current_epoch] = val_metrics
                     score = val_metrics[self.score_metric]  # overall score
@@ -1650,7 +1650,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                     pickle_path = f"{self.save_path}/best.pickle"
                     self._log(f"New best model saved to {save_path}", level=2)
                     self.save(save_path, pickle=False)
-                    self.save(pickle_path, pickle=False)
+                    self.save(pickle_path, pickle=True)
 
             # save pickled model every n epochs
             # pickled model file allows us to resume training
@@ -1751,11 +1751,17 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             )
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, unpickle=True):
         """load a model saved using CNN.save()
 
         Args:
             path: path to file saved using CNN.save()
+            unpickle: if True, passes `weights_only=False` to
+                torch.load(). This is necessary if the model was saved with
+                pickle=True, which saves the entire model object. If
+                `unpickle=False`, this function will work if the model was saved
+                with pickle=False, but will raise an error if the model was saved
+                with pickle=True. [default: True]
 
         Returns:
             new CNN instance
@@ -1763,7 +1769,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Note: Note that if you used pickle=True when saving, the model object might not load properly
         across different versions of OpenSoundscape.
         """
-        model_dict = torch.load(path)
+        model_dict = torch.load(path, weights_only=not unpickle)
 
         opso_version = (
             model_dict.pop("opensoundscape_version")
@@ -2170,7 +2176,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         return_preds=False,
         avgpool=True,
         return_dfs=True,
-        **kwargs,
+        audio_root=None,
+        **dataloader_kwargs,
     ):
         """
         Generate embeddings (intermediate layer outputs) for audio files/clips
@@ -2197,12 +2204,17 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 .predict(). if False, returns np.array of embeddings [default: True]. If
                 avg_pool=False, overrides to return np.array since we can't have a df with >2
                 dimensions
-            kwargs are passed to self.predict_dataloader()
+            audio_root: optionally pass a root directory (pathlib.Path or str)
+                - `audio_root` is prepended to each file path
+                - if None (default), samples must contain full paths to files
+            dataloader_kwargs are passed to self.predict_dataloader()
 
         Returns: (embeddings, preds) if return_preds=True or embeddings if return_preds=False
             types are pd.DataFrame if return_dfs=True, or np.array if return_dfs=False
 
         """
+        if audio_root is not None:
+            dataloader_kwargs.update(dict(audio_root=audio_root))
         if not avgpool:  # cannot create a DataFrame with >2 dimensions
             return_dfs = False
 
@@ -2222,7 +2234,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(samples, **kwargs)
+        dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
 
         # run inference, returns (scores, intermediate_outputs)
         preds, embeddings = self(
@@ -2300,9 +2312,6 @@ def use_resample_loss(model, train_df):
     """
     class_frequency = torch.tensor(train_df.values).sum(0).to(model.device)
     model.loss_fn = ResampleLoss(class_frequency)
-
-
-# TODO: implement `classifier_lr` key in self.optimizer_params and use in configure_optimizers
 
 
 @register_model_cls
@@ -2487,7 +2496,7 @@ class InceptionV3(SpectrogramClassifier):
         )
 
 
-def load_model(path, device=None):
+def load_model(path, device=None, unpickle=True):
     """load a saved model object
 
     This function handles models saved either as pickled objects or as a dictionary
@@ -2500,8 +2509,11 @@ def load_model(path, device=None):
     Args:
         path: file path of saved model
         device: which device to load into, eg 'cuda:1'
-        [default: None] will choose first gpu if available, otherwise cpu
-
+            [default: None] will choose first gpu if available, otherwise cpu
+        unpickle: if True, passes `weights_only=False` to torch.load(). This is necessary if the
+        model was saved with`pickle=True`, which saves the entire model object.
+            If `unpickle=False`, this function will work if the model was saved with pickle=False,
+            but will raise an error if the model was saved with pickle=True. [default: True]
     Returns:
         a model object with loaded weights
     """
@@ -2512,7 +2524,11 @@ def load_model(path, device=None):
         # otherwise mps (Apple Silicon) if available, otherwise cpu
         if device is None:
             device = _gpu_if_available()
-        loaded_content = torch.load(path, map_location=device)
+        loaded_content = torch.load(
+            path,
+            map_location=device,
+            weights_only=not unpickle,
+        )
 
         if isinstance(loaded_content, dict):
             model_cls = MODEL_CLS_DICT[loaded_content.pop("class")]
@@ -2546,116 +2562,6 @@ def load_model(path, device=None):
             original model. See the `Predict with pre-trained CNN` tutorial for details.
             """
         ) from e
-
-
-# def load_outdated_model(
-#     path, architecture, sample_duration, model_class=CNN, device=None
-# ):
-#     """load a CNN saved with a version of OpenSoundscape <0.6.0
-
-#     This function enables you to load models saved with opso 0.4.x and 0.5.x.
-#     If your model was saved with .save() in a previous version of OpenSoundscape
-#     >=0.6.0, you must re-load the model
-#     using the original package version and save it's network's state dict, i.e.,
-#     `torch.save(model.network.state_dict(),path)`, then load the state dict
-#     to a new model object with model.load_weights(). See the
-#     `Predict with pre-trained CNN` tutorial for details.
-
-#     For models created with the same version of OpenSoundscape as the one
-#     you are using, simply use opensoundscape.ml.cnn.load_model().
-
-#     Note: for future use of the loaded model, you can simply call
-#     `model.save(path)` after creating it, then reload it with
-#     `model = load_model(path)`.
-#     The saved model will be fully compatible with opensoundscape >=0.7.0.
-
-#     Examples:
-#     ```
-#     #load a binary resnet18 model from opso 0.4.x, 0.5.x, or 0.6.0
-#     from opensoundscape import CNN
-#     model = load_outdated_model('old_model.tar',architecture='resnet18')
-
-#     #load a resnet50 model of class CNN created with opso 0.5.0
-#     from opensoundscape import CNN
-#     model_050 = load_outdated_model('opso050_pytorch_model_r50.model',architecture='resnet50')
-#     ```
-
-#     Args:
-#         path: path to model file, ie .model or .tar file
-#         architecture: see CNN docs
-#             (pass None if the class __init__ does not take architecture as an argument)
-#         sample_duration: length of samples in seconds
-#         model_class: class to construct. Normally CNN.
-#         device: optionally specify a device to map tensors onto,
-#         eg 'cpu', 'cuda:0', 'cuda:1'[default: None]
-#             - if None, will choose cuda:0 if cuda is available, otherwise chooses cpu
-
-#     Returns:
-#         a cnn model object with the weights loaded from the saved model
-#     """
-#     if device is None:
-#         device = _gpu_if_available()
-
-#     try:
-#         # use torch to load the saved model object
-#         model_dict = torch.load(path, map_location=device)
-#     except AttributeError as exc:
-#         raise Exception(
-#             "This model could not be loaded in this version of "
-#             "OpenSoundscape. You may need to load the model with the version "
-#             "of OpenSoundscape that created it and torch.save() the "
-#             "model.network.state_dict(), then load the weights with model.load_weights"
-#         ) from exc
-
-#     if type(model_dict) != dict:
-#         raise ValueError(
-#             "This model was saved as a complete object. Try using load_model() instead."
-#         )
-
-#     # get the list of classes
-#     if "classes" in model_dict:
-#         classes = model_dict["classes"]
-#     elif "labels_yaml" in model_dict:
-#         classes = list(yaml.safe_load(model_dict["labels_yaml"]).values())
-#     else:
-#         raise ValueError("Could not get a list of classes from the saved model.")
-
-#     # try to construct a model object
-#     if architecture is None:
-#         model = model_class(classes=classes, sample_duration=sample_duration)
-#     else:
-#         model = model_class(
-#             architecture=architecture, classes=classes, sample_duration=sample_duration
-#         )
-
-#     # rename keys of resnet18 architecture from 0.4.x-0.6.0 to match pytorch resnet18 keys
-#     model_dict["model_state_dict"] = {
-#         k.replace("classifier.", "fc.").replace("feature.", ""): v
-#         for k, v in model_dict["model_state_dict"].items()
-#     }
-
-#     # load the state dictionary of the network, allowing mismatches
-#     mismatched_keys = model.network.load_state_dict(
-#         model_dict["model_state_dict"], strict=False
-#     )
-#     print("mismatched keys:")
-#     print(mismatched_keys)
-
-#     # if there's no record of single-tartet vs multitarget, it' single target from opso 0.4.x
-#     try:
-#         single_target = model_dict["single_target"]
-#     except KeyError:
-#         single_target = True
-
-#     model.single_target = single_target
-
-#     warnings.warn(
-#         "After loading a model, you still need to ensure that your "
-#         "preprocessing (model.preprocessor) matches the settings used to create"
-#         "the original model."
-#     )
-
-#     return model
 
 
 def _gpu_if_available():

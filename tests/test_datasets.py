@@ -26,6 +26,13 @@ def short_file_df():
 
 
 @pytest.fixture()
+def relative_path_df():
+    paths = ["audio/veryshort.wav"]
+    labels = [[0, 1]]
+    return pd.DataFrame(index=paths, data=labels, columns=[0, 1])
+
+
+@pytest.fixture()
 def bad_good_df():
     paths = ["tests/audio/veryshort.wav", "tests/audio/silence_10s.mp3"]
     labels = [[1, 0], [1, 0]]
@@ -74,6 +81,17 @@ def test_audio_file_dataset(dataset_df, pre):
     pre.width = 224
     pre.channels = 3
     dataset = AudioFileDataset(dataset_df, pre)
+    sample1 = dataset[0]
+    assert sample1.data.numpy().shape == (3, 224, 224)
+    assert dataset[0].labels.values.shape == (2,)
+
+
+def test_audio_root(relative_path_df, pre):
+    pre.bypass_augmentation = True
+    pre.height = 224
+    pre.width = 224
+    pre.channels = 3
+    dataset = AudioFileDataset(relative_path_df, pre, audio_root="tests/")
     sample1 = dataset[0]
     assert sample1.data.numpy().shape == (3, 224, 224)
     assert dataset[0].labels.values.shape == (2,)
@@ -178,6 +196,7 @@ def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
     """duplicate indices of overlay_df are now removed, resolving
     a bug that caused duplicated indices to return 2-d labels.
     """
+    # test with update_labels=True
     overlay_df = pd.concat([overlay_df, overlay_df])
     overlay_pre = SpectrogramPreprocessor(2.0, overlay_df=overlay_df)
     dataset = AudioFileDataset(dataset_df, overlay_pre)
@@ -185,6 +204,10 @@ def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
     dataset.preprocessor.pipeline.overlay.set(update_labels=True)
     sample = dataset[0]
     assert np.array_equal(sample.labels.values, [1, 1])
+    # test with update_labels=False
+    dataset.preprocessor.pipeline.overlay.set(update_labels=False)
+    sample = dataset[0]
+    assert np.array_equal(sample.labels.values, [1, 0])
 
 
 def test_overlay_criterion_fn(dataset_df, overlay_pre):

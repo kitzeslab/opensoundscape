@@ -24,7 +24,7 @@ copyright = "2024 Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilna
 author = "Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilnani, Alexandra Syunkova, Leonardo Viotti, Santiago Ruiz Guzman, Justin Kitzes"
 
 # The full version, including alpha/beta/rc tags
-release = "0.11.0"
+release = "0.12.0"
 
 
 # -- General configuration ---------------------------------------------------
@@ -88,6 +88,7 @@ style_nav_header_background = "#2980B9"
 
 # Mock libraries we don't want to install on RTD
 autodoc_mock_imports = [
+    "opensoundscape.sample_data",  # weird opso module that sets class to itself - skip in automodule
     "docopt",
     "pandas",
     "librosa",
@@ -115,6 +116,7 @@ autodoc_mock_imports = [
     "noisereduce",
     "torchmetrics",
     "lightning",
+    "cv2",
 ]
 
 master_doc = "index"

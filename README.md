@@ -50,7 +50,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 
 #### How do I install OpenSoundscape?
 
-* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.11.0`. 
+* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.12.0`. 
 * To use OpenSoundscape in Jupyter Notebooks (e.g. for tutorials), follow the installation instructions for your operating system, then follow the "Jupyter" instructions.
 * Contributors and advanced users can also use Poetry to install OpenSoundscape using the "Contributor" instructions
 
@@ -87,24 +87,29 @@ Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 ```
 
 ### Load and use a model from the Bioacoustics Model Zoo
-The [Bioacoustics Model Zoo](https://github.com/kitzeslab/bioacoustics-model-zoo) hosts models in a respository that can be accessed via `torch.hub` and are compatible with OpenSoundscape. Load up a model and apply it to your own audio right away:
+The [Bioacoustics Model Zoo](https://github.com/kitzeslab/bioacoustics-model-zoo) hosts models in a repository that can be installed as a package and are compatible with OpenSoundscape. To install, use
+`pip install git+https://github.com/kitzeslab/bioacoustics-model-zoo`
+
+Load up a model and apply it to your own audio right away:
 
 ```python
-from opensoundscape.ml import bioacoustics_model_zoo as bmz
+import bioacoustics_model_zoo as bmz
 
 #list available models
-print(bmz.list_models())
+print(bmz.utils.list_models())
 
 #generate class predictions and embedding vectors with Perch
-perch = bmz.load("Perch")
+perch = bmz.Perch()
 scores = perch.predict(files)
 embeddings = perch.generate_embeddings(files)
 
 #...or BirdNET
-birdnet = bmz.load("BirdNET")
+birdnet = bmz.BirdNET()
 scores = birdnet.predict(files)
 embeddings = birdnet.generate_embeddings(files)
 ```
+
+See the tutorial notebooks for examples of training and fine-tuning models from the model zoo with your own annotations. 
 
 ### Load a pre-trained CNN from a local file, and make predictions on long audio files
 ```python
@@ -135,7 +140,7 @@ class_list = ['IBWO','BLJA']
 
 # create labels for fixed-duration (2 second) clips 
 labels = all_annotations.clip_labels(
-  cip_duration=2,
+  clip_duration=2,
   clip_overlap=0,
   min_label_overlap=0.25,
   class_subset=class_list
@@ -153,11 +158,15 @@ model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
 
 ### Train a custom classifier on BirdNET or Perch embeddings
 
+Make sure you've installed the model zoo in your Python environment:
+
+`pip install git+https://github.com/kitzeslab/bioacoustics-model-zoo`
+
 ```python
-from opensoundscape.ml import bioacoustics_model_zoo as bmz
+import bioacoustics_model_zoo as bmz
 
 # load a model from the model zoo
-model = bmz.load('BirdNET') #or bmz.load('Perch')
+model = bmz.BirdNET() #or bmz.Perch()
 
 # define classes for your custom classifier
 model.change_classes(train_df.columns)
@@ -167,4 +176,8 @@ model.train(train_df,val_df,num_augmentation_variants=4,batch_size=64)
 
 # run inference using your custom classifier on audio data
 model.predict(audio_files)
+
+# save and load customized models
+model.save(save_path)
+reloaded_model = bmz.BirdNET.load(save_path)
 ```
