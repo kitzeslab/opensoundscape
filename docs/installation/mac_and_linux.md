@@ -20,7 +20,7 @@ Feel free to use another virtual environment manager (e.g. `virtualenvwrapper`) 
 
 ### Intel-chip Macs (not Apple Silicon)
 
-You may need to install pytorch from conda-forge since newer versions are not visible to pip. Run these lines in Termina, replacing `NAME` with the desired name of your environment:
+You may need to install pytorch from conda-forge since newer versions are not visible to pip. Run these lines in your terminal, replacing `NAME` with the desired name of your environment:
 
 ```
 conda create -n NAME python=3.11
