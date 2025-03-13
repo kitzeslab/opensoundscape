@@ -60,7 +60,14 @@ Details about installation are available on the OpenSoundscape documentation at 
 * It has been tested on Python 3.9, 3.10, and 3.11.
 * For Apple Silicon (M1 chip) users, Python >=3.9 is recommended and may be required to avoid dependency issues.
 * Most computer cluster users should follow the Linux installation instructions
+* For older Macs (Intel chip), use this workaround since newer PyTorch versions are not found by pip (replace `NAME` with the desired name of your enviornment):
 
+```
+conda create -n NAME python=3.11
+conda activate NAME
+conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 -c conda-forge
+pip install opensoundscape==0.12.0
+```
 
 ### Use Audio and Spectrogram classes to inspect audio data
 ```python
