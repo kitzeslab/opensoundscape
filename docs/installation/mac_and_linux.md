@@ -1,6 +1,6 @@
 # Mac and Linux
 
-OpenSoundscape can be installed on Mac and Linux machines with Python >=3.9 using the pip command `pip install opensoundscape==0.12.0`. We recommend installing OpenSoundscape in a virtual environment to prevent dependency conflicts.
+OpenSoundscape can be installed on Mac and Linux machines with Python >=3.9 using the pip command `pip install opensoundscape==0.12.0`. We strongly recommend installing OpenSoundscape in a virtual environment to prevent dependency conflicts.
 
 Below are instructions for installation with two package managers:
 * `conda`: Python and package management through Anaconda, a package manager popular among scientific programmers
@@ -17,6 +17,17 @@ Feel free to use another virtual environment manager (e.g. `virtualenvwrapper`) 
 * Activate the environment: `conda activate opensoundscape`
 * Install opensoundscape using pip: `pip install opensoundscape==0.12.0`
 * Deactivate the environment when you're done using it: `conda deactivate`
+
+### Intel-chip Macs (not Apple Silicon)
+
+You may need to install pytorch from conda-forge since newer versions are not visible to pip. Run these lines in your terminal, replacing `NAME` with the desired name of your environment:
+
+```
+conda create -n NAME python=3.11
+conda activate NAME
+conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 -c conda-forge
+pip install opensoundscape==0.12.0
+```
 
 ## Installation via `venv`
 
