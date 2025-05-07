@@ -184,10 +184,12 @@ class SpatialEvent:
         ]
 
         # then, calculate the offset from the event start time to each file's start time
-        self.receiver_start_time_offsets = [
-            (event_start_timestamp - receiver_start_timestamp).total_seconds()
-            for receiver_start_timestamp in file_start_timestamp
-        ]
+        self.receiver_start_time_offsets = np.array(
+            [
+                (event_start_timestamp - receiver_start_timestamp).total_seconds()
+                for receiver_start_timestamp in file_start_timestamp
+            ]
+        )
 
     def _estimate_delays(self):
         """Hidden method to estimate time delay of event relative to receiver_files[0] with gcc
