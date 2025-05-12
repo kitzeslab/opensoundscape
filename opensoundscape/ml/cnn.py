@@ -210,7 +210,7 @@ class BaseModule:
         batch_size = len(batch_tensors)
 
         # automatic mixed precision
-        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        self.scaler = torch.amp.GradScaler(enabled=self.use_amp)
         if "cuda" in str(self.device):
             device_type = "cuda"
             dtype = torch.float16
@@ -2399,7 +2399,7 @@ class InceptionV3(SpectrogramClassifier):
         # once mps is supported https://github.com/pytorch/pytorch/pull/99272
         # but right now, raises error if enabled=True and device is mps
 
-        # self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        # self.scaler = torch.amp.GradScaler(enabled=self.use_amp)
         # with torch.autocast(
         #     device_type=self.device, dtype=torch.float16, enabled=self.use_amp
         # ):
@@ -2422,7 +2422,7 @@ class InceptionV3(SpectrogramClassifier):
             use_amp = self.use_amp
 
         if use_amp:  # as of 7/11/24, torch.autocast is not supported for mps
-            self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+            self.scaler = torch.amp.GradScaler(enabled=self.use_amp)
             if "cuda" in str(self.device):
                 device_type = "cuda"
                 dtype = torch.float16
