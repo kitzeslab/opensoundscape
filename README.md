@@ -95,7 +95,7 @@ Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 
 ### Load and use a model from the Bioacoustics Model Zoo
 The [Bioacoustics Model Zoo](https://github.com/kitzeslab/bioacoustics-model-zoo) hosts models in a repository that can be installed as a package and are compatible with OpenSoundscape. To install, use
-`pip install git+https://github.com/kitzeslab/bioacoustics-model-zoo`
+`pip install bioacoustics-model-zoo==0.12.0`
 
 Load up a model and apply it to your own audio right away:
 
@@ -167,7 +167,7 @@ model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
 
 Make sure you've installed the model zoo in your Python environment:
 
-`pip install git+https://github.com/kitzeslab/bioacoustics-model-zoo`
+`pip install bioacoustics-model-zoo==0.12.0`
 
 ```python
 import bioacoustics_model_zoo as bmz
