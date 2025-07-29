@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "opensoundscape"
 version = "0.12.1"
-description = "Open source, scalable acoustic classification for ecology and conservation"
+description = "Open source, scalable acoustic data analysis for ecology and conservation"
 authors = [
   "Sam Lapp <sammlapp@gmail.com>",
   "Tessa Rhinehart <tessa.rhinehart@gmail.com>",

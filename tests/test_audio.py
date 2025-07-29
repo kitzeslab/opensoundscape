@@ -586,6 +586,9 @@ def test_resample_veryshort_wav(veryshort_wav_str):
     assert resampled_audio.samples.shape == (3133,)
     assert resampled_audio.sample_rate == 22050
 
+    assert resampled_audio.samples.min() >= -1
+    assert resampled_audio.samples.max() <= 1
+
 
 def test_spawn(veryshort_wav_audio):
     """spawn method creates copy of Audio object with any kwarg fields updated"""

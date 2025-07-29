@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" audio.py: Utilities for loading and modifying Audio objects
+"""audio.py: Utilities for loading and modifying Audio objects
 
 
 **Note: Out-of-place operations**
@@ -370,13 +370,14 @@ class Audio:
             self._to_ipdisplay_audio(normalize=normalize, autoplay=autoplay)
         )
 
-    def resample(self, sample_rate, resample_type=None):
+    def resample(self, sample_rate, resample_type=None, clip_range=(-1, 1)):
         """Resample Audio object
 
         Args:
             sample_rate (scalar):   the new sample rate
             resample_type (str):    resampling algorithm to use [default: None
                                     (uses self.resample_type of instance)]
+            clip_range: (float,float): min and max value bounding output samples
 
         Returns:
             a new Audio object of the desired sample rate
@@ -384,15 +385,18 @@ class Audio:
         if resample_type is None:
             resample_type = self.resample_type
 
-        samples_resampled = librosa.resample(
+        new_samples = librosa.resample(
             self.samples,
             orig_sr=self.sample_rate,
             target_sr=sample_rate,
             res_type=resample_type,
         )
 
+        # clip to min/max output range
+        new_samples = np.clip(new_samples, clip_range[0], clip_range[1])
+
         return self._spawn(
-            samples=samples_resampled,
+            samples=new_samples,
             sample_rate=sample_rate,
             resample_type=resample_type,
         )
