@@ -2526,7 +2526,8 @@ def load_model(path, device=None, unpickle=True):
             device = _gpu_if_available()
         loaded_content = torch.load(
             path,
-            map_location=device,
+            # loading directly to other devices can cause issues if there are any tensors that should stay on cpu
+            map_location="cpu",
             weights_only=not unpickle,
         )
 
@@ -2536,6 +2537,10 @@ def load_model(path, device=None, unpickle=True):
             model.network.load_state_dict(loaded_content["weights"])
         else:
             model = loaded_content
+
+        # now we can set the selected device
+        model.device = device
+        model.network.to(device)
 
         # warn the user if loaded model's opso version doesn't match the current one
         if model.opensoundscape_version != opensoundscape.__version__:
