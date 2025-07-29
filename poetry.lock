@@ -1937,7 +1937,7 @@ test = ["ipykernel", "pre-commit", "pytest (<8)", "pytest-cov", "pytest-timeout"
 
 [[package]]
 name = "jupyter-events"
-version = "0.12.0"
+version = "0.12.1"
 description = "Jupyter Event System library"
 optional = false
 python-versions = ">=3.9"

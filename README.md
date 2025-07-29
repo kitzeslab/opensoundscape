@@ -50,7 +50,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 
 #### How do I install OpenSoundscape?
 
-* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.12.0`. 
+* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.12.1`. 
 * To use OpenSoundscape in Jupyter Notebooks (e.g. for tutorials), follow the installation instructions for your operating system, then follow the "Jupyter" instructions.
 * Contributors and advanced users can also use Poetry to install OpenSoundscape using the "Contributor" instructions
 
@@ -66,7 +66,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 conda create -n NAME python=3.11
 conda activate NAME
 conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 -c conda-forge
-pip install opensoundscape==0.12.0
+pip install opensoundscape==0.12.1
 ```
 
 ### Use Audio and Spectrogram classes to inspect audio data
