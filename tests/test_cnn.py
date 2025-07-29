@@ -94,19 +94,19 @@ def test_init_with_str():
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
 
 
-def test_save_load():
+def test_save_load(model_save_path):
     classes = [0, 1]
     arch = resnet18(2, weights=None, num_channels=1)
     m = cnn.SpectrogramClassifier(architecture=arch, classes=classes, sample_duration=3)
-    m.save("tests/models/saved1.model")
-    m2 = cnn.SpectrogramClassifier.load("tests/models/saved1.model")
+    m.save(model_save_path)
+    m2 = cnn.SpectrogramClassifier.load(model_save_path)
     assert m2.classes == classes
     assert type(m2) == cnn.SpectrogramClassifier
     assert m2.preprocessor.sample_duration == 3
 
     # use class name and class look-up dictionary to re-create the correct class from saved model
     # and "class" key
-    m3 = cnn.load_model("tests/models/saved1.model")
+    m3 = cnn.load_model(model_save_path)
     assert m3.classes == classes
     assert type(m3) == cnn.SpectrogramClassifier
     assert m3.preprocessor.sample_duration == 3
@@ -118,7 +118,7 @@ def test_save_load():
         )
 
 
-def test_save_load_pickel(train_df):
+def test_save_load_pickel(train_df, model_save_path):
     """when saving with pickle, can resume training and have the same optimizer state"""
     classes = [0, 1]
     m = cnn.SpectrogramClassifier(
@@ -133,9 +133,9 @@ def test_save_load_pickel(train_df):
         save_interval=10,
         num_workers=0,
     )
-    shutil.rmtree("tests/models/")
-    m.save("tests/models/saved1.model", pickle=True)
-    m2 = cnn.SpectrogramClassifier.load("tests/models/saved1.model")
+    shutil.rmtree(Path(model_save_path).parent)
+    m.save(model_save_path, pickle=True)
+    m2 = cnn.SpectrogramClassifier.load(model_save_path)
     assert m2.classes == classes
     assert type(m2) == cnn.SpectrogramClassifier
     assert str(m.scheduler.state_dict()) == str(m2.scheduler.state_dict())
@@ -143,75 +143,79 @@ def test_save_load_pickel(train_df):
     assert m2.preprocessor.sample_duration == 3
 
 
-def test_train_single_target(train_df):
+def test_train_single_target(train_df, model_save_path):
+    savedir = Path(model_save_path).parent
     model = cnn.CNN(
         architecture="resnet18", classes=[0, 1], sample_duration=5.0, single_target=True
     )
     model.train(
         train_df,
         train_df,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
-def test_train_multi_target(train_df):
+def test_train_multi_target(train_df, model_save_path):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    savedir = Path(model_save_path).parent
     model.train(
         train_df,
         train_df,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
-def test_train_on_clip_df(train_df_clips):
+def test_train_on_clip_df(train_df_clips, model_save_path):
     """
     test training a model when Audio files are long/unsplit
     and a dataframe provides clip-level labels. Training
     should internally load a relevant clip from the audio
     file and get its labels from the dataframe
     """
+    savedir = Path(model_save_path).parent
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=1.0)
     model.train(
         train_df_clips,
         train_df_clips,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
-def test_train_with_audio_root(train_df_relative):
+def test_train_with_audio_root(train_df_relative, model_save_path):
     """
     test training a model when Audio files are long/unsplit
     and a dataframe provides clip-level labels. Training
     should internally load a relevant clip from the audio
     file and get its labels from the dataframe
     """
+    savedir = Path(model_save_path).parent
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=1.0)
     model.train(
         train_df_relative,
         train_df_relative,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
         audio_root="tests/audio",
     )
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
 def test_classifier_custom_lr(train_df):
@@ -232,17 +236,17 @@ def test_classifier_custom_lr(train_df):
     )
 
 
-def test_reset_or_keep_optimizer_and_scheduler(train_df):
+def test_reset_or_keep_optimizer_and_scheduler(train_df, model_save_path):
     import copy
     from opensoundscape.utils import set_seed
 
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
-
+    savedir = Path(model_save_path).parent
     set_seed(0)
     model.train(
         train_df,
         train_df,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
@@ -252,7 +256,7 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df):
     model.train(
         train_df,
         train_df,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=0,
         batch_size=2,
         save_interval=10,
@@ -266,7 +270,7 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df):
     model.train(
         train_df,
         train_df,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=0,
         batch_size=2,
         save_interval=10,
@@ -288,7 +292,7 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df):
     model.train(
         train_df,
         train_df,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=0,
         batch_size=2,
         save_interval=10,
@@ -301,28 +305,29 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df):
     assert model.scheduler.state_dict()["last_epoch"] == 0
     assert model.scheduler.state_dict()["_step_count"] == 1
 
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
-def test_train_amp_cpu(train_df):
+def test_train_amp_cpu(train_df, model_save_path):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     # first test with cpu
     model.device = "cpu"
+    savedir = Path(model_save_path).parent
     model.use_amp = True
     model.train(
         train_df,
         train_df,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
     model.predict(train_df)
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
-def test_train_amp_mps(train_df):
+def test_train_amp_mps(train_df, model_save_path):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     # if cuda is available, test with cuda
     if torch.cuda.is_available():
@@ -330,70 +335,74 @@ def test_train_amp_mps(train_df):
     else:
         return  # cannot test cuda
     model.use_amp = True
+    savedir = Path(model_save_path).parent
     model.train(
         train_df,
         train_df,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
     model.predict(train_df)
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
-def test_train_amp_mps(train_df):
+def test_train_amp_mps(train_df, model_save_path):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     if torch.mps.is_available():
         assert model.device.type == "mps"
     else:
         return  # cannot test mps on this machine
     model.use_amp = True
+    savedir = Path(model_save_path).parent
     model.train(
         train_df,
         train_df,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
     model.predict(train_df)
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
-def test_train_resample_loss(train_df):
+def test_train_resample_loss(train_df, model_save_path):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     cnn.use_resample_loss(model, train_df=train_df)
+    savedir = Path(model_save_path).parent
     model.train(
         train_df,
         train_df,
-        save_path="tests/models",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
-def test_train_one_class(train_df):
+def test_train_one_class(train_df, model_save_path):
     model = cnn.CNN(
         architecture="resnet18",
         classes=[0],
         sample_duration=5.0,
     )
+    savedir = Path(model_save_path).parent
     model.train(
         train_df[[0]],
         train_df[[0]],
-        save_path="tests/models",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
 def test_single_target_setter():
@@ -567,19 +576,20 @@ def test_predict_wrong_input_error(test_df):
         model.predict(ds)
 
 
-def test_train_predict_inception(train_df):
+def test_train_predict_inception(train_df, model_save_path):
     model = cnn.InceptionV3([0, 1], 5.0, weights=None)
+    savedir = Path(model_save_path).parent
     model.train(
         train_df,
         train_df,
-        save_path="tests/models/",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
     model.predict(train_df, num_workers=0)
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
 def test_train_predict_architecture(train_df):
@@ -594,11 +604,12 @@ def test_train_predict_architecture(train_df):
         assert model.preprocessor.channels == num_channels
 
 
-def test_train_bad_index(train_df):
+def test_train_bad_index(train_df, model_save_path):
     """
     AssertionError catches case where index is not one of the allowed formats
     """
     model = cnn.CNN("resnet18", [0, 1], sample_duration=2)
+    savedir = Path(model_save_path).parent
     # reset the index so that train_df index is integers (not an allowed format)
     train_df = make_clip_df(train_df.index.values, clip_duration=2).reset_index()
     train_df[0] = np.random.choice([0, 1], size=10)
@@ -607,7 +618,7 @@ def test_train_bad_index(train_df):
         model.train(
             train_df,
             train_df,
-            save_path="tests/models/",
+            save_path=savedir,
             epochs=1,
             batch_size=2,
             save_interval=10,
@@ -680,30 +691,30 @@ def test_init_positional_args():
     cnn.CNN("resnet18", [0, 1], 0)
 
 
-def test_save_load_and_train_model_resample_loss(train_df):
+def test_save_load_and_train_model_resample_loss(train_df, model_save_path):
     arch = alexnet(2, weights=None)
     classes = [0, 1]
 
     m = cnn.CNN(architecture=arch, classes=classes, sample_duration=1.0)
     cnn.use_resample_loss(m, train_df)
-    m.save("tests/models/saved1.model", pickle=True)
-    m2 = cnn.load_model("tests/models/saved1.model")
+    m.save(model_save_path, pickle=True)
+    m2 = cnn.load_model(model_save_path)
     assert m2.classes == classes
     assert type(m2) == cnn.CNN
     assert isinstance(m2.loss_fn, ResampleLoss)
-
+    savedir = Path(model_save_path).parent
     # make sure it still trains ok after reloading w/resample loss
     m2.train(
         train_df,
         train_df,
-        save_path="tests/models/",
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
 
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
 def test_prediction_warns_different_classes(train_df):
@@ -767,10 +778,11 @@ def test_eval_raises_bad_labels(train_df):
         model.eval(train_df.values, scores.values)
 
 
-def test_train_no_validation(train_df):
+def test_train_no_validation(train_df, model_save_path):
+    savedir = Path(model_save_path).parent
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=2)
-    model.train(train_df, save_path="tests/models")
-    shutil.rmtree("tests/models/")
+    model.train(train_df, save_path=savedir)
+    shutil.rmtree(savedir)
 
 
 def test_train_raise_errors(short_file_df, missing_file_df):
@@ -904,7 +916,7 @@ def test_generate_cams_target_layers(test_df):
     )
 
 
-def test_train_with_posixpath(train_df):
+def test_train_with_posixpath(train_df, model_save_path):
     """test that train works with pathlib.Path objects"""
     from pathlib import Path
 
@@ -916,17 +928,19 @@ def test_train_with_posixpath(train_df):
     # change the index of train_df to be the Path objects
     train_df.index = posix_paths
 
+    savedir = Path(model_save_path).parent
+
     model.train(
         train_df,
         train_df,
-        save_path=Path("tests/models"),
+        save_path=savedir,
         epochs=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
 
-    shutil.rmtree("tests/models/")
+    shutil.rmtree(savedir)
 
 
 def test_predict_posixpath_missing_files(missing_file_df, test_df):
