@@ -39,33 +39,33 @@ jobs:
         run: /home/runner/.local/bin/poetry run black . --check --diff
   # temporarily disabling macos tests as they are failing due to mps out of memory errors
   # that we can't seem to fix. - SL 2024-06-21
-  test_macos:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        python-version: ["3.13"]
-      # Ensure that all flavours are run to completion even if an other flavor failed
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install libsndfile
-        run: brew install libsndfile
-      - name: Install ffmpeg v4
-        run: brew install ffmpeg
-      - name: Install poetry
-        run: curl -sSL https://install.python-poetry.org | python
-      - name: Poetry install
-        run: /Users/runner/.local/bin/poetry install
-      - name: Workaround for missing pytorch dependencies during poetry install
-        run: /Users/runner/.local/bin/poetry run pip install torch
-      - name: Poetry run pytest
-        run: /Users/runner/.local/bin/poetry run pytest
-      - name: Poetry run black check
-        run: /Users/runner/.local/bin/poetry run black . --check --diff
+  # test_macos:
+  #   runs-on: macos-latest
+  #   strategy:
+  #     matrix:
+  #       python-version: ["3.13"]
+  #     # Ensure that all flavours are run to completion even if an other flavor failed
+  #     fail-fast: false
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Set up Python ${{ matrix.python-version }}
+  #       uses: actions/setup-python@v2
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
+  #     - name: Install libsndfile
+  #       run: brew install libsndfile
+  #     - name: Install ffmpeg v4
+  #       run: brew install ffmpeg
+  #     - name: Install poetry
+  #       run: curl -sSL https://install.python-poetry.org | python
+  #     - name: Poetry install
+  #       run: /Users/runner/.local/bin/poetry install
+  #     - name: Workaround for missing pytorch dependencies during poetry install
+  #       run: /Users/runner/.local/bin/poetry run pip install torch
+  #     - name: Poetry run pytest
+  #       run: /Users/runner/.local/bin/poetry run pytest
+  #     - name: Poetry run black check
+  #       run: /Users/runner/.local/bin/poetry run black . --check --diff
 ## ------------------------------------------------------------------------
 ## The below job installs opensoundscape on a windows machine using WSL.
 ## It is commented out, as it keeps hanging on the final step 'Poetry run pytest'
