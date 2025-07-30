@@ -31,12 +31,12 @@ from opensoundscape.utils import make_clip_df
 @pytest.fixture()
 def model_save_path(request, tmp_path):
     """Fixture providing a temporary model save path with proper cleanup.
-    
+
     Uses pytest's tmp_path fixture to create isolated temporary directories
     for each test, ensuring no conflicts between parallel test runs.
     """
     path = tmp_path / "temp.model"
-    
+
     # Cleanup function to remove the file if it exists
     def fin():
         if path.exists():
@@ -50,17 +50,18 @@ def model_save_path(request, tmp_path):
 @pytest.fixture()
 def temp_model_dir(request, tmp_path):
     """Fixture providing a temporary directory for model saving with proper cleanup.
-    
+
     This fixture is used for tests that need to save models to a directory
     rather than a specific file path.
     """
     model_dir = tmp_path / "models"
     model_dir.mkdir(exist_ok=True)
-    
+
     # Cleanup function to remove the directory and its contents
     def fin():
         if model_dir.exists():
             import shutil
+
             shutil.rmtree(model_dir)
 
     request.addfinalizer(fin)
@@ -705,7 +706,9 @@ def test_init_positional_args():
     cnn.CNN("resnet18", [0, 1], 0)
 
 
-def test_save_load_and_train_model_resample_loss(train_df, model_save_path, temp_model_dir):
+def test_save_load_and_train_model_resample_loss(
+    train_df, model_save_path, temp_model_dir
+):
     arch = alexnet(2, weights=None)
     classes = [0, 1]
 
