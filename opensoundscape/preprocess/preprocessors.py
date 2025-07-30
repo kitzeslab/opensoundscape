@@ -529,7 +529,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
-                "load_audio": AudioClipLoader(),
+                "load_audio": AudioClipLoader(out_of_bounds_mode="ignore"),
                 # if we are augmenting and get a long file, take a random trim from it
                 "random_trim_audio": AudioTrim(
                     target_duration=sample_duration,

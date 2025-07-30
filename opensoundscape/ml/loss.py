@@ -1,5 +1,4 @@
-"""loss function classes to use with opensoundscape models
-"""
+"""loss function classes to use with opensoundscape models"""
 
 import torch
 import torch.nn as nn
@@ -93,6 +92,7 @@ def weight_reduce_loss(loss, weight=None, reduction="mean", avg_factor=None):
 
 def binary_cross_entropy(pred, label, weight=None, reduction="mean", avg_factor=None):
     """helper function for BCE loss in ResampleLoss class"""
+    device = pred.device
     if pred.dim() != label.dim():
         if weight is not None:
             weight = weight.view(-1, 1).expand(weight.size(0), pred.size(-1))
@@ -100,10 +100,10 @@ def binary_cross_entropy(pred, label, weight=None, reduction="mean", avg_factor=
 
     # weighted element-wise losses
     if weight is not None:
-        weight = weight.float()
+        weight = weight.float().to(device)
 
     loss = F.binary_cross_entropy_with_logits(
-        pred, label.float(), weight, reduction="none"
+        pred, label.float().to(device), weight, reduction="none"
     )
 
     loss = weight_reduce_loss(loss, reduction=reduction, avg_factor=avg_factor)
@@ -114,7 +114,7 @@ def binary_cross_entropy(pred, label, weight=None, reduction="mean", avg_factor=
 class ResampleLoss(nn.Module):
     def __init__(self, class_freq, reduction="mean", loss_weight=1.0):
         super().__init__()
-
+        device = class_freq.device
         self.loss_weight = loss_weight
         self.reduction = reduction
 
@@ -144,7 +144,7 @@ class ResampleLoss(nn.Module):
             -torch.log(self.train_num / self.class_freq - 1)
             * init_bias
             / self.neg_scale
-        )
+        ).to(device)
         self.freq_inv = (
             torch.ones(self.class_freq.shape, device=self.class_freq.device)
             / self.class_freq
@@ -178,13 +178,20 @@ class ResampleLoss(nn.Module):
         return weight
 
     def logit_reg_functions(self, labels, logits, weight=None):
-        logits += self.init_bias
+        device = self.init_bias.device
+        labels = labels.to(device)
+        logits = logits.to(self.init_bias.device) + self.init_bias
         logits = logits * (1 - labels) * self.neg_scale + logits * labels
         weight = weight / self.neg_scale * (1 - labels) + weight * labels
         return logits, weight
 
     def rebalance_weight(self, gt_labels):
-        repeat_rate = torch.sum(gt_labels.float() * self.freq_inv, dim=1, keepdim=True)
+        gt_labels = gt_labels.float().to(self.class_freq.device)
+        repeat_rate = torch.sum(
+            gt_labels * self.freq_inv,
+            dim=1,
+            keepdim=True,
+        )
         pos_weight = self.freq_inv.clone().detach().unsqueeze(0) / repeat_rate
         # pos and neg are equally treated
         weight = (

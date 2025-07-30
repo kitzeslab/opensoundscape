@@ -7,7 +7,6 @@ import torch
 import os
 import warnings
 from matplotlib.patches import Patch
-import cv2
 
 from opensoundscape.utils import generate_opacity_colormaps
 

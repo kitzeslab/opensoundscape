@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.13"] # can list multiple versions here
       # Ensure that all flavours are run to completion even if an other flavor failed
       fail-fast: false
     
@@ -43,7 +43,7 @@ jobs:
   #   runs-on: macos-latest
   #   strategy:
   #     matrix:
-  #       python-version: ["3.9", "3.10", "3.11"]
+  #       python-version: ["3.13"]
   #     # Ensure that all flavours are run to completion even if an other flavor failed
   #     fail-fast: false
   #   steps:

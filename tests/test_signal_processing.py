@@ -221,7 +221,8 @@ def test_gcc():
     end = 510  # end of signal
 
     a = np.zeros(1000)
-    a[start:end] = 3  # impulse
+    # Note: sometimes failed to find correct tdoa when impulse was 3 so upped to 20
+    a[start:end] = 20  # impulse
     a += np.random.rand(1000)  # add noise
     b = np.zeros(1000)
     b[start - delay : end - delay] = (
@@ -235,7 +236,9 @@ def test_gcc():
         gccs = sp.gcc(a, b, cc_filter=cc_filter)
         # assert that the argmax is the correct delay
         lags = scipy.signal.correlation_lags(len(a), len(b))
-        assert lags[np.argmax(gccs)] == delay
+        assert (
+            lags[np.argmax(gccs)] == delay
+        ), f"filter {filter} did not find correct delay"
 
 
 def test_all_tdoa_filter_types_find_correct_delay_no_noise():

@@ -9,7 +9,6 @@ import itertools
 import pandas as pd
 import numpy as np
 import warnings
-import crowsetta
 from sklearn.model_selection import train_test_split
 
 from opensoundscape.utils import (
@@ -21,6 +20,21 @@ from opensoundscape.utils import (
 )
 
 import scipy.sparse
+
+try:
+    import crowsetta
+except ImportError:
+    crowsetta = None
+
+
+def check_crowsetta_installed():
+    """raise helpful error if optional dependency not installed"""
+    if crowsetta is None:
+        raise ImportError(
+            """This function requires the optional dependency `crowsetta` which is not
+                          installed in the current python environment. Use `pip install crowsetta`
+                          to install it."""
+        )
 
 
 class BoxedAnnotations:
@@ -431,6 +445,8 @@ class BoxedAnnotations:
 
         Note: if an empty list is passed, creates empty BoxedAnnotations object
         """
+        check_crowsetta_installed()  # raises helpful error if optional dependency is missing
+
         # store individual objects in a list, starting with an empty BoxedAnnotations object
         boxed_anns = []
 
@@ -630,6 +646,7 @@ class BoxedAnnotations:
             - if mode=='bbox', Annotations have attribute .bboxes
             - if mode=='sequence', Annotations have attribute .seq)
         """
+        check_crowsetta_installed()  # raise helpful error if optional dependency not installed
         assert mode in ("bbox", "sequence"), "invalid mode, choose 'bbox' or 'sequence'"
 
         ann_objects = []  # we plan to return a list of crowsetta.Annotation objects
@@ -1433,6 +1450,7 @@ def multi_hot_to_categorical(labels, classes):
 
 def _df_to_crowsetta_sequence(df):
     """create a crowsetta.Sequence from BoxedAnnotations style dataframe"""
+    check_crowsetta_installed()  # raise helpful error if optional dependency not installed
     return crowsetta.Sequence.from_dict(
         {
             "onset_samples": (
@@ -1450,6 +1468,7 @@ def _df_to_crowsetta_sequence(df):
 
 def _df_to_crowsetta_bboxes(df):
     """create list of crowsetta.BBoxes from BoxedAnnotations style dataframe"""
+    check_crowsetta_installed()  # raise helpful error if optional dependency not installed
     # ensure we have a unique index
     df = df.reset_index(drop=True)
 

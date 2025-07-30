@@ -50,17 +50,24 @@ Details about installation are available on the OpenSoundscape documentation at 
 
 #### How do I install OpenSoundscape?
 
-* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.12.0`. 
+* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.12.1`. 
 * To use OpenSoundscape in Jupyter Notebooks (e.g. for tutorials), follow the installation instructions for your operating system, then follow the "Jupyter" instructions.
 * Contributors and advanced users can also use Poetry to install OpenSoundscape using the "Contributor" instructions
 
 #### Will OpenSoundscape work on my machine?
 
 * OpenSoundscape can be installed on Windows, Mac, and Linux machines.
-* It has been tested on Python 3.9, 3.10, and 3.11.
-* For Apple Silicon (M1 chip) users, Python >=3.9 is recommended and may be required to avoid dependency issues.
+* For Windows users, we strongly recommend using WSL2 which facilitates happy coding
+* We support Python 3.10, 3.11, 3.12, and 3.13 (but current github runners only test on Python 3.13)
 * Most computer cluster users should follow the Linux installation instructions
+* For older Macs (Intel chip), use this workaround since newer PyTorch versions are not found by pip (replace `NAME` with the desired name of your enviornment):
 
+```
+conda create -n NAME python=3.11
+conda activate NAME
+conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 -c conda-forge
+pip install opensoundscape==0.12.1
+```
 
 ### Use Audio and Spectrogram classes to inspect audio data
 ```python
@@ -88,7 +95,7 @@ Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 
 ### Load and use a model from the Bioacoustics Model Zoo
 The [Bioacoustics Model Zoo](https://github.com/kitzeslab/bioacoustics-model-zoo) hosts models in a repository that can be installed as a package and are compatible with OpenSoundscape. To install, use
-`pip install git+https://github.com/kitzeslab/bioacoustics-model-zoo`
+`pip install bioacoustics-model-zoo==0.12.0`
 
 Load up a model and apply it to your own audio right away:
 
@@ -160,7 +167,7 @@ model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
 
 Make sure you've installed the model zoo in your Python environment:
 
-`pip install git+https://github.com/kitzeslab/bioacoustics-model-zoo`
+`pip install bioacoustics-model-zoo==0.12.0`
 
 ```python
 import bioacoustics_model_zoo as bmz

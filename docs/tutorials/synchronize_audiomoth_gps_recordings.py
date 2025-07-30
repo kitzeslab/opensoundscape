@@ -67,9 +67,10 @@ def sync_entire_folder(folder):
             # Get the processed PPS DF
             pps_file = file.parent / str(file.stem + PPS_SUFFIX)
             assert pps_file.exists()
+            pps_table = pd.read_csv(pps_file, index_col=0)
 
             processed_pps_df = associate_pps_samples_timestamps(
-                pps_file, cpu_clock_counter_col=cpu_clock_counter_col
+                pps_table, cpu_clock_counter_col=cpu_clock_counter_col
             )
 
             # Resample the audio
