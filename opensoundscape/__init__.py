@@ -16,7 +16,7 @@ from . import localization
 from . import sample_data
 
 # expose some modules at the top level
-from .ml import cnn, cnn_architectures
+from .ml import cnn, cnn_architectures, shallow_classifier
 from .preprocess import preprocessors, actions
 
 # expose some classes at the top level
@@ -34,3 +34,4 @@ from .annotations import BoxedAnnotations
 from .preprocess.utils import show_tensor, show_tensor_grid
 from .localization import SpatialEvent, SynchronizedRecorderArray
 from .utils import set_seed
+from .ml.shallow_classifier import MLPClassifier
