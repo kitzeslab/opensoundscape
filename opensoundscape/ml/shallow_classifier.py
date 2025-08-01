@@ -3,6 +3,7 @@ import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
 import opensoundscape
 from opensoundscape.ml.utils import _version_mismatch_warn
+from torch.utils.data import DataLoader, Dataset
 
 
 class MLPClassifier(torch.nn.Module):
@@ -63,7 +64,7 @@ class MLPClassifier(torch.nn.Module):
         return x
 
     def fit(self, *args, **kwargs):
-        """fit the weights on features and labels, without batching
+        """fit the weights on features and labels
 
         Args: see quick_fit()
         """
@@ -92,18 +93,35 @@ class MLPClassifier(torch.nn.Module):
         return cls(**model_dict)
 
 
+class EmbeddingDataset(Dataset):
+    """simple dataset wrapper for embedding features and labels"""
+
+    def __init__(self, features, labels):
+        self.features = features
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.features)
+
+    def __getitem__(self, idx):
+        return self.features[idx], self.labels[idx]
+
+
 def quick_fit(
     model,
     train_features,
     train_labels,
     validation_features=None,
     validation_labels=None,
+    batch_size=128,
     steps=1000,
     optimizer=None,
     criterion=None,
     device=torch.device("cpu"),
+    validation_interval=1,
+    logging_interval=100,
 ):
-    """train a PyTorch model on features and labels without batching
+    """train a PyTorch model on features and labels
 
     Assumes all data can fit in memory, so that one step includes all data (i.e. step=epoch)
 
@@ -123,6 +141,10 @@ def quick_fit(
 
         validation_labels: labels for validation; if None, does not perform validation
 
+        batch_size: batch size for training; if fewer samples than batch_size,
+            the entire dataset is used as a single batch
+            [Default: 128]
+
         steps: number of training steps (epochs); each step, all data is passed forward and
         backward, and the optimizer updates the weights
             [Default: 1000]
@@ -133,10 +155,13 @@ def quick_fit(
         multi-label classification)
 
         device: torch.device to use; default is torch.device('cpu')
+
+        validation_interval: how often to validate the model during training; if validation_features
+        and validation_labels are provided, validation is performed every validation_interval steps
     """
     # if no optimizer or criterion provided, use default Adam and CrossEntropyLoss
     if optimizer is None:
-        optimizer = torch.optim.Adam(model.parameters())
+        optimizer = torch.optim.AdamW(model.parameters())
     if criterion is None:
         criterion = torch.nn.BCEWithLogitsLoss()
 
@@ -147,6 +172,11 @@ def quick_fit(
     train_features = torch.tensor(train_features, dtype=torch.float32, device=device)
     train_labels = torch.tensor(train_labels, dtype=torch.float32, device=device)
 
+    train_dataset = EmbeddingDataset(train_features, train_labels)
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=0
+    )
+
     # if validation data provided, convert to tensors and move to the device
     if validation_features is not None:
         validation_features = torch.tensor(
@@ -155,26 +185,56 @@ def quick_fit(
         validation_labels = torch.tensor(
             validation_labels, dtype=torch.float32, device=device
         )
+        validation_dataset = EmbeddingDataset(validation_features, validation_labels)
+        validation_loader = DataLoader(
+            validation_dataset, batch_size=batch_size, shuffle=False, num_workers=0
+        )
 
     for step in range(steps):
         model.train()
-        optimizer.zero_grad()
 
-        outputs = model(train_features)
-        loss = criterion(outputs, train_labels)
+        # iterate over the training data in batches
+        for batch_features, batch_labels in train_loader:
+            batch_features = batch_features.to(device)
+            batch_labels = batch_labels.to(device)
 
-        loss.backward()
-        optimizer.step()
+            # zero the gradients
+            optimizer.zero_grad()
+
+            # forward pass
+            outputs = model(batch_features)
+
+            # compute loss
+            loss = criterion(outputs, batch_labels)
+
+            # backward pass and optimization
+            loss.backward()
+            optimizer.step()
 
         # Validation (optional)
-        if validation_features is not None:
+        if validation_features is not None and (step + 1) % validation_interval == 0:
             model.eval()
             with torch.no_grad():
-                val_outputs = model(validation_features)
-                val_loss = criterion(val_outputs, validation_labels)
-            if (step + 1) % 100 == 0:
+                # val_outputs = model(validation_features)
+                # val_loss = criterion(val_outputs, validation_labels)
+                val_outputs = []
+                val_loss = 0.0
+                for val_batch_features, val_batch_labels in validation_loader:
+                    val_batch_features = val_batch_features.to(device)
+                    val_batch_labels = val_batch_labels.to(device)
+
+                    # forward pass
+                    val_output = model(val_batch_features)
+                    val_outputs.append(val_output)
+
+                    # compute loss
+                    val_loss += criterion(val_output, val_batch_labels).item()
+                val_outputs = torch.cat(val_outputs, dim=0)
+                val_loss /= len(validation_loader)
+            # log the loss and metrics
+            if (step + 1) % logging_interval == 0:
                 print(
-                    f"Epoch {step+1}/{steps}, Loss: {loss.item()}, Val Loss: {val_loss.item()}"
+                    f"Epoch {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}"
                 )
                 try:
                     auroc = roc_auc_score(

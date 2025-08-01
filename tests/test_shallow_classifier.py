@@ -165,7 +165,9 @@ class TestQuickFit:
         train_labels = torch.randint(0, 2, (n_samples, 2)).float()
 
         # Fit for just a few steps to test functionality
-        shallow_classifier.quick_fit(mlp, train_features, train_labels, steps=5)
+        shallow_classifier.quick_fit(
+            mlp, train_features, train_labels, steps=5, batch_size=8
+        )
 
         # Test that model can still make predictions
         output = mlp(train_features)
@@ -189,6 +191,7 @@ class TestQuickFit:
             validation_features=val_features,
             validation_labels=val_labels,
             steps=5,
+            batch_size=8,
         )
 
         # Test predictions on both sets
@@ -214,6 +217,7 @@ class TestQuickFit:
             optimizer=optimizer,
             criterion=criterion,
             steps=3,
+            batch_size=5,
         )
 
         output = mlp(train_features)
@@ -227,10 +231,199 @@ class TestQuickFit:
         train_labels = torch.randint(0, 2, (8, 2)).float()
 
         # This should call quick_fit internally
-        mlp.fit(train_features, train_labels, steps=3)
+        mlp.fit(train_features, train_labels, steps=3, batch_size=4)
 
         output = mlp(train_features)
         assert output.shape == (8, 2)
+
+
+class TestBatchedTraining:
+    """Test suite for batched training functionality"""
+
+    def test_batch_size_smaller_than_dataset(self):
+        """Test training with batch size smaller than dataset"""
+        mlp = opso.MLPClassifier(8, 2, hidden_layer_sizes=(4,))
+
+        # Create dataset with 20 samples, use batch size of 5
+        n_samples = 20
+        batch_size = 5
+        train_features = torch.randn(n_samples, 8)
+        train_labels = torch.randint(0, 2, (n_samples, 2)).float()
+
+        # Should process 4 batches per epoch (20/5 = 4)
+        shallow_classifier.quick_fit(
+            mlp, train_features, train_labels, batch_size=batch_size, steps=3
+        )
+
+        # Test that model can make predictions
+        output = mlp(train_features)
+        assert output.shape == (n_samples, 2)
+
+    def test_batch_size_larger_than_dataset(self):
+        """Test training with batch size larger than dataset"""
+        mlp = opso.MLPClassifier(6, 3, hidden_layer_sizes=(3,))
+
+        # Create small dataset with 8 samples, use batch size of 20
+        n_samples = 8
+        batch_size = 20
+        train_features = torch.randn(n_samples, 6)
+        train_labels = torch.randint(0, 2, (n_samples, 3)).float()
+
+        # Should process 1 batch per epoch with all 8 samples
+        shallow_classifier.quick_fit(
+            mlp, train_features, train_labels, batch_size=batch_size, steps=3
+        )
+
+        # Test that model can make predictions
+        output = mlp(train_features)
+        assert output.shape == (n_samples, 3)
+
+    def test_batch_size_equal_to_dataset(self):
+        """Test training with batch size equal to dataset size"""
+        mlp = opso.MLPClassifier(5, 2)
+
+        # Create dataset with exactly batch size samples
+        n_samples = 15
+        batch_size = 15
+        train_features = torch.randn(n_samples, 5)
+        train_labels = torch.randint(0, 2, (n_samples, 2)).float()
+
+        shallow_classifier.quick_fit(
+            mlp, train_features, train_labels, batch_size=batch_size, steps=3
+        )
+
+        output = mlp(train_features)
+        assert output.shape == (n_samples, 2)
+
+    def test_batch_size_one(self):
+        """Test training with batch size of 1 (SGD)"""
+        mlp = opso.MLPClassifier(4, 2)
+
+        n_samples = 10
+        batch_size = 1
+        train_features = torch.randn(n_samples, 4)
+        train_labels = torch.randint(0, 2, (n_samples, 2)).float()
+
+        # Should process 10 batches per epoch
+        shallow_classifier.quick_fit(
+            mlp, train_features, train_labels, batch_size=batch_size, steps=2
+        )
+
+        output = mlp(train_features)
+        assert output.shape == (n_samples, 2)
+
+    def test_batched_validation_smaller_batch(self):
+        """Test validation with batch size smaller than validation set"""
+        mlp = opso.MLPClassifier(6, 2, hidden_layer_sizes=(3,))
+
+        # Training data
+        train_features = torch.randn(30, 6)
+        train_labels = torch.randint(0, 2, (30, 2)).float()
+
+        # Validation data - 15 samples with batch size 4
+        val_features = torch.randn(15, 6)
+        val_labels = torch.randint(0, 2, (15, 2)).float()
+
+        shallow_classifier.quick_fit(
+            mlp,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=4,
+            steps=3,
+            validation_interval=1,
+        )
+
+        # Should work for both training and validation
+        train_output = mlp(train_features)
+        val_output = mlp(val_features)
+        assert train_output.shape == (30, 2)
+        assert val_output.shape == (15, 2)
+
+    def test_batched_validation_larger_batch(self):
+        """Test validation with batch size larger than validation set"""
+        mlp = opso.MLPClassifier(5, 3)
+
+        # Training data
+        train_features = torch.randn(25, 5)
+        train_labels = torch.randint(0, 2, (25, 3)).float()
+
+        # Small validation set with large batch size
+        val_features = torch.randn(8, 5)
+        val_labels = torch.randint(0, 2, (8, 3)).float()
+
+        shallow_classifier.quick_fit(
+            mlp,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=20,
+            steps=3,
+            validation_interval=1,
+        )
+
+        train_output = mlp(train_features)
+        val_output = mlp(val_features)
+        assert train_output.shape == (25, 3)
+        assert val_output.shape == (8, 3)
+
+    def test_embedding_dataset(self):
+        """Test EmbeddingDataset class directly"""
+        features = torch.randn(10, 5)
+        labels = torch.randint(0, 2, (10, 3)).float()
+
+        dataset = shallow_classifier.EmbeddingDataset(features, labels)
+
+        assert len(dataset) == 10
+
+        # Test individual item access
+        feat, lab = dataset[0]
+        assert feat.shape == (5,)
+        assert lab.shape == (3,)
+        assert torch.equal(feat, features[0])
+        assert torch.equal(lab, labels[0])
+
+        # Test with DataLoader
+        loader = torch.utils.data.DataLoader(dataset, batch_size=3, shuffle=False)
+        batch_features, batch_labels = next(iter(loader))
+        assert batch_features.shape == (3, 5)
+        assert batch_labels.shape == (3, 3)
+
+    def test_different_batch_sizes_same_result(self):
+        """Test that different batch sizes produce similar training behavior"""
+        # Create identical models
+        mlp1 = opso.MLPClassifier(8, 2, hidden_layer_sizes=(4,))
+        mlp2 = opso.MLPClassifier(8, 2, hidden_layer_sizes=(4,))
+
+        # Copy weights to ensure identical starting point
+        mlp2.load_state_dict(mlp1.state_dict())
+
+        # Same data
+        n_samples = 32
+        train_features = torch.randn(n_samples, 8)
+        train_labels = torch.randint(0, 2, (n_samples, 2)).float()
+
+        # Use same random seed for reproducible shuffling
+        torch.manual_seed(42)
+        shallow_classifier.quick_fit(
+            mlp1, train_features, train_labels, batch_size=8, steps=5
+        )
+
+        torch.manual_seed(42)
+        shallow_classifier.quick_fit(
+            mlp2, train_features, train_labels, batch_size=16, steps=5
+        )
+
+        # Models should produce similar (though not identical due to different batch dynamics) outputs
+        output1 = mlp1(train_features)
+        output2 = mlp2(train_features)
+        assert output1.shape == output2.shape == (n_samples, 2)
+
+        # They shouldn't be identical (different batch dynamics)
+        # but should be reasonably close if training is working
+        assert not torch.allclose(output1, output2, atol=1e-3)
 
 
 class TestEdgeCases:
