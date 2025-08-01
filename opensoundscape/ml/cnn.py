@@ -32,7 +32,7 @@ from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.sample import collate_audio_samples
 from opensoundscape.utils import identity
 from opensoundscape.logging import wandb_table
-
+from opensoundscape.ml import shallow_classifier
 from opensoundscape.ml.cam import CAM
 import pytorch_grad_cam
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -667,37 +667,66 @@ class SpectrogramModule(BaseModule):
             log_graph=False,
         )
 
-    def change_classes(self, new_classes):
+    def change_classes(self, new_classes, hidden_layers=None):
         """change the classes that the model predicts
 
         replaces the network's final linear classifier layer with a new layer
         with random weights and the correct number of output features
 
-        will raise an error if self.network.classifier_layer is not the name of
-        a torch.nn.Linear layer, since we don't know how to replace it otherwise
+        Supports torch.nn.Linear and opensoundscape.ml.shallow_classifier.MLPClassifier as the
+        classifier layer to update. Will raise an error if self.network.classifier_layer is a
+        different type
 
         Args:
             new_classes: list of class names
+            hidden_layers: list of hidden layer sizes for the new classifier
+                - None: creates a single torch.nn.Linear layer
+                - (int, ...): creates an MLPClassifier object with hidden layers
+                    of the specified sizes; eg (100, 50) creates 2 hidden layers
+                    with 100 and 50 neurons, respectively.
+                - (): empty tuple creates an MLPClassifier with no hidden layers
         """
         assert len(new_classes) > 0, "new_classes must have >0 elements"
 
-        assert isinstance(self.classifier, torch.nn.Linear), (
-            f"Expected self.classifier to be a torch.nn.Linear layer, "
-            f"but found {type(self.classifier)}. Cannot automatically replace this layer to "
-            "achieve desired number of output features."
+        # assert isinstance(self.classifier, torch.nn.Linear), (
+        assert isinstance(
+            self.classifier, (torch.nn.Linear, shallow_classifier.MLPClassifier)
+        ), (
+            f"Expected self.classifier to be a torch.nn.Linear or opensoundscape.ml.shallow_classifier.MLPClassifier, "
+            f"but found {type(self.classifier)}."
         )
 
-        # replace fully-connected final classifier layer
+        # get the number of input features to the classifier layer
+        # for torch.nn.Linear and MLPClassifier, this is the in_features attribute
+        in_features = self.classifier.in_features
+
+        # create a new classifier layer with the correct number of output features
+        if hidden_layers is None:
+            new_layer = torch.nn.Linear(in_features, len(new_classes))
+        elif isinstance(hidden_layers, (list, tuple)):
+            # create an MLPClassifier with the specified hidden layers
+            new_layer = shallow_classifier.MLPClassifier(
+                input_size=in_features,
+                output_size=len(new_classes),
+                hidden_layer_sizes=hidden_layers,
+                classes=new_classes,
+            )
+        else:
+            raise ValueError(
+                "hidden_layers must be None (for torch.nn.Linear), or list/tuple of integers (for MLPClassifier). "
+                f"Got {hidden_layers} instead."
+            )
+
+        # replace the classifier layer with a new layer
         clf_layer_name = self.network.classifier_layer
-        new_layer = cnn_architectures.change_fc_output_size(
-            self.classifier, len(new_classes)
-        )
         cnn_architectures.set_layer_from_name(self.network, clf_layer_name, new_layer)
 
         # update class list
         self.classes = new_classes
 
         # re-initialize metrics, using the new number of classes
+        # otherwise we'll get errors when computing metrics
+        # (plus we should discard any old metrics after changing classes)
         self._init_torch_metrics()
 
     @property

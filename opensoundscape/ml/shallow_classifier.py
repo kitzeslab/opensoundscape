@@ -28,10 +28,16 @@ class MLPClassifier(torch.nn.Module):
 
         # constructor_name tuple hints to .load()
         # how to recreate the network with the appropriate shape
-        self.input_size = input_size
-        self.output_size = output_size
-        self.hidden_layer_sizes = hidden_layer_sizes
+        self.in_features = input_size
+        self.out_features = output_size
+        self.hidden_layer_sizes = tuple(hidden_layer_sizes)
         self.classes = classes
+
+        if classes is not None:
+            assert (
+                len(classes) == output_size
+            ), f"if specified, classes must have length {output_size}, but found {len(classes)}"
+            classes = list(classes)  # convert to list if tuple
 
         # compose the MLP network:
         # add fully connected layers and RELU activations
@@ -73,8 +79,8 @@ class MLPClassifier(torch.nn.Module):
     def save(self, path):
         torch.save(
             {
-                "input_size": self.input_size,
-                "output_size": self.output_size,
+                "input_size": self.in_features,
+                "output_size": self.out_features,
                 "classes": self.classes,
                 "hidden_layer_sizes": self.hidden_layer_sizes,
                 "weights": self.state_dict(),

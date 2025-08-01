@@ -19,16 +19,16 @@ class TestMLPClassifier:
             hidden_layer_sizes=(50,),
             classes=("a", "b", "c"),
         )
-        assert mlp.input_size == 512
-        assert mlp.output_size == 3
+        assert mlp.in_features == 512
+        assert mlp.out_features == 3
         assert mlp.classes == ("a", "b", "c")
         assert mlp.hidden_layer_sizes == (50,)
 
     def test_init_no_hidden_layers(self):
         """Test initialization with no hidden layers"""
         mlp = opso.MLPClassifier(512, 3)
-        assert mlp.input_size == 512
-        assert mlp.output_size == 3
+        assert mlp.in_features == 512
+        assert mlp.out_features == 3
         assert mlp.classes is None
         assert mlp.hidden_layer_sizes == ()
 
@@ -87,8 +87,8 @@ class TestMLPClassifier:
             mlp2 = opso.MLPClassifier.load(temp_path)
 
             # Test that loaded model has same attributes
-            assert mlp2.input_size == mlp.input_size
-            assert mlp2.output_size == mlp.output_size
+            assert mlp2.in_features == mlp.in_features
+            assert mlp2.out_features == mlp.out_features
             assert mlp2.classes == mlp.classes
             assert mlp2.hidden_layer_sizes == mlp.hidden_layer_sizes
 

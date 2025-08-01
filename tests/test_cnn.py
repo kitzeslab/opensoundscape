@@ -21,6 +21,7 @@ from opensoundscape.preprocess.utils import PreprocessingError
 
 from opensoundscape.ml.cnn_architectures import alexnet, resnet18
 from opensoundscape.ml import cnn_architectures
+from opensoundscape.ml.shallow_classifier import MLPClassifier
 
 from opensoundscape.sample import AudioSample
 from opensoundscape.ml.cam import CAM
@@ -1151,3 +1152,203 @@ def test_change_classes_all_arch():
                 assert model.classifier.out_features == 3
         except Exception as e:
             raise Exception(f"{arch_name} failed") from e
+
+
+def test_change_classes_mlp_classifier():
+    """Test change_classes method with MLPClassifier hidden layers"""
+    # Create a CNN model with standard linear classifier
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["class_a", "class_b"],
+        sample_duration=5.0,
+        channels=1,
+    )
+
+    # Store original classifier type and input features
+    original_in_features = model.classifier.in_features
+    assert isinstance(model.classifier, torch.nn.Linear)
+
+    # Test 1: Change to MLPClassifier with single hidden layer
+    new_classes = ["bird", "frog", "insect"]
+    hidden_layers = [128]
+
+    model.change_classes(new_classes, hidden_layers=hidden_layers)
+
+    # Verify the classifier was replaced with MLPClassifier
+    assert isinstance(model.classifier, MLPClassifier)
+    assert model.classes == new_classes
+    assert model.classifier.in_features == original_in_features
+    assert model.classifier.out_features == len(new_classes)
+    assert model.classifier.hidden_layer_sizes == tuple(hidden_layers)
+    assert model.classifier.classes == new_classes
+
+    # Test forward pass works
+    dummy_input = torch.randn(
+        2, 1, 224, 224
+    )  # batch_size=2, channels=1, height=224, width=224
+    output = model(dummy_input)
+    assert output.shape == (2, len(new_classes))
+
+
+def test_change_classes_mlp_multiple_hidden_layers():
+    """Test change_classes with MLPClassifier having multiple hidden layers"""
+    model = cnn.CNN(
+        architecture="resnet18", classes=["a", "b"], sample_duration=5.0, channels=1
+    )
+
+    original_in_features = model.classifier.in_features
+
+    # Test with multiple hidden layers
+    new_classes = ["dog", "cat", "bird", "other"]
+    hidden_layers = [256, 128, 64]
+
+    model.change_classes(new_classes, hidden_layers=hidden_layers)
+
+    assert isinstance(model.classifier, MLPClassifier)
+    assert model.classes == new_classes
+    assert model.classifier.in_features == original_in_features
+    assert model.classifier.out_features == len(new_classes)
+    assert model.classifier.hidden_layer_sizes == tuple(hidden_layers)
+    assert model.classifier.classes == new_classes
+
+    # Test forward pass
+    dummy_input = torch.randn(3, 1, 224, 224)
+    output = model(dummy_input)
+    assert output.shape == (3, len(new_classes))
+
+
+def test_change_classes_mlp_no_hidden_layers():
+    """Test change_classes with empty tuple for hidden layers (creates MLPClassifier with no hidden layers)"""
+    model = cnn.CNN(
+        architecture="resnet18", classes=["x", "y"], sample_duration=5.0, channels=1
+    )
+
+    original_in_features = model.classifier.in_features
+
+    # Test with empty tuple - should create MLPClassifier with no hidden layers
+    new_classes = ["noise", "signal"]
+    hidden_layers = ()
+
+    model.change_classes(new_classes, hidden_layers=hidden_layers)
+
+    assert isinstance(model.classifier, MLPClassifier)
+    assert model.classes == new_classes
+    assert model.classifier.in_features == original_in_features
+    assert model.classifier.out_features == len(new_classes)
+    assert model.classifier.hidden_layer_sizes == ()
+    assert model.classifier.classes == new_classes
+
+    # Test forward pass
+    dummy_input = torch.randn(1, 1, 224, 224)
+    output = model(dummy_input)
+    assert output.shape == (1, len(new_classes))
+
+
+def test_change_classes_back_to_linear():
+    """Test changing from MLPClassifier back to torch.nn.Linear"""
+    model = cnn.CNN(
+        architecture="resnet18", classes=["a", "b"], sample_duration=5.0, channels=1
+    )
+
+    original_in_features = model.classifier.in_features
+
+    # First change to MLPClassifier
+    model.change_classes(["x", "y", "z"], hidden_layers=[64])
+    assert isinstance(model.classifier, MLPClassifier)
+
+    # Then change back to Linear (hidden_layers=None)
+    new_classes = ["final_a", "final_b"]
+    model.change_classes(new_classes, hidden_layers=None)
+
+    assert isinstance(model.classifier, torch.nn.Linear)
+    assert model.classes == new_classes
+    assert model.classifier.in_features == original_in_features
+    assert model.classifier.out_features == len(new_classes)
+
+    # Test forward pass
+    dummy_input = torch.randn(2, 1, 224, 224)
+    output = model(dummy_input)
+    assert output.shape == (2, len(new_classes))
+
+
+def test_change_classes_mlp_from_existing_mlp():
+    """Test changing classes when starting with MLPClassifier"""
+    model = cnn.CNN(
+        architecture="resnet18", classes=["a", "b"], sample_duration=5.0, channels=1
+    )
+
+    # First create an MLPClassifier
+    model.change_classes(["x", "y"], hidden_layers=[32])
+    original_in_features = model.classifier.in_features
+    assert isinstance(model.classifier, MLPClassifier)
+
+    # Now change to a different MLPClassifier configuration
+    new_classes = ["class1", "class2", "class3", "class4"]
+    new_hidden_layers = [128, 64]
+
+    model.change_classes(new_classes, hidden_layers=new_hidden_layers)
+
+    assert isinstance(model.classifier, MLPClassifier)
+    assert model.classes == new_classes
+    assert model.classifier.in_features == original_in_features
+    assert model.classifier.out_features == len(new_classes)
+    assert model.classifier.hidden_layer_sizes == tuple(new_hidden_layers)
+    assert model.classifier.classes == new_classes
+
+    # Test forward pass
+    dummy_input = torch.randn(1, 1, 224, 224)
+    output = model(dummy_input)
+    assert output.shape == (1, len(new_classes))
+
+
+def test_change_classes_invalid_hidden_layers():
+    """Test change_classes with invalid hidden_layers parameter"""
+    model = cnn.CNN(
+        architecture="resnet18", classes=["a", "b"], sample_duration=5.0, channels=1
+    )
+
+    # Test with invalid hidden_layers type
+    with pytest.raises(ValueError, match="hidden_layers must be None"):
+        model.change_classes(["x", "y"], hidden_layers="invalid")
+
+    with pytest.raises(ValueError, match="hidden_layers must be None"):
+        model.change_classes(["x", "y"], hidden_layers=123)
+
+
+def test_change_classes_single_hidden_layer_list():
+    """Test change_classes with single hidden layer specified as list"""
+    model = cnn.CNN(
+        architecture="resnet18", classes=["a", "b"], sample_duration=5.0, channels=1
+    )
+
+    # Test with list instead of tuple
+    new_classes = ["bird", "noise"]
+    hidden_layers = [100]  # List instead of tuple
+
+    model.change_classes(new_classes, hidden_layers=hidden_layers)
+
+    assert isinstance(model.classifier, MLPClassifier)
+    assert model.classifier.hidden_layer_sizes == (100,)  # Should be converted to tuple
+    assert model.classifier.classes == list(new_classes)
+
+
+def test_change_classes_preserves_device():
+    """Test that change_classes preserves model device"""
+    model = cnn.CNN(
+        architecture="resnet18", classes=["a", "b"], sample_duration=5.0, channels=1
+    )
+
+    # Move model to CPU explicitly (default but let's be explicit)
+    device = torch.device("cpu")
+    model = model.to(device)
+
+    # Change classes with MLPClassifier
+    model.change_classes(["x", "y", "z"], hidden_layers=[64])
+
+    # Check that new classifier is on the same device
+    assert next(model.classifier.parameters()).device == device
+
+    # Test forward pass on same device
+    dummy_input = torch.randn(1, 1, 224, 224).to(device)
+    output = model.network(dummy_input)
+    assert output.device == device
