@@ -5,13 +5,20 @@ import os
 from opensoundscape.ml import shallow_classifier
 import opensoundscape as opso
 
+from copy import deepcopy
+
 
 class TestMLPClassifier:
     """Test suite for MLPClassifier"""
 
     def test_init_basic(self):
         """Test basic initialization"""
-        mlp = opso.MLPClassifier(512, 3, ("a", "b", "c"), hidden_layer_sizes=(50,))
+        mlp = opso.MLPClassifier(
+            512,
+            3,
+            hidden_layer_sizes=(50,),
+            classes=("a", "b", "c"),
+        )
         assert mlp.input_size == 512
         assert mlp.output_size == 3
         assert mlp.classes == ("a", "b", "c")
@@ -32,7 +39,12 @@ class TestMLPClassifier:
 
     def test_forward(self):
         """Test forward pass"""
-        mlp = opso.MLPClassifier(512, 3, ("a", "b", "c"), hidden_layer_sizes=(50,))
+        mlp = opso.MLPClassifier(
+            512,
+            3,
+            hidden_layer_sizes=(50,),
+            classes=("a", "b", "c"),
+        )
         x = torch.rand(2, 512)
         output = mlp.forward(x)
         assert output.shape == (2, 3)
@@ -46,14 +58,24 @@ class TestMLPClassifier:
 
     def test_forward_batch_size_one(self):
         """Test forward pass with batch size 1"""
-        mlp = opso.MLPClassifier(512, 3, ("a", "b", "c"), hidden_layer_sizes=(50,))
+        mlp = opso.MLPClassifier(
+            512,
+            3,
+            hidden_layer_sizes=(50,),
+            classes=("a", "b", "c"),
+        )
         x = torch.rand(1, 512)
         output = mlp.forward(x)
         assert output.shape == (1, 3)
 
     def test_save_and_load(self):
         """Test save and load functionality"""
-        mlp = opso.MLPClassifier(512, 3, ("a", "b", "c"), hidden_layer_sizes=(50,))
+        mlp = opso.MLPClassifier(
+            512,
+            3,
+            hidden_layer_sizes=(50,),
+            classes=("a", "b", "c"),
+        )
         x = torch.rand(2, 512)
         output1 = mlp.forward(x)
 
@@ -101,7 +123,7 @@ class TestMLPClassifier:
 
     def test_save_and_load_no_hidden_layers(self):
         """Test save and load with no hidden layers"""
-        mlp = opso.MLPClassifier(128, 4, ("w", "x", "y", "z"))
+        mlp = opso.MLPClassifier(128, 4, classes=("w", "x", "y", "z"))
         x = torch.rand(1, 128)
         output1 = mlp.forward(x)
 
@@ -122,7 +144,9 @@ class TestMLPClassifier:
 
     def test_call_method(self):
         """Test that __call__ method works (should be same as forward)"""
-        mlp = opso.MLPClassifier(512, 3, ("a", "b", "c"), hidden_layer_sizes=(50,))
+        mlp = opso.MLPClassifier(
+            512, 3, hidden_layer_sizes=(50,), classes=("a", "b", "c")
+        )
         x = torch.rand(2, 512)
         output1 = mlp.forward(x)
         output2 = mlp(x)
@@ -437,7 +461,7 @@ class TestEarlyStopping:
         val_labels = torch.randint(0, 2, (15, 2)).float()
 
         # Store initial model state
-        initial_state = mlp.state_dict().copy()
+        initial_state = deepcopy(mlp.state_dict())
 
         # Train with validation - should load best model at end
         shallow_classifier.fit(
@@ -470,7 +494,7 @@ class TestEarlyStopping:
         train_labels = torch.randint(0, 2, (20, 2)).float()
 
         # Store initial model state
-        initial_state = mlp.state_dict().copy()
+        initial_state = deepcopy(mlp.state_dict())
 
         # Train without validation
         shallow_classifier.fit(mlp, train_features, train_labels, batch_size=8, steps=5)

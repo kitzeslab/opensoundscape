@@ -12,17 +12,17 @@ class MLPClassifier(torch.nn.Module):
     Args:
         input_size: length of 1-d tensors passed as input samples
         output_size: number of classes at the output layer
-        classes (optional): list of class names, if provided should have len=output_size
-            - default: None
         hidden_layer_sizes: default () empty tuple creates a 1-layer regression classifier,
             specify sequence of hidden layers by the number of elements. For example (100,)
             creates 1 hidden layer with 100 element
+        classes (optional): list of class names, if provided should have len=output_size
+            - default: None
         weights: optionally pass a pytorch weight_dict of model weights to load
             default None initializes the model with random weights
     """
 
     def __init__(
-        self, input_size, output_size, classes=None, hidden_layer_sizes=(), weights=None
+        self, input_size, output_size, hidden_layer_sizes=(), classes=None, weights=None
     ):
         super().__init__()
 
@@ -167,6 +167,7 @@ def fit(
 
         early_stopping_patience: if provided and validation data is available, training will stop
         early if validation loss doesn't improve for this many steps (not validation evaluations)
+        [Default: None, which means no early stopping]
     """
     # if no optimizer or criterion provided, use default AdamW and BCEWithLogitsLoss
     if optimizer is None:
@@ -247,7 +248,7 @@ def fit(
             # Check if this is the best validation loss and save model state
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                best_model_state = model.state_dict().copy()
+                best_model_state = model.state_dict()
                 best_step = step
 
             # log the loss and metrics
