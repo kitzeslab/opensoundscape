@@ -64,11 +64,11 @@ class MLPClassifier(torch.nn.Module):
         return x
 
     def fit(self, *args, **kwargs):
-        """fit the weights on features and labels
+        """fit the MLP classifier on features and labels
 
-        Args: see quick_fit()
+        Args: see shallow_classifier.fit()
         """
-        quick_fit(self, *args, **kwargs)
+        fit(self, *args, **kwargs)
 
     def save(self, path):
         torch.save(
@@ -107,7 +107,7 @@ class EmbeddingDataset(Dataset):
         return self.features[idx], self.labels[idx]
 
 
-def quick_fit(
+def fit(
     model,
     train_features,
     train_labels,
@@ -120,10 +120,13 @@ def quick_fit(
     device=torch.device("cpu"),
     validation_interval=1,
     logging_interval=100,
+    early_stopping_patience=None,
 ):
-    """train a PyTorch model on features and labels
+    """train a PyTorch model on features and labels with batching and early stopping
 
-    Assumes all data can fit in memory, so that one step includes all data (i.e. step=epoch)
+    Assumes all data can fit in memory. Training uses batched DataLoaders for efficient processing.
+    If validation data is provided, the model with the lowest validation loss is automatically
+    restored at the end of training (early stopping).
 
     Defaults are for multi-target label problems and assume train_labels is an array of 0/1
     of shape (n_samples, n_classes)
@@ -149,7 +152,7 @@ def quick_fit(
         backward, and the optimizer updates the weights
             [Default: 1000]
 
-        optimizer: torch.optim optimizer to use; default None uses Adam
+        optimizer: torch.optim optimizer to use; default None uses AdamW
 
         criterion: loss function to use; default None uses BCEWithLogitsLoss (appropriate for
         multi-label classification)
@@ -158,8 +161,14 @@ def quick_fit(
 
         validation_interval: how often to validate the model during training; if validation_features
         and validation_labels are provided, validation is performed every validation_interval steps
+
+        logging_interval: how often to print training progress; progress is logged every
+        logging_interval steps when validation is performed
+
+        early_stopping_patience: if provided and validation data is available, training will stop
+        early if validation loss doesn't improve for this many steps (not validation evaluations)
     """
-    # if no optimizer or criterion provided, use default Adam and CrossEntropyLoss
+    # if no optimizer or criterion provided, use default AdamW and BCEWithLogitsLoss
     if optimizer is None:
         optimizer = torch.optim.AdamW(model.parameters())
     if criterion is None:
@@ -178,6 +187,9 @@ def quick_fit(
     )
 
     # if validation data provided, convert to tensors and move to the device
+    best_val_loss = float("inf")
+    best_model_state = None
+    best_step = -1
     if validation_features is not None:
         validation_features = torch.tensor(
             validation_features, dtype=torch.float32, device=device
@@ -231,6 +243,13 @@ def quick_fit(
                     val_loss += criterion(val_output, val_batch_labels).item()
                 val_outputs = torch.cat(val_outputs, dim=0)
                 val_loss /= len(validation_loader)
+
+            # Check if this is the best validation loss and save model state
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_model_state = model.state_dict().copy()
+                best_step = step
+
             # log the loss and metrics
             if (step + 1) % logging_interval == 0:
                 print(
@@ -252,6 +271,27 @@ def quick_fit(
                     map = float("nan")
                 print(f"val AU ROC: {auroc:0.3f}")
                 print(f"val MAP: {map:0.3f}")
+
+            # Check early stopping condition based on steps since last improvement
+            if early_stopping_patience is not None and best_step >= 0:
+                # Calculate steps since last improvement
+                steps_since_improvement = step - best_step
+                if steps_since_improvement >= early_stopping_patience:
+                    print(
+                        f"Early stopping triggered after {step + 1} steps (patience: {early_stopping_patience})"
+                    )
+                    print(
+                        f"Best validation loss: {best_val_loss:0.3f} at step {best_step + 1}"
+                    )
+                    break
+
+    # Load the best model state if validation was used
+    if validation_features is not None and best_model_state is not None:
+        model.load_state_dict(best_model_state)
+        print(
+            f"Loaded best model with validation loss: {best_val_loss:0.3f} at step {best_step + 1} of {steps}"
+        )
+
     print("Training complete")
 
 
@@ -320,6 +360,9 @@ def fit_classifier_on_embeddings(
     optimizer=None,
     criterion=None,
     device=torch.device("cpu"),
+    early_stopping_patience=None,
+    logging_interval=100,
+    validation_interval=1,
 ):
     """Embed samples with an embedding model, then fit a classifier on the embeddings
 
@@ -388,7 +431,7 @@ def fit_classifier_on_embeddings(
         y_val = torch.tensor(validation_df.values).to(device).float()
 
     print("Fitting the classifier")
-    quick_fit(
+    fit(
         model=classifier_model,
         train_features=x_train,
         train_labels=y_train,
@@ -398,6 +441,9 @@ def fit_classifier_on_embeddings(
         optimizer=optimizer,
         criterion=criterion,
         device=device,
+        validation_interval=validation_interval,
+        logging_interval=logging_interval,
+        early_stopping_patience=early_stopping_patience,
     )
 
     # returning the embeddings and labels is useful

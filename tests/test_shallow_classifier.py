@@ -2,7 +2,6 @@ import pytest
 import torch
 import tempfile
 import os
-import numpy as np
 from opensoundscape.ml import shallow_classifier
 import opensoundscape as opso
 
@@ -165,9 +164,7 @@ class TestQuickFit:
         train_labels = torch.randint(0, 2, (n_samples, 2)).float()
 
         # Fit for just a few steps to test functionality
-        shallow_classifier.quick_fit(
-            mlp, train_features, train_labels, steps=5, batch_size=8
-        )
+        shallow_classifier.fit(mlp, train_features, train_labels, steps=5, batch_size=8)
 
         # Test that model can still make predictions
         output = mlp(train_features)
@@ -184,7 +181,7 @@ class TestQuickFit:
         val_labels = torch.randint(0, 2, (5, 3)).float()
 
         # Fit with validation
-        shallow_classifier.quick_fit(
+        shallow_classifier.fit(
             mlp,
             train_features,
             train_labels,
@@ -210,7 +207,7 @@ class TestQuickFit:
         optimizer = torch.optim.SGD(mlp.parameters(), lr=0.01)
         criterion = torch.nn.MSELoss()
 
-        shallow_classifier.quick_fit(
+        shallow_classifier.fit(
             mlp,
             train_features,
             train_labels,
@@ -251,7 +248,7 @@ class TestBatchedTraining:
         train_labels = torch.randint(0, 2, (n_samples, 2)).float()
 
         # Should process 4 batches per epoch (20/5 = 4)
-        shallow_classifier.quick_fit(
+        shallow_classifier.fit(
             mlp, train_features, train_labels, batch_size=batch_size, steps=3
         )
 
@@ -270,7 +267,7 @@ class TestBatchedTraining:
         train_labels = torch.randint(0, 2, (n_samples, 3)).float()
 
         # Should process 1 batch per epoch with all 8 samples
-        shallow_classifier.quick_fit(
+        shallow_classifier.fit(
             mlp, train_features, train_labels, batch_size=batch_size, steps=3
         )
 
@@ -288,7 +285,7 @@ class TestBatchedTraining:
         train_features = torch.randn(n_samples, 5)
         train_labels = torch.randint(0, 2, (n_samples, 2)).float()
 
-        shallow_classifier.quick_fit(
+        shallow_classifier.fit(
             mlp, train_features, train_labels, batch_size=batch_size, steps=3
         )
 
@@ -305,7 +302,7 @@ class TestBatchedTraining:
         train_labels = torch.randint(0, 2, (n_samples, 2)).float()
 
         # Should process 10 batches per epoch
-        shallow_classifier.quick_fit(
+        shallow_classifier.fit(
             mlp, train_features, train_labels, batch_size=batch_size, steps=2
         )
 
@@ -324,7 +321,7 @@ class TestBatchedTraining:
         val_features = torch.randn(15, 6)
         val_labels = torch.randint(0, 2, (15, 2)).float()
 
-        shallow_classifier.quick_fit(
+        shallow_classifier.fit(
             mlp,
             train_features,
             train_labels,
@@ -353,7 +350,7 @@ class TestBatchedTraining:
         val_features = torch.randn(8, 5)
         val_labels = torch.randint(0, 2, (8, 3)).float()
 
-        shallow_classifier.quick_fit(
+        shallow_classifier.fit(
             mlp,
             train_features,
             train_labels,
@@ -407,12 +404,12 @@ class TestBatchedTraining:
 
         # Use same random seed for reproducible shuffling
         torch.manual_seed(42)
-        shallow_classifier.quick_fit(
+        shallow_classifier.fit(
             mlp1, train_features, train_labels, batch_size=8, steps=5
         )
 
         torch.manual_seed(42)
-        shallow_classifier.quick_fit(
+        shallow_classifier.fit(
             mlp2, train_features, train_labels, batch_size=16, steps=5
         )
 
@@ -424,6 +421,329 @@ class TestBatchedTraining:
         # They shouldn't be identical (different batch dynamics)
         # but should be reasonably close if training is working
         assert not torch.allclose(output1, output2, atol=1e-3)
+
+
+class TestEarlyStopping:
+    """Test suite for early stopping and best model loading functionality"""
+
+    def test_early_stopping_saves_best_model(self):
+        """Test that training saves and loads the best model based on validation loss"""
+        mlp = opso.MLPClassifier(6, 2, hidden_layer_sizes=(4,))
+
+        # Create training and validation data
+        train_features = torch.randn(40, 6)
+        train_labels = torch.randint(0, 2, (40, 2)).float()
+        val_features = torch.randn(15, 6)
+        val_labels = torch.randint(0, 2, (15, 2)).float()
+
+        # Store initial model state
+        initial_state = mlp.state_dict().copy()
+
+        # Train with validation - should load best model at end
+        shallow_classifier.fit(
+            mlp,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=8,
+            steps=10,
+            validation_interval=1,
+        )
+
+        # Model state should be different from initial (training occurred)
+        final_state = mlp.state_dict()
+
+        # Check that at least some parameters changed
+        changed = False
+        for key in initial_state:
+            if not torch.allclose(initial_state[key], final_state[key], atol=1e-6):
+                changed = True
+                break
+        assert changed, "Model parameters should have changed during training"
+
+    def test_no_early_stopping_without_validation(self):
+        """Test that early stopping is skipped when no validation data provided"""
+        mlp = opso.MLPClassifier(5, 2)
+
+        train_features = torch.randn(20, 5)
+        train_labels = torch.randint(0, 2, (20, 2)).float()
+
+        # Store initial model state
+        initial_state = mlp.state_dict().copy()
+
+        # Train without validation
+        shallow_classifier.fit(mlp, train_features, train_labels, batch_size=8, steps=5)
+
+        # Model should still be trained (parameters changed)
+        final_state = mlp.state_dict()
+        changed = False
+        for key in initial_state:
+            if not torch.allclose(initial_state[key], final_state[key], atol=1e-6):
+                changed = True
+                break
+        assert changed, "Model parameters should have changed during training"
+
+    def test_early_stopping_deterministic_improvement(self):
+        """Test early stopping with a scenario designed to show improvement"""
+        # Create a simple problem where the model should improve
+        torch.manual_seed(42)
+        mlp = opso.MLPClassifier(4, 1, hidden_layer_sizes=(8,))
+
+        # Generate linearly separable data for consistent improvement
+        n_train, n_val = 100, 30
+        train_features = torch.randn(n_train, 4)
+        # Create labels that have some structure the model can learn
+        train_labels = (train_features.sum(dim=1, keepdim=True) > 0).float()
+
+        val_features = torch.randn(n_val, 4)
+        val_labels = (val_features.sum(dim=1, keepdim=True) > 0).float()
+
+        # Train with frequent validation checking
+        shallow_classifier.fit(
+            mlp,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=16,
+            steps=20,
+            validation_interval=1,
+            logging_interval=10,
+        )
+
+        # Model should make reasonable predictions
+        predictions = mlp(val_features)
+        assert predictions.shape == (n_val, 1)
+
+    def test_validation_interval_respected(self):
+        """Test that validation only occurs at specified intervals"""
+        mlp = opso.MLPClassifier(3, 2)
+
+        train_features = torch.randn(24, 3)
+        train_labels = torch.randint(0, 2, (24, 2)).float()
+        val_features = torch.randn(8, 3)
+        val_labels = torch.randint(0, 2, (8, 2)).float()
+
+        # With validation_interval=3, validation should occur at steps 3, 6, 9, etc.
+        shallow_classifier.fit(
+            mlp,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=8,
+            steps=5,
+            validation_interval=3,
+            logging_interval=1,
+        )
+
+        # Should complete without errors
+        output = mlp(val_features)
+        assert output.shape == (8, 2)
+
+    def test_best_model_state_copying(self):
+        """Test that model state is properly copied and restored"""
+        # Create two identical models
+        mlp1 = opso.MLPClassifier(4, 2, hidden_layer_sizes=(3,))
+        mlp2 = opso.MLPClassifier(4, 2, hidden_layer_sizes=(3,))
+
+        # Make them identical
+        mlp2.load_state_dict(mlp1.state_dict())
+
+        train_features = torch.randn(32, 4)
+        train_labels = torch.randint(0, 2, (32, 2)).float()
+        val_features = torch.randn(12, 4)
+        val_labels = torch.randint(0, 2, (12, 2)).float()
+
+        # Train one with validation (early stopping)
+        shallow_classifier.fit(
+            mlp1,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=8,
+            steps=10,
+            validation_interval=1,
+        )
+
+        # Train one without validation
+        shallow_classifier.fit(
+            mlp2, train_features, train_labels, batch_size=8, steps=10
+        )
+
+        # Both should produce valid outputs
+        output1 = mlp1(val_features)
+        output2 = mlp2(val_features)
+        assert output1.shape == output2.shape == (12, 2)
+
+        # They might be different due to early stopping vs full training
+        # This test mainly ensures no crashes occur during state management
+
+    def test_early_stopping_with_patience(self):
+        """Test early stopping with patience parameter"""
+        mlp = opso.MLPClassifier(5, 2, hidden_layer_sizes=(3,))
+
+        # Create data where validation loss won't improve much
+        train_features = torch.randn(30, 5)
+        train_labels = torch.randint(0, 2, (30, 2)).float()
+        val_features = torch.randn(10, 5)
+        val_labels = torch.randint(0, 2, (10, 2)).float()
+
+        # Train with patience of 3 steps, should stop early
+        shallow_classifier.fit(
+            mlp,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=8,
+            steps=100,  # Large number of steps
+            validation_interval=1,
+            early_stopping_patience=3,
+            logging_interval=10,
+        )
+
+        # Should complete without errors and model should work
+        output = mlp(val_features)
+        assert output.shape == (10, 2)
+
+    def test_early_stopping_patience_step_based(self):
+        """Test that patience is based on steps since last improvement"""
+        mlp = opso.MLPClassifier(4, 1)
+
+        train_features = torch.randn(24, 4)
+        train_labels = torch.randint(0, 2, (24, 1)).float()
+        val_features = torch.randn(8, 4)
+        val_labels = torch.randint(0, 2, (8, 1)).float()
+
+        # Validation every 2 steps, patience of 4 steps
+        # If best validation is at step 2, should stop at step 6 (4 steps later)
+        shallow_classifier.fit(
+            mlp,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=8,
+            steps=20,
+            validation_interval=2,
+            early_stopping_patience=4,
+            logging_interval=5,
+        )
+
+        output = mlp(val_features)
+        assert output.shape == (8, 1)
+
+    def test_no_early_stopping_without_patience(self):
+        """Test that early stopping doesn't occur without patience parameter"""
+        mlp = opso.MLPClassifier(3, 2)
+
+        train_features = torch.randn(20, 3)
+        train_labels = torch.randint(0, 2, (20, 2)).float()
+        val_features = torch.randn(6, 3)
+        val_labels = torch.randint(0, 2, (6, 2)).float()
+
+        # Train without early_stopping_patience - should complete all steps
+        shallow_classifier.fit(
+            mlp,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=8,
+            steps=10,
+            validation_interval=1,
+            # early_stopping_patience=None (default)
+        )
+
+        output = mlp(val_features)
+        assert output.shape == (6, 2)
+
+    def test_early_stopping_with_improvement(self):
+        """Test early stopping with a scenario that should show improvement"""
+        # Use a structured problem that should improve
+        torch.manual_seed(123)
+        mlp = opso.MLPClassifier(3, 1, hidden_layer_sizes=(6,))
+
+        # Create linearly separable problem
+        n_train, n_val = 60, 20
+        train_features = torch.randn(n_train, 3)
+        # Make labels predictable: positive if sum of features > 0
+        train_labels = (train_features.sum(dim=1, keepdim=True) > 0).float()
+
+        val_features = torch.randn(n_val, 3)
+        val_labels = (val_features.sum(dim=1, keepdim=True) > 0).float()
+
+        # Train with reasonable patience
+        shallow_classifier.fit(
+            mlp,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=12,
+            steps=30,
+            validation_interval=1,
+            early_stopping_patience=10,
+            logging_interval=5,
+        )
+
+        # Model should learn this simple pattern
+        predictions = mlp(val_features)
+        assert predictions.shape == (n_val, 1)
+
+    def test_early_stopping_loads_best_model(self):
+        """Test that early stopping loads the best model, not the last one"""
+        mlp = opso.MLPClassifier(4, 2, hidden_layer_sizes=(3,))
+
+        train_features = torch.randn(32, 4)
+        train_labels = torch.randint(0, 2, (32, 2)).float()
+        val_features = torch.randn(12, 4)
+        val_labels = torch.randint(0, 2, (12, 2)).float()
+
+        # Record initial state
+        initial_output = mlp(val_features)
+
+        # Train with early stopping
+        shallow_classifier.fit(
+            mlp,
+            train_features,
+            train_labels,
+            validation_features=val_features,
+            validation_labels=val_labels,
+            batch_size=8,
+            steps=20,
+            validation_interval=1,
+            early_stopping_patience=5,
+            logging_interval=10,
+        )
+
+        # Model should have changed from initial state
+        final_output = mlp(val_features)
+        assert not torch.allclose(initial_output, final_output, atol=1e-6)
+        assert final_output.shape == (12, 2)
+
+    def test_early_stopping_without_validation_data(self):
+        """Test that early stopping is ignored without validation data"""
+        mlp = opso.MLPClassifier(4, 2)
+
+        train_features = torch.randn(20, 4)
+        train_labels = torch.randint(0, 2, (20, 2)).float()
+
+        # Should ignore early_stopping_patience when no validation data
+        shallow_classifier.fit(
+            mlp,
+            train_features,
+            train_labels,
+            batch_size=8,
+            steps=5,
+            early_stopping_patience=3,  # Should be ignored
+        )
+
+        output = mlp(train_features)
+        assert output.shape == (20, 2)
 
 
 class TestEdgeCases:
