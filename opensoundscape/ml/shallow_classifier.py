@@ -367,12 +367,12 @@ def fit_classifier_on_embeddings(
 ):
     """Embed samples with an embedding model, then fit a classifier on the embeddings
 
-    wraps embedding_model.embed() with quick_fit(clf,...)
+    wraps embedding_model.embed() with fit(clf,...)
 
     Also supports generating augmented variations of the training samples
 
     Note: if embedding takes a while and you might want to fit multiple times, consider embedding
-    the samples first then running quick_fit(...) rather than calling this function.
+    the samples first then running fit(...) rather than calling this function.
 
     Args:
         embedding_model: a model with an embed() method that takes a dataframe and returns embeddings
@@ -385,7 +385,7 @@ def fit_classifier_on_embeddings(
             if >0, embeds each training sample with stochastic augmentation num_augmentation_variants times
         embedding_batch_size: batch size for embedding; default 1
         embedding_num_workers: number of workers for embedding; default 0
-        steps, optimizer, criterion, device: model fitting parameters, see quick_fit()
+        steps, optimizer, criterion, device: model fitting parameters, see fit()
 
     Returns:
         x_train, y_train, x_val, y_val: the embedded training and validation samples and their labels, as torch.tensor

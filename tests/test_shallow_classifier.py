@@ -176,10 +176,10 @@ class TestMLPClassifier:
 
 
 class TestQuickFit:
-    """Test suite for quick_fit function"""
+    """Test suite for fit function"""
 
-    def test_quick_fit_basic(self):
-        """Test basic quick_fit functionality"""
+    def test_fit_basic(self):
+        """Test basic fit functionality"""
         mlp = opso.MLPClassifier(10, 2, hidden_layer_sizes=(5,))
 
         # Create simple training data
@@ -194,8 +194,8 @@ class TestQuickFit:
         output = mlp(train_features)
         assert output.shape == (n_samples, 2)
 
-    def test_quick_fit_with_validation(self):
-        """Test quick_fit with validation data"""
+    def test_fit_with_validation(self):
+        """Test fit with validation data"""
         mlp = opso.MLPClassifier(8, 3, hidden_layer_sizes=(4,))
 
         # Create training and validation data
@@ -221,8 +221,8 @@ class TestQuickFit:
         assert train_output.shape == (15, 3)
         assert val_output.shape == (5, 3)
 
-    def test_quick_fit_custom_optimizer_criterion(self):
-        """Test quick_fit with custom optimizer and criterion"""
+    def test_fit_custom_optimizer_criterion(self):
+        """Test fit with custom optimizer and criterion"""
         mlp = opso.MLPClassifier(6, 1)
 
         train_features = torch.randn(10, 6)
@@ -245,13 +245,13 @@ class TestQuickFit:
         assert output.shape == (10, 1)
 
     def test_mlp_fit_method(self):
-        """Test that MLPClassifier.fit() calls quick_fit"""
+        """Test that MLPClassifier.fit() calls fit"""
         mlp = opso.MLPClassifier(5, 2)
 
         train_features = torch.randn(8, 5)
         train_labels = torch.randint(0, 2, (8, 2)).float()
 
-        # This should call quick_fit internally
+        # This should call fit internally
         mlp.fit(train_features, train_labels, steps=3, batch_size=4)
 
         output = mlp(train_features)
