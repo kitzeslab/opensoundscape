@@ -340,6 +340,8 @@ def fit(
             "map": map,
             "per_class_auroc": per_class_auroc,
         }
+    else:
+        best_model_val_metrics = None
     print("Training complete")
     return best_model_val_metrics
 
