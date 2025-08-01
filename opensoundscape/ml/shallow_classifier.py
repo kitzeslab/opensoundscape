@@ -257,27 +257,29 @@ def fit(
                 best_model_state = model.state_dict()
                 best_step = step
 
+            # Store metrics
+            try:
+                auroc = roc_auc_score(
+                    validation_labels.detach().cpu().numpy(),
+                    val_outputs.detach().cpu().numpy(),
+                )
+            except:
+                auroc = float("nan")
+            try:
+                map = average_precision_score(
+                    validation_labels.detach().cpu().numpy(),
+                    val_outputs.detach().cpu().numpy(),
+                )
+            except:
+                map = float("nan")
+
             # log the loss and metrics
             if (step + 1) % logging_interval == 0:
                 print(
                     f"Epoch {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}"
                 )
-                try:
-                    auroc = roc_auc_score(
-                        validation_labels.detach().cpu().numpy(),
-                        val_outputs.detach().cpu().numpy(),
-                    )
-                except:
-                    auroc = float("nan")
-                try:
-                    map = average_precision_score(
-                        validation_labels.detach().cpu().numpy(),
-                        val_outputs.detach().cpu().numpy(),
-                    )
-                except:
-                    map = float("nan")
-                print(f"val AU ROC: {auroc:0.3f}")
-                print(f"val MAP: {map:0.3f}")
+                print(f"\tval AU ROC: {auroc:0.3f}")
+                print(f"\tval MAP: {map:0.3f}")
 
             # Check early stopping condition based on steps since last improvement
             if early_stopping_patience is not None and best_step >= 0:
@@ -298,8 +300,48 @@ def fit(
         print(
             f"Loaded best model with validation loss: {best_val_loss:0.3f} at step {best_step + 1} of {steps}"
         )
-
+        # compute metrics for the best model
+        model.eval()
+        with torch.no_grad():
+            val_outputs = []
+            for val_batch_features, _ in validation_loader:
+                val_batch_features = val_batch_features.to(device)
+                val_output = model(val_batch_features)
+                val_outputs.append(val_output)
+            val_outputs = torch.cat(val_outputs, dim=0)
+        try:
+            auroc = roc_auc_score(
+                validation_labels.detach().cpu().numpy(),
+                val_outputs.detach().cpu().numpy(),
+            )
+        except:
+            auroc = float("nan")
+        try:
+            map = average_precision_score(
+                validation_labels.detach().cpu().numpy(),
+                val_outputs.detach().cpu().numpy(),
+            )
+        except:
+            map = float("nan")
+        per_class_auroc = []
+        for i in range(validation_labels.shape[1]):
+            try:
+                per_class_auroc.append(
+                    roc_auc_score(
+                        validation_labels[:, i].detach().cpu().numpy(),
+                        val_outputs[:, i].detach().cpu().numpy(),
+                    )
+                )
+            except:
+                per_class_auroc.append(float("nan"))
+        best_model_val_metrics = {
+            "loss": best_val_loss,
+            "auroc": auroc,
+            "map": map,
+            "per_class_auroc": per_class_auroc,
+        }
     print("Training complete")
+    return best_model_val_metrics
 
 
 def augmented_embed(
@@ -453,7 +495,7 @@ def fit_classifier_on_embeddings(
         y_val = torch.tensor(validation_df.values).to(device).float()
 
     print("Fitting the classifier")
-    fit(
+    metrics = fit(
         model=classifier_model,
         train_features=x_train,
         train_labels=y_train,
@@ -470,4 +512,4 @@ def fit_classifier_on_embeddings(
 
     # returning the embeddings and labels is useful
     # for re-training without re-embedding
-    return x_train, y_train, x_val, y_val
+    return x_train, y_train, x_val, y_val, metrics
