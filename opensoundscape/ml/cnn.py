@@ -16,7 +16,11 @@ from tqdm.autonotebook import tqdm
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
-from opensoundscape.ml.utils import apply_activation_layer, check_labels
+from opensoundscape.ml.utils import (
+    apply_activation_layer,
+    check_labels,
+    _version_mismatch_warn,
+)
 from opensoundscape.preprocess.preprocessors import (
     SpectrogramPreprocessor,
     BasePreprocessor,
@@ -1769,31 +1773,24 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Note: Note that if you used pickle=True when saving, the model object might not load properly
         across different versions of OpenSoundscape.
         """
-        model_dict = torch.load(path, weights_only=not unpickle)
+        loaded_content = torch.load(path, weights_only=not unpickle)
 
-        opso_version = (
-            model_dict.pop("opensoundscape_version")
-            if isinstance(model_dict, dict)
-            else model_dict.opensoundscape_version
-        )
-        if opso_version != opensoundscape.__version__:
-            warnings.warn(
-                f"Model was saved with OpenSoundscape version {opso_version}, "
-                f"but you are currently using version {opensoundscape.__version__}. "
-                "This might not be an issue but you should confirm that the model behaves as expected."
-            )
-
-        if isinstance(model_dict, dict):
+        if isinstance(loaded_content, dict):
+            _version_mismatch_warn(loaded_content.pop("opensoundscape_version"))
             # load up the weights and instantiate from dictionary keys
             # includes preprocessing parameters and settings
-            state_dict = model_dict.pop("weights")
-            class_name = model_dict.pop("class")
-            model = cls(**model_dict)
+            state_dict = loaded_content.pop("weights")
+            class_name = loaded_content.pop("class")
+            if not class_name == io.build_name(cls):
+                warnings.warn(
+                    f"Using .load method of {io.build_name(cls)} but the "
+                    f"loaded model class is {class_name}."
+                )
+            model = cls(**loaded_content)
             model.network.load_state_dict(state_dict)
-        else:
-            model = model_dict  # entire pickled object, not dictionary
-            opso_version = model.opensoundscape_version
-
+        else:  # entire pickled object, not dictionary
+            _version_mismatch_warn(loaded_content.opensoundscape_version)
+            model = loaded_content
         return model
 
     def save_weights(self, path):
@@ -2532,28 +2529,22 @@ def load_model(path, device=None, unpickle=True):
         )
 
         if isinstance(loaded_content, dict):
+            # warn the user if loaded model's opso version doesn't match the current one
+            _version_mismatch_warn(loaded_content.pop("opensoundscape_version"))
             model_cls = MODEL_CLS_DICT[loaded_content.pop("class")]
             model = model_cls(**loaded_content)
             model.network.load_state_dict(loaded_content["weights"])
-        else:
+        else:  # entire pickled object was loaded
+            _version_mismatch_warn(loaded_content.opensoundscape_version)
             model = loaded_content
 
         # now we can set the selected device
         model.device = device
         model.network.to(device)
 
-        # warn the user if loaded model's opso version doesn't match the current one
-        if model.opensoundscape_version != opensoundscape.__version__:
-            warnings.warn(
-                f"This model was saved with an earlier version of opensoundscape "
-                f"({model.opensoundscape_version}) and will not work properly in "
-                f"the current opensoundscape version ({opensoundscape.__version__}). "
-                f"To use models across package versions use .save_torch_dict and "
-                f".load_torch_dict"
-            )
-
         model.device = device
         return model
+
     except ModuleNotFoundError as e:
         raise ModuleNotFoundError(
             """

@@ -1,18 +1,38 @@
 from tqdm.autonotebook import tqdm
 import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
+import opensoundscape
+from opensoundscape.ml.utils import _version_mismatch_warn
 
 
 class MLPClassifier(torch.nn.Module):
-    """initialize a fully connected NN with ReLU activations"""
+    """initialize a fully connected NN (MLP) with ReLU activations
 
-    def __init__(self, input_size, output_size, hidden_layer_sizes=()):
+    Args:
+        input_size: length of 1-d tensors passed as input samples
+        output_size: number of classes at the output layer
+        classes (optional): list of class names, if provided should have len=output_size
+            - default: None
+        hidden_layer_sizes: default () empty tuple creates a 1-layer regression classifier,
+            specify sequence of hidden layers by the number of elements. For example (100,)
+            creates 1 hidden layer with 100 element
+        weights: optionally pass a pytorch weight_dict of model weights to load
+            default None initializes the model with random weights
+    """
+
+    def __init__(
+        self, input_size, output_size, classes=None, hidden_layer_sizes=(), weights=None
+    ):
         super().__init__()
 
         # constructor_name tuple hints to .load()
         # how to recreate the network with the appropriate shape
-        self.constructor_name = (input_size, output_size, hidden_layer_sizes)
+        self.input_size = input_size
+        self.output_size = output_size
+        self.hidden_layer_sizes = hidden_layer_sizes
+        self.classes = classes
 
+        # compose the MLP network:
         # add fully connected layers and RELU activations
         self.add_module("hidden_layers", torch.nn.Sequential())
         shapes = [input_size] + list(hidden_layer_sizes) + [output_size]
@@ -21,11 +41,21 @@ class MLPClassifier(torch.nn.Module):
                 f"layer_{i}", torch.nn.Linear(in_size, out_size)
             )
             self.hidden_layers.add_module(f"relu_{i}", torch.nn.ReLU())
+
         # add a final fully connected layer (the only layer if no hidden layers)
         self.add_module("classifier", torch.nn.Linear(shapes[-2], shapes[-1]))
 
         # hint to opensoundscape which layer is the final classifier layer
         self.classifier_layer = "classifier"
+
+        # try loading the weights dictionary if provided
+        if weights is not None:
+            try:
+                self.load_state_dict(weights)
+            except Exception as e:
+                raise ValueError(
+                    f"Error loading weights. Ensure the weights match the model architecture."
+                ) from e
 
     def forward(self, x):
         x = self.hidden_layers(x)
@@ -40,19 +70,26 @@ class MLPClassifier(torch.nn.Module):
         quick_fit(self, *args, **kwargs)
 
     def save(self, path):
-        # self.constructor_name holds tuple of input args: input_size, output_size, hidden_layer_sizes
         torch.save(
-            {"weights": self.state_dict(), "architecture": self.constructor_name}, path
+            {
+                "input_size": self.input_size,
+                "output_size": self.output_size,
+                "classes": self.classes,
+                "hidden_layer_sizes": self.hidden_layer_sizes,
+                "weights": self.state_dict(),
+                "opensoundscape_version": opensoundscape.__version__,
+            },
+            path,
         )
 
-    def load(self, path, **kwargs):
+    @classmethod
+    def load(cls, path, **kwargs):
         """load object saved with self.save(); **kwargs like map_location are passed to torch.load"""
         model_dict = torch.load(path, **kwargs)
-        # model_dict['architecture'] is tuple of init args: input_size, output_size, hidden_layer_sizes
-        model = self.__init__(*model_dict["architecture"])
-        # state dict is saved in 'weights' key
-        model.load_state_dict(model_dict["weights"])
-        return model
+        opso_version = model_dict.pop("opensoundscape_version")
+        _version_mismatch_warn(opso_version)
+        # all other keys are used as args to __init__
+        return cls(**model_dict)
 
 
 def quick_fit(
