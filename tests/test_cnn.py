@@ -1186,7 +1186,7 @@ def test_change_classes_mlp_classifier():
     dummy_input = torch.randn(
         2, 1, 224, 224
     )  # batch_size=2, channels=1, height=224, width=224
-    output = model(dummy_input)
+    output = model.network(dummy_input)
     assert output.shape == (2, len(new_classes))
 
 
@@ -1213,7 +1213,7 @@ def test_change_classes_mlp_multiple_hidden_layers():
 
     # Test forward pass
     dummy_input = torch.randn(3, 1, 224, 224)
-    output = model(dummy_input)
+    output = model.network(dummy_input)
     assert output.shape == (3, len(new_classes))
 
 
@@ -1240,7 +1240,7 @@ def test_change_classes_mlp_no_hidden_layers():
 
     # Test forward pass
     dummy_input = torch.randn(1, 1, 224, 224)
-    output = model(dummy_input)
+    output = model.network(dummy_input)
     assert output.shape == (1, len(new_classes))
 
 
@@ -1267,7 +1267,7 @@ def test_change_classes_back_to_linear():
 
     # Test forward pass
     dummy_input = torch.randn(2, 1, 224, 224)
-    output = model(dummy_input)
+    output = model.network(dummy_input)
     assert output.shape == (2, len(new_classes))
 
 
@@ -1297,7 +1297,7 @@ def test_change_classes_mlp_from_existing_mlp():
 
     # Test forward pass
     dummy_input = torch.randn(1, 1, 224, 224)
-    output = model(dummy_input)
+    output = model.network(dummy_input)
     assert output.shape == (1, len(new_classes))
 
 
