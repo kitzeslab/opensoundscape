@@ -16,7 +16,11 @@ from tqdm.autonotebook import tqdm
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
-from opensoundscape.ml.utils import apply_activation_layer, check_labels
+from opensoundscape.ml.utils import (
+    apply_activation_layer,
+    check_labels,
+    _version_mismatch_warn,
+)
 from opensoundscape.preprocess.preprocessors import (
     SpectrogramPreprocessor,
     BasePreprocessor,
@@ -28,7 +32,7 @@ from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.sample import collate_audio_samples
 from opensoundscape.utils import identity
 from opensoundscape.logging import wandb_table
-
+from opensoundscape.ml import shallow_classifier
 from opensoundscape.ml.cam import CAM
 import pytorch_grad_cam
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -663,37 +667,66 @@ class SpectrogramModule(BaseModule):
             log_graph=False,
         )
 
-    def change_classes(self, new_classes):
+    def change_classes(self, new_classes, hidden_layers=None):
         """change the classes that the model predicts
 
         replaces the network's final linear classifier layer with a new layer
         with random weights and the correct number of output features
 
-        will raise an error if self.network.classifier_layer is not the name of
-        a torch.nn.Linear layer, since we don't know how to replace it otherwise
+        Supports torch.nn.Linear and opensoundscape.ml.shallow_classifier.MLPClassifier as the
+        classifier layer to update. Will raise an error if self.network.classifier_layer is a
+        different type
 
         Args:
             new_classes: list of class names
+            hidden_layers: list of hidden layer sizes for the new classifier
+                - None: creates a single torch.nn.Linear layer
+                - (int, ...): creates an MLPClassifier object with hidden layers
+                    of the specified sizes; eg (100, 50) creates 2 hidden layers
+                    with 100 and 50 neurons, respectively.
+                - (): empty tuple creates an MLPClassifier with no hidden layers
         """
         assert len(new_classes) > 0, "new_classes must have >0 elements"
 
-        assert isinstance(self.classifier, torch.nn.Linear), (
-            f"Expected self.classifier to be a torch.nn.Linear layer, "
-            f"but found {type(self.classifier)}. Cannot automatically replace this layer to "
-            "achieve desired number of output features."
+        # assert isinstance(self.classifier, torch.nn.Linear), (
+        assert isinstance(
+            self.classifier, (torch.nn.Linear, shallow_classifier.MLPClassifier)
+        ), (
+            f"Expected self.classifier to be a torch.nn.Linear or opensoundscape.ml.shallow_classifier.MLPClassifier, "
+            f"but found {type(self.classifier)}."
         )
 
-        # replace fully-connected final classifier layer
+        # get the number of input features to the classifier layer
+        # for torch.nn.Linear and MLPClassifier, this is the in_features attribute
+        in_features = self.classifier.in_features
+
+        # create a new classifier layer with the correct number of output features
+        if hidden_layers is None:
+            new_layer = torch.nn.Linear(in_features, len(new_classes))
+        elif isinstance(hidden_layers, (list, tuple)):
+            # create an MLPClassifier with the specified hidden layers
+            new_layer = shallow_classifier.MLPClassifier(
+                input_size=in_features,
+                output_size=len(new_classes),
+                hidden_layer_sizes=hidden_layers,
+                classes=new_classes,
+            )
+        else:
+            raise ValueError(
+                "hidden_layers must be None (for torch.nn.Linear), or list/tuple of integers (for MLPClassifier). "
+                f"Got {hidden_layers} instead."
+            )
+
+        # replace the classifier layer with a new layer
         clf_layer_name = self.network.classifier_layer
-        new_layer = cnn_architectures.change_fc_output_size(
-            self.classifier, len(new_classes)
-        )
         cnn_architectures.set_layer_from_name(self.network, clf_layer_name, new_layer)
 
         # update class list
         self.classes = new_classes
 
         # re-initialize metrics, using the new number of classes
+        # otherwise we'll get errors when computing metrics
+        # (plus we should discard any old metrics after changing classes)
         self._init_torch_metrics()
 
     @property
@@ -1769,31 +1802,24 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Note: Note that if you used pickle=True when saving, the model object might not load properly
         across different versions of OpenSoundscape.
         """
-        model_dict = torch.load(path, weights_only=not unpickle)
+        loaded_content = torch.load(path, weights_only=not unpickle)
 
-        opso_version = (
-            model_dict.pop("opensoundscape_version")
-            if isinstance(model_dict, dict)
-            else model_dict.opensoundscape_version
-        )
-        if opso_version != opensoundscape.__version__:
-            warnings.warn(
-                f"Model was saved with OpenSoundscape version {opso_version}, "
-                f"but you are currently using version {opensoundscape.__version__}. "
-                "This might not be an issue but you should confirm that the model behaves as expected."
-            )
-
-        if isinstance(model_dict, dict):
+        if isinstance(loaded_content, dict):
+            _version_mismatch_warn(loaded_content.pop("opensoundscape_version"))
             # load up the weights and instantiate from dictionary keys
             # includes preprocessing parameters and settings
-            state_dict = model_dict.pop("weights")
-            class_name = model_dict.pop("class")
-            model = cls(**model_dict)
+            state_dict = loaded_content.pop("weights")
+            class_name = loaded_content.pop("class")
+            if not class_name == io.build_name(cls):
+                warnings.warn(
+                    f"Using .load method of {io.build_name(cls)} but the "
+                    f"loaded model class is {class_name}."
+                )
+            model = cls(**loaded_content)
             model.network.load_state_dict(state_dict)
-        else:
-            model = model_dict  # entire pickled object, not dictionary
-            opso_version = model.opensoundscape_version
-
+        else:  # entire pickled object, not dictionary
+            _version_mismatch_warn(loaded_content.opensoundscape_version)
+            model = loaded_content
         return model
 
     def save_weights(self, path):
@@ -2532,28 +2558,22 @@ def load_model(path, device=None, unpickle=True):
         )
 
         if isinstance(loaded_content, dict):
+            # warn the user if loaded model's opso version doesn't match the current one
+            _version_mismatch_warn(loaded_content.pop("opensoundscape_version"))
             model_cls = MODEL_CLS_DICT[loaded_content.pop("class")]
             model = model_cls(**loaded_content)
             model.network.load_state_dict(loaded_content["weights"])
-        else:
+        else:  # entire pickled object was loaded
+            _version_mismatch_warn(loaded_content.opensoundscape_version)
             model = loaded_content
 
         # now we can set the selected device
         model.device = device
         model.network.to(device)
 
-        # warn the user if loaded model's opso version doesn't match the current one
-        if model.opensoundscape_version != opensoundscape.__version__:
-            warnings.warn(
-                f"This model was saved with an earlier version of opensoundscape "
-                f"({model.opensoundscape_version}) and will not work properly in "
-                f"the current opensoundscape version ({opensoundscape.__version__}). "
-                f"To use models across package versions use .save_torch_dict and "
-                f".load_torch_dict"
-            )
-
         model.device = device
         return model
+
     except ModuleNotFoundError as e:
         raise ModuleNotFoundError(
             """

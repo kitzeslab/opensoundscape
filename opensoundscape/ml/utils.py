@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import pytorch_grad_cam
 import tqdm
 
+import opensoundscape
 from opensoundscape.ml.sampling import ClassAwareSampler
 
 
@@ -181,3 +182,12 @@ def check_labels(label_df, classes):
     assert (
         label_df.values.max(axis=None) <= 1 and label_df.values.min(axis=None) >= 0
     ), "Labels must in range [0,1], but found values outside range"
+
+
+def _version_mismatch_warn(opensoundscape_version):
+    if opensoundscape_version != opensoundscape.__version__:
+        warnings.warn(
+            f"Model was saved with OpenSoundscape version {opensoundscape_version}, "
+            f"but you are currently using version {opensoundscape.__version__}. "
+            "This might not be an issue but you should confirm that the model behaves as expected."
+        )
