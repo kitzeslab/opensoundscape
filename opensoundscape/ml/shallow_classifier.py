@@ -309,6 +309,7 @@ def augmented_embed(
     batch_size=1,
     num_workers=0,
     device=torch.device("cpu"),
+    audio_root=None,
 ):
     """Embed samples using augmentation during preprocessing
 
@@ -341,6 +342,7 @@ def augmented_embed(
                     num_workers=num_workers,
                     bypass_augmentations=False,
                     progress_bar=False,
+                    audio_root=audio_root,
                 )
             )
         )
@@ -370,6 +372,7 @@ def fit_classifier_on_embeddings(
     early_stopping_patience=None,
     logging_interval=100,
     validation_interval=1,
+    audio_root=None,
 ):
     """Embed samples with an embedding model, then fit a classifier on the embeddings
 
@@ -392,6 +395,15 @@ def fit_classifier_on_embeddings(
         embedding_batch_size: batch size for embedding; default 1
         embedding_num_workers: number of workers for embedding; default 0
         steps, optimizer, criterion, device: model fitting parameters, see fit()
+        early_stopping_patience: if provided, training will stop early if validation loss doesn't improve
+            for this many steps (not validation evaluations)
+            [Default: None, which means no early stopping]
+        logging_interval: how often to print training progress; progress is logged every logging_interval steps
+            when validation is performed
+        validation_interval: how often to validate the model during training; if validation_df is provided,
+            validation is performed every validation_interval steps
+        audio_root: if provided, used as prefix for audio files in train_df and validation_df;
+            if None, assumes train_df and validation_df already have absolute audio paths
 
     Returns:
         x_train, y_train, x_val, y_val: the embedded training and validation samples and their labels, as torch.tensor
@@ -407,6 +419,7 @@ def fit_classifier_on_embeddings(
             batch_size=embedding_batch_size,
             num_workers=embedding_num_workers,
             device=device,
+            audio_root=audio_root,
         )
 
     else:
@@ -418,6 +431,7 @@ def fit_classifier_on_embeddings(
                 batch_size=embedding_batch_size,
                 num_workers=embedding_num_workers,
                 progress_bar=True,
+                audio_root=audio_root,
             )
         ).to(device)
         y_train = torch.tensor(train_df.values).to(device).float()
@@ -433,6 +447,7 @@ def fit_classifier_on_embeddings(
                 return_dfs=False,
                 batch_size=embedding_batch_size,
                 num_workers=embedding_num_workers,
+                audio_root=audio_root,
             )
         ).to(device)
         y_val = torch.tensor(validation_df.values).to(device).float()
