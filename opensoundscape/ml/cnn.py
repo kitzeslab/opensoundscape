@@ -1940,6 +1940,346 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             return pred_scores, intermediate_outputs
         return pred_scores
 
+    def embed_to_hoplite_db(
+        self,
+        samples,
+        db,
+        dataset_name,
+        target_layer=None,
+        wandb_session=None,
+        progress_bar=True,
+        audio_root=None,
+        embedding_exists_mode="skip",  # skip, error, add
+        commit_frequency_batches=1,
+        **dataloader_kwargs,
+    ):
+        """Run inference on a dataloader, saving 1D outputs of target_layer to a hoplite database
+
+        Args:
+            samples: (same as CNN.predict())
+            db: a hoplite database object
+            dataset_name: name of the dataset to save embeddings under
+
+            target_layer: the layer to extract features from (must be a layer in self.network)
+                if None [default], attempts to use architecture's default target_layer
+                Note: only architectures created with opensoundscape 0.9.0+ will
+                have a default target layer. See pytorch_grad_cam docs for suggestions.
+                Note: if multiple layers are provided, the activations are merged across
+                    layers (rather than returning separate activations per layer)
+            wandb_session: a wandb session to log progress to (e.g. return value of wandb.init())
+            progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
+            audio_root: the root directory for relative paths to audio files
+            embedding_exists_mode: str, behavior when an embedding already exists for a given
+                (dataset_name, source_id, offset) tuple. Options are:
+                    "skip": skip inserting the embedding (default)
+                    "error": raise an error
+                    "add": add a new embedding entry to the db with the same source info
+                Note that hoplite doesn't currently support removing or replacing existing entries
+            commit_frequency_batches: int, commit to db after every N batches[default: 1]
+            **dataloader_kwargs: additional keyword arguments to pass to the dataloader
+
+        Returns:
+            dict with info about failed samples
+        """
+        try:
+            from perch_hoplite.db import interface as hoplite_interface
+        except ImportError as e:
+            raise ImportError(
+                "hoplite is not installed. Please install hoplite to use this feature."
+            ) from e
+
+        # potentially: store db.metadata.dataset_paths -> dataset_name:audio_root mapping in db
+        # and warn user if overwriting an existing mapping with a different audio_root
+
+        # create dataloader, collate using `identity` to return list of AudioSample
+        # rather than (samples, labels) tensors
+        dataloader = self.inference_dataloader_cls(
+            samples,
+            self.preprocessor,
+            shuffle=False,
+            collate_fn=identity,
+            audio_root=audio_root,
+            **dataloader_kwargs,
+        )
+
+        if embedding_exists_mode in ["skip", "error"]:
+            # filter dataloader to only samples that don't already have embeddings
+            # dataloader.dataset/
+            index_values = list(dataloader.dataset.dataset.label_df.index)
+
+            # check if each exists
+            keep_idxs = []
+            for i, (file, start_time, _) in enumerate(index_values):
+                matching_ids = db.get_embeddings_by_source(
+                    dataset_name=dataset_name,
+                    source_id=str(file),
+                    offsets=np.array([start_time], dtype=np.float16),
+                )
+                if len(matching_ids) == 0:
+                    keep_idxs.append(i)
+                elif embedding_exists_mode == "error":
+                    # don't allow adding or skipping duplicated entries
+                    raise ValueError(
+                        f"Embedding already exists for {file}:{start_time} in dataset {dataset_name}"
+                        " and embedding_exists_mode='error'. Other options are 'skip' or 'add'. "
+                    )
+
+            # subset the label_df to exclude duplicated_idxs
+            original_len = len(dataloader.dataset.dataset.label_df)
+            dataloader.dataset.dataset.label_df = (
+                dataloader.dataset.dataset.label_df.iloc[keep_idxs]
+            )
+            new_len = len(dataloader.dataset.dataset.label_df)
+
+            if new_len == 0:
+                # all samples already have embeddings, nothing to do
+                print("all samples already have embeddings in the database")
+                return
+
+        elif embedding_exists_mode == "error":
+            # check if any samples already have embeddings, raise error if so
+            raise NotImplementedError
+        # elif embedding_exists_mode == "add": # do nothing, allow duplicates
+
+        # move network to device
+        self.network.to(self.device)
+        self.network.eval()
+
+        # use default target layer if none provided
+        target_layer = self._check_or_get_default_embedding_layer(target_layer)
+
+        # store the embeddings per-batch, then save to hoplite db
+        # and clear the batch
+        # global embeddings
+        stored_embedding = {"batch": None}
+
+        # define a function that will be used to save the output of each target layer
+        # during inference
+        def forward_hook_to_save_embeddings():
+            def hook(module, input, output):
+                # apply global average pooling to intermediate outputs
+                # (average across all dimensions except first to get a 1D vector per sample)
+                # (also skip batch dimension: so start averaging from dim 2)
+                if output.dim() > 2:
+                    output = output.mean(list(range(2, output.dim())))
+                stored_embedding["batch"] = output
+
+            return hook
+
+        embedding_hook_handle = target_layer.register_forward_hook(
+            forward_hook_to_save_embeddings()
+        )
+
+        # disable gradient updates during inference
+        with torch.set_grad_enabled(False):
+            for i, batch_samples in enumerate(
+                tqdm(dataloader, disable=not progress_bar)
+            ):
+
+                batch_tensors, _ = collate_audio_samples(batch_samples)
+                batch_tensors.requires_grad = False
+
+                # forward pass of network: feature extractor + classifier
+                _ = self.network(batch_tensors.to(self.device))  # discard logits
+
+                if wandb_session is not None:
+                    wandb_session.log(
+                        {
+                            "progress": i / len(dataloader),
+                            "completed_batches": i,
+                            "total_batches": len(dataloader),
+                        }
+                    )
+
+                # insert the embeddings one-by-one to the hoplite db
+                batch_emb = (
+                    stored_embedding["batch"].detach().cpu().numpy().astype(np.float16)
+                )
+                for j in range(batch_tensors.shape[0]):
+                    file = batch_samples[j].source
+                    if audio_root is not None:
+                        # use the relative path for the source name stored in the db
+                        file = str(Path(file).relative_to(audio_root))
+                    start_time = batch_samples[j].start_time
+
+                    # save embeddings to hoplite db
+                    # TODO: configure root_audio_path & match with embedding db
+                    # the embedding source object stores the relative file path and offset (start time)
+                    # with an associated embedding_id.
+                    # retrieval:
+                    # ids = db.get_embedding_ids()
+                    # returned_ids, emb = db.get_embeddings(ids[0:2]) # NOT IN ORDER of ids passed!
+                    # slower but in order:
+                    # emb = np.array([db.get_embedding(id) for id in ids]) # TODO compare speed on large db
+                    # source = db.get_embedding_source(ids[0]) # to get_embedding_sources
+
+                    emb_source = hoplite_interface.EmbeddingSource(
+                        dataset_name=dataset_name,
+                        source_id=file,
+                        offsets=np.array([start_time], np.float16),
+                    )
+                    db.insert_embedding(batch_emb[j], emb_source)
+
+                # clear the temp storage for batch embeddings, to make sure we don't
+                # accidentally reuse them
+                stored_embedding["batch"] = None
+
+                # commit once per batch
+                # could commit at the end, which would make more sense if batch_size=1
+                # committing is relatively slow, but we don't want to lose progress if interrupted
+                if (i + 1) % commit_frequency_batches == 0:
+                    db.commit()
+
+            # end of batch loop
+        # commit any remaining embeddings!
+        db.commit()
+
+        # clean up by removing forward hooks
+        embedding_hook_handle.remove()
+
+        # return info about any failed samples
+        return {"failed_samples": dataloader.dataset.report()}
+
+    def similarity_search_hoplite_db(
+        self,
+        query_samples,
+        db,
+        num_results=5,
+        exact_search=False,
+        search_subset_size=None,
+        datasets=None,
+        target_score=None,
+        audio_root=None,
+        search_kwargs=None,
+        **embedding_kwargs,
+    ):
+        """Perform a similarity search in the Hoplite database.
+
+        Args:
+            query_samples: audio examples for which to find most similar examples
+                file path, list of paths, or dataframe with `file,start_time,end_time` multi-index
+            db: a Hoplite database containing embeddings from the same model
+            num_results: The number of results to return for each query
+            exact_search: default False for usearch (faster), if True uses brute force search
+            datasets: list of datasets to include in the search; if None, searches all datasets
+            search_subset_size: Number of embeddings to compare with. If None, all embeddings
+                are used. For floats between 0 and 1, sample a proportion of the database.
+                For ints, sample the specified number of embeddings.
+                if None [default], searches all embeddings
+                Note: only implemented for exact_search=True
+            target_score: if specified, searches for similarity scores close to target_score
+                default [None] searches for most similar embeddings
+            audio_root: root directory for relative paths to query audio files
+            search_kwargs: dict of additional keyword arguments passed to db.ui.search() or
+                brutalism.threaded_brute_search() if exact_search=True
+                exact_search=False: radius, threads, exact, log, progress
+                exact_search=True: batch_size, max_workers, rng_seed
+            **embedding_kwargs: additional keyword arguments passed to self.embed(), such as
+                batch_size and num_workers
+        Returns:
+            A list of dictionaries with the search results, one item per query sample:
+            Each item is a dictionary with the following keys:
+                - "query": dictionary with query metadata
+                - "results": list of dictionaries with metadata for each retrieved sample
+        """
+        try:
+            from perch_hoplite.db import brutalism
+            from perch_hoplite.db import score_functions
+            from perch_hoplite.db import search_results
+        except ImportError as e:
+            raise ImportError(
+                "hoplite is not installed. Please install hoplite to use this feature."
+            ) from e
+
+        if search_kwargs is None:
+            search_kwargs = {}
+
+        if search_subset_size is not None and not exact_search:
+            raise NotImplementedError(
+                "search_subset_size is only implemented for exact_search=True"
+            )
+
+        # generate embeddings for the query samples
+        print("embedding query samples")
+        embeddings = self.embed(
+            query_samples, audio_root=audio_root, **embedding_kwargs
+        )
+
+        print(
+            f"performing similarity search for each of {embeddings.shape[0]} query samples"
+        )
+        compiled_search_results = []
+        for (qfile, qstart_time, qend_time), emb in embeddings.iterrows():
+            query_embedding = emb.values.astype(np.float16)
+            if exact_search:
+                score_fn = score_functions.get_score_fn(
+                    "dot", target_score=target_score
+                )
+                results, all_scores = brutalism.threaded_brute_search(
+                    db,
+                    query_embedding,
+                    num_results,
+                    score_fn=score_fn,
+                    sample_size=search_subset_size,
+                    **search_kwargs,
+                )
+
+            else:
+                ann_matches = db.ui.search(
+                    query_embedding, count=num_results, **search_kwargs
+                )
+                results = search_results.TopKSearchResults(top_k=num_results)
+                for k, d in zip(ann_matches.keys, ann_matches.distances):
+                    results.update(search_results.SearchResult(k, d))
+
+            # extract relevant info for each match into dictionaries
+            results_list = []
+            for match in results.search_results:
+                clip_info = db.get_embedding_source(match.embedding_id)
+                results_list.append(
+                    {
+                        "embedding_id": match.embedding_id,
+                        "score": match.sort_score,
+                        "dataset_name": clip_info.dataset_name,
+                        "source_id": clip_info.source_id,
+                        "offset": clip_info.offsets[0],
+                    }
+                )
+            compiled_search_results.append(
+                {
+                    "query": {
+                        "file": qfile,
+                        "start_time": qstart_time,
+                        "end_time": qend_time,
+                        # "embedding": query_embedding,
+                        "audio_root": audio_root,
+                    },
+                    "results": results_list,
+                }
+            )
+        return compiled_search_results
+
+    def _check_or_get_default_embedding_layer(self, target_layer=None):
+        """helper function to get default target layer for embeddings
+
+        if target_layer is None, try to get the default embedding layer
+        otherwise, ensure that target_layer is a module of self.network
+        """
+        if target_layer is None:
+            try:
+                target_layer = self.network.get_submodule(self.network.embedding_layer)
+            except (AttributeError, KeyError) as exc:
+                raise AttributeError(
+                    "Please specify target_layer. Models trained with older versions of Opensoundscape, "
+                    "or custom architectures, do not have default `.network.embedding_layer`. "
+                    "e.g. For a ResNET model, try target_layers=[self.model.layer4]"
+                ) from exc
+        else:  # check that target_layers are modules of self.model
+            assert (
+                target_layer in self.network.modules()
+            ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
+        return target_layer
+
     def generate_cams(
         self,
         samples,
@@ -2219,19 +2559,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             return_dfs = False
 
         # if target_layer is None, attempt to retrieve default target layers of network
-        if target_layer is None:
-            try:
-                target_layer = self.network.get_submodule(self.network.embedding_layer)
-            except (AttributeError, KeyError) as exc:
-                raise AttributeError(
-                    "Please specify target_layer. Models trained with older versions of Opensoundscape, "
-                    "or custom architectures, do not have default `.network.embedding_layer`. "
-                    "e.g. For a ResNET model, try target_layers=[self.model.layer4]"
-                ) from exc
-        else:  # check that target_layers are modules of self.model
-            assert (
-                target_layer in self.network.modules()
-            ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
+        target_layer = self._check_or_get_default_embedding_layer(target_layer)
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
