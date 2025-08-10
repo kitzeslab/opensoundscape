@@ -1977,6 +1977,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         audio_root=None,
         embedding_exists_mode="skip",  # skip, error, add
         commit_frequency_batches=1,
+        overflow_mode="warn",
         **dataloader_kwargs,
     ):
         """Run inference on a dataloader, saving 1D outputs of target_layer to a hoplite database
@@ -2002,6 +2003,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                     "add": add a new embedding entry to the db with the same source info
                 Note that hoplite doesn't currently support removing or replacing existing entries
             commit_frequency_batches: int, commit to db after every N batches[default: 1]
+            overflow_mode: 'warn', 'error', or 'ignore' behvior when embedding values exceed
+                the range of float16, which is the range of values allowed in hoplite db
             **dataloader_kwargs: additional keyword arguments to pass to the dataloader
 
         Returns:
@@ -2061,10 +2064,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 # all samples already have embeddings, nothing to do
                 print("all samples already have embeddings in the database")
                 return
-
-        elif embedding_exists_mode == "error":
-            # check if any samples already have embeddings, raise error if so
-            raise NotImplementedError
         # elif embedding_exists_mode == "add": # do nothing, allow duplicates
 
         # move network to device
@@ -2118,9 +2117,18 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                     )
 
                 # insert the embeddings one-by-one to the hoplite db
-                batch_emb = (
-                    stored_embedding["batch"].detach().cpu().numpy().astype(np.float16)
-                )
+
+                max_float16 = np.finfo(np.float16).max
+                batch_emb = stored_embedding["batch"].detach().cpu().numpy()
+                # we clip values to the float16 range before casting, to avoid overfloat -> inf values
+                if np.abs(batch_emb).max() > max_float16:
+                    if overflow_mode == "warn":
+                        warnings.warn("clipping embedding values to float16 range")
+                    elif overflow_mode == "error":
+                        raise ValueError("Embeddings exceeded float16 range")
+                    # otherwise clip without warnings/errors
+                batch_emb = batch_emb.clip(-max_float16, max_float16).astype(np.float16)
+
                 for j in range(batch_tensors.shape[0]):
                     file = batch_samples[j].source
                     if audio_root is not None:
@@ -2173,7 +2181,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         num_results=5,
         exact_search=False,
         search_subset_size=None,
-        datasets=None,
+        # datasets=None, # would like to implement filtering to specific datasets
         target_score=None,
         audio_root=None,
         search_kwargs=None,
@@ -2187,7 +2195,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             db: a Hoplite database containing embeddings from the same model
             num_results: The number of results to return for each query
             exact_search: default False for usearch (faster), if True uses brute force search
-            datasets: list of datasets to include in the search; if None, searches all datasets
             search_subset_size: Number of embeddings to compare with. If None, all embeddings
                 are used. For floats between 0 and 1, sample a proportion of the database.
                 For ints, sample the specified number of embeddings.
@@ -2220,10 +2227,15 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         if search_kwargs is None:
             search_kwargs = {}
 
-        if search_subset_size is not None and not exact_search:
-            raise NotImplementedError(
-                "search_subset_size is only implemented for exact_search=True"
-            )
+        if not exact_search:
+            if search_subset_size is not None:
+                raise NotImplementedError(
+                    "search_subset_size is only implemented for exact_search=True"
+                )
+            if target_score is not None:
+                raise NotImplementedError(
+                    "target_score is only implemented for exact_search=True"
+                )
 
         # generate embeddings for the query samples
         print("embedding query samples")
