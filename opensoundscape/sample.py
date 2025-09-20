@@ -103,7 +103,7 @@ class AudioSample(Sample):
         # cast (potentially sparse input) to dense boolean #TODO: should it be int or long, or float?
         # note that this implementation doesn't allow soft labels
         # make a copy to avoid modifying original
-        labels_series = labels_series.copy().astype(bool)
+        labels_series = labels_series.copy().astype(np.float16)
 
         if type(labels_series.name) == tuple:
             # if the dataframe has a multi-index, it should be (file,start_time,end_time)
