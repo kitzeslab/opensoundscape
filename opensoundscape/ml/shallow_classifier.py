@@ -69,12 +69,85 @@ class MLPClassifier(torch.nn.Module):
         x = self.classifier(x)
         return x
 
-    def fit(self, *args, **kwargs):
-        """fit the MLP classifier on features and labels
+    def fit(
+        self,
+        train_features,
+        train_labels,
+        validation_features=None,
+        validation_labels=None,
+        batch_size=128,
+        steps=1000,
+        optimizer=None,
+        criterion=None,
+        device=torch.device("cpu"),
+        validation_interval=1,
+        logging_interval=100,
+        early_stopping_patience=None,
+    ):
+        """train a PyTorch model on features and labels with batching and early stopping
 
-        Args: see shallow_classifier.fit()
+        Assumes all data can fit in memory. Training uses batched DataLoaders for efficient processing.
+        If validation data is provided, the model with the lowest validation loss is automatically
+        restored at the end of training (early stopping).
+
+        Defaults are for multi-target label problems and assume train_labels is an array of 0/1
+        of shape (n_samples, n_classes)
+
+        Note: this is a convenience wrapper around opensoundscape.ml.shallow_classifier.fit()
+
+        Args:
+            model: a torch.nn.Module object to train
+
+            train_features: input features for training, often embeddings; should be a valid input to
+            model(); generally shape (n_samples,n_features)
+
+            train_labels: labels for training, generally one-hot encoded with shape
+            (n_samples,n_classes); should be a valid target for criterion()
+
+            validation_features: input features for validation; if None, does not perform validation
+
+            validation_labels: labels for validation; if None, does not perform validation
+
+            batch_size: batch size for training; if fewer samples than batch_size,
+                the entire dataset is used as a single batch
+                [Default: 128]
+
+            steps: number of training steps (epochs); each step, all data is passed forward and
+            backward, and the optimizer updates the weights
+                [Default: 1000]
+
+            optimizer: torch.optim optimizer to use; default None uses AdamW
+
+            criterion: loss function to use; default None uses BCEWithLogitsLoss (appropriate for
+            multi-label classification)
+
+            device: torch.device to use; default is torch.device('cpu')
+
+            validation_interval: how often to validate the model during training; if validation_features
+            and validation_labels are provided, validation is performed every validation_interval steps
+
+            logging_interval: how often to print training progress; progress is logged every
+            logging_interval steps when validation is performed
+
+            early_stopping_patience: if provided and validation data is available, training will stop
+            early if validation loss doesn't improve for this many steps (not validation evaluations)
+            [Default: None, which means no early stopping]
         """
-        fit(self, *args, **kwargs)
+        return fit(
+            model=self,
+            train_features=train_features,
+            train_labels=train_labels,
+            validation_features=validation_features,
+            validation_labels=validation_labels,
+            batch_size=batch_size,
+            steps=steps,
+            optimizer=optimizer,
+            criterion=criterion,
+            device=device,
+            validation_interval=validation_interval,
+            logging_interval=logging_interval,
+            early_stopping_patience=early_stopping_patience,
+        )
 
     def save(self, path):
         torch.save(
