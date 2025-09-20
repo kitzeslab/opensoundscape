@@ -16,6 +16,11 @@ def raven_file():
 
 
 @pytest.fixture()
+def raven_file_Annotation_col():
+    return "tests/raven_annots/raven_with_Annotation_col.txt"
+
+
+@pytest.fixture()
 def audio_2min():
     return "tests/audio/MSD-0003_20180427_2minstart00.wav"
 
@@ -107,8 +112,8 @@ def boxed_annotations():
     )
     return BoxedAnnotations(
         df,
-        audio_files=["audio_file.wav"] * 3,
-        annotation_files=["audio_file.annotations.txt"] * 3,
+        audio_files=["audio_file.wav"],
+        annotation_files=["audio_file.annotations.txt"],
     )
 
 
@@ -125,7 +130,11 @@ def boxed_annotations_2_files():
             "annotation": ["a", "b", None],
         }
     )
-    return BoxedAnnotations(df)
+    return BoxedAnnotations(
+        df,
+        audio_files=["audio_file.wav", "audio2.wav"],
+        annotation_files=["ann.txt", "ann2.txt"],
+    )
 
 
 @pytest.fixture()
@@ -186,6 +195,16 @@ def test_load_raven_annotations(raven_file):
 def test_concat_boxed_annotations(boxed_annotations):
     joined = BoxedAnnotations.concat([boxed_annotations] * 3)
     assert len(joined.df) == 9
+    assert len(joined.audio_files) == 3
+    assert len(joined.annotation_files) == 3
+
+    # handles scenario where audio_files and/or annotation_files are None
+    boxed_annotations.annotation_files = None
+    boxed_annotations.audio_files = None
+    joined = BoxedAnnotations.concat([boxed_annotations] * 3)
+    assert len(joined.df) == 9
+    assert joined.audio_files is None
+    assert joined.annotation_files is None
 
 
 def test_load_raven_annotations_w_audio(raven_file):
@@ -230,6 +249,37 @@ def test_load_raven_annotation_column_name(raven_file):
         a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=25)
     with pytest.raises(IndexError):
         a = BoxedAnnotations.from_raven_files([raven_file], annotation_column=-1)
+
+
+def test_from_raven_files_list_of_annotation_column(
+    raven_file, raven_file_Annotation_col
+):
+    ba = BoxedAnnotations.from_raven_files(
+        [raven_file, raven_file_Annotation_col],
+        annotation_column=["Species", "Annotation"],
+    )
+    assert "CSWA" in ba.unique_labels() and "WOTH" in ba.unique_labels()
+
+    # also allowed to be a tuple
+    ba = BoxedAnnotations.from_raven_files(
+        [raven_file, raven_file_Annotation_col],
+        annotation_column=("Species", "Annotation"),
+    )
+    assert "CSWA" in ba.unique_labels() and "WOTH" in ba.unique_labels()
+
+    # raises an exception if no matching column is found
+    with pytest.raises(KeyError):
+        ba = BoxedAnnotations.from_raven_files(
+            [raven_file, raven_file_Annotation_col],
+            annotation_column=["Species", "notacolumn"],
+        )
+
+    # raises an exception if multiple matching columns are found
+    with pytest.raises(KeyError):
+        ba = BoxedAnnotations.from_raven_files(
+            [raven_file, raven_file_Annotation_col],
+            annotation_column=["Species", "Selection"],
+        )
 
 
 def test_load_raven_annotations_empty(raven_file_empty):
@@ -862,11 +912,17 @@ def test_to_and_from_crowsetta(boxed_annotations_2_files):
     assert len(anns) == 2
 
     # back to BoxedAnnotations format
-    ba2 = BoxedAnnotations.from_crowsetta(anns)
+    ba2 = BoxedAnnotations.from_crowsetta(
+        anns, audio_files=ba.audio_files, annotation_files=ba.annotation_files
+    )
 
-    # order of annotations is not retained
+    # Note: order of annotations is not retained
     # because of the .groupby call
     assert set(ba2.df.annotation) == set([None, "a", "b"])
+
+    # should contain .audio_files and .annotation_files
+    assert ba2.annotation_files == ba.annotation_files
+    assert ba2.audio_files == ba.audio_files
 
     # test 'sequence' mode:
     anns = ba.to_crowsetta(mode="sequence")
@@ -874,7 +930,13 @@ def test_to_and_from_crowsetta(boxed_annotations_2_files):
     assert type(anns[0].seq) == crowsetta.Sequence
 
     # back to BoxedAnnotations format
-    ba3 = BoxedAnnotations.from_crowsetta(anns)
+    ba3 = BoxedAnnotations.from_crowsetta(
+        anns, audio_files=ba.audio_files, annotation_files=ba.annotation_files
+    )
+
+    # should contain .audio_files and .annotation_files
+    assert ba2.annotation_files == ba.annotation_files
+    assert ba2.audio_files == ba.audio_files
 
     # order of annotations is not retained
     # because of the .groupby call
@@ -1086,3 +1148,15 @@ def test_categorical_labels_from_multihot_df():
     assert cl.classes == ["class0", "class1"]
     assert cl.labels == [[0], [1], [0, 1]]
     assert cl.class_labels == [["class0"], ["class1"], ["class0", "class1"]]
+
+
+def test_train_test_split(boxed_annotations_2_files):
+    train, test = boxed_annotations_2_files.train_test_split(
+        train_size=0.5, random_state=0
+    )
+    assert len(train.audio_files) == 1
+    assert len(test.audio_files) == 1
+    assert train.audio_files[0] != test.audio_files[0]
+    assert len(train.df) + len(test.df) == len(boxed_annotations_2_files.df)
+    assert isinstance(train, BoxedAnnotations)
+    assert isinstance(test, BoxedAnnotations)

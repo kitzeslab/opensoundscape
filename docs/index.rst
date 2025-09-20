@@ -24,7 +24,7 @@ The documentation is organized into the following sections:
 
 **Introduction**: 
 
-   * Quick Start Guide
+   * Quick Start Guide: please visit the main `README <https://github.com/kitzeslab/opensoundscape?tab=readme-ov-file#quick-start-guide>`_
    * Links to resources 
    * Orientation for PyTorch users
 
@@ -74,7 +74,6 @@ Suggested citation:
    :hidden: 
    :caption: Introduction
 
-   intro/quick-start.md
    intro/resources.md
    intro/pytorch_orientation.md
 

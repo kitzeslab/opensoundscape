@@ -281,8 +281,8 @@ class AudioClipLoader(Action):
     """Action to load clips from an audio file
 
     Loads an audio file or part of a file to an Audio object.
-    Will load entire audio file if _start_time and _end_time are None.
-    If _start_time and _end_time are provided, loads the audio only in the
+    Will load entire audio file if sample.start_time and sample.duration are None.
+    If sample.start_time and sample.duration are provided, loads the audio only in the
     specified interval.
 
     see Audio.from_file() for documentation.
@@ -300,7 +300,7 @@ class AudioClipLoader(Action):
 
     def __call__(self, sample, **kwargs):
         offset = 0 if sample.start_time is None else sample.start_time
-        duration = None if sample.duration is None else sample.duration
+        duration = sample.duration
         sample.data = self.action_fn(
             sample.data, offset=offset, duration=duration, **dict(self.params, **kwargs)
         )

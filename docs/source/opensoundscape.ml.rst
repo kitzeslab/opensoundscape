@@ -4,14 +4,6 @@ opensoundscape.ml package
 Submodules
 ----------
 
-opensoundscape.ml.bioacoustics\_model\_zoo module
--------------------------------------------------
-
-.. automodule:: opensoundscape.ml.bioacoustics_model_zoo
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 opensoundscape.ml.cam module
 ----------------------------
 

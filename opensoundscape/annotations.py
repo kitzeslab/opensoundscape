@@ -9,7 +9,7 @@ import itertools
 import pandas as pd
 import numpy as np
 import warnings
-import crowsetta
+from sklearn.model_selection import train_test_split
 
 from opensoundscape.utils import (
     overlap,
@@ -20,6 +20,21 @@ from opensoundscape.utils import (
 )
 
 import scipy.sparse
+
+try:
+    import crowsetta
+except ImportError:
+    crowsetta = None
+
+
+def check_crowsetta_installed():
+    """raise helpful error if optional dependency not installed"""
+    if crowsetta is None:
+        raise ImportError(
+            """This function requires the optional dependency `crowsetta` which is not
+                          installed in the current python environment. Use `pip install crowsetta`
+                          to install it."""
+        )
 
 
 class BoxedAnnotations:
@@ -129,13 +144,16 @@ class BoxedAnnotations:
         Args:
             raven_files: list or iterable of raven .txt file paths (as str or pathlib.Path),
                 or a single file path (str or pathlib.Path). Eg ['path1.txt','path2.txt']
-            annotation_column: string name or integer position of column containing annotations
+            annotation_column: column name(s) or integer position to use as the annotations
                 - pass `None` to load the Raven file without explicitly
                 assigning a column as the annotation column. The resulting
                 object's `.df` will have an `annotation` column with nan values!
                 - if a string is passed, the column with this name will be used as the annotations.
                 - if an integer is passed, the column at that position will be used as the annotation column.
-                NOTE: column positions are ordered increasingly starting at 0.
+                    NOTE: column positions are ordered increasingly starting at 0.
+                - if a list/tuple is passed, find a column matching any value in the list
+                    NOTE: if multiple columns match, an error will be raised
+                    Example: ['annotation','label','Species'] will find a column with any of these names
             audio_files: (list) optionally specify audio files corresponding to each
                 raven file (length should match raven_files) Eg ['path1.txt','path2.txt']
                 - if None (default), .clip_labels() will not be able to
@@ -195,6 +213,10 @@ class BoxedAnnotations:
             but their lengths did not match.
             """
 
+        assert isinstance(
+            annotation_column, (str, int, type(None), list, tuple)
+        ), "Annotation column index has to be a string, integer, list, tuple, or None."
+
         all_file_dfs = []
 
         # mapping of Raven file columns to standard opensoundscape names
@@ -214,10 +236,7 @@ class BoxedAnnotations:
                 warnings.warn(f"{raven_file} has zero rows.")
                 continue
 
-            assert isinstance(
-                annotation_column, (str, int, type(None))
-            ), "Annotation column index has to be a string, integer, or None."
-
+            # handle varioius options for specifying the annotation column
             if isinstance(annotation_column, str):
                 # annotation_column is a string that is present in the annotation file's header
                 try:
@@ -237,11 +256,13 @@ class BoxedAnnotations:
             elif isinstance(annotation_column, int):
                 # using the column number to specify which column contains annotations
                 # first column is 1, second is 2, etc
-                if not 0 <= annotation_column < len(df):
+                if not 0 <= annotation_column < len(df.columns):
                     # ensure column number is within bounds
                     raise IndexError(
-                        f"Specified column index, {annotation_column}, is out of bounds of the columns in the annotation file. Please provide a number between 0 and {len(df.columns)-1}! "
-                        f"Please keep in mind Python uses zero-based indexing, meaning the column numbers start at 0."
+                        f"""Specified annotation column index ({annotation_column}) is out of bounds
+                        of the columns in the annotation file. Please provide a number between 0 and
+                        {len(df.columns)-1}! Please keep in mind Python uses zero-based indexing,
+                        meaning the column numbers start at 0."""
                     )
                 df = df.rename(
                     columns={
@@ -249,6 +270,32 @@ class BoxedAnnotations:
                     },
                     errors="raise",
                 )
+            elif isinstance(annotation_column, (list, tuple)):
+                annotation_column = list(annotation_column)
+                # make sure exactly one value from annotation_column is in the df.columns
+                matching_cols = [col for col in annotation_column if col in df.columns]
+                if len(matching_cols) == 0:
+                    raise KeyError(
+                        f"None of the specified annotation columns, {annotation_column}, "
+                        f"match any of the column names in the annotation file: {list(df.columns)} "
+                        f"when attempting to load {raven_file}. "
+                        f"Please ensure all raven files contain one of the specified annotation_column values."
+                    )
+                elif len(matching_cols) > 1:
+                    raise KeyError(
+                        f"Multiple columns in the annotation file match the specified annotation columns: "
+                        f"{matching_cols}. when attempting to load {raven_file}. "
+                        "Please ensure only one column in each raven file matches a value listed in annotation_columns"
+                    )
+                else:
+                    # rename the column to 'annotation'
+                    df = df.rename(
+                        columns={
+                            matching_cols[0]: "annotation",
+                        },
+                        errors="raise",
+                    )
+
             else:
                 # None was passed to annotation_column
                 # we'll create an empty `annotation` column
@@ -378,15 +425,28 @@ class BoxedAnnotations:
         )
 
     @classmethod
-    def from_crowsetta(cls, annotations):
-        """
-        crowsetta.Annotation object or list of Annotation objects
-        - the objects _either_ have .bbox: list of BBox objects,
-        OR .seq: Sequence object with list of values for
-            onset/offset (or sample onset/offset), labels
+    def from_crowsetta(cls, annotations, audio_files=None, annotation_files=None):
+        """create BoxedAnnotations from crowsetta.Annotation object or list of Annotation objects
+
+
+        Args:
+            annotations: crowsetta.Annotation object or list of objects
+                the objects _either_ have
+                `.bbox`: list of BBox objects, OR
+                `.seq`: Sequence object with list of values for onset/offset
+                    (or sample onset/offset), labels
+            audio_files: optionally, pass list of the annotated audio files
+                (this might include files with zero annotations)
+            annotation_files: optionally, pass list of files containing annotations
+
+        Returns:
+            BoxedAnnotations object containing the annotations in .df,
+            and possibly containing the provided .audio_files and .annotation_files lists
 
         Note: if an empty list is passed, creates empty BoxedAnnotations object
         """
+        check_crowsetta_installed()  # raises helpful error if optional dependency is missing
+
         # store individual objects in a list, starting with an empty BoxedAnnotations object
         boxed_anns = []
 
@@ -428,7 +488,11 @@ class BoxedAnnotations:
                     ba.df["annotation_id"] = ann_i  # keep record of annotation number
                     boxed_anns.append(ba)
 
-        return cls.concat(boxed_anns)
+        ba = cls.concat(boxed_anns)
+        ba.audio_files = audio_files
+        ba.annotation_files = annotation_files
+
+        return ba
 
     @classmethod
     def from_csv(cls, path):
@@ -582,6 +646,7 @@ class BoxedAnnotations:
             - if mode=='bbox', Annotations have attribute .bboxes
             - if mode=='sequence', Annotations have attribute .seq)
         """
+        check_crowsetta_installed()  # raise helpful error if optional dependency not installed
         assert mode in ("bbox", "sequence"), "invalid mode, choose 'bbox' or 'sequence'"
 
         ann_objects = []  # we plan to return a list of crowsetta.Annotation objects
@@ -1174,13 +1239,66 @@ class BoxedAnnotations:
     def concat(cls, list_of_boxed_annotations):
         """concatenate a list of BoxedAnnotations objects into one"""
         dfs = [ba.df for ba in list_of_boxed_annotations]
-        return cls(pd.concat(dfs).reset_index(drop=True))
+        audio_files = []
+        annotation_files = []
+        for ba in list_of_boxed_annotations:
+            if ba.audio_files is not None:
+                audio_files.extend(ba.audio_files)
+            if ba.annotation_files is not None:
+                annotation_files.extend(ba.annotation_files)
+        if len(audio_files) == 0:
+            audio_files = None
+        if len(annotation_files) == 0:
+            annotation_files = None
+        return cls(
+            pd.concat(dfs).reset_index(drop=True),
+            audio_files=audio_files,
+            annotation_files=annotation_files,
+        )
 
-    @classmethod
-    def concat(cls, list_of_boxed_annotations):
-        """concatenate a list of BoxedAnnotations objects into one"""
-        dfs = [ba.df for ba in list_of_boxed_annotations]
-        return cls(pd.concat(dfs).reset_index(drop=True))
+    def train_test_split(self, **kwargs):
+        """split annotations into train and test sets
+
+        Splits annotations into train and test sets by audio file, not by row,
+        such that all annotations for a given audio file are in either the train
+        or test set. This is useful for ensuring that the same audio files are
+        not present in both the train and test sets, which could lead to data leakage.
+
+        Note that because self.audio_files is used, this approach retains audio files that
+        do not have any annotations (which would not be true if the bounding box .df table
+        were split based on the audio file column)
+
+        self.audio_files must be set to the list of annotated audio files
+
+        Args:
+            see sklearn.model_selection.train_test_split for arguments
+            (test_size, train_size, random_state, shuffle, stratify)
+        """
+        assert (
+            self.audio_files is not None
+        ), ".audio_files was None. Please set the .audio_files attribute to use BoxedAnnotations.train_test_split"
+        # pair up audio and annotation files
+        train_idx, test_idx = train_test_split(range(len(self.audio_files)), **kwargs)
+        train_files = np.array(self.audio_files)[train_idx]
+        test_files = np.array(self.audio_files)[test_idx]
+        train_ann_files = np.array(self.annotation_files)[train_idx]
+        test_ann_files = np.array(self.annotation_files)[test_idx]
+
+        # find class dynamically so that this method works if BoxedAnnotations is subclassed
+        cls = type(self)
+        train_anns = cls(
+            self.df[self.df.audio_file.apply(lambda x: x in train_files)].reset_index(),
+            annotation_files=train_ann_files,
+            audio_files=train_files,
+        )
+
+        test_anns = cls(
+            self.df[self.df.audio_file.apply(lambda x: x in test_files)].reset_index(),
+            annotation_files=test_ann_files,
+            audio_files=test_files,
+        )
+
+        return train_anns, test_anns
 
 
 def diff(base_annotations, comparison_annotations):
@@ -1332,6 +1450,7 @@ def multi_hot_to_categorical(labels, classes):
 
 def _df_to_crowsetta_sequence(df):
     """create a crowsetta.Sequence from BoxedAnnotations style dataframe"""
+    check_crowsetta_installed()  # raise helpful error if optional dependency not installed
     return crowsetta.Sequence.from_dict(
         {
             "onset_samples": (
@@ -1349,6 +1468,7 @@ def _df_to_crowsetta_sequence(df):
 
 def _df_to_crowsetta_bboxes(df):
     """create list of crowsetta.BBoxes from BoxedAnnotations style dataframe"""
+    check_crowsetta_installed()  # raise helpful error if optional dependency not installed
     # ensure we have a unique index
     df = df.reset_index(drop=True)
 

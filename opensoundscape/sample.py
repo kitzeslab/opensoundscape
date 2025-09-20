@@ -72,7 +72,12 @@ class AudioSample(Sample):
             return list(self.labels[self.labels == 1].index)
 
     @classmethod
-    def from_series(cls, labels_series, rounding_precision=10):
+    def from_series(
+        cls,
+        labels_series,
+        rounding_precision=10,
+        audio_root=None,
+    ):
         """initialize AudioSample from a pandas Series (optionally containing labels)
 
         - if series name (dataframe index) is tuple, extracts ['file','start_time','end_time']
@@ -91,6 +96,9 @@ class AudioSample(Sample):
             rounding_precision: rounds duration to this many decimals
                 to avoid floating point precision errors. Pass `None` for no rounding.
                 Default: 10 decimal places
+            audio_root: optionally pass a root directory (pathlib.Path or str) to prepended to each
+            file path
+                - if None (default), value of `file` must be full path
         """
         # cast (potentially sparse input) to dense boolean #TODO: should it be int or long, or float?
         # note that this implementation doesn't allow soft labels
@@ -103,12 +111,21 @@ class AudioSample(Sample):
                 len(labels_series.name) == 3
             ), "series.name must be ('file','start_time','end_time') or a single value 'file'"
             sample_path, start_time, end_time = labels_series.name
+            sample_path = Path(sample_path)
         else:
             # Series.name (dataframe index) contains a path to a file
             # No clip times are provided, so the entire file will be loaded
             sample_path = Path(labels_series.name)
             start_time = None
             end_time = None
+
+        if audio_root is not None:
+            # check that audio_root argument is valid
+            msg = f"audio_root must be str, Path, or None. Got {type(audio_root)}"
+            assert isinstance(audio_root, (str, Path)), msg
+
+            # prepend the root directory to the given file path
+            sample_path = Path(audio_root) / sample_path
 
         # calculate duration if start, end given
         if end_time is not None and start_time is not None:
@@ -121,7 +138,7 @@ class AudioSample(Sample):
 
         # instantiate (create the object)
         return cls(
-            source=sample_path,
+            source=str(sample_path),
             start_time=start_time,
             duration=duration,
             labels=labels_series.copy(),

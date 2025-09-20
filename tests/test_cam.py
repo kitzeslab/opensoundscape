@@ -11,7 +11,7 @@ import pandas as pd
 
 @pytest.fixture()
 def cam():
-    base = torch.rand(3, 224, 224)
+    base = torch.rand(1, 224, 224)
     activation_maps = pd.Series(
         {i: np.random.uniform(0, 1, [224, 224]) for i in range(2)}
     )
@@ -36,3 +36,7 @@ def test_cam_plot(cam):
     cam.plot(class_subset=(0, 1))
     cam.plot(class_subset=(0,), mode="backprop")
     cam.plot(class_subset=(0,), mode="backprop_and_activation")
+
+
+def test_cam_plot_None(cam):
+    cam.plot(mode=None)

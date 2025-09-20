@@ -41,6 +41,9 @@ class AudioFileDataset(torch.utils.data.Dataset):
         preprocessor:
             an object of BasePreprocessor or its children which defines
             the operations to perform on input samples
+        audio_root:
+            optionally pass a root directory (pathlib.Path or str) to prepend to each file path
+            - if None (default), samples must contain full paths to files
 
     Returns:
         sample (AudioSample object)
@@ -53,10 +56,18 @@ class AudioFileDataset(torch.utils.data.Dataset):
             produce a list of clips with start/end times, if split_files_into_clips=True
     """
 
-    def __init__(self, samples, preprocessor, bypass_augmentations=False):
+    def __init__(
+        self, samples, preprocessor, bypass_augmentations=False, audio_root=None
+    ):
+        super().__init__()
+
         ## Input Validation ##
 
-        # validate type of samples: list, np array, or df
+        # check that audio_root argument is valid
+        msg = f"audio_root must be str, Path, or None. Got {type(audio_root)}"
+        assert isinstance(audio_root, (str, Path, type(None))), msg
+
+        # validate type of samples: list or np array of files, or df
         assert type(samples) in (
             list,
             np.ndarray,
@@ -83,6 +94,8 @@ class AudioFileDataset(torch.utils.data.Dataset):
         # give helpful warnings for incorret df, but don't raise Exception
         if len(df) > 0:
             first_path = df.index[0][0] if self.has_clips else df.index[0]
+            if audio_root is not None:
+                first_path = Path(audio_root) / first_path
             if not Path(first_path).exists():
                 warnings.warn(
                     "Index of dataframe passed to "
@@ -95,12 +108,22 @@ class AudioFileDataset(torch.utils.data.Dataset):
             warnings.warn("Zero samples!")
 
         self.classes = df.columns
-        self.label_df = df
-        self.preprocessor = preprocessor
-        self.invalid_samples = set()
+        """list of classes to which multi-hot labels correspond"""
 
-        # if True skips Actions with .is_augmentation=True
+        self.label_df = df
+        """dataframe containing file paths, clip times, and multi-hot labels (one column per class)"""
+
+        self.preprocessor = preprocessor
+        """Preprocessor object containing a .pipeline of ordered preprocessing operations"""
+
+        self.invalid_samples = set()
+        """set of file paths that raised exceptions during preprocessing"""
+
+        self.audio_root = audio_root
+        """path to prepend to all audio file paths when loading"""
+
         self.bypass_augmentations = bypass_augmentations
+        """if True, skips Actions with .is_augmentation=True"""
 
     @classmethod
     def from_categorical_df(
@@ -147,10 +170,12 @@ class AudioFileDataset(torch.utils.data.Dataset):
             raise InvalidIndexError(
                 f"idx must be an integer, got {type(idx)}. "
                 f"This could happen if you specified a custom sampler that results in returning "
-                "lists of indices rather than a single index. AudioFiledataset.__getitem__ "
+                "lists of indices rather than a single index. AudioFileDataset.__getitem__ "
                 "requires that idx is a single integer index."
             )
-        sample = AudioSample.from_series(self.label_df.iloc[idx])
+        sample = AudioSample.from_series(
+            self.label_df.iloc[idx], audio_root=self.audio_root
+        )
 
         # preprocessor.forward will raise PreprocessingError if something fails
         sample = self.preprocessor.forward(
@@ -218,8 +243,20 @@ class AudioSplittingDataset(AudioFileDataset):
         **kwargs are passed to opensoundscape.utils.make_clip_df
     """
 
-    def __init__(self, samples, preprocessor, **kwargs):
-        super().__init__(samples=samples, preprocessor=preprocessor)
+    def __init__(
+        self,
+        samples,
+        preprocessor,
+        bypass_augmentations=False,
+        audio_root=None,
+        **kwargs,
+    ):
+        super().__init__(
+            samples=samples,
+            preprocessor=preprocessor,
+            bypass_augmentations=bypass_augmentations,
+            audio_root=audio_root,
+        )
 
         self.has_clips = True
 
@@ -230,5 +267,6 @@ class AudioSplittingDataset(AudioFileDataset):
             files=samples,
             clip_duration=preprocessor.sample_duration,
             return_invalid_samples=True,
+            audio_root=audio_root,
             **kwargs,
         )

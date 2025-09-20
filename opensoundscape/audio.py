@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" audio.py: Utilities for loading and modifying Audio objects
+"""audio.py: Utilities for loading and modifying Audio objects
 
 
 **Note: Out-of-place operations**
@@ -24,6 +24,7 @@ from pathlib import Path
 import json
 import io
 import urllib
+import os
 
 import numpy as np
 import scipy
@@ -369,13 +370,14 @@ class Audio:
             self._to_ipdisplay_audio(normalize=normalize, autoplay=autoplay)
         )
 
-    def resample(self, sample_rate, resample_type=None):
+    def resample(self, sample_rate, resample_type=None, clip_range=(-1, 1)):
         """Resample Audio object
 
         Args:
             sample_rate (scalar):   the new sample rate
             resample_type (str):    resampling algorithm to use [default: None
                                     (uses self.resample_type of instance)]
+            clip_range: (float,float): min and max value bounding output samples
 
         Returns:
             a new Audio object of the desired sample rate
@@ -383,15 +385,18 @@ class Audio:
         if resample_type is None:
             resample_type = self.resample_type
 
-        samples_resampled = librosa.resample(
+        new_samples = librosa.resample(
             self.samples,
             orig_sr=self.sample_rate,
             target_sr=sample_rate,
             res_type=resample_type,
         )
 
+        # clip to min/max output range
+        new_samples = np.clip(new_samples, clip_range[0], clip_range[1])
+
         return self._spawn(
-            samples=samples_resampled,
+            samples=new_samples,
             sample_rate=sample_rate,
             resample_type=resample_type,
         )
@@ -823,9 +828,8 @@ class Audio:
         self,
         path,
         metadata_format="opso",
-        soundfile_subtype=None,
-        soundfile_format=None,
         suppress_warnings=False,
+        **sf_kwargs,
     ):
         """Save Audio to file
 
@@ -849,21 +853,34 @@ class Audio:
                     ["title","copyright","software","artist","comment","date",
                      "album","license","tracknumber","genre"]
                 - None: does not save metadata to file
-            soundfile_subtype: soundfile audio subtype choice, see soundfile.write
-                or list options with soundfile.available_subtypes()
-            soundfile_format: soundfile audio format choice, see soundfile.write
+
             suppress_warnings: if True, will not warn user when unable to
                 save metadata [default: False]
+
+            **sf_kwargs: additional keyword arguments to pass to soundfile.write(). See the docstring of
+                soundfile.write() or soundfile.SoundFile for details.
+
+        Examples:
+
+        Basic saving with default metadata format:
+        `audio.save("output.wav")` or `audio.save("output.mp3")`
+
+        Save a specific format and subtype, such as OPUS:
+        (use soundfile.list_formats() and soundfile.list_subtypes() to see available formats and subtypes)
+        `audio.save("output.ogg", format="OGG", subtype="OPUS")`
+
+        Specify bitrate:
+        soundfinder >= v0.13.1  supports variable bitrate and compression level for mp3 / OPUS formats:
+        `audio.save("output.mp3", bitrate_mode="VARIABLE", compression_level=0.8)`
+
+        # change sample rate before saving:
+        `audio.resample(44100).save("output.wav")`
         """
         fmt = Path(path).suffix.upper()
 
         try:
             soundfile.write(
-                file=path,
-                data=self.samples,
-                samplerate=self.sample_rate,
-                subtype=soundfile_subtype,
-                format=soundfile_format,
+                file=path, data=self.samples, samplerate=self.sample_rate, **sf_kwargs
             )
         except ValueError as exc:
             raise NotImplementedError(
@@ -875,12 +892,18 @@ class Audio:
 
         if metadata_format is not None and self.metadata is not None:
             if fmt not in [".WAV", ".AIFF"]:
+                # detailed metadata will not be written to file!
                 if not suppress_warnings:
                     warnings.warn(
                         "Saving metadata is only supported for WAV and AIFF formats"
                     )
             else:  # we can write metadata for WAV and AIFF
-                _write_metadata(self.metadata, metadata_format, path)
+                write_metadata(
+                    self.metadata,
+                    metadata_format,
+                    path,
+                    suppress_warnings=suppress_warnings,
+                )
 
     def split(self, clip_duration, **kwargs):
         """Split Audio into even-lengthed clips
@@ -1442,8 +1465,10 @@ def parse_metadata(path):
     return metadata
 
 
-def _write_metadata(metadata, metadata_format, path):
+def write_metadata(metadata, metadata_format, path, suppress_warnings=False):
     """write metadata using one of the supported formats
+
+    Currently, only supports writing to .WAV and .AIFF.
 
     metadata fields containing empty strings `''` will be replaced by a string
     containing a single space `' '` as a workaround to
@@ -1454,7 +1479,14 @@ def _write_metadata(metadata, metadata_format, path):
         metadata_format: one of 'opso','opso_metadata_v0.1','soundfile'
             (see Audio.wave documentation)
         path: file path to save metadata in with soundfile
+        suppress_warnings: if True, does not warn user when writing to unsupported format
     """
+    suffix = Path(path).suffix.upper()
+    assert suffix in [
+        ".WAV",
+        ".AIFF",
+    ], f"Only supports writing to .WAV and .AIFF. Suffix was {suffix}"
+
     metadata = metadata.copy()  # avoid changing the existing object
     if metadata_format == "soundfile":
         pass  # just write the metadata as is

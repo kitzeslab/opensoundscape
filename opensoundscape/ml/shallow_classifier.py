@@ -140,14 +140,16 @@ def quick_fit(
                     f"Epoch {step+1}/{steps}, Loss: {loss.item()}, Val Loss: {val_loss.item()}"
                 )
                 try:
-                    auroc = average_precision_score(
-                        validation_labels.detach().numpy(), val_outputs.detach().numpy()
+                    auroc = roc_auc_score(
+                        validation_labels.detach().cpu().numpy(),
+                        val_outputs.detach().cpu().numpy(),
                     )
                 except:
                     auroc = float("nan")
                 try:
                     map = average_precision_score(
-                        validation_labels.detach().numpy(), val_outputs.detach().numpy()
+                        validation_labels.detach().cpu().numpy(),
+                        val_outputs.detach().cpu().numpy(),
                     )
                 except:
                     map = float("nan")

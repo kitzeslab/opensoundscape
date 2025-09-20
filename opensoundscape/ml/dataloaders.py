@@ -42,6 +42,9 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             [default: idenitty] returns list of AudioSample objects,
             use collate_fn=opensoundscape.sample.collate_audio_samples to return
             a tuple of (data, labels) tensors
+        audio_root: optionally pass a root directory (pathlib.Path or str)
+            - `audio_root` is prepended to each file path
+            - if None (default), samples must contain full paths to files
         **kwargs: any arguments to torch.utils.data.DataLoader
 
     Returns:
@@ -62,6 +65,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         bypass_augmentations=True,
         raise_errors=False,
         collate_fn=identity,
+        audio_root=None,
         **kwargs,
         # TODO: persistent_workers=True?
     ):
@@ -100,6 +104,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             clip_overlap_fraction = overlap_fraction
 
         # validate that file paths are correctly placed in the input index or list
+        # and check that the first one exist as a way to quickly catch mistakes
         if len(samples) > 0:
             if isinstance(samples, pd.DataFrame):  # samples is a pd.DataFrame
                 if isinstance(samples.index, pd.core.indexes.multi.MultiIndex):
@@ -109,6 +114,8 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
                     first_path = samples.index.values[0]
             else:  # samples is a list of file path
                 first_path = samples[0]
+            if audio_root is not None:
+                first_path = Path(first_path) / Path(audio_root)
             _check_is_path(first_path)
 
         # set up prediction Dataset, considering three possible cases:
@@ -120,7 +127,9 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             and type(samples.index) == pd.core.indexes.multi.MultiIndex
         ):  # c1 user provided multi-index df with file,start_time,end_time of clips
             # raise AssertionError if first item of multi-index is not str or Path
-            dataset = AudioFileDataset(samples=samples, preprocessor=preprocessor)
+            dataset = AudioFileDataset(
+                samples=samples, preprocessor=preprocessor, audio_root=audio_root
+            )
         elif (
             split_files_into_clips
         ):  # c2 user provided file list; split each file into appropriate length clips
@@ -132,11 +141,14 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
                 clip_overlap_fraction=clip_overlap_fraction,
                 clip_step=clip_step,
                 final_clip=final_clip,
+                audio_root=audio_root,
             )
         else:  # c3 samples is list of files and
             # split_files_into_clips=False -> one sample & one prediction per file provided
             # eg, each file is a 5 second clips and the model expects 5 second clips
-            dataset = AudioFileDataset(samples=samples, preprocessor=preprocessor)
+            dataset = AudioFileDataset(
+                samples=samples, preprocessor=preprocessor, audio_root=audio_root
+            )
 
         dataset.bypass_augmentations = bypass_augmentations
 

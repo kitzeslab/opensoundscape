@@ -179,5 +179,5 @@ def check_labels(label_df, classes):
     assert list(classes) == list(label_df.columns), class_err
 
     assert (
-        label_df.max(axis=None) <= 1 and label_df.min(axis=None) >= 0
+        label_df.values.max(axis=None) <= 1 and label_df.values.min(axis=None) >= 0
     ), "Labels must in range [0,1], but found values outside range"

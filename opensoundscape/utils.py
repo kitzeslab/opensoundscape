@@ -251,6 +251,7 @@ def make_clip_df(
     final_clip=None,
     return_invalid_samples=False,
     raise_exceptions=False,
+    audio_root=None,
 ):
     """generate df of fixed-length clip start/end times for a set of files
 
@@ -281,6 +282,9 @@ def make_clip_df(
             to check the duration of an audio file, the exception will be raised.
             If False [default], adds a row to the dataframe with np.nan for
             'start_time' and 'end_time' for that file path.
+        audio_root: optionally pass a root directory (pathlib.Path or str)
+            - `audio_root` is prepended to each file path
+            - if None (default), `files` must contain full paths to files
 
     Returns:
         clip_df: dataframe multi-index ('file','start_time','end_time')
@@ -314,8 +318,12 @@ def make_clip_df(
     invalid_samples = set()
     idx_cols = ["file", "start_time", "end_time"]
     for f in file_list:
+        if audio_root is None:
+            path = f
+        else:
+            path = Path(audio_root) / Path(f)
         try:
-            t = librosa.get_duration(path=f)
+            t = librosa.get_duration(path=path)
             clips = generate_clip_times_df(
                 full_duration=t,
                 clip_duration=clip_duration,
