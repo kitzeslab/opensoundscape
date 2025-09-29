@@ -55,6 +55,13 @@ class SpatialEvent:
             cc_threshold: float. This acts as a minimum threshold for cross correlation. If the cross correlation at the estimated time delay is is below this value, the corresponding time delay is discarded and not used during localization.
                 NOTE: The scale of the cross correlation values depends on the cc_filter used.
                 default: None. Do not discard any time delays.
+            cc_filter: filter for generalized cross correlation, see opensoundscape.signal_processing.gcc()
+                'phat' - Phase transform. Default.
+                'roth' - Roth correlation (1971)
+                'scot' - Smoothed Coherence Transform,
+                'ht' - Hannan and Thomson
+                'cc' - normal cross correlation with no filter
+                'cc_norm' - normal cross correlation normalized by the length and amplitude of the signal
             speed_of_sound: float, optional. Speed of sound in meters per second.
                 Default: opensoundscape.localization.localization_algorithms.SPEED_OF_SOUND
 
@@ -207,7 +214,7 @@ class SpatialEvent:
                 If None, defaults to self.max_delay
             bandpass_range: bandpass audio to [low, high] frequencies in Hz before
                 cross correlation
-                If None, defaults to self.bandpass_range=
+                If None, defaults to self.bandpass_range
 
         Returns:
             list of time delays, list of max cross correlation values
@@ -246,12 +253,6 @@ class SpatialEvent:
             self.cc_maxs = None
             return None, None
 
-        # bandpass once now to avoid repeating operation for each receiver
-        if self.bandpass_range is not None:
-            reference_audio = reference_audio.bandpass(
-                low_f=self.bandpass_range[0], high_f=self.bandpass_range[1], order=9
-            )
-
         # estimate time difference of arrival (tdoa) for each file relative to the first
         # skip the first because we don't need to cross correlate a file with itself
         tdoas = []
@@ -275,19 +276,17 @@ class SpatialEvent:
             )
 
             # catch edge cases where the audio lengths do not match.
-            if (
-                abs(len(audio2.samples) - len(reference_audio.samples)) > 1
-            ):  # allow for 1 sample difference
+            # allow for 1 sample difference
+            if abs(len(audio2.samples) - len(reference_audio.samples)) > 1:
                 bad_receivers_index.append(index)
             else:
                 tdoa, cc_max = audio.estimate_delay(
                     primary_audio=audio2,
                     reference_audio=reference_audio,
                     max_delay=self.max_delay,
-                    bandpass_range=self.bandpass_range,
+                    frequency_range=self.bandpass_range,
                     cc_filter=self.cc_filter,
                     return_cc_max=True,
-                    skip_ref_bandpass=True,
                 )
                 tdoas.append(tdoa)
                 cc_maxs.append(cc_max)

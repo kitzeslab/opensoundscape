@@ -380,26 +380,29 @@ def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords):
     max_delay = 0.04
     receiver_start_time_offsets = [0.2] * (len(LOCA_2021_aru_coords) - 1) + [0.1]
     duration = 0.3
-    cc_filter = "phat"
-    bandpass_range = (5000, 10000)
+    bandpass_range = (7000, 10000)
+    success = {}
+    # Note: others give different results compared to phat! cc_norm, cc, roth, scot, ht
+    for cc_filter in ["phat"]:  # , "cc_norm", "cc", "roth", "scot", "ht"]:
+        event = localization.SpatialEvent(
+            receiver_files=LOCA_2021_aru_coords.index,
+            receiver_locations=LOCA_2021_aru_coords.values,
+            max_delay=max_delay,
+            receiver_start_time_offsets=receiver_start_time_offsets,
+            duration=duration,
+            class_name="zeep",
+            bandpass_range=bandpass_range,
+            cc_filter=cc_filter,
+        )
 
-    event = localization.SpatialEvent(
-        receiver_files=LOCA_2021_aru_coords.index,
-        receiver_locations=LOCA_2021_aru_coords.values,
-        max_delay=max_delay,
-        receiver_start_time_offsets=receiver_start_time_offsets,
-        duration=duration,
-        class_name="zeep",
-        bandpass_range=bandpass_range,
-        cc_filter=cc_filter,
-    )
-
-    # check that the delays are what we expect
-    event._estimate_delays()
-    true_TDOAS = np.array(
-        [0, 0.0325, -0.002, 0.0316, -0.0086, 0.024, 0.024]
-    )  # with reference receiver LOCA_2021_3...
-    assert np.allclose(event.tdoas, true_TDOAS, atol=0.01)
+        # check that the delays are what we expect
+        # with reference receiver LOCA_2021_3...
+        event._estimate_delays()
+        true_TDOAS = np.array([0, 0.0325, -0.002, 0.0316, -0.0086, 0.024, 0.024])
+        success[cc_filter] = np.allclose(event.tdoas, true_TDOAS, atol=0.01)
+    assert all(
+        success.values()
+    ), f"Incorrect result for cc_filters: {[k for k,v in success.items() if not v]}"
 
 
 def test_SpatialEvent_estimate_delays_auto_timestamps(LOCA_2021_aru_coords):
