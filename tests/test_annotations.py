@@ -1103,6 +1103,30 @@ def test_categorical_labels_init(labels_df, labels_df_int):
     assert list(cl.multihot_labels_at_index(0)) == [1, 1, 0]
 
 
+def test_categorical_labels_init_from_single_values(labels_df):
+    # init with single string labels, internally converts them to lists
+    cl = annotations.CategoricalLabels(
+        files=labels_df["file"],
+        start_times=labels_df["start_time"],
+        end_times=labels_df["end_time"],
+        labels=["abc", "b", "b"],
+        classes=None,
+        integer_labels=False,
+    )
+    assert set(cl.classes) == set(["abc", "b"])
+
+    # init with single integer labels
+    cl = annotations.CategoricalLabels(
+        files=labels_df["file"],
+        start_times=labels_df["start_time"],
+        end_times=labels_df["end_time"],
+        labels=[0, 1, 0],
+        classes=["a", "b"],
+        integer_labels=True,
+    )
+    assert set(cl.classes) == set(["a", "b"])
+
+
 def test_categorical_labels_init_no_classes(labels_df):
 
     # init with classes=None

@@ -1592,6 +1592,10 @@ class CategoricalLabels:
             multihot_df_sparse: sparse dataframe of multi-hot labels
             multihot_df_dense: dense dataframe of multi-hot labels
         """
+        # for convenience, if labels is a list of single items, convert to list of lists
+        if all(not isinstance(l, list) for l in labels):
+            labels = [[l] for l in labels]
+
         # labels can be list of lists of class names or list of lists of integer class indices
         # if classes are not provided, infer them from unique set of labels
         if classes is None:
