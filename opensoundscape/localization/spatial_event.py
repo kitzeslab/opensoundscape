@@ -31,7 +31,7 @@ class SpatialEvent:
         class_name=None,
         bandpass_range=None,
         cc_threshold=0,
-        cc_filter=None,
+        cc_filter="phat",
         speed_of_sound=SPEED_OF_SOUND,
     ):
         """
@@ -232,7 +232,7 @@ class SpatialEvent:
         if self.receiver_start_time_offsets is None:
             assert (
                 self.start_timestamp is not None
-            ), "must set .receiver_start_time_offsets or .start_timestamp. Both were None."
+            ), "must set .receiver_start_time_offsets or .start_timestamp to estimate tdoas. Both were None."
             # sets the .receiver_start_time_offsets using start_timestamp and receiver start times
             self._calculate_receiver_start_time_offsets()
 
@@ -295,6 +295,7 @@ class SpatialEvent:
         self.cc_maxs = np.array(cc_maxs)
 
         # delete the bad receivers from this SpatialEvent
+        # i.e. those that had audio length mismatches
         if len(bad_receivers_index) > 0:
             print(
                 f"Warning: {len(bad_receivers_index)} receivers were discarded because their audio files were not the same length as the primary receiver."
@@ -328,8 +329,8 @@ class SpatialEvent:
         tdoas = self.tdoas
         locations = self.receiver_locations
 
-        # apply the cc_threshold filter
-        # only keep receivers that have a cc_max above the cc_threshold
+        # apply the cross correlation maximum filter:
+        # only use tdoas from receivers that have a cc_max above the cc_threshold
         rec_mask = self.cc_maxs > self.cc_threshold
         tdoas = tdoas[rec_mask]
         locations = locations[rec_mask]
