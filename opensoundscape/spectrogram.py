@@ -433,7 +433,7 @@ class Spectrogram:
         self,
         ax=None,
         show_colorbar=False,
-        range=(-100, -20),
+        range=(-80, 0),
         kHz=False,
         cmap="Greys",
     ):
@@ -543,7 +543,7 @@ class Spectrogram:
         colormap=None,
         invert=False,
         return_type="pil",
-        range=(-100, -20),
+        range=(-80, 0),
         use_skimage=False,
     ):
         """Create an image from spectrogram (array, tensor, or PIL.Image)
@@ -551,8 +551,8 @@ class Spectrogram:
         Note: Linearly rescales values in the spectrogram from
         `range` (min,max) to [0,255] (PIL.Image) or [0,1] (array/tensor)
 
-        Default of `range` is [-100, -20], so, e.g.,
-        -20 db is loudest -> black, -100 db is quietest -> white
+        Default of `range` is [-80, 0], so, e.g.,
+        0 db is loudest -> black, -80 db is quietest -> white
 
         Args:
             shape: tuple of output dimensions as (height, width)
@@ -813,7 +813,7 @@ class MelSpectrogram(Spectrogram):
         return spec
 
     def plot(
-        self, ax=None, show_colorbar=False, range=(-100, -20), kHz=False, n_freq_ticks=5
+        self, ax=None, show_colorbar=False, range=(-80, 0), kHz=False, n_freq_ticks=5
     ):
         """
         Plot a spectrogram (e.g., mel) with evenly sized pixels and *evenly spaced y-ticks*,
@@ -865,6 +865,71 @@ class MelSpectrogram(Spectrogram):
             plt.colorbar(im, ax=ax)
 
         return ax
+
+
+def plot_spectrograms(
+    specs, n_col=3, value_range=(-80, 0), frequency_range=None, titles=None
+):
+    """plot a grid of spectrograms
+
+    Args:
+        specs: list of Spectrogram objects
+        n_col: number of columns in the plot grid
+        value_range: (min, max) value range for plotting
+        titles: optional list of titles for each subplot
+
+    Returns:
+        fig, axs: matplotlib figure and axes objects
+    """
+    if frequency_range is not None:
+        specs = [s.bandpass(frequency_range[0], frequency_range[1]) for s in specs]
+    n_row = int(np.ceil(len(specs) / n_col))
+    fig, axs = plt.subplots(n_row, n_col, figsize=(5 * n_col, 3 * n_row))
+    for i, s in enumerate(specs):
+        r = i // n_col
+        c = i % n_col
+        ax = axs[r, c] if n_row > 1 else axs[c]
+        s.plot(ax=ax, range=value_range)
+        if titles:
+            ax.set_title(titles[i])
+    for j in range(i + 1, n_row * n_col):
+        r = j // n_col
+        c = j % n_col
+        ax = axs[r, c] if n_row > 1 else axs[c]
+        ax.axis("off")
+    plt.tight_layout()
+
+    return fig, axs
+
+
+def plot_spectrograms_from_audio(
+    audio_clips,
+    n_col=3,
+    value_range=(-80, 0),
+    frequency_range=None,
+    titles=None,
+    **kwargs,
+):
+    """create spectrograms from audio clips and plot them in a grid
+
+    Args:
+        audio_clips: list of Audio objects
+        n_col: number of columns in the plot grid
+        value_range: (min, max) value range for plotting
+        titles: optional list of titles for each subplot
+        **kwargs: kwargs passed to Spectrogram.from_audio
+
+    Returns:
+        fig, axs: matplotlib figure and axes objects
+    """
+    specs = [Spectrogram.from_audio(a, **kwargs) for a in audio_clips]
+    return plot_spectrograms(
+        specs,
+        n_col=n_col,
+        value_range=value_range,
+        frequency_range=frequency_range,
+        titles=titles,
+    )
 
 
 def torch_to_dB(spectrogram, power=2, eps=1e-10):
