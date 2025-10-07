@@ -530,6 +530,8 @@ class SpectrogramModule(BaseModule):
             if preprocessor_dict is None, this class will be instantiated to set self.preprocessor
         **preprocessor_kwargs: additional arguments to pass to the initialization of the preprocessor class
             this is ignored if preprocessor_dict is not None
+            for the default SpectrogramPreprocessor, can pass any of:
+                width, height, channels, sample_rate, sample_shape, overlay_df
     """
 
     def __init__(
