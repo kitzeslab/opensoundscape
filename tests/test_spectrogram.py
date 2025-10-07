@@ -6,6 +6,7 @@ import numpy as np
 import math
 import torch
 from PIL.Image import Image
+from opensoundscape import birds  # 10s Audio object
 
 
 @pytest.fixture()
@@ -25,10 +26,8 @@ def spec():
         frequencies=np.linspace(0, 100, 5),
         times=np.linspace(0, 10, 10),
         window_samples=100,
-        overlap_samples=50,
-        window_type="Hann",
+        hop_samples=50,
         audio_sample_rate=44100,
-        scaling="spectrum",
     )
 
 
@@ -39,14 +38,14 @@ def test_spectrogram_raises_typeerror():
 
 def test_spectrogram_shape_of_veryshort(veryshort_wav_str):
     audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
-    spec = Spectrogram.from_audio(audio, overlap_samples=384)
+    spec = Spectrogram.from_audio(audio, hop_samples=512 - 384)
     assert spec.spectrogram.shape == (257, 21)
     assert spec.frequencies.shape == (257,)
     assert spec.times.shape == (21,)
-    assert math.isclose(spec.window_length, 0.02321995465, abs_tol=1e-4)
-    assert math.isclose(spec.window_step, 0.005804988662, abs_tol=1e-4)
+    assert math.isclose(spec.window_length_seconds, 0.02321995465, abs_tol=1e-4)
+    assert math.isclose(spec.window_hop_seconds, 0.005804988662, abs_tol=1e-4)
+    # sometimes lose a bit of the audio signal because of windowing
     assert math.isclose(spec.duration, audio.duration, abs_tol=1e-2)
-    assert math.isclose(spec.window_start_times[0], 0, abs_tol=1e-4)
 
 
 def test_spectrogram_shape_of_windowlengths_overlapfraction(veryshort_wav_str):
@@ -110,10 +109,8 @@ def test_bandpass_spectrogram(spec):
     assert np.allclose(spec.frequencies, np.array([25, 50, 75]))
     # make sure it didn't loose any properties
     assert spec.window_samples == 100
-    assert spec.overlap_samples == 50
-    assert spec.window_type == "Hann"
+    assert spec.hop_samples == 50
     assert spec.audio_sample_rate == 44100
-    assert spec.scaling == "spectrum"
 
 
 def test_bandpass_spectrogram_out_of_bounds(spec):
@@ -141,10 +138,8 @@ def test_trim_spectrogram(spec):
     spec = spec.trim(2, 4)
     # make sure it didn't loose any properties
     assert spec.window_samples == 100
-    assert spec.overlap_samples == 50
-    assert spec.window_type == "Hann"
+    assert spec.hop_samples == 50
     assert spec.audio_sample_rate == 44100
-    assert spec.scaling == "spectrum"
 
 
 def test_limit_range():
@@ -199,14 +194,13 @@ def test_to_image_with_bandpass():
     )
 
 
-def test_melspectrogram_underflow(cswa_str):
+def test_melspectrogram_underflow():
     """
     Fixed a bug where log transform was applied twice.
     Added a test to check the max value of dB scaled spec is as expected
     """
-    audio = Audio.from_file(cswa_str)
-    mel_spec = MelSpectrogram.from_audio(audio)
-    assert math.isclose(mel_spec.spectrogram.max(), -30.914056301116943, abs_tol=1e-4)
+    mel_spec = MelSpectrogram.from_audio(birds)
+    assert math.isclose(mel_spec.spectrogram.max(), -15.927558, abs_tol=1e-4)
 
 
 def test_to_image_shape(spec):
