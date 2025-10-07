@@ -366,6 +366,8 @@ class Audio:
 
     def show_widget(self, normalize=False, autoplay=False):
         """create and display IPython.display.Audio widget; see that class for docs"""
+        if max(abs(self.samples)) > 1:
+            normalize = True  # avoid error in display with out-of-bounds samples
         IPython.display.display(
             self._to_ipdisplay_audio(normalize=normalize, autoplay=autoplay)
         )
