@@ -2211,6 +2211,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
     def embed(
         self,
         samples,
+        batch_size=1,
+        num_workers=0,
         target_layer=None,
         progress_bar=True,
         return_preds=False,
@@ -2233,6 +2235,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             samples: same as CNN.predict(): list of file paths, OR pd.DataFrame with index
                 containing audio file paths, OR a pd.DataFrame with multi-index (file, start_time,
                 end_time)
+            batch_size: batch size to use for dataloader [default: 1]
+            num_workers: number of parallel CPU workers to use for dataloader [default: 0]
             target_layers: layers from self.model._modules to
                 extract outputs from - if None, attempts to use self.model.embedding_layer as
                 default
@@ -2253,8 +2257,14 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             types are pd.DataFrame if return_dfs=True, or np.array if return_dfs=False
 
         """
+        if dataloader_kwargs is None:
+            dataloader_kwargs = dict()
         if audio_root is not None:
             dataloader_kwargs.update(dict(audio_root=audio_root))
+        if batch_size is not None:
+            dataloader_kwargs.update(dict(batch_size=batch_size))
+        if num_workers is not None:
+            dataloader_kwargs.update(dict(num_workers=num_workers))
         if not avgpool:  # cannot create a DataFrame with >2 dimensions
             return_dfs = False
 
