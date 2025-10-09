@@ -106,7 +106,8 @@ Suggested citation:
    tutorials/customize_cnn_training
    tutorials/preprocess_audio_dataset
    tutorials/acoustic_localization
-   tutorials/signal_processing
+   tutorials/RIBBIT_pulse_rate_demo
+   tutorials/ruffed_grouse_detector
 
 .. toctree::
    :maxdepth: 2
