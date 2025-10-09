@@ -845,6 +845,16 @@ class SpectrogramModule(BaseModule):
         self.network.requires_grad_(True)
 
 
+def _warn_output_size(dataloader, size, output_size_warning):
+    if output_size_warning and len(dataloader.dataset) * size > output_size_warning:
+        warnings.warn(
+            f"Generating ~{len(dataloader.dataset)*size:,} output values "
+            f"({len(dataloader.dataset):,} samples x ~{size:,} per sample). "
+            f"This may use a lot of memory (~1Gb per 3e8 outputs). To disable this warning, set "
+            f"`output_size_warning` to None or 0."
+        )
+
+
 @register_model_cls
 class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
     """defines pure pytorch train, predict, and eval methods for a spectrogram classifier"""
@@ -1013,6 +1023,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         return_invalid_samples=False,
         progress_bar=True,
         audio_root=None,
+        output_size_warning=1e9,
         **dataloader_kwargs,
     ):
         """Generate predictions on a set of samples
@@ -1066,6 +1077,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             audio_root: optionally pass a root directory (pathlib.Path or str)
                 - `audio_root` is prepended to each file path
                 - if None (default), samples must contain full paths to files
+            output_size_warning: int, if >0, raises a warning if the number of
+                output scores (clips * classes) exceeds this number, as this
+                can cause heavy memory usage. Set to None or 0 to disable.
+                [default: 1e9]
             **dataloader_kwargs: additional arguments to self.predict_dataloader()
 
         Returns:
@@ -1107,6 +1122,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             raise_errors=raise_errors,
             **dataloader_kwargs,
         )
+
+        # check size of output
+        _warn_output_size(dataloader, len(self.classes), output_size_warning)
 
         # check for matching class list
         if len(dataloader.dataset.dataset.classes) > 0 and list(self.classes) != list(
@@ -2219,6 +2237,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         avgpool=True,
         return_dfs=True,
         audio_root=None,
+        output_size_warning=1e9,
         **dataloader_kwargs,
     ):
         """
@@ -2285,6 +2304,13 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
+
+        # warn the user if the output size is very large
+        try:
+            out_dim = target_layer.out_features
+        except:
+            out_dim = 1000  # guess embedding size
+        _warn_output_size(dataloader, out_dim, output_size_warning)
 
         # run inference, returns (scores, intermediate_outputs)
         preds, embeddings = self(
