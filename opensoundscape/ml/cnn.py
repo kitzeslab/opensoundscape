@@ -458,8 +458,8 @@ class BaseModule:
             final_clip=None,
             bypass_augmentations=bypass_augmentations,
             shuffle=True,  # SHUFFLE SAMPLES because we are training
-            # use pin_memory=True when loading files on CPU and training on GPU
-            pin_memory=False if self.device == torch.device("cpu") else True,
+            # use pin_memory=True when loading files on CPU and training on CUDA GPU
+            pin_memory=self.device.type == "cuda",
             collate_fn=collate_fn,
             **kwargs,
         )
@@ -480,7 +480,7 @@ class BaseModule:
             samples=samples,
             preprocessor=self.preprocessor,
             shuffle=False,  # keep original order
-            pin_memory=False if self.device == torch.device("cpu") else True,
+            pin_memory=self.device.type == "cuda",
             collate_fn=collate_fn,
             **kwargs,
         )
