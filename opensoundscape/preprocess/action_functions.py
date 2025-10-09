@@ -1,4 +1,4 @@
-"""preprocessing and augmentation functions 
+"""preprocessing and augmentation functions
 
 these can be passed to the Action class (action_fn=...) to create a preprocessing action that applies the function to a sample
 """
@@ -296,15 +296,20 @@ def random_wrap_audio(audio, probability=0.5, max_shift=None):
 
 @register_action_fn
 def audio_time_mask(
-    audio, max_masks=10, max_width=0.02, noise_dBFS=-15, noise_color="white"
+    audio, max_masks=10, max_width=0.02, noise_to_signal_dB=10, noise_color="white"
 ):
     """randomly replace time slices with  noise
+
+    Adaptively selects noise level relative to the signal level of the input audio
 
     Args:
         audio: input Audio object
         max_masks: maximum number of white noise time masks [default: 10]
         max_width: maximum size of bars as fraction of sample width [default: 0.02]
-        noise_dBFS & noise_color: see Audio.noise() `dBFS` and `color` args
+        noise_to_signal_dB: desired noise:signal ratio in dB. Positive values
+            mean noise is louder than signal, negative values mean noise is quieter.
+            Signal level is calculated as audio.dBFS ie the temporal average level.
+        noise_color: see Audio.noise() `dBFS` and `color` args
 
     Returns:
         augmented Audio object
@@ -334,6 +339,9 @@ def audio_time_mask(
         np.array(unmasked_segment_starts[:-1]) + np.array(unmasked_segment_lens)
     )
 
+    # choose noise dBFS based on signal level and desired noise:signal ratio
+    noise_dBFS = audio.dBFS + noise_to_signal_dB
+
     samples = []
     for i in range(n_masks):
         samples.extend(
@@ -350,6 +358,8 @@ def audio_time_mask(
     # add the last segment of original audio, making sure we end up with correct total number of samples
     samples.extend(audio.samples[len(samples) - len(audio.samples) :])
 
+    # mix with original audio
+    samples = (np.array(samples) + audio.samples).clip(-1, 1)
     return audio._spawn(samples=samples)
 
 
