@@ -159,15 +159,15 @@ def test_linear_to_dB():
     # Create a spectrogram with known linear values
     linear_values = np.array([[1, 10, 100], [0.1, 1, 10]])
     s = Spectrogram(linear_values, np.zeros((2)), np.zeros((3)))
-    
+
     # Convert to dB
     s_dB = s.linear_to_dB()
-    
+
     # Check expected dB values: dB = 10 * log10(linear)
     # 1 -> 0 dB, 10 -> 10 dB, 100 -> 20 dB, 0.1 -> -10 dB
     expected = np.array([[0, 10, 20], [-10, 0, 10]])
     assert np.allclose(s_dB.spectrogram, expected)
-    
+
     # Test that zero/negative values become -inf
     linear_with_zeros = np.array([[1, 0, -1], [10, 100, 1000]])
     s_with_zeros = Spectrogram(linear_with_zeros, np.zeros((2)), np.zeros((3)))
@@ -181,10 +181,10 @@ def test_dB_to_linear():
     # Create a spectrogram with known dB values
     dB_values = np.array([[0, 10, 20], [-10, 0, 10]])
     s = Spectrogram(dB_values, np.zeros((2)), np.zeros((3)))
-    
+
     # Convert to linear
     s_linear = s.dB_to_linear()
-    
+
     # Check expected linear values: linear = 10^(dB/10)
     # 0 dB -> 1, 10 dB -> 10, 20 dB -> 100, -10 dB -> 0.1
     expected = np.array([[1, 10, 100], [0.1, 1, 10]])
@@ -196,10 +196,10 @@ def test_linear_to_dB_and_back():
     # Create a spectrogram with positive linear values
     linear_values = np.array([[1, 2, 5], [0.5, 10, 100]])
     s = Spectrogram(linear_values, np.zeros((2)), np.zeros((3)))
-    
+
     # Convert to dB and back
     s_roundtrip = s.linear_to_dB().dB_to_linear()
-    
+
     # Should get back the original values
     assert np.allclose(s_roundtrip.spectrogram, linear_values)
 

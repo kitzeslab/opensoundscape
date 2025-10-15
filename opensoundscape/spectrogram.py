@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-""" spectrogram.py: Utilities for dealing with spectrograms
-"""
+"""spectrogram.py: Utilities for dealing with spectrograms"""
 import warnings
 import os
 
@@ -357,7 +356,7 @@ class Spectrogram:
         """Convert spectrogram values from linear scale to dB scale
 
         Applies the transformation: dB = 10 * log10(linear)
-        
+
         Negative or zero values are set to -inf to avoid log of non-positive numbers.
 
         Returns:
