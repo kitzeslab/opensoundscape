@@ -154,6 +154,56 @@ def test_limit_range():
     assert np.max(s.spectrogram) <= -20 and np.min(s.spectrogram) >= -100
 
 
+def test_linear_to_dB():
+    """Test conversion from linear to dB scale"""
+    # Create a spectrogram with known linear values
+    linear_values = np.array([[1, 10, 100], [0.1, 1, 10]])
+    s = Spectrogram(linear_values, np.zeros((2)), np.zeros((3)))
+    
+    # Convert to dB
+    s_dB = s.linear_to_dB()
+    
+    # Check expected dB values: dB = 10 * log10(linear)
+    # 1 -> 0 dB, 10 -> 10 dB, 100 -> 20 dB, 0.1 -> -10 dB
+    expected = np.array([[0, 10, 20], [-10, 0, 10]])
+    assert np.allclose(s_dB.spectrogram, expected)
+    
+    # Test that zero/negative values become -inf
+    linear_with_zeros = np.array([[1, 0, -1], [10, 100, 1000]])
+    s_with_zeros = Spectrogram(linear_with_zeros, np.zeros((2)), np.zeros((3)))
+    s_dB_zeros = s_with_zeros.linear_to_dB()
+    assert s_dB_zeros.spectrogram[0, 1] == -np.inf
+    assert s_dB_zeros.spectrogram[0, 2] == -np.inf
+
+
+def test_dB_to_linear():
+    """Test conversion from dB to linear scale"""
+    # Create a spectrogram with known dB values
+    dB_values = np.array([[0, 10, 20], [-10, 0, 10]])
+    s = Spectrogram(dB_values, np.zeros((2)), np.zeros((3)))
+    
+    # Convert to linear
+    s_linear = s.dB_to_linear()
+    
+    # Check expected linear values: linear = 10^(dB/10)
+    # 0 dB -> 1, 10 dB -> 10, 20 dB -> 100, -10 dB -> 0.1
+    expected = np.array([[1, 10, 100], [0.1, 1, 10]])
+    assert np.allclose(s_linear.spectrogram, expected)
+
+
+def test_linear_to_dB_and_back():
+    """Test round-trip conversion: linear -> dB -> linear"""
+    # Create a spectrogram with positive linear values
+    linear_values = np.array([[1, 2, 5], [0.5, 10, 100]])
+    s = Spectrogram(linear_values, np.zeros((2)), np.zeros((3)))
+    
+    # Convert to dB and back
+    s_roundtrip = s.linear_to_dB().dB_to_linear()
+    
+    # Should get back the original values
+    assert np.allclose(s_roundtrip.spectrogram, linear_values)
+
+
 def test_plot_spectrogram():
     Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20)).plot()
 

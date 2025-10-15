@@ -353,6 +353,35 @@ class Spectrogram:
 
         return self._spawn(spectrogram=self.spectrogram.clip(min, max))
 
+    def linear_to_dB(self):
+        """Convert spectrogram values from linear scale to dB scale
+
+        Applies the transformation: dB = 10 * log10(linear)
+        
+        Negative or zero values are set to -inf to avoid log of non-positive numbers.
+
+        Returns:
+            Spectrogram object with values converted to dB scale
+        """
+        # avoid RuntimeWarning by setting negative or 0 values to -np.inf
+        dB_spectrogram = 10 * np.log10(
+            self.spectrogram,
+            where=self.spectrogram > 0,
+            out=np.full(self.spectrogram.shape, -np.inf),
+        )
+        return self._spawn(spectrogram=dB_spectrogram)
+
+    def dB_to_linear(self):
+        """Convert spectrogram values from dB scale to linear scale
+
+        Applies the transformation: linear = 10^(dB/10)
+
+        Returns:
+            Spectrogram object with values converted to linear scale
+        """
+        linear_spectrogram = np.power(10, self.spectrogram / 10)
+        return self._spawn(spectrogram=linear_spectrogram)
+
     def bandpass(self, min_f, max_f, out_of_bounds_ok=True):
         """extract a frequency band from a spectrogram
 
