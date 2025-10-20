@@ -8,6 +8,7 @@ import random
 import librosa
 import torch
 import torchvision
+import numpy as np
 
 from opensoundscape.audio import Audio, mix, concat
 from opensoundscape.preprocess import tensor_augment, io
@@ -51,6 +52,62 @@ def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
     """
     gain = random.uniform(dB_range[0], dB_range[1])
     return audio.apply_gain(dB=gain, clip_range=clip_range)
+
+
+def adaptive_random_gain(
+    audio, gain_range=(-30, 0), min_output_level=-40, clip_range=[-1, 1]
+):
+    """apply gain while maintaining a minimum resulting dBFS level
+
+    applies a randomly selected gain level to an Audio object,
+    while ensuring that the resulting audio has at least min_output_level dBFS
+    (while respecting the maximum gain allowed in the gain_range argument)
+
+    Args:
+        audio: an Audio object
+        gain_range: (min,max) decibels of gain to apply
+            - dB gain applied is chosen from a uniform random
+            distribution in this range
+        min_output_level: minimum dBFS level of resulting audio
+            - if audio.dBFS + gain < min_output_level, gain_range is
+            restricted to ensure resulting audio is at least min_output_level dBFS
+    """
+    # constrain the lower bound of the gain range to ensure we don't reduce
+    # the level below the desired minimum
+    gain_lower_bound = max(gain_range[0], min_output_level - audio.dBFS)
+
+    return audio_random_gain(
+        audio, dB_range=(gain_lower_bound, gain_range[1]), clip_range=clip_range
+    )
+
+
+def adaptive_random_noise(audio, snr_range=(-20, 0), signal_dB=0, color="white"):
+    """apply random noise, selecting from a signal to noise ratio range
+
+    Args:
+        audio: an Audio object
+        snr_range: (min,max) decibels of signal to noise ratio
+            - SNR is defined here as signal_dB - noise_dBFS
+            - SNR is chosen from a uniform random distribution in this range
+        signal_dB: dB (decibels) gain to apply to the incoming Audio
+            before mixing with noise [default: 0 dB]
+        color: color of noise to add (see Audio.noise() `color` arg)
+            options: "white", "pink", "brownian", "brown", "violet", "blue"
+
+    Returns: Audio object with noise added
+    """
+    # add random noise with a level based on the signal level
+    # the signal to noise ratio relative to the input is chosen from snr_range
+    # signal_dB is the gain applied to the input signal before mixing with noise
+    # (can be negative to reduce signal level)
+    signal_level = audio.dBFS + signal_dB
+    noise_dB = signal_level + np.random.uniform(snr_range[0], snr_range[1])
+    return audio_add_noise(
+        audio,
+        noise_dB=noise_dB,
+        signal_dB=signal_dB,
+        color=color,
+    )
 
 
 @register_action_fn
