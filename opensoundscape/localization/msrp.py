@@ -222,8 +222,14 @@ def compute_time_delays(
     return pairwise_arrival_times
 
 
-def MSRP_RIJ_HT(
-    receiver_positions, search_map, data, sample_rate, freq_low, freq_high, init_data
+def compute_msrp(
+    receiver_positions,
+    signals,
+    sample_rate,
+    freq_low,
+    freq_high,
+    time_delays,
+    cc_filter="phat",
 ):
     """Calculate likelihood of sound sources at each search location.
 
@@ -234,13 +240,15 @@ def MSRP_RIJ_HT(
     Uses "level 2" implementation of original Matlab implementation
 
     Args:
-        node_positions: ndarray of shape (N, 3) containing [x, y, z] positions
-        search_map: dict with search grid coordinates
-        data: ndarray of shape (N, DataLen) containing audio samples from each node
+        receiver_positions: ndarray of shape (N, 3) containing [x, y, z] positions
+        signals: ndarray of shape (N, DataLen) containing audio samples from each node
         sample_rate: float, sample rate in Hz
         freq_low: float, low frequency cutoff in Hz
         freq_high: float, high frequency cutoff in Hz
-        init_data: dict created with MSRP_Init function
+        time_delays: dict created with compute_time_delays function, the valid region of
+            time delay indices for each search location
+        cc_filter: str, cross-correlation filter to use; see opensoundscape.signal_processing.gcc
+            (options: phat, roth, scot, ht, cc, cc_norm)
 
     Returns:
         ndarray: SMap array with likelihood values for each search location,
@@ -249,23 +257,23 @@ def MSRP_RIJ_HT(
     Author: Sam Lapp, translated from Tim Huang (original Matlab implementation) and Richard Hedley
     (R implementation)
     """
-    NPos = np.asarray(receiver_positions)
-    N = len(NPos)  # Number of receivers
-    ML2 = data.shape[1] * 2 - 1  # Length of cross-correlation result
-    NIJ = N * (N - 1) // 2  # Number of receiver pairs
+    receiver_positions = np.asarray(receiver_positions)
+    n_receivers = len(receiver_positions)  # Number of receivers
+    cc_len = signals.shape[1] * 2 - 1  # Length of cross-correlation result
+    n_receiver_pairs = n_receivers * (n_receivers - 1) // 2  # Number of receiver pairs
 
     k = 0
-    pairwise_cc = np.zeros((NIJ, ML2))  # Preallocate cross-correlation
+    pairwise_cc = np.zeros((n_receiver_pairs, cc_len))  # Preallocate cross-correlation
 
     # Compute generalized cross-correlation for all pairs
-    for i in range(N - 1):
-        for j in range(i + 1, N):
+    for i in range(n_receivers - 1):
+        for j in range(i + 1, n_receivers):
             # Use the gcc function from signal_processing.py
             # with frequency range filtering; note ordering convention
             gcc_result = gcc(
-                data[j, :],  # signal
-                data[i, :],  # reference signal
-                cc_filter="phat",  # PHAT method
+                signals[j, :],  # signal
+                signals[i, :],  # reference signal
+                cc_filter=cc_filter,  # phat is used in original implementation
                 frequency_range=(freq_low, freq_high),
                 sample_rate=sample_rate,
             )
@@ -276,10 +284,10 @@ def MSRP_RIJ_HT(
             pairwise_cc[k, :] = np.abs(analytic_signal)
             k += 1
 
-    # Get spatial dimensions and time delay arrays from init_data
-    T1 = init_data["T1"]  # Shape: (nx, ny, nz, NIJ)
-    T2 = init_data["T2"]  # Shape: (nx, ny, nz, NIJ)
-    nx, ny, nz, _ = T1.shape
+    # Get spatial dimensions and time delay arrays from time_delays
+    # T1 = time_delays["T1"]  # Shape: (nx, ny, nz, n_receiver_pairs)
+    # T2 = time_delays["T2"]  # Shape: (nx, ny, nz, n_receiver_pairs)
+    nx, ny, nz, _ = time_delays["T1"].shape
 
     # Initialize steered response power array with spatial dimensions
     srp = np.zeros((nx, ny, nz))
@@ -289,23 +297,21 @@ def MSRP_RIJ_HT(
     for ix in range(nx):
         for iy in range(ny):
             for iz in range(nz):
-                dT1 = T1[ix, iy, iz, :]
-                dT2 = T2[ix, iy, iz, :]
 
                 sub1 = []
                 sub2 = []
-                for kij in range(NIJ):
+                for kij in range(n_receiver_pairs):
                     # Build indices for valid time delay range
-                    # Note: dT1 and dT2 are now stored as 0-based indices
-                    # They're already clamped to [0, ML2-1] in MSRP_Init
-                    t1 = dT1[kij]
-                    t2 = dT2[kij]
-                    if t2 >= t1:
+                    # They should already be clamped to [0, ML2-1]
+                    t1 = time_delays["T1"][ix, iy, iz, kij]
+                    t2 = time_delays["T2"][ix, iy, iz, kij]
+                    if t2 >= t1:  # >0 interval to sum over
                         n_indices = t2 - t1 + 1
                         sub1.extend([kij] * n_indices)
                         sub2.extend(range(t1, t2 + 1))
 
                 # Extract relevant correlation values and sum
+                # extensions of the approach use different aggregation
                 if len(sub1) > 0:
                     tR = pairwise_cc[sub1, sub2]
                     srp[ix, iy, iz] = np.sum(tR)
@@ -319,18 +325,12 @@ def localize(
     wav_dict,
     coordinates,
     sample_rate,
-    margin=10,
-    zMin=-1,
-    zMax=20,
-    resolution=1,
+    search_map,
+    time_delays,
     freq_low=2000,
     freq_high=8000,
-    temp_c=15,
-    speed_of_sound=None,
     plot=False,
-    init_data=None,
-    keep_init_data=True,
-    keep_search_map=False,
+    keep_power_map=True,
 ):
     """Localize a sound source using MSRP algorithm.
 
@@ -346,22 +346,25 @@ def localize(
             - 'Northing': y coordinate in meters
             - 'Elevation': z coordinate in meters
         sample_rate: float, sample rate of audio in Hz margin: float, margin in meters around
-        stations to search (default: 10) zMin: float, minimum elevation offset from lowest station
-        in meters (default: -1) zMax: float, maximum elevation offset from highest station in meters
-        (default: 20) resolution: float, grid resolution in meters (default: 1) freq_low: float, low
-        frequency cutoff in Hz (default: 2000) freq_high: float, high frequency cutoff in Hz
-        (default: 8000) temp_c: float, temperature in Celsius for calculating speed of sound
-        (default: 15) speed_of_sound: float, speed of sound in m/s. If provided, overrides temp_c
-        (default: None) plot: bool, whether to create plots (default: False) loc_folder: str, folder
-        path for saving plots (required if plot=True) init_data: dict, precomputed InitData to save
-        time (default: None) keep_init_data: bool, whether to return InitData in output (default:
-        True) keep_search_map: bool, whether to return SearchMap in output (default: False)
+            stations to search (default: 10) zMin: float, minimum elevation offset from lowest station
+            in meters (default: -1) zMax: float, maximum elevation offset from highest station in meters
+            (default: 20)
+        resolution: float, grid resolution in meters (default: 1) freq_low: float, low
+            frequency cutoff in Hz (default: 2000)
+        freq_high: float, high frequency cutoff in Hz
+            (default: 8000)
+        temp_c: float, temperature in Celsius for calculating speed of sound
+            (default: 15)
+        speed_of_sound: float, speed of sound in m/s. If provided, overrides temp_c
+            (default: None)
+        plot: bool, whether to create plots (default: False) loc_folder: str, folder
+            path for saving plots (required if plot=True)
+        time_delays: dict, precomputed pairwise time delays from compute_time_delays
+        keep_power_map: bool, whether to return the power map in output (default: True)
 
     Returns:
         dict containing:
             - 'location': DataFrame with Easting, Northing, Elevation, Power
-            - 'init_data': (if keep_init_data=True) precomputed data for reuse
-            - 'search_map': (if keep_search_map=True) search grid
             - 'smap': (if keep_search_map=True) 3D likelihood array
 
     Author: Sam Lapp (Python implementation); Richard Hedley (R implementation); Tim Huang (original
@@ -377,33 +380,15 @@ def localize(
     if not all(name in coordinates["Station"].values for name in wav_dict.keys()):
         raise ValueError("Some names in wav_dict not found in coordinates!")
 
-    # Calculate speed of sound if not provided
-    if speed_of_sound is None:
-        Vc = 331.45 * np.sqrt(1 + temp_c / 273.15)
-    else:
-        Vc = speed_of_sound
-
     # Get station names
     stations = list(wav_dict.keys())
 
     # Create node position array from coordinates
     coords_indexed = coordinates.set_index("Station")
-    node_positions = coords_indexed.loc[
+    receiver_positions = coords_indexed.loc[
         stations, ["Easting", "Northing", "Elevation"]
     ].values
 
-    # Create SearchMap (grid around nodes)
-    search_map = makeSearchMap(
-        easting=node_positions[:, 0],
-        northing=node_positions[:, 1],
-        elevation=node_positions[:, 2],
-        margin=margin,
-        zMin=zMin,
-        zMax=zMax,
-        resolution=resolution,
-    )
-
-    # Get DataLen from first audio array
     first_audio = list(wav_dict.values())[0]
     data_len = len(first_audio)
 
@@ -415,69 +400,70 @@ def localize(
                 f"Station {name} has length {len(audio)}, expected {data_len}"
             )
 
-    # Create InitData if needed
-    if init_data is None:
-        init_data = compute_time_delays(
-            receiver_positions=node_positions,
-            search_map=search_map,
-            sample_rate=sample_rate,
-            speed_of_sound=Vc,
-            signal_len=data_len,
-        )
-    else:
-        print("Inherited InitData in 0 seconds.")
-
     # Create Data matrix
-    data = np.zeros((len(node_positions), data_len))
+    data = np.zeros((len(receiver_positions), data_len))
 
     for i, station in enumerate(stations):
-        # Subtract DC offset and round
+        # Subtract DC offset (detrend signal)
         audio = wav_dict[station]
         data[i, :] = np.round(audio - np.mean(audio))
 
+    # track time to perform localization
     locstarttime = time.time()
 
     # Run MSRP
-    smap = MSRP_RIJ_HT(
-        receiver_positions=node_positions,
-        search_map=search_map,
-        data=data,
+    power_map = compute_msrp(
+        receiver_positions=receiver_positions,
+        signals=data,
         sample_rate=sample_rate,
         freq_low=freq_low,
         freq_high=freq_high,
-        init_data=init_data,
+        time_delays=time_delays,
     )
 
     elapsed = time.time() - locstarttime
     print(f"Localized detection in {elapsed:.1f} seconds.")
 
     # Extract global maximum location
-    location_ind = np.unravel_index(np.argmax(smap), smap.shape)
-    x_ind = search_map["XAxis"][location_ind[0]]
-    y_ind = search_map["YAxis"][location_ind[1]]
-    z_ind = search_map["ZAxis"][location_ind[2]]
-
-    location = pd.DataFrame(
-        {
-            "Easting": [x_ind],
-            "Northing": [y_ind],
-            "Elevation": [z_ind],
-            "Power": [np.max(smap)],
-        }
+    max_idx = np.unravel_index(np.argmax(power_map), power_map.shape)
+    location = np.array(
+        [
+            search_map["XAxis"][max_idx[0]],
+            search_map["YAxis"][max_idx[1]],
+            search_map["ZAxis"][max_idx[2]],
+        ]
     )
 
-    # TODO: Add plotting functionality if plot=True
     if plot:
-        print("Warning: Plotting functionality not yet implemented in Python version")
+        raise NotImplementedError("Plotting not yet implemented in Python version")
+        # from matplotlib import pyplot as plt
+
+        # x = search_map["XAxis"]
+        # y = search_map["YAxis"]
+        # # smap has shape (nx, ny, nz) with our new (x,y,z) indexing
+        # # pcolormesh expects data[i,j] at position (x[j], y[i])
+        # # so we need to transpose from (nx, ny) to (ny, nx) for the plot
+        # plt.pcolormesh(x, y, power_map[:, :, 0].T, shading="auto")
+        # plt.scatter(
+        #     receiver_positions["Easting"],
+        #     receiver_positions["Northing"],
+        #     c="White",
+        #     label="Receivers",
+        # )
+
+        # plt.scatter(
+        #     location[0],
+        #     location[1],
+        #     c="Red",
+        #     label="Estimated Position",
+        # )
+        # plt.legend()
+        # plt.show()
 
     # Build output dictionary
-    out = {"location": location}
+    out = {"location": location, "max_power": np.max(power_map)}
 
-    if keep_init_data:
-        out["init_data"] = init_data
-
-    if keep_search_map:
-        out["search_map"] = search_map
-        out["smap"] = smap
+    if keep_power_map:
+        out["power_map"] = power_map
 
     return out
