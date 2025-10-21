@@ -154,6 +154,7 @@ class SpatialEvent:
             - if localization is not successful, .location_estimate attribute of returned object is
               None
         """
+
         # If no values are already stored, perform generalized cross correlation to estimate time delays
         # or if user wants to re-estimate the time delays, perform generalized cross correlation to estimate time delays
         if self.tdoas is None or self.cc_maxs is None or use_stored_tdoas is False:
@@ -406,6 +407,63 @@ class SpatialEvent:
                 d[key] = str(d[key])
         return d
 
+    def localize_msrp(self, search_map, keep_power_map=False):
+        """perform M-SRP-PHAT localization on a SpatialEvent"""
+        from opensoundscape.localization import msrp
+
+        # Load audio signals
+        signals = []
+        sample_rate = search_map.sample_rate
+
+        # make smaller search map corresponding to the included recorders
+        reduced_search_map = search_map.subset(self.receiver_locations)
+
+        # load audio signals from each receiver
+        # todo extend extracted clip by max_delay on either side? see spatial_event._estimate_delays
+
+        for i, file in enumerate(self.receiver_files):
+            try:
+                audio = Audio.from_file(
+                    file,
+                    sample_rate=sample_rate,
+                    offset=self.receiver_start_time_offsets[i],
+                    duration=self.duration,
+                )
+                signals.append(audio.samples)
+            except Exception as e:
+                print(f"Could not load {file}: {e}")
+                continue
+
+        # combine into np.array with consistent signal length
+        min_len = np.min([len(s) for s in signals])
+        signals = np.array([s[:min_len] for s in signals])
+
+        # run msrp localization
+        result = msrp.localize(
+            signals=signals,
+            receiver_positions=self.receiver_locations,
+            search_map=reduced_search_map,
+            keep_power_map=keep_power_map,
+        )
+        estimate = PositionEstimate(
+            location_estimate=result["location"],
+            class_name=self.class_name,
+            receiver_files=self.receiver_files,
+            receiver_locations=self.receiver_locations,
+            start_timestamp=self.start_timestamp,
+            receiver_start_time_offsets=self.receiver_start_time_offsets,
+            duration=self.duration,
+        )
+        estimate.max_power = result["max_power"]
+
+        if keep_power_map:
+            # include the complete set of steered response power and associated positions
+            # in the returned PositionEstimate
+            estimate.power_map = result["power_map"]
+            estimate.search_map = reduced_search_map
+
+        return estimate
+
 
 def events_to_df(list_of_events):
     """convert a list of SpatialEvent objects to pd DataFrame
@@ -493,7 +551,9 @@ def calculate_tdoa_residuals(
     return time_residuals * speed_of_sound
 
 
-def localize_events_parallel(events, num_workers, localization_algorithm):
+def localize_events_parallel(
+    events, num_workers, localization_algorithm, search_map=None, **kwargs
+):
 
     # perform gcc to estimate relative time of arrival at each receiver
     # estimate locations of sound event using time delays and receiver locations
@@ -502,7 +562,16 @@ def localize_events_parallel(events, num_workers, localization_algorithm):
 
     # parallelize the localization of each event across cpus
     # return list of PositionEstimate objects
-    return Parallel(n_jobs=num_workers)(
-        delayed(e.estimate_location)(localization_algorithm=localization_algorithm)
-        for e in events
-    )
+    if localization_algorithm == "msrp":
+        if search_map is None:
+            raise ValueError("search_map must be provided for msrp localization")
+        return Parallel(n_jobs=num_workers)(
+            delayed(e.localize_msrp)(search_map=search_map, **kwargs) for e in events
+        )
+    else:
+        return Parallel(n_jobs=num_workers)(
+            delayed(e.estimate_location)(
+                localization_algorithm=localization_algorithm, **kwargs
+            )
+            for e in events
+        )

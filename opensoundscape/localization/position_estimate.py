@@ -127,6 +127,87 @@ class PositionEstimate:
 
         return all_audio
 
+    def plot_msrp(self, n_col=4, max_plots=8):
+
+        assert hasattr(
+            self, "search_map"
+        ), "must use keep_power_map=True in SpatialEvent.localize_msrp() to retain search_map and power_map for plotting"
+
+        from matplotlib import pyplot as plt
+
+        search_map = self.search_map
+        heights = np.unique(search_map.grid[:, 2])
+        heights = select_evenly_spaced_values(heights, max_plots)
+        n_plots = len(heights)
+
+        # look at one specific height
+        fig, axs = plt.subplots((n_plots // n_col) + 1, n_col)
+        axs = axs.flatten()
+
+        for i, height in enumerate(heights):
+            ax = axs[i]
+            grid_at_height_mask = search_map.grid[:, 2] == height
+            # select x and y values from search_mask.grid using mask
+            x = search_map.grid[grid_at_height_mask, 0]
+            y = search_map.grid[grid_at_height_mask, 1]
+            power = self.power_map[grid_at_height_mask]
+            rec = self.receiver_locations
+
+            ax.scatter(x, y, c=power)
+            ax.scatter(
+                rec[:, 0],
+                rec[:, 1],
+                c="Grey",
+                label="Receivers",
+                marker=".",
+                s=100,
+            )
+
+            ax.scatter(
+                self.location_estimate[0],
+                self.location_estimate[1],
+                c="Red",
+                label="Estimated Source",
+                marker="x",
+                s=200,
+            )
+            ax.set_title(f"height: {height}")
+
+        # remove unused axes
+        if n_plots < len(axs):
+            for ax in axs[n_plots:]:
+                ax.remove()
+
+        axs[0].legend()
+        return fig, axs
+
+
+def select_evenly_spaced_values(arr, N):
+    """
+    Selects N evenly spaced values from a NumPy array.
+
+    Args:
+        arr (np.ndarray): The input NumPy array.
+        N (int): The number of evenly spaced values to select.
+
+    Returns:
+        np.ndarray: A new array containing the N evenly spaced values.
+    """
+    if N <= 0:
+        return np.array([])
+    if N == 1:
+        return np.array([arr[0]])
+
+    if len(arr) < N:
+        return arr
+
+    # Generate N evenly spaced indices from 0 to len(arr) - 1
+    indices = np.linspace(0, len(arr) - 1, N, dtype=int)
+
+    # Select the values from the original array using these indices
+    selected_values = arr[indices]
+    return selected_values
+
 
 def positions_to_df(list_of_events):
     """convert a list of PositionEstimate objects to pd DataFrame
