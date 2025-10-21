@@ -2,6 +2,8 @@
 
 This module contains Python translations of the MSRP localization functions
 originally implemented in Matlab by Tim Huang, then in R by Richard Hedley (locaR package)
+
+#TODO: refactor to use list of (x,y,z) positions instead of requiring cubic grid
 """
 
 import numpy as np
@@ -73,9 +75,7 @@ def makeSearchMap(
         "XAxis": XAxis,
         "YAxis": YAxis,
         "ZAxis": ZAxis,
-        "XDen": resolution,
-        "YDen": resolution,
-        "ZDen": resolution,
+        "resolution": resolution,
         "XLim": (XLim1, XLim2),
         "YLim": (YLim1, YLim2),
         "ZLim": (ZLim1, ZLim2),
@@ -84,24 +84,26 @@ def makeSearchMap(
     return SearchMap
 
 
-def MSRP_Init(receiver_positions, search_map, sample_rate, speed_of_sound, data_len):
+def compute_time_delays(
+    receiver_positions, search_map, sample_rate, speed_of_sound, signal_len
+):
     """Pre-compute time-delays at search positions
 
     Args:
-        receiver_positions: ndarray of shape (N, 3) containing [x, y, z] positions of N receivers (microphones)
-        search_map: dict with keys 'XDen', 'YDen', 'ZDen' (densities) and
-            'XMap', 'YMap', 'ZMap' (3D arrays of search grid coordinates)
-        sample_rate: float, sample rate in Hz
-        speed_of_sound: float, speed of sound in m/s
-        data_len: int, length of audio data in samples
+        receiver_positions: ndarray of shape (N, 3) containing [x, y, z] positions of N receivers
+        (microphones) search_map: dict with keys 'resolution' and
+            'XAxis', 'YAxis', 'ZAxis' (1D arrays of search grid coordinates)
+        sample_rate: float, sample rate in Hz speed_of_sound: float, speed of sound in m/s data_len:
+        int, length of audio data in samples
 
     Returns:
-        dict containing InitData with precomputed time delay indices as 3D arrays.
-        The 'T1' and 'T2' arrays have shape (nx, ny, nz, NIJ) where:
+        dict containing InitData with precomputed time delay indices as 3D arrays. The 'T1' and 'T2'
+        arrays have shape (nx, ny, nz, NIJ) where:
             - nx, ny, nz are the spatial dimensions from search_map
             - NIJ is the number of receiver pairs
 
-    Author: Tim Huang (original R implementation)
+    Author: Sam Lapp, translated from Tim Huang (original Matlab implementation) and Richard Hedley
+    (R implementation)
     """
     import time
 
@@ -110,25 +112,18 @@ def MSRP_Init(receiver_positions, search_map, sample_rate, speed_of_sound, data_
     receiver_positions = np.asarray(receiver_positions)
     n_receivers = len(receiver_positions)  # Number of receivers
 
-    Fs = sample_rate
+    sr = sample_rate  # for brevity
 
-    den = max(search_map["XDen"], search_map["YDen"], search_map["ZDen"])
+    cc_len = signal_len * 2 - 1  # Length of cross-correlation result
 
-    ML2 = data_len * 2 - 1
-    MaxDataLen = data_len
-
-    n_receiver_pairs = (
-        n_receivers * (n_receivers - 1) // 2
-    )  # Number of pairwise comparisons
+    # Number of pairwise comparisons of receivers
+    n_receiver_pairs = n_receivers * (n_receivers - 1) // 2
 
     # Create list of all pairwise comparisons
     import itertools
 
-    receiver_pairs = np.array(
-        list(itertools.combinations(range(n_receivers), 2)), dtype=int
-    )
-    IJ1 = receiver_pairs[:, 0]
-    IJ2 = receiver_pairs[:, 1]
+    pairs = np.array(list(itertools.combinations(range(n_receivers), 2)), dtype=int).T
+    # rec1, rec2 = receiver_pairs[:, 0], receiver_pairs[:, 1]
 
     # Get spatial dimensions from search_map
     nx, ny, nz = (
@@ -137,14 +132,11 @@ def MSRP_Init(receiver_positions, search_map, sample_rate, speed_of_sound, data_
         len(search_map["ZAxis"]),
     )
 
-    # Preallocate 3D arrays for time delay indices
+    # Preallocate 3D arrays for pairwise time-difference-of-arrival for
+    # each search grid location and pair of receivers
     # Shape: (nx, ny, nz, n_receiver_pairs) for each grid point and receiver pair
     T1 = np.zeros((nx, ny, nz, n_receiver_pairs), dtype=int)
     T2 = np.zeros((nx, ny, nz, n_receiver_pairs), dtype=int)
-
-    # Use 0-based indexing for Python (clamp to [0, ML2-1] instead of [1, ML2])
-    zeros = np.zeros((1, n_receiver_pairs))
-    maxindices = np.ones((1, n_receiver_pairs)) * (ML2 - 1)
 
     # Iterate over all grid points using spatial indices
     for ix in range(nx):
@@ -160,26 +152,40 @@ def MSRP_Init(receiver_positions, search_map, sample_rate, speed_of_sound, data_
                 rel_receiver_position = np.array([x, y, z]) - receiver_positions
                 receiver_dist = np.sqrt(np.sum(rel_receiver_position**2, axis=1)) + 1e-6
 
-                # Normalized directional differences divided by speed_of_sound
-                dPx = (
-                    (x - receiver_positions[IJ2, 0]) / receiver_dist[IJ2]
-                    - (x - receiver_positions[IJ1, 0]) / receiver_dist[IJ1]
+                # Normalized directional differences divided by speed_of_sound (gradient of time delay)
+                # eq 9
+                grad_tau_x = (
+                    (x - receiver_positions[pairs[1], 0]) / receiver_dist[pairs[1]]
+                    - (x - receiver_positions[pairs[0], 0]) / receiver_dist[pairs[0]]
                 ) / speed_of_sound
-                dPy = (
-                    (y - receiver_positions[IJ2, 1]) / receiver_dist[IJ2]
-                    - (y - receiver_positions[IJ1, 1]) / receiver_dist[IJ1]
+                grad_tau_y = (
+                    (y - receiver_positions[pairs[1], 1]) / receiver_dist[pairs[1]]
+                    - (y - receiver_positions[pairs[0], 1]) / receiver_dist[pairs[0]]
                 ) / speed_of_sound
-                dPz = (
-                    (z - receiver_positions[IJ2, 2]) / receiver_dist[IJ2]
-                    - (z - receiver_positions[IJ1, 2]) / receiver_dist[IJ1]
+                grad_tau_z = (
+                    (z - receiver_positions[pairs[1], 2]) / receiver_dist[pairs[1]]
+                    - (z - receiver_positions[pairs[0], 2]) / receiver_dist[pairs[0]]
                 ) / speed_of_sound
 
-                # Euclidean distance
-                dP = np.sqrt(dPx**2 + dPy**2 + dPz**2)
+                # magnitude of the gradient
+                grad_mag = np.sqrt(grad_tau_x**2 + grad_tau_y**2 + grad_tau_z**2)
 
-                phi = np.arctan2(dPx, dPy)
-                theta = np.arccos(dPz / dP)
+                """
+                Quoting the paper:
 
+                The IMTDF inside a volume can only take values in the range defined by its boundary
+                surface. Therefore, for each point of the grid, the problem of finding the GCC
+                accumulation limits of its volume of influence can be simplified to finding the
+                maximum and minimum values on the boundary surface.
+                ...
+                The accumulation limits for a symmetric volume surrounding a point of the grid can
+                be calculated by taking the product of the magnitude of the gradient and the
+                distance d that exists from the point to the boundary following the gradient’s
+                direction
+                """
+                # Calculate distance to boundary d following the gradient direction
+                theta = np.arccos(grad_tau_z / grad_mag)  # eq 13
+                phi = np.arctan2(grad_tau_x, grad_tau_y)  # eq 14
                 angles = np.vstack(
                     [
                         np.cos(phi) * np.sin(theta),
@@ -187,51 +193,45 @@ def MSRP_Init(receiver_positions, search_map, sample_rate, speed_of_sound, data_
                         np.cos(theta),
                     ]
                 )
-                d = 0.5 * den * np.min(1 / np.abs(angles), axis=0)
+                # eq 12
+                d = 0.5 * search_map["resolution"] * np.min(1 / np.abs(angles), axis=0)
 
-                # Convert time to samples (0-based indexing)
-                # Add MaxDataLen-1 instead of MaxDataLen to get 0-based center index
-                dT1 = np.round(
-                    (
-                        (receiver_dist[IJ2] - receiver_dist[IJ1]) / speed_of_sound
-                        - dP * d
-                    )
-                    * Fs
-                ) + (MaxDataLen - 1)
-                dT2 = np.round(
-                    (
-                        (receiver_dist[IJ2] - receiver_dist[IJ1]) / speed_of_sound
-                        + dP * d
-                    )
-                    * Fs
-                ) + (MaxDataLen - 1)
+                # Compute time delays in seconds
+                paired_distance_diff = receiver_dist[pairs[1]] - receiver_dist[pairs[0]]
+                dT1 = (paired_distance_diff) / speed_of_sound - grad_mag * d
+                dT2 = (paired_distance_diff) / speed_of_sound + grad_mag * d
 
-                # Clamp to valid 0-based indices [0, ML2-1]
-                dT1 = np.maximum(zeros, dT1)  # .reshape(1, -1))
-                dT1 = np.minimum(maxindices, dT1)
-                dT2 = np.maximum(zeros, dT2)  # .reshape(1, -1))
-                dT2 = np.minimum(maxindices, dT2)
+                # convert to sample position in gcc result
+                # Add signal_len-1 to get 0-based center index
+                dT1 = np.round(dT1 * sr) + (signal_len - 1)
+                dT2 = np.round(dT2 * sr) + (signal_len - 1)
+
+                # Clamp to valid indices [0, ML2-1]
+                dT1 = np.clip(dT1, 0, cc_len - 1)
+                dT2 = np.clip(dT2, 0, cc_len - 1)
 
                 # Store in 3D arrays
-                T1[ix, iy, iz, :] = dT1.astype(int).flatten()
-                T2[ix, iy, iz, :] = dT2.astype(int).flatten()
+                T1[ix, iy, iz, :] = dT1.astype(int)  # .flatten()
+                T2[ix, iy, iz, :] = dT2.astype(int)  # .flatten()
 
     elapsed = time.time() - start_time
-    print(f"Created InitData in {elapsed:.1f} seconds")
+    print(f"Computed pairwise arrival times in {elapsed:.1f} seconds")
 
-    InitData = {"T1": T1, "T2": T2}
+    pairwise_arrival_times = {"T1": T1, "T2": T2}
 
-    return InitData
+    return pairwise_arrival_times
 
 
 def MSRP_RIJ_HT(
-    node_positions, search_map, data, sample_rate, freq_low, freq_high, init_data
+    receiver_positions, search_map, data, sample_rate, freq_low, freq_high, init_data
 ):
     """Calculate likelihood of sound sources at each search location.
 
     This function uses the InitData and other info to calculate the likelihood
     of sound sources coming from each location using generalized cross-correlation
     with the Hilbert transform.
+
+    Uses "level 2" implementation of original Matlab implementation
 
     Args:
         node_positions: ndarray of shape (N, 3) containing [x, y, z] positions
@@ -246,16 +246,16 @@ def MSRP_RIJ_HT(
         ndarray: SMap array with likelihood values for each search location,
             shape (nx, ny, nz) matching the search_map dimensions
 
-    Author: Tim Huang (original R implementation)
+    Author: Sam Lapp, translated from Tim Huang (original Matlab implementation) and Richard Hedley
+    (R implementation)
     """
-    NPos = np.asarray(node_positions)
-    N = len(NPos)
-    MaxDataLen = data.shape[1]
-    ML2 = data.shape[1] * 2 - 1
-    NIJ = N * (N - 1) // 2
+    NPos = np.asarray(receiver_positions)
+    N = len(NPos)  # Number of receivers
+    ML2 = data.shape[1] * 2 - 1  # Length of cross-correlation result
+    NIJ = N * (N - 1) // 2  # Number of receiver pairs
 
     k = 0
-    Rij = np.zeros((NIJ, ML2))
+    pairwise_cc = np.zeros((NIJ, ML2))  # Preallocate cross-correlation
 
     # Compute generalized cross-correlation for all pairs
     for i in range(N - 1):
@@ -273,7 +273,7 @@ def MSRP_RIJ_HT(
             # Apply Hilbert transform and take absolute value
             # Note: scipy.signal.hilbert returns the analytic signal
             analytic_signal = scipy_signal.hilbert(gcc_result)
-            Rij[k, :] = np.abs(analytic_signal)
+            pairwise_cc[k, :] = np.abs(analytic_signal)
             k += 1
 
     # Get spatial dimensions and time delay arrays from init_data
@@ -281,10 +281,11 @@ def MSRP_RIJ_HT(
     T2 = init_data["T2"]  # Shape: (nx, ny, nz, NIJ)
     nx, ny, nz, _ = T1.shape
 
-    # Initialize output array with spatial dimensions
-    SMap = np.zeros((nx, ny, nz))
+    # Initialize steered response power array with spatial dimensions
+    srp = np.zeros((nx, ny, nz))
 
-    # Calculate likelihood for each spatial location
+    # Calculate steered response power for each spatial location
+    # by integrating over valid time delay ranges
     for ix in range(nx):
         for iy in range(ny):
             for iz in range(nz):
@@ -306,12 +307,12 @@ def MSRP_RIJ_HT(
 
                 # Extract relevant correlation values and sum
                 if len(sub1) > 0:
-                    tR = Rij[sub1, sub2]
-                    SMap[ix, iy, iz] = np.sum(tR)
+                    tR = pairwise_cc[sub1, sub2]
+                    srp[ix, iy, iz] = np.sum(tR)
                 else:
-                    SMap[ix, iy, iz] = 0
+                    srp[ix, iy, iz] = 0
 
-    return SMap
+    return srp
 
 
 def localize(
@@ -333,8 +334,8 @@ def localize(
 ):
     """Localize a sound source using MSRP algorithm.
 
-    Main function to localize a sound source given synchronized audio recordings
-    from multiple stations using the MSRP (Maximum Source Range Power) algorithm.
+    Main function to localize a sound source given synchronized audio recordings from multiple
+    stations using the MSRP (Modified Steered Response Power) algorithm.
 
     Args:
         wav_dict: dict of audio arrays where keys are station names and values
@@ -344,20 +345,17 @@ def localize(
             - 'Easting': x coordinate in meters
             - 'Northing': y coordinate in meters
             - 'Elevation': z coordinate in meters
-        sample_rate: float, sample rate of audio in Hz
-        margin: float, margin in meters around stations to search (default: 10)
-        zMin: float, minimum elevation offset from lowest station in meters (default: -1)
-        zMax: float, maximum elevation offset from highest station in meters (default: 20)
-        resolution: float, grid resolution in meters (default: 1)
-        freq_low: float, low frequency cutoff in Hz (default: 2000)
-        freq_high: float, high frequency cutoff in Hz (default: 8000)
-        temp_c: float, temperature in Celsius for calculating speed of sound (default: 15)
-        speed_of_sound: float, speed of sound in m/s. If provided, overrides temp_c (default: None)
-        plot: bool, whether to create plots (default: False)
-        loc_folder: str, folder path for saving plots (required if plot=True)
-        init_data: dict, precomputed InitData to save time (default: None)
-        keep_init_data: bool, whether to return InitData in output (default: True)
-        keep_search_map: bool, whether to return SearchMap in output (default: False)
+        sample_rate: float, sample rate of audio in Hz margin: float, margin in meters around
+        stations to search (default: 10) zMin: float, minimum elevation offset from lowest station
+        in meters (default: -1) zMax: float, maximum elevation offset from highest station in meters
+        (default: 20) resolution: float, grid resolution in meters (default: 1) freq_low: float, low
+        frequency cutoff in Hz (default: 2000) freq_high: float, high frequency cutoff in Hz
+        (default: 8000) temp_c: float, temperature in Celsius for calculating speed of sound
+        (default: 15) speed_of_sound: float, speed of sound in m/s. If provided, overrides temp_c
+        (default: None) plot: bool, whether to create plots (default: False) loc_folder: str, folder
+        path for saving plots (required if plot=True) init_data: dict, precomputed InitData to save
+        time (default: None) keep_init_data: bool, whether to return InitData in output (default:
+        True) keep_search_map: bool, whether to return SearchMap in output (default: False)
 
     Returns:
         dict containing:
@@ -366,7 +364,8 @@ def localize(
             - 'search_map': (if keep_search_map=True) search grid
             - 'smap': (if keep_search_map=True) 3D likelihood array
 
-    Author: Sam Lapp (Python implementation); Richard Hedley (R implementation); Tim Huang (original Matlab implementation);
+    Author: Sam Lapp (Python implementation); Richard Hedley (R implementation); Tim Huang (original
+    Matlab implementation);
     """
     import time
 
@@ -418,12 +417,12 @@ def localize(
 
     # Create InitData if needed
     if init_data is None:
-        init_data = MSRP_Init(
+        init_data = compute_time_delays(
             receiver_positions=node_positions,
             search_map=search_map,
             sample_rate=sample_rate,
             speed_of_sound=Vc,
-            data_len=data_len,
+            signal_len=data_len,
         )
     else:
         print("Inherited InitData in 0 seconds.")
@@ -440,7 +439,7 @@ def localize(
 
     # Run MSRP
     smap = MSRP_RIJ_HT(
-        node_positions=node_positions,
+        receiver_positions=node_positions,
         search_map=search_map,
         data=data,
         sample_rate=sample_rate,
