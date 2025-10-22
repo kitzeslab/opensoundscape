@@ -439,6 +439,10 @@ class SpatialEvent:
         signals = np.array([s[:min_len] for s in signals])
 
         # run msrp localization
+        # TODO:
+        # msrp.localize assumes that the order of signals/receiver positions will
+        # match search_map.pairwise_time_delays when iterating pairs as double-loop
+        # so we should make sure to subset search_map.pairwise_time_delays accordingly
         result = msrp.localize(
             signals=signals,
             receiver_positions=self.receiver_locations,

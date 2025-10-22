@@ -27,7 +27,8 @@ class SpatialGrid:
         margin=0,
         speed_of_sound=343,
         compute_time_intervals=True,
-        time_intervals=None,
+        pairwise_time_intervals=None,
+        pair_idx_lookup=None,
     ):
         """
         Initialize a SpatialGrid object
@@ -40,7 +41,7 @@ class SpatialGrid:
             speed_of_sound: speed of sound in meters per second. Default is 343 m/s.
             compute_time_intervals: whether to pre-compute time-delay intervals for each point in the grid. Default is True.
             time_intervals: precomputed time-delay intervals to use instead of computing them. Default is None.
-
+            pairwise_time_intervals: precomputed pairwise time-delay intervals to use instead of computing them. Default is None.
         """
         self.recorder_positions = np.array(recorder_positions)
         self.sample_rate = sample_rate
@@ -50,12 +51,32 @@ class SpatialGrid:
         self.speed_of_sound = speed_of_sound
         self.grid = self._make_grid()
 
-        if time_intervals is not None:
-            self.pairwise_time_intervals = time_intervals
+        if pairwise_time_intervals is not None:
+            self.pairwise_time_intervals = pairwise_time_intervals
+            self.pair_idx_lookup = pair_idx_lookup
         elif compute_time_intervals:
-            self.pairwise_time_intervals = self._make_time_intervals()
+            self._make_time_intervals()
         else:
             self.pairwise_time_intervals = None
+            self.pair_idx_lookup = None
+
+    def get_pairwise_time_intervals(self, receiver_idx1, receiver_idx2):
+        """
+        Get the pairwise time-delay intervals for a specific pair of receivers
+        Args:
+            receiver_idx1: index of the first receiver
+            receiver_idx2: index of the second receiver
+        Returns:
+            pairwise_time_intervals: the time-delay intervals for the specified pair of receivers
+        """
+        if self.pairwise_time_intervals is None:
+            raise ValueError(
+                "Time-delay intervals have not been computed for this SpatialGrid."
+            )
+        pair_idx = self.pair_idx_lookup.get((receiver_idx1, receiver_idx2))
+        if pair_idx is None:
+            raise ValueError("Invalid receiver indices.")
+        return self.pairwise_time_intervals[:, pair_idx, :]
 
     def _make_grid(self, filter_to_convex_hull=True):
         """
@@ -108,11 +129,18 @@ class SpatialGrid:
         Args:
             grid_points: array of shape (N, 2) or (N, 3) containing [x,y] or [x,y,z] positions of each grid point
         Returns:
-            subset: array of shape (M, 2) or (M, 3) containing [x,y] or [x,y,z] positions of each grid point inside the convex hull
+            subset: SpatialGrid object for the reduced search grid
         """
         import copy
 
         subset_grid = copy.deepcopy(self)
+
+        # find indices of self.recorder_positions, first match for each of grid_points
+        grid_points = np.array(grid_points)[:, : self.recorder_positions.shape[1]]
+        grid_point_idx_to_keep = [
+            np.where((self.recorder_positions == point).all(axis=1))[0][0]
+            for point in grid_points
+        ]
 
         if self.dimensions == 2:
             hull = ConvexHull(grid_points[:, :2])
@@ -131,9 +159,15 @@ class SpatialGrid:
         )
         subset_grid.grid = self.grid[mask]
         if subset_grid.pairwise_time_intervals is not None:
+            # we need to subset the pairwise_time_intervals to only include the receiver pairs that are in the subset grid
+            # TODO: check that this always creates the correct pair order for the recorder subset
+            pair_mask = [
+                idx1 in grid_point_idx_to_keep and idx2 in grid_point_idx_to_keep
+                for idx1, idx2 in self.pair_idx_lookup.keys()
+            ]
             subset_grid.pairwise_time_intervals = self.pairwise_time_intervals[
                 :, mask, :
-            ]
+            ][:, :, pair_mask]
 
         return subset_grid
 
@@ -143,14 +177,16 @@ class SpatialGrid:
         Returns:
             pairwise_time_intervals: a dict with keys 'T1' and 'T2' containing the valid time-delay intervals for each point in the grid
         """
-        time_intervals = compute_time_delay_intervals(
+        self.pairwise_time_intervals, receiver_idx_pairs = compute_time_delay_intervals(
             receiver_positions=self.recorder_positions,
             grid_positions=self.grid,
             sample_rate=self.sample_rate,
             speed_of_sound=self.speed_of_sound,
             resolution=self.resolution,
         )
-        return time_intervals
+        self.pair_idx_lookup = {
+            (i, j): idx for idx, (i, j) in enumerate(receiver_idx_pairs.T)
+        }
 
 
 def compute_time_delay_intervals(
@@ -176,10 +212,10 @@ def compute_time_delay_intervals(
     """
     import time
 
-    start_time = time.time()
+    # start_time = time.time()
 
     receiver_positions = np.asarray(receiver_positions)
-    n_receivers = len(receiver_positions)  # Number of receivers
+    n_receivers, dims = receiver_positions.shape
 
     sr = sample_rate  # for brevity
 
@@ -189,7 +225,9 @@ def compute_time_delay_intervals(
     # Create list of all pairwise comparisons
     import itertools
 
-    pairs = np.array(list(itertools.combinations(range(n_receivers), 2)), dtype=int).T
+    receiver_idx_pairs = np.array(
+        list(itertools.combinations(range(n_receivers), 2)), dtype=int
+    ).T
     T1 = np.zeros((len(grid_positions), n_receiver_pairs), dtype=int)
     T2 = np.zeros((len(grid_positions), n_receiver_pairs), dtype=int)
 
@@ -203,27 +241,45 @@ def compute_time_delay_intervals(
 
         # Normalized directional differences divided by speed_of_sound (gradient of time delay)
         # eq 9
-        grad_tau_x = (
-            (grid_position[0] - receiver_positions[pairs[1], 0])
-            / receiver_dist[pairs[1]]
-            - (grid_position[0] - receiver_positions[pairs[0], 0])
-            / receiver_dist[pairs[0]]
-        ) / speed_of_sound
-        grad_tau_y = (
-            (grid_position[1] - receiver_positions[pairs[1], 1])
-            / receiver_dist[pairs[1]]
-            - (grid_position[1] - receiver_positions[pairs[0], 1])
-            / receiver_dist[pairs[0]]
-        ) / speed_of_sound
-        grad_tau_z = (
-            (grid_position[2] - receiver_positions[pairs[1], 2])
-            / receiver_dist[pairs[1]]
-            - (grid_position[2] - receiver_positions[pairs[0], 2])
-            / receiver_dist[pairs[0]]
-        ) / speed_of_sound
+        gradient_tau = np.array(
+            [
+                (
+                    (
+                        grid_position[dim]
+                        - receiver_positions[receiver_idx_pairs[1], dim]
+                    )
+                    / receiver_dist[receiver_idx_pairs[1]]
+                    - (
+                        grid_position[dim]
+                        - receiver_positions[receiver_idx_pairs[0], dim]
+                    )
+                    / receiver_dist[receiver_idx_pairs[0]]
+                )
+                / speed_of_sound
+                for dim in range(dims)
+            ]
+        )
+        # grad_tau_x = (
+        #     (grid_position[0] - receiver_positions[pairs[1], 0])
+        #     / receiver_dist[pairs[1]]
+        #     - (grid_position[0] - receiver_positions[pairs[0], 0])
+        #     / receiver_dist[pairs[0]]
+        # ) / speed_of_sound
+        # grad_tau_y = (
+        #     (grid_position[1] - receiver_positions[pairs[1], 1])
+        #     / receiver_dist[pairs[1]]
+        #     - (grid_position[1] - receiver_positions[pairs[0], 1])
+        #     / receiver_dist[pairs[0]]
+        # ) / speed_of_sound
+        # grad_tau_z = (
+        #     (grid_position[2] - receiver_positions[pairs[1], 2])
+        #     / receiver_dist[pairs[1]]
+        #     - (grid_position[2] - receiver_positions[pairs[0], 2])
+        #     / receiver_dist[pairs[0]]
+        # ) / speed_of_sound
 
         # magnitude of the gradient
-        grad_mag = np.sqrt(grad_tau_x**2 + grad_tau_y**2 + grad_tau_z**2)
+        grad_mag = np.linalg.norm(gradient_tau, axis=0)
 
         """
             Quoting the paper:
@@ -238,21 +294,35 @@ def compute_time_delay_intervals(
             distance d that exists from the point to the boundary following the gradient’s
             direction
             """
-        # Calculate distance to boundary d following the gradient direction
-        theta = np.arccos(grad_tau_z / grad_mag)  # eq 13
-        phi = np.arctan2(grad_tau_x, grad_tau_y)  # eq 14
-        angles = np.vstack(
+        # Calculate distance to boundary d of a cube with edge length resolution, following the gradient direction
+        # eq 12
+        # phi: azimuth angle, theta: elevation desceding from z-axis
+        # x = r * sin(theta) * cos(phi), y = r * sin(theta) * sin(phi), z = r * cos(theta)
+        # setting x,y,or z to resolution/2 gives
+        # dist to box edge = min distance to intersect the x=resolution/2, y=resolution/2, z=resolution/2 planes
+        # distance to plane in x: d_x = (resolution / 2) / np.abs(np.cos(phi) * np.sin(theta))
+        # distance to plane in y: d_y = (resolution / 2) / np.abs(np.sin(phi) * np.sin(theta))
+        # distance to plane in z: d_z = (resolution / 2) / np.abs(np.cos(theta))
+        if dims < 3:
+            theta = np.repeat(np.pi / 2, receiver_idx_pairs.shape[1])  # zero elevation
+        else:
+            theta = np.arccos(gradient_tau[2] / grad_mag)  # eq 13
+        eps = 1e-12  # avoid divsion by zero; large vallues will be ignored because of min()
+        phi = np.arctan2(gradient_tau[1], gradient_tau[0])  # eq 14
+        normalized_directional_distances = np.vstack(
             [
-                np.cos(phi) * np.sin(theta),
-                np.sin(phi) * np.sin(theta),
-                np.cos(theta),
+                1 / abs(np.cos(phi) * np.sin(theta) + eps),
+                1 / abs(np.sin(phi) * np.sin(theta) + eps),
+                1 / abs(np.cos(theta) + eps),
             ]
         )
-        # eq 12
-        d = 0.5 * resolution * np.min(1 / np.abs(angles), axis=0)
+        # d: dist_to_finite_element_edge_along_gradient, for a cube with edge length resolution
+        d = 0.5 * resolution * np.min(normalized_directional_distances, axis=0)
 
         # Compute time delays in seconds
-        paired_distance_diff = receiver_dist[pairs[1]] - receiver_dist[pairs[0]]
+        paired_distance_diff = (
+            receiver_dist[receiver_idx_pairs[1]] - receiver_dist[receiver_idx_pairs[0]]
+        )
         dT1 = (paired_distance_diff) / speed_of_sound - grad_mag * d
         dT2 = (paired_distance_diff) / speed_of_sound + grad_mag * d
 
@@ -264,12 +334,12 @@ def compute_time_delay_intervals(
         T1[i, :] = dT1.astype(int)  # .flatten()
         T2[i, :] = dT2.astype(int)  # .flatten()
 
-    elapsed = time.time() - start_time
-    # print(f"Computed pairwise arrival times in {elapsed:.1f} seconds")
+        # elapsed = time.time() - start_time
+        # print(f"Computed pairwise arrival times in {elapsed:.1f} seconds")
 
-    pairwise_time_delay_intervals = np.array([T1, T2])
+        pairwise_time_delay_intervals = np.array([T1, T2])
 
-    return pairwise_time_delay_intervals
+    return pairwise_time_delay_intervals, receiver_idx_pairs
 
 
 def compute_msrp(
@@ -296,7 +366,7 @@ def compute_msrp(
         freq_low: float, low frequency cutoff in Hz
         freq_high: float, high frequency cutoff in Hz
         time_delays: dict created with compute_time_delays function, the valid region of
-            time delay indices for each search location
+            time delay indices for each search location for each receiver pair
         cc_filter: str, cross-correlation filter to use; see opensoundscape.signal_processing.gcc
             (options: phat, roth, scot, ht, cc, cc_norm)
 
@@ -421,8 +491,6 @@ def localize(
     Matlab implementation);
     """
     import time
-
-    data_len = signals.shape[1]
 
     # detrend, subtracting dc offset
     signals = np.asarray(signals) - np.mean(signals, axis=1, keepdims=True)

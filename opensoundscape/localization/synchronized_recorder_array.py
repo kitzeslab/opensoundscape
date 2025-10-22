@@ -45,6 +45,39 @@ class GetStartTimestamp:
         )
 
 
+def get_receiver_positions(file_coords):
+    """
+    Given a DataFrame with file paths as index and columns ['x', 'y'] or ['x', 'y', 'z'],
+    returns:
+      - receiver_positions: DataFrame of unique receiver locations
+      - file_to_recorder_idx: dict mapping file path -> row index of receiver_positions
+    """
+
+    # Ensure coordinate columns exist
+    coord_cols = [c for c in ["x", "y", "z"] if c in file_coords.columns]
+    if not coord_cols:
+        raise ValueError("file_coords must have at least 'x' and 'y' columns")
+
+    # Drop duplicate coordinate rows, preserving order
+    receiver_positions = (
+        file_coords[coord_cols].drop_duplicates().reset_index(drop=True)
+    )
+
+    # Map each file path to its receiver index
+    # Use numpy broadcasting for efficiency
+    # coords_array = file_coords[coord_cols].to_numpy()
+    unique_array = receiver_positions[coord_cols].to_numpy()
+
+    # Compute mapping by matching rows
+    # (this assumes exact floating point matches)
+    file_to_recorder_idx = {}
+    for i, (path, row) in enumerate(file_coords.iterrows()):
+        idx = np.where((unique_array == row[coord_cols].to_numpy()).all(axis=1))[0][0]
+        file_to_recorder_idx[path] = int(idx)
+
+    return receiver_positions, file_to_recorder_idx
+
+
 class SynchronizedRecorderArray:
     """
     Class with utilities for localizing sound events from array of recorders
@@ -85,6 +118,12 @@ class SynchronizedRecorderArray:
         """
         self.file_coords = file_coords
         self.speed_of_sound = speed_of_sound
+
+        # create df of the unique receiver positions
+        # file_to_recorder_idx maps from file path to row index in receiver_positions
+        self.receiver_positions, self.file_to_recorder_idx = get_receiver_positions(
+            file_coords
+        )
 
     def localize_detections(
         self,
@@ -196,6 +235,7 @@ class SynchronizedRecorderArray:
                 time delays of a set of detections. [Default: 'gillette'] Options:
                     - 'gillette': linear closed-form algorithm of Gillette and Silverman 2008 [1]
                     - 'soundfinder': GPS location algorithm of Wilson et al. 2014 [2]
+                    - 'least_squares': nonlinear least squares minimization of residuals
 
             cc_threshold : float, optional
                 Threshold for cross correlation: if the max value of the cross correlation is below
@@ -265,16 +305,16 @@ class SynchronizedRecorderArray:
 
         # separate positions into localized and unlocalized:
 
-        # list of PositionEstimates for events that were successfully localized and passed filters
-        localized_positions = [
+        # PositionEstimates for events that we do not consider valid localizations (e.g. too few
+        # receivers, too few receivers after applying cc_threshold or high residual in localization)
+        unlocalized_positions = [
             e
             for e in position_estimates
             if (e.location_estimate is None or e.residual_rms > residual_threshold)
         ]
 
-        # PositionEstimates for events that we do not consider valid localizations (e.g. too few
-        # receivers, too few receivers after applying cc_threshold or high residual in localization)
-        unlocalized_positions = [
+        # list of PositionEstimates for events that were successfully localized and passed filters
+        localized_positions = [
             e
             for e in position_estimates
             if (
@@ -286,9 +326,95 @@ class SynchronizedRecorderArray:
         # not localized, but typically, we just want the PositionEstimates that were successfully
         # localized
         if return_unlocalized:
-            return unlocalized_positions, localized_positions
+            return localized_positions, unlocalized_positions
         else:
-            return unlocalized_positions
+            return localized_positions
+
+    def localize_events_msrp(
+        self,
+        events,
+        resolution,
+        margin,
+        audio_sample_rate=None,
+        spatial_grid=None,
+        num_workers=1,
+        keep_power_map=False,
+    ):
+        """localizes events in parallel using modified steered response power algorithm
+
+        creates a search grid if not provided
+        """
+
+        from opensoundscape.localization import msrp
+
+        if spatial_grid is None:
+            # generate the grid and time delay intervals on which to evaluate steered response power
+            assert (
+                audio_sample_rate is not None
+            ), "must provide audio_sample_rate for msrp localization if not providing spatial_grid"
+
+            spatial_grid = msrp.SpatialGrid(
+                recorder_positions=self.receiver_positions.values,
+                sample_rate=audio_sample_rate,
+                resolution=resolution,
+                margin=margin,
+                speed_of_sound=self.speed_of_sound,
+                compute_time_intervals=True,
+            )
+
+        return localize_events_parallel(
+            events=events,
+            num_workers=num_workers,
+            localization_algorithm="msrp",
+            search_map=spatial_grid,
+            keep_power_map=keep_power_map,
+        )
+
+    def localize_detections_msrp(
+        self,
+        detections,
+        max_receiver_dist,
+        audio_sample_rate,
+        resolution=1,
+        margin=0,
+        min_n_receivers=3,
+        cc_filter="phat",
+        bandpass_ranges=None,
+        spatial_grid=None,
+        num_workers=1,
+        keep_power_map=False,
+    ):
+        """localizes detections using modified steered response power algorithm
+
+
+        wraps self.create_candidate_events() and self.localize_events_msrp()
+        """
+        # create list of SpatialEvents, each SpatialEvent will be used to estimate a location
+        # each SpatialEvent consists of a receiver with a detection, and every other receivers within max_receiver_dist
+        # localization will be performed on each SpatialEvent
+        # multiple SpatialEvents may refer to the same real-world sound event
+        candidate_events = self.create_candidate_events(
+            detections,
+            min_n_receivers,
+            max_receiver_dist,
+            cc_filter=cc_filter,
+            bandpass_ranges=bandpass_ranges,
+            cc_threshold=0,  # not used for msrp
+        )
+
+        # localize each event with joblib.Parallel for parallelization
+        # get back list of PositionEstimate objects
+        position_estimates = self.localize_events_msrp(
+            events=candidate_events,
+            resolution=resolution,
+            margin=margin,
+            audio_sample_rate=audio_sample_rate,
+            spatial_grid=spatial_grid,
+            num_workers=num_workers,
+            keep_power_map=keep_power_map,
+        )
+
+        return position_estimates
 
     def check_files_missing_coordinates(self, detections):
         """
