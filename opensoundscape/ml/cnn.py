@@ -79,12 +79,13 @@ def register_model_cls(model_cls):
 
 
 class BaseModule:
-    def __init__(self):
-        """base class for pytorch and lightning models in opensoundscape
+    """base class for pytorch and lightning models in opensoundscape
 
-        This class is intended to be subclassed by classes with more customized functionality.
-        For example, see SpectrogramModule, SpectrogramClassifier, and LightningSpectrogramModule.
-        """
+    This class is intended to be subclassed by classes with more customized functionality.
+    For example, see SpectrogramModule, SpectrogramClassifier, and LightningSpectrogramModule.
+    """
+
+    def __init__(self):
         super().__init__()
 
         self.name = "BaseModule"
@@ -457,8 +458,8 @@ class BaseModule:
             final_clip=None,
             bypass_augmentations=bypass_augmentations,
             shuffle=True,  # SHUFFLE SAMPLES because we are training
-            # use pin_memory=True when loading files on CPU and training on GPU
-            pin_memory=False if self.device == torch.device("cpu") else True,
+            # use pin_memory=True when loading files on CPU and training on CUDA GPU
+            pin_memory=self.device.type == "cuda",
             collate_fn=collate_fn,
             **kwargs,
         )
@@ -479,7 +480,7 @@ class BaseModule:
             samples=samples,
             preprocessor=self.preprocessor,
             shuffle=False,  # keep original order
-            pin_memory=False if self.device == torch.device("cpu") else True,
+            pin_memory=self.device.type == "cuda",
             collate_fn=collate_fn,
             **kwargs,
         )
@@ -509,27 +510,9 @@ def get_channel_dim(model):
 
 
 class SpectrogramModule(BaseModule):
-    """Parent class for both SpectrogramClassifier (pytorch) and LightningSpectrogramModule (lightning)
+    """Parent class for SpectrogramClassifier (pytorch) and LightningSpectrogramModule (lightning)
 
     implements functionality that is shared between both pure PyTorch and Lightning classes/workflows
-
-    Args:
-        architecture: a pytorch Module such as Resnet18 or a custom object
-        classes: list of class names
-        sample_duration: duration of audio samples in seconds
-        single_target: if True, predict only class with max score
-        channels: number of channels in input data
-        sample_height: height of input data
-        sample_width: width of input data
-        preprocessor_dict: dictionary defining preprocessor and parameters,
-            can be generated with preprocessor.to_dict()
-            if not None, will override other preprocessor arguments
-            (sample_duration, sample_height, sample_width, channels)
-        preprocessor_cls:
-            a class object that inherits from BasePreprocessor
-            if preprocessor_dict is None, this class will be instantiated to set self.preprocessor
-        **preprocessor_kwargs: additional arguments to pass to the initialization of the preprocessor class
-            this is ignored if preprocessor_dict is not None
     """
 
     def __init__(
@@ -542,6 +525,27 @@ class SpectrogramModule(BaseModule):
         preprocessor_cls=SpectrogramPreprocessor,
         **preprocessor_kwargs,
     ):
+        """
+        Args:
+            architecture: a pytorch Module such as Resnet18 or a custom object
+            classes: list of class names
+            sample_duration: duration of audio samples in seconds
+            single_target: if True, predict only class with max score
+            channels: number of channels in input data
+            sample_height: height of input data
+            sample_width: width of input data
+            preprocessor_dict: dictionary defining preprocessor and parameters,
+                can be generated with preprocessor.to_dict()
+                if not None, will override other preprocessor arguments
+                (sample_duration, sample_height, sample_width, channels)
+            preprocessor_cls:
+                a class object that inherits from BasePreprocessor
+                if preprocessor_dict is None, this class will be instantiated to set self.preprocessor
+            **preprocessor_kwargs: additional arguments to pass to the initialization of the preprocessor class
+                this is ignored if preprocessor_dict is not None
+                for the default SpectrogramPreprocessor, can pass any of:
+                    width, height, channels, sample_rate, sample_shape, overlay_df
+        """
         super().__init__()
         self.classes = classes
         self._single_target = single_target
@@ -841,18 +845,56 @@ class SpectrogramModule(BaseModule):
         self.network.requires_grad_(True)
 
 
+def _warn_output_size(dataloader, size, output_size_warning):
+    if output_size_warning and len(dataloader.dataset) * size > output_size_warning:
+        warnings.warn(
+            f"Generating ~{len(dataloader.dataset)*size:,} output values "
+            f"({len(dataloader.dataset):,} samples x ~{size:,} per sample). "
+            f"This may use a lot of memory (~1Gb per 3e8 outputs). To disable this warning, set "
+            f"`output_size_warning` to None or 0."
+        )
+
+
 @register_model_cls
 class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
+    """defines pure pytorch train, predict, and eval methods for a spectrogram classifier"""
+
     name = "SpectrogramClassifier"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        architecture,
+        classes,
+        sample_duration,
+        single_target=False,
+        preprocessor_dict=None,
+        preprocessor_cls=SpectrogramPreprocessor,
+        **preprocessor_kwargs,
+    ):
         """defines pure pytorch train, predict, and eval methods for a spectrogram classifier
 
         subclasses SpectrogramModule, defines methods that are used for pure PyTorch workflow. To
         use lightning, see ml.lightning.LightningSpectrogramModule.
 
         Args:
-            see SpectrogramModule for arguments
+            architecture: a pytorch Module such as Resnet18 or a custom object
+            classes: list of class names
+            sample_duration: duration of audio samples in seconds
+            single_target: if True, predict only class with max score
+            channels: number of channels in input data
+            sample_height: height of input data
+            sample_width: width of input data
+            preprocessor_dict: dictionary defining preprocessor and parameters,
+                can be generated with preprocessor.to_dict()
+                if not None, will override other preprocessor arguments
+                (sample_duration, sample_height, sample_width, channels)
+            preprocessor_cls:
+                a class object that inherits from BasePreprocessor
+                if preprocessor_dict is None, this class will be instantiated to set self.preprocessor
+            **preprocessor_kwargs: additional arguments to pass to the initialization of the preprocessor class
+                this is ignored if preprocessor_dict is not None
+                for the default SpectrogramPreprocessor, can pass any of:
+                    width, height, channels, sample_rate, sample_shape, overlay_df
 
         Methods:
             predict: generate predictions across a set of audio files or a dataframe defining audio
@@ -925,7 +967,15 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                   directly
                 This ensures that other parameters like self.torch_metrics are updated accordingly
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(
+            architecture,
+            classes,
+            sample_duration,
+            single_target=single_target,
+            preprocessor_dict=preprocessor_dict,
+            preprocessor_cls=preprocessor_cls,
+            **preprocessor_kwargs,
+        )
 
         self.log_file = None
         """specify a path to save output to a text file"""
@@ -973,6 +1023,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         return_invalid_samples=False,
         progress_bar=True,
         audio_root=None,
+        output_size_warning=1e9,
         **dataloader_kwargs,
     ):
         """Generate predictions on a set of samples
@@ -1026,6 +1077,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             audio_root: optionally pass a root directory (pathlib.Path or str)
                 - `audio_root` is prepended to each file path
                 - if None (default), samples must contain full paths to files
+            output_size_warning: int, if >0, raises a warning if the number of
+                output scores (clips * classes) exceeds this number, as this
+                can cause heavy memory usage. Set to None or 0 to disable.
+                [default: 1e9]
             **dataloader_kwargs: additional arguments to self.predict_dataloader()
 
         Returns:
@@ -1067,6 +1122,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             raise_errors=raise_errors,
             **dataloader_kwargs,
         )
+
+        # check size of output
+        _warn_output_size(dataloader, len(self.classes), output_size_warning)
 
         # check for matching class list
         if len(dataloader.dataset.dataset.classes) > 0 and list(self.classes) != list(
@@ -2171,12 +2229,15 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
     def embed(
         self,
         samples,
+        batch_size=1,
+        num_workers=0,
         target_layer=None,
         progress_bar=True,
         return_preds=False,
         avgpool=True,
         return_dfs=True,
         audio_root=None,
+        output_size_warning=1e9,
         **dataloader_kwargs,
     ):
         """
@@ -2193,6 +2254,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             samples: same as CNN.predict(): list of file paths, OR pd.DataFrame with index
                 containing audio file paths, OR a pd.DataFrame with multi-index (file, start_time,
                 end_time)
+            batch_size: batch size to use for dataloader [default: 1]
+            num_workers: number of parallel CPU workers to use for dataloader [default: 0]
             target_layers: layers from self.model._modules to
                 extract outputs from - if None, attempts to use self.model.embedding_layer as
                 default
@@ -2213,8 +2276,14 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             types are pd.DataFrame if return_dfs=True, or np.array if return_dfs=False
 
         """
+        if dataloader_kwargs is None:
+            dataloader_kwargs = dict()
         if audio_root is not None:
             dataloader_kwargs.update(dict(audio_root=audio_root))
+        if batch_size is not None:
+            dataloader_kwargs.update(dict(batch_size=batch_size))
+        if num_workers is not None:
+            dataloader_kwargs.update(dict(num_workers=num_workers))
         if not avgpool:  # cannot create a DataFrame with >2 dimensions
             return_dfs = False
 
@@ -2235,6 +2304,13 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # create dataloader to generate batches of AudioSamples
         dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
+
+        # warn the user if the output size is very large
+        try:
+            out_dim = target_layer.out_features
+        except:
+            out_dim = 1000  # guess embedding size
+        _warn_output_size(dataloader, out_dim, output_size_warning)
 
         # run inference, returns (scores, intermediate_outputs)
         preds, embeddings = self(
@@ -2281,23 +2357,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         self._device = torch.device(device)
 
 
-@register_model_cls
-class CNN(SpectrogramClassifier):
-    """alias for SpectrogramClassifier
-
-    improves comaptibility with older code / previous opso versions
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-
-class BaseClassifier(SpectrogramClassifier):
-    """alias for SpectrogramClassifier
-
-    improves compatibility with older code / previous opso versions,
-    which had a BaseClassifier class as a parent to the CNN class
-    """
+# alias for convenience
+CNN = SpectrogramClassifier
+register_model_cls(CNN)
+CNN.__doc__ = SpectrogramClassifier.__doc__
 
 
 def use_resample_loss(model, train_df):

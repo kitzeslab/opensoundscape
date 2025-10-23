@@ -4,6 +4,7 @@ import copy
 import inspect
 from matplotlib import pyplot as plt
 import matplotlib
+import numpy as np
 
 
 class PreprocessingError(Exception):
@@ -55,6 +56,7 @@ def show_tensor(
     transform_from_zero_centered=True,
     invert=False,
     cmap=None,
+    axis=None,
 ):
     """helper function for displaying a sample as an image
 
@@ -67,6 +69,7 @@ def show_tensor(
             if true, flips value range via x=1-x
         cmap: matplotlib colormap passed to plt.imshow()
             - if None, will choose 'Greys' if only one channel
+        axis: matplotlib axis to plot on, if None will create new figure
     """
     sample = process_tensor_for_display(
         tensor,
@@ -82,10 +85,12 @@ def show_tensor(
         else:
             cmap = None
 
+    if axis is None:
+        axis = plt.subplot()
     # this avoids stretching the color range to the min/max of the tensor
     normalize = matplotlib.colors.Normalize(vmin=0, vmax=1)
 
-    plt.imshow(sample, cmap=cmap, norm=normalize)
+    axis.imshow(sample, cmap=cmap, norm=normalize)
 
 
 def show_tensor_grid(
@@ -103,14 +108,18 @@ def show_tensor_grid(
         columns: number of columns in grid
         labels: title of each subplot
         for other args, see show_tensor()
+
+    Returns:
+        fig, axs = matplotlib figure and axes array
     """
     if labels is not None:
         assert len(labels) == len(tensors)
 
-    fig, _ = plt.subplots(figsize=[5 * columns, 5 * (len(tensors) // columns + 1)])
+    fig, axs = plt.subplots(np.ceil(len(tensors) / columns).astype(int), columns)
+    axs = axs.flatten()
     for i, s in enumerate(tensors):
-        ax = plt.subplot(len(tensors) // columns + 1, columns, i + 1)
-        show_tensor(s, channel, transform_from_zero_centered, invert)
+        show_tensor(s, channel, transform_from_zero_centered, invert, axis=axs[i])
         if labels is not None:
-            ax.set_title(labels[i])
-    return fig
+            axs[i].set_title(labels[i])
+    plt.tight_layout()
+    return fig, axs

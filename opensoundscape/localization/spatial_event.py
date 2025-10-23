@@ -125,7 +125,7 @@ class SpatialEvent:
 
     def estimate_location(
         self,
-        localization_algorithm="gillette",
+        localization_algorithm="least_squares",
         use_stored_tdoas=True,
     ):
         """
@@ -143,8 +143,8 @@ class SpatialEvent:
 
         Args:
             - localization_algorithm: algorithm to use for estimating the location of a sound event
-              from the locations and time delays of a set of detections. Options are 'gillette' or
-              'soundfinder'. Default is 'gillette'.
+              from the locations and time delays of a set of detections. Options are 'least_squares',
+              'soundfinder', or 'gillette' Default is 'least_squares'.
             - use_stored_tdoas: if True, uses the tdoas stored in self.tdoas to estimate the
               location.
                 If False, first calls self._estimate_delays() to estimate the tdoas. default: True

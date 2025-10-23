@@ -76,18 +76,20 @@ def travel_time(source, receiver, speed_of_sound):
 
 def localize(receiver_locations, tdoas, algorithm, speed_of_sound):
     """
-    Perform TDOA localization on a sound event. If there are not enough receivers to localize the event, return None.
-    Args:
+    Perform TDOA localization on a sound event. If there are not enough receivers to localize the
+    event, return None. Args:
         receiver_locations: a list of [x,y,z] locations for each receiver
             locations should be in meters, e.g., the UTM coordinate system.
         tdoas: a list of TDOA times (onset times) for each recorder
             The times should be in seconds.
         speed_of_sound: speed of sound in m/s
         algorithm: the algorithm to use for localization
-            Options: 'soundfinder', 'gillette', 'least_squares'.
-            See the documentation for the functions soundfinder_localize, gillette_localize, and least_squares_localize for more detail on how each algorithm works.
+            Options: 'soundfinder', 'gillette', 'least_squares'. See the documentation for the
+            functions `soundfinder_localize`, `gillette_localize`, and `least_squares_localize` for more
+            detail on how each algorithm works.
     Returns:
-        The estimated source location in meters, in the same number of dimensions as the receiver locations.
+        The estimated source location in meters, in the same number of dimensions as the receiver
+        locations.
     """
     # check that there are enough receivers to localize the event
     ndim = len(receiver_locations[0])
