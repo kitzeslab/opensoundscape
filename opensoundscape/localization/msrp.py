@@ -398,8 +398,8 @@ def compute_msrp(
         analytic_signal = scipy_signal.hilbert(gcc_result)
         pairwise_cc[receiver_pair] = np.abs(analytic_signal)
 
-    # Initialize steered response power array with spatial dimensions
-    srp = pd.Series(0, index=t0.index)  # grid points as index
+    # Initialize steered response power array with spatial dimensions (float dtype)
+    srp = pd.Series(0.0, index=t0.index, dtype=float)  # grid points as index
 
     # Calculate steered response power for each spatial location
     # by integrating over valid time delay ranges
