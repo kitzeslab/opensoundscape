@@ -24,6 +24,7 @@ class SpatialEvent:
         receiver_files,
         receiver_locations,
         max_delay,
+        receivers=None,
         min_n_receivers=3,
         receiver_start_time_offsets=None,
         start_timestamp=None,
@@ -41,6 +42,7 @@ class SpatialEvent:
             receiver_files: list of audio files, one for each receiver
             receiver_locations: list of [x,y] or [x,y,z] positions of each receiver in meters
             max_delay: maximum time delay (in seconds) to consider for time-delay-of-arrival estimate. Cannot be longer than 1/2 the duration.
+            receivers: list of receiver IDs corresponding to each receiver file and location
             receiver_start_time_offsets: list of start_time of detection (seconds) for each receiver relative to start of audio file
                 - if all audio files started at the same real-world time, this value will be the same for all recievers
                 - for example, 5.0 means the detection window starts 5 seconds after the beginning of the Audio file
@@ -103,6 +105,7 @@ class SpatialEvent:
         self.speed_of_sound = speed_of_sound
 
         # static attributes
+        self.receivers = receivers
         self.receiver_files = np.array(receiver_files)
         self.receiver_locations = np.array(receiver_locations)
         self.start_timestamp = start_timestamp

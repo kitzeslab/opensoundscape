@@ -1,6 +1,7 @@
 import warnings
 import numpy as np
 import datetime
+import pandas as pd
 
 from opensoundscape.audio import Audio
 from opensoundscape.utils import cast_np_to_native
@@ -9,71 +10,6 @@ from opensoundscape.localization.spatial_event import (
     localize_events_parallel,
 )
 from opensoundscape.localization.localization_algorithms import SPEED_OF_SOUND
-
-
-class GetStartTimestamp:
-    def __init__(self) -> None:
-        self.cached_file = ""
-        self.cached_recording_start_time = None
-
-    def __call__(self, file, start_time):
-        """extract start_timestamp from file metadata, return start_timestamp + start_time in seconds
-
-        Args:
-            file: str, path to audio file
-            start_time: float, time in seconds from start of file
-
-        Returns:
-            datetime.datetime: start timestamp parsed from audio file metadata + start_time
-        """
-        try:
-            if file == self.cached_file:
-                recording_start_dt = self.cached_recording_start_time
-            else:
-                recording_start_dt = Audio.from_file(file, duration=0.0001).metadata[
-                    "recording_start_time"
-                ]  # TODO: replace with audio.metadata_from_file after merging develop
-                self.cached_file = file
-                self.cached_recording_start_time = recording_start_dt
-        except Exception as exc:
-            raise Exception(
-                f"Failed to retrieve recording start time from metadata of file {file}."
-            ) from exc
-
-        return recording_start_dt + datetime.timedelta(
-            seconds=cast_np_to_native(start_time)
-        )
-
-
-def get_receiver_positions(file_coords):
-    """
-    Given a DataFrame with file paths as index and columns ['x', 'y'] or ['x', 'y', 'z'],
-    returns:
-      - receiver_positions: DataFrame of unique receiver locations
-      - file_to_recorder_idx: dict mapping file path -> row index of receiver_positions
-    """
-
-    # Ensure coordinate columns exist
-    coord_cols = [c for c in ["x", "y", "z"] if c in file_coords.columns]
-    if not coord_cols:
-        raise ValueError("file_coords must have at least 'x' and 'y' columns")
-
-    # Unique receiver positions
-    receiver_positions = (
-        file_coords[coord_cols].drop_duplicates().reset_index(drop=True)
-    )
-
-    # Use merge with an indicator for matching, preserving NaNs properly
-    merged = file_coords.reset_index().merge(
-        receiver_positions.reset_index().rename(columns={"index": "rec_idx"}),
-        on=coord_cols,
-        how="left",
-    )
-
-    # Map file path (index of file_coords) to receiver index
-    file_to_recorder_idx = merged.set_index(file_coords.index.name)["rec_idx"].to_dict()
-
-    return receiver_positions, file_to_recorder_idx
 
 
 class SynchronizedRecorderArray:
@@ -99,28 +35,60 @@ class SynchronizedRecorderArray:
 
     def __init__(
         self,
-        file_coords,
+        receiver_positions,
+        file_receiver_map,
         speed_of_sound=SPEED_OF_SOUND,
     ):
         """
         Args:
-            file_coords : pandas.DataFrame
-                DataFrame with index filepath, and columns for x, y, (z) locations of reciever that
-                recorded the audio file, in meters.
-                Third coordinate is optional. Localization algorithms are in 2d if columns are (x,y) and
-                3d if columns are (x,y,z). When running .localize_detections() or .create_candidate_events(),
-                Each audio file in `detections` must have a corresponding
-                row in `file_coords` specifiying the location of the reciever that recorded the file.
+            receiver_positions : pandas.DataFrame
+                DataFrame with columns for x, y, (z) locations of each receiver in meters.
+                Index is receiver ID or name.
+                z coordinate is optional, if not provided localization is performed in 2D.
+            file_receiver_map : dict
+                a dictionary or pd.Series mapping from audio file path to receiver ID/name
+                (index of receiver_positions)
             speed_of_sound : float, optional. Speed of sound in meters per second.
                 Default: opensoundscape.localization.localization_algorithms.SPEED_OF_SOUND
         """
-        self.file_coords = file_coords
+        if isinstance(file_receiver_map, pd.Series):  # allow pd.Series as input
+            file_receiver_map = file_receiver_map.to_dict()
+        self.receiver_positions = receiver_positions
+        self.file_receiver = file_receiver_map
         self.speed_of_sound = speed_of_sound
 
-        # create df of the unique receiver positions
-        # file_to_recorder_idx maps from file path to row index in receiver_positions
-        self.receiver_positions, self.file_to_receiver_idx = get_receiver_positions(
-            file_coords
+    @classmethod
+    def from_file_coords(
+        cls,
+        file_coords,
+        speed_of_sound=SPEED_OF_SOUND,
+    ):
+        """
+        Create a SynchronizedRecorderArray from a DataFrame of file coordinates.
+
+        This function creates receiver_positions and file_receiver_map from file_coords.
+        The receivers are named by an integer index.
+
+        This function is provided for convenience and backwards compatability, but
+        using receiver_positions and file_receiver_map directly is recommended, as
+        it retains interpretable receiver names/IDs.
+
+        Args:
+            file_coords : pandas.DataFrame
+                DataFrame with index filepath, and columns for x, y, (z) locations of receiver
+                that recorded the audio file, in meters.
+                z coordinate is optional, if not provided localization is performed in 2D.
+            speed_of_sound : float, optional. Speed of sound in meters per second.
+                Default: opensoundscape.localization.localization_algorithms.SPEED_OF_SOUND
+
+        Returns:
+            SynchronizedRecorderArray
+        """
+        receiver_positions, file_receiver_map = get_receiver_positions(file_coords)
+        return cls(
+            receiver_positions=receiver_positions,
+            file_receiver_map=file_receiver_map,
+            speed_of_sound=speed_of_sound,
         )
 
     def localize_detections(
@@ -145,10 +113,10 @@ class SynchronizedRecorderArray:
         Algorithm
         ----------
         The user provides a table of class detections from each recorder with timestamps. The
-        object's self.file_coords dataframe contains a table listing the spatial location of the
-        recorder for each unique audio file in the table of detections. The audio recordings must be
-        synchronized such that timestamps from each recording correspond to the exact same
-        real-world time.
+        object's self.receiver_positions dataframe contains a table listing the spatial location of
+        each recorder, and the self.file_receiver_map dataframe contains a mapping of audio files to
+        their corresponding recorders. The audio recordings must be synchronized such that
+        timestamps from each recording correspond to the exact same real-world time.
 
         Localization of sound events proceeds in four steps:
 
@@ -352,7 +320,7 @@ class SynchronizedRecorderArray:
             ), "must provide audio_sample_rate for msrp localization if not providing spatial_grid"
 
             spatial_grid = msrp.SearchMap(
-                recorder_positions=self.receiver_positions.values,
+                receiver_positions=self.receiver_positions.values,
                 sample_rate=audio_sample_rate,
                 resolution=resolution,
                 margin=margin,
@@ -416,15 +384,23 @@ class SynchronizedRecorderArray:
 
     def check_files_missing_coordinates(self, detections):
         """
-        Check that all files in detections have coordinates in file_coords
+        Check that all files in detections have a mapping to a receiver with coordinates
+
         Returns:
-            - a list of files that are in detections but not in file_coords
+            - a list of files that are in detections but
+                either (a) not in self.file_receiver_map or
+                (b) mapped to a receiver ID not in self.receiver_positions
         """
         files_missing_coordinates = []
         files = list(detections.reset_index()["file"].unique())
         for file in files:
-            if str(file) not in self.file_coords.index:
+            if str(file) not in self.file_receiver:
                 files_missing_coordinates.append(file)
+            else:
+                receiver_id = self.file_receiver[str(file)]
+                if receiver_id not in self.receiver_positions.index:
+                    # receiver ID not in receiver_positions df
+                    files_missing_coordinates.append(file)
         return files_missing_coordinates
 
     def create_candidate_events(
@@ -484,11 +460,12 @@ class SynchronizedRecorderArray:
         Returns:
             a list of SpatialEvent objects to attempt to localize
         """
-        # check that all files have coordinates in file_coords
+        # check that all files have receiver mapping, and receivers have coordinates
         if len(self.check_files_missing_coordinates(detections)) > 0:
             warnings.warn(
-                "WARNING: Not all audio files have corresponding coordinates in self.file_coords."
-                "Check file_coords.index contains each file in detections.index. "
+                "WARNING: Not all audio files have corresponding receivers with coordinates."
+                "Check self.file_receiver_map contains each file in detections.index, "
+                "and that receiver IDs are mapped to coordinates in self.receiver_positions."
                 "Use self.check_files_missing_coordinates() for list of files. "
             )
 
@@ -519,7 +496,8 @@ class SynchronizedRecorderArray:
         # within max_receiver_dist of that receiver
         #
         # eg {ARU_0.mp3: [ARU_1.mp3, ARU_2.mp3...], ARU_1... }
-        nearby_files_dict = self.make_nearby_files_dict(max_receiver_dist)
+        # nearby_files_dict = self.make_nearby_files_dict(max_receiver_dist)
+        nearby_receivers_dict = self.make_nearby_receivers_dict(max_receiver_dist)
 
         # generate SpatialEvents for each detection, if enough nearby
         # receivers also had a detection at the same time
@@ -602,21 +580,27 @@ class SynchronizedRecorderArray:
                 for ref_file in files_w_dets:
                     # check how many other detections are close enough to be detections of
                     # the same sound event
-                    # first, use pre-created dictionary of nearby receivers for each audio file
-                    close_receivers = nearby_files_dict[ref_file]
+                    # first, look up close receivers from pre-created dictionary
+                    ref_receiver = self.file_receiver[ref_file]
+                    close_receivers = nearby_receivers_dict[ref_receiver]
                     # then, subset files with detections to those that are nearby
-                    close_det_files = [f for f in files_w_dets if f in close_receivers]
+                    close_det_files = [
+                        f
+                        for f in files_w_dets
+                        if self.file_receiver[f] in close_receivers
+                    ]
 
                     # if enough receivers, create a SpatialEvent using this set of receivers
                     # +1 to count the reference receiver
                     if len(close_det_files) + 1 >= min_n_receivers:
-                        # SpatialEvent will include reference receiver + close recievers
+                        # SpatialEvent will include audio from reference receiver + close receivers
                         receiver_files = [ref_file] + close_det_files
+                        receivers = [self.file_receiver[r] for r in receiver_files]
 
                         # retrieve positions of each receiver
-                        receiver_locations = [
-                            self.file_coords.loc[r] for r in receiver_files
-                        ]
+                        receiver_locations = self.receiver_positions.loc[
+                            receivers
+                        ].values
 
                         # subset detections to close recievers, and re-index to only 'file'
                         close_dets = (
@@ -633,6 +617,7 @@ class SynchronizedRecorderArray:
                         # create a SpatialEvent for this cluster of simultaneous detections
                         candidate_events.append(
                             SpatialEvent(
+                                receivers=receivers,
                                 receiver_files=receiver_files,
                                 receiver_locations=receiver_locations,
                                 bandpass_range=bandpass_range,
@@ -655,38 +640,89 @@ class SynchronizedRecorderArray:
 
         return candidate_events
 
-    def make_nearby_files_dict(self, r_max):
-        """create dictinoary listing nearby files for each file
+    def make_nearby_receivers_dict(self, r_max):
+        """create dictinoary listing nearby receivers for each receiver
 
-        pre-generate a dictionary listing all close files for each audio file
-        dictionary will have a key for each audio file, and value listing all other receivers
+        pre-generate a dictionary listing all close receivers for each receiver
+        dictionary will have a key for each receiver ID/name, and value listing all other receivers
         within r_max of that receiver
 
-        eg {ARU_0.mp3: [ARU_1.mp3, ARU_2.mp3...], ARU_1... }
-
-        Note: could manually create this dictionary to only list _simulataneous_ nearby
-        files if the detection dataframe contains files from different times
+        eg {rec_0: [rec_1, rec_2...], rec_1... }
 
         The returned dictionary is used in create_candidate_events as a look-up table for
-            recordings nearby a detection in any given file
-
-        Args:
-            r_max: maximum distance from each recorder in which to include other
-                recorders in the list of 'nearby recorders', in meters
-
-        Returns:
-            dictionary with keys for each file and values = list of nearby recordings
+            creating SpatialEvents with recordings in the vicinity of a detection
         """
-        aru_files = self.file_coords.index.values
-        nearby_files_dict = dict()
-        for aru in aru_files:  # make an entry in the dictionary for each file
-            reference_receiver = self.file_coords.loc[aru]  # location of receiver
-            other_receivers = self.file_coords.drop([aru])
-            distances = np.array(other_receivers) - np.array(reference_receiver)
-            euclid_distances = [np.linalg.norm(d) for d in distances]
+
+        nearby_receivers_dict = dict()
+        # make an entry in the dictionary for each recorder
+        for rec_id in self.receiver_positions.index:
+            reference_receiver = self.receiver_positions.loc[rec_id]
+            other_receivers = self.receiver_positions.drop([rec_id])
+            # compute euclidean distances to all other receivers
+            euclid_distances = np.linalg.norm(
+                other_receivers.values - reference_receiver.values, axis=1
+            )
 
             # boolean mask for whether recorder is close enough
             mask = [r <= r_max for r in euclid_distances]
-            nearby_files_dict[aru] = list(other_receivers[mask].index)
 
-        return nearby_files_dict
+            # dictionary entry mapping ref receiver to other nearby receivers
+            nearby_receivers_dict[rec_id] = list(other_receivers[mask].index)
+
+        return nearby_receivers_dict
+
+
+class GetStartTimestamp:
+    def __init__(self) -> None:
+        self.cached_file = ""
+        self.cached_recording_start_time = None
+
+    def __call__(self, file, start_time):
+        """extract start_timestamp from file metadata, return start_timestamp + start_time in seconds
+
+        Args:
+            file: str, path to audio file
+            start_time: float, time in seconds from start of file
+
+        Returns:
+            datetime.datetime: start timestamp parsed from audio file metadata + start_time
+        """
+        try:
+            if file == self.cached_file:
+                recording_start_dt = self.cached_recording_start_time
+            else:
+                recording_start_dt = Audio.from_file(file, duration=0.0001).metadata[
+                    "recording_start_time"
+                ]  # TODO: replace with audio.metadata_from_file after merging develop
+                self.cached_file = file
+                self.cached_recording_start_time = recording_start_dt
+        except Exception as exc:
+            raise Exception(
+                f"Failed to retrieve recording start time from metadata of file {file}."
+            ) from exc
+
+        return recording_start_dt + datetime.timedelta(
+            seconds=cast_np_to_native(start_time)
+        )
+
+
+def get_receiver_positions(file_coords):
+    """
+    Given a DataFrame with file paths as index and columns ['x', 'y'] or ['x', 'y', 'z'],
+    returns:
+      - receiver_positions: DataFrame of unique receiver locations
+      - file_to_recorder_idx: dict mapping file path -> row index of receiver_positions
+    """
+
+    # Ensure coordinate columns exist
+    coord_cols = [c for c in ["x", "y", "z"] if c in file_coords.columns]
+    if not coord_cols:
+        raise ValueError("file_coords must have at least 'x' and 'y' columns")
+
+    indices, coords = pd.factorize(pd.Series([tuple(x) for x in file_coords.values]))
+    receiver_positions = pd.DataFrame(
+        [list(t) for t in coords], columns=file_coords.columns
+    )
+    file_to_receiver_idx = {f: i for f, i in zip(file_coords.index, indices)}
+
+    return receiver_positions, file_to_receiver_idx
