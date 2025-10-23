@@ -411,7 +411,30 @@ class SpatialEvent:
         return d
 
     def localize_msrp(self, search_map, keep_power_map=False, **kwargs):
-        """perform M-SRP-PHAT localization on a SpatialEvent"""
+        """Perform M-SRP-PHAT localization on a SpatialEvent.
+
+        This method extracts aligned audio segments from the event's receiver files,
+        constructs the `signals` dict (receiver_id -> numpy array), and calls
+        `opensoundscape.localization.msrp.localize()` with the provided
+        `search_map` and keyword arguments.
+
+        Keyword arguments passed through (**kwargs) are forwarded to
+        `msrp.localize()` and may include: freq_low, freq_high, cc_filter,
+        aggregation_fn, convex_hull_margin, detrend, and others supported by
+        `msrp.localize()`.
+
+        Args:
+            search_map (SearchMap): grid with precomputed time-delay intervals.
+                Create with `opensoundscape.localization.SearchMap`.
+            keep_power_map (bool): if True, attach 'power_map' and 'search_map' to
+                the returned PositionEstimate (via keep_maps in msrp.localize()).
+                Useful for plotting or analysis beyond just the maximum power location.
+                Default: False.
+
+        Returns:
+            PositionEstimate: populated with location_estimate and, if requested,
+            power_map and search_map attributes.
+        """
         from opensoundscape.localization import msrp
 
         # Load audio signals

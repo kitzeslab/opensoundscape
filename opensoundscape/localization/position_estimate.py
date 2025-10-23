@@ -12,14 +12,18 @@ class PositionEstimate:
     - duration: duration of the event in seconds
 
 
-    Also contains information about the receivers used for localization, and intermediate outputs
-    of the localization algorithm:
+    Also contains information about the receivers used for localization, intermediate outputs
+    of the localization algorithm, and optional MSRP outputs:
     - receiver_files: list of file paths to audio files used for localization
     - receiver_start_time_offsets: list of floats, time from start of audio to start of event
         for each receiver
     - receiver_locations: list of receiver locations
     - tdoas: list of time differences of arrival computed with cross correlation
     - cc_maxs: list of cross correlation maxima
+    - power_map: optional pd.Series of SRP values indexed by search-grid coordinates
+        (added when localization is performed with M-SRP and keep_maps=True)
+    - search_map: optional SearchMap object used to compute the SRP (added when
+        keep_maps=True)
 
     Args:
         location estimate: 2 or 3 element array of floats, estimated location of the sound source

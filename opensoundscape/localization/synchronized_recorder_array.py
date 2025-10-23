@@ -307,9 +307,37 @@ class SynchronizedRecorderArray:
         keep_power_map=False,
         **kwargs,
     ):
-        """localizes events in parallel using modified steered response power algorithm
+        """Localize events in parallel using the modified steered-response power (M-SRP) algorithm.
 
-        creates a search grid if not provided
+        For each SpatialEvent in `events`, this function will extract aligned audio
+        segments from the event's receiver files and call `msrp.localize()` for
+        each event in parallel.
+
+        Creates a `SearchMap` (if `spatial_grid` is not provided), computes the valid time intervals
+        of the search map if not pre-computed.
+
+        Args:
+            events (list[SpatialEvent]): candidate events to localize.
+            resolution (float): grid resolution in meters for SearchMap creation if
+                `spatial_grid` is not provided.
+            margin (float): margin in meters to expand the convex hull when
+                creating the SearchMap.
+            audio_sample_rate (float): sample rate of the audio (required if
+                creating a SearchMap here).
+            spatial_grid (SearchMap or None): optional precomputed SearchMap to use.
+            num_workers (int): number of parallel workers.
+            keep_power_map (bool): if True, include 'power_map' and 'search_map'
+                in returned PositionEstimate objects.
+            **kwargs: forwarded to `msrp.localize()` (e.g. freq_low, freq_high,
+                cc_filter, aggregation_fn, convex_hull_margin, detrend).
+
+        Returns:
+            list[PositionEstimate]: list of position estimates (one per event). If
+            `keep_power_map` is True, each PositionEstimate will include `power_map`
+            (pd.Series) and `search_map` attributes.
+
+        See also:
+            SynchronizedRecorderArray.localize_detections()
         """
 
         from opensoundscape.localization import msrp
@@ -353,10 +381,41 @@ class SynchronizedRecorderArray:
         keep_power_map=False,
         **kwargs,
     ):
-        """localizes detections using modified steered response power algorithm
+        """Localize detections using the modified steered-response power algorithm.
 
+        This convenience wrapper groups detections into candidate SpatialEvents
+        (via `create_candidate_events`) and then localizes them using
+        `localize_events_msrp`.
+        Args:
+            detections (pd.DataFrame): multi-index DataFrame of detections
+                (index: file, start_time, end_time, start_timestamp; columns:
+                class names with 0/1 values for non-detection/detection).
+            max_receiver_dist (float): maximum distance in meters between receivers.
+            audio_sample_rate (float): sample rate of the audio files.
+            resolution (float): grid resolution in meters for SearchMap creation
+                if `spatial_grid` is not provided.
+            margin (float): margin in meters to expand the convex hull when
+                creating the SearchMap.
+            min_n_receivers (int): minimum number of receivers that must detect an
+                event for it to be localized. [default: 3]
+            cc_filter (str): filter to use for generalized cross correlation. See
+                opensoundscape.signal_processing.gcc() function for options. Default is "phat".
+            bandpass_ranges (dict, None, or 2-element list/tuple, optional): Any of:
+                - dict: {"class name": [low_f, high_f]} for audio bandpass filtering during
+                cross correlation with keys for each class
+                - list/tuple: [low_f,high_f] for all classes
+                - None [Default]: does not bandpass audio.
+            spatial_grid (SearchMap or None): optional precomputed SearchMap to use.
+            num_workers (int): number of parallel workers.
+            keep_power_map (bool): if True, include 'power_map' and 'search_map'
+                in returned PositionEstimate objects.
+            **kwargs: forwarded to `msrp.localize()` (e.g. freq_low, freq_high,
+                cc_filter, aggregation_fn, convex_hull_margin, detrend).
 
-        wraps self.create_candidate_events() and self.localize_events_msrp()
+        Returns:
+            list[PositionEstimate]: localized position estimates. If
+            `keep_power_map` is True, returned PositionEstimate objects will
+            include `power_map` and `search_map` attributes.
         """
         # create list of SpatialEvents, each SpatialEvent will be used to estimate a location
         # each SpatialEvent consists of a receiver with a detection, and every other receivers within max_receiver_dist

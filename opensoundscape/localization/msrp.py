@@ -331,28 +331,33 @@ def compute_msrp(
     cc_filter="phat",
     aggregation_fn=np.sum,
 ):
-    """Calculate likelihood of sound sources at each search location.
+    """Calculate steered-response power for each search location.
 
-    This function uses the InitData and other info to calculate the likelihood
-    of sound sources coming from each location using generalized cross-correlation
-    with the Hilbert transform.
-
-    Uses "level 2" implementation of original Matlab implementation
+    This function computes generalized cross-correlations (GCC) for all receiver
+    pairs, applies a Hilbert transform, and aggregates correlation magnitudes
+    across valid time-delay windows defined in the provided SearchMap.
 
     Args:
-        receiver_positions: pd.DataFrame with receiver positions in meters, shape (N, 2) or (N, 3)
-            index contains receiver ID
-        signals: dictionary of receiver : np.array of shape (signal length,) containing audio samples
-        freq_low: float, low frequency cutoff in Hz
-        freq_high: float, high frequency cutoff in Hz
-        time_delays: dict created with compute_time_delays function, the valid region of
-            time delay indices for each search location for each receiver pair
-        cc_filter: str, cross-correlation filter to use; see opensoundscape.signal_processing.gcc
-            (options: phat, roth, scot, ht, cc, cc_norm)
+        signals (dict): mapping receiver_id -> 1-D numpy array of audio samples.
+            All signals should have the same length and be synchronized.
+        search_map (SearchMap): precomputed search grid and pairwise time-delay
+            intervals (from `SearchMap._make_time_intervals()` or created with
+            `SearchMap(..., compute_time_intervals=True)`).
+        freq_low (float or None): low frequency bound (Hz) for bandpass filtering
+            applied during GCC. Pass None to disable frequency filtering.
+        freq_high (float or None): high frequency bound (Hz) for bandpass filtering
+            applied during GCC. Pass None to disable frequency filtering.
+        cc_filter (str): cross-correlation filter passed to
+            `opensoundscape.signal_processing.gcc`. Options include 'phat', 'roth',
+            'scot', 'ht', 'cc', 'cc_norm'. Default: 'phat'.
+        aggregation_fn (callable): function to aggregate cross-correlation values
+            within a search-cell's valid time-delay windows (default: np.sum).
 
     Returns:
-        ndarray: SMap array with likelihood values for each search location,
-            shape (nx, ny, nz) matching the search_map dimensions
+        pd.Series: steered-response power (SRP) indexed by grid-point coordinate
+            tuples (the same index as `search_map.time_delay_min` /
+            `search_map.time_delay_max`). Values are the aggregated cross correlation
+             values for each grid cell.
 
     Author: Sam Lapp, translated from Tim Huang (original Matlab implementation) and Richard Hedley
     (R implementation)
@@ -427,33 +432,38 @@ def localize(
     convex_hull_margin=0,
     detrend=True,
 ):
-    """Localize a sound source using MSRP algorithm.
+    """Localize a sound source using the M-SRP (modified steered-response power) algorithm.
 
-    Main function to localize a sound source given synchronized audio recordings from multiple
-    stations using the MSRP (Modified Steered Response Power) algorithm.
+    This is a convenience wrapper that computes the steered-response power across the
+    provided `search_map` and returns the best location along with optional maps.
 
     Args:
-        signals: dict of receiver_id : np.array of shape (signal length,) containing audio samples
-        search_map: SearchMap object containing grid points and precomputed time delay intervals
-        resolution: float, grid resolution in meters (default: 1) freq_low: float, low
-            frequency cutoff in Hz (default: 2000)
-        freq_high: float, high frequency cutoff in Hz
-            (default: 8000)
-        temp_c: float, temperature in Celsius for calculating speed of sound
-            (default: 15)
-        speed_of_sound: float, speed of sound in m/s. If provided, overrides temp_c
-            (default: None)
-        plot: bool, whether to create plots (default: False) loc_folder: str, folder
-            path for saving plots (required if plot=True)
-        time_delays: dict, precomputed pairwise time delays from compute_time_delays
-        keep_power_map: bool, whether to return the power map in output (default: True)
-        convex_hull_margin: float, margin in meters around convex hull of receivers to search
-            - pass None to disable filtering to convex hull
+        signals (dict): mapping receiver_id -> 1-D numpy array of audio samples.
+            All signals must be synchronized and of equal length.
+        search_map (SearchMap): grid object containing search points and precomputed
+            time-delay intervals (see `SearchMap`). If time-delay intervals are not
+            present they will be computed.
+        freq_low (float or None): low frequency bound (Hz) for GCC bandpass. Pass
+            None to disable.
+        freq_high (float or None): high frequency bound (Hz) for GCC bandpass. Pass
+            None to disable.
+        keep_maps (bool): if True, the returned dict will include 'power_map' (the
+            SRP Series) and 'search_map' (the SearchMap used). Default: True.
+        cc_filter (str): filter passed to `opensoundscape.signal_processing.gcc`.
+        aggregation_fn (callable): function used to aggregate GCC magnitudes within
+            each grid cell (default: np.sum).
+        convex_hull_margin (float or None): if not None, filter the search grid to
+            the convex hull of the provided receivers expanded by this margin (m).
+            Pass None to disable convex-hull filtering.
+        detrend (bool): if True, subtract the mean from each input signal before
+            computing GCC. Default: True.
 
     Returns:
-        dict containing:
-            - 'location': DataFrame with Easting, Northing, Elevation, Power
-            - 'smap': (if keep_search_map=True) 3D likelihood array
+        dict: with keys:
+            - 'location': grid-point tuple at which SRP is maximum (e.g. (x, y) or (x, y, z))
+            - 'max_power': scalar maximum SRP value
+            - 'power_map' (optional): pd.Series of SRP indexed by grid-point tuples
+            - 'search_map' (optional): the SearchMap object used for localization
 
     Author: Sam Lapp (Python implementation); Richard Hedley (R implementation); Tim Huang (original
     Matlab implementation);
