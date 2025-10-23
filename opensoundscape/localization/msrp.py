@@ -6,6 +6,7 @@ originally implemented in Matlab by Tim Huang, then in R by Richard Hedley (loca
 #TODO: refactor to use list of (x,y,z) positions instead of requiring cubic grid
 """
 
+import itertools
 import numpy as np
 import pandas as pd
 import torch
@@ -14,7 +15,7 @@ from opensoundscape.signal_processing import gcc
 from scipy.spatial import ConvexHull
 
 
-class SpatialGrid:
+class SearchMap:
     """
     Class for creating a grid of points for localizing sound events with methods that use a grid search approach.
     """
@@ -23,15 +24,13 @@ class SpatialGrid:
         self,
         recorder_positions,
         sample_rate,
-        resolution=1,
+        resolution,
         margin=0,
         speed_of_sound=343,
         compute_time_intervals=True,
-        pairwise_time_intervals=None,
-        pair_idx_lookup=None,
     ):
         """
-        Initialize a SpatialGrid object
+        Initialize a SearchMap object with a cubic grid of points for localizing sound events.
         Args:
             recorder_positions: list of [x,y] or [x,y,z] positions of each recorder in meters
             sample_rate: sample rate of the audio in Hz.
@@ -40,25 +39,23 @@ class SpatialGrid:
                     A negative margin will shrink the grid. Default is 0.
             speed_of_sound: speed of sound in meters per second. Default is 343 m/s.
             compute_time_intervals: whether to pre-compute time-delay intervals for each point in the grid. Default is True.
-            time_intervals: precomputed time-delay intervals to use instead of computing them. Default is None.
-            pairwise_time_intervals: precomputed pairwise time-delay intervals to use instead of computing them. Default is None.
         """
-        self.recorder_positions = np.array(recorder_positions)
+        self.receiver_positions = np.array(recorder_positions)
+        self.receiver_idx = {
+            tuple(pos): idx for idx, pos in enumerate(self.receiver_positions)
+        }  # dict for fast look-up of receiver index by position
         self.sample_rate = sample_rate
         self.resolution = resolution
         self.margin = margin
-        self.dimensions = self.recorder_positions.shape[1]
+        self.dimensions = self.receiver_positions.shape[1]  # 2d or 3d spatial grid
         self.speed_of_sound = speed_of_sound
-        self.grid = self._make_grid()
+        self._make_grid()  # creates self.search_points list of coordinates and self.x, self.xidx, etc
 
-        if pairwise_time_intervals is not None:
-            self.pairwise_time_intervals = pairwise_time_intervals
-            self.pair_idx_lookup = pair_idx_lookup
-        elif compute_time_intervals:
+        if compute_time_intervals:
             self._make_time_intervals()
         else:
             self.pairwise_time_intervals = None
-            self.pair_idx_lookup = None
+            self.pair_idx = None
 
     def get_pairwise_time_intervals(self, receiver_idx1, receiver_idx2):
         """
@@ -73,9 +70,10 @@ class SpatialGrid:
             raise ValueError(
                 "Time-delay intervals have not been computed for this SpatialGrid."
             )
-        pair_idx = self.pair_idx_lookup.get((receiver_idx1, receiver_idx2))
-        if pair_idx is None:
-            raise ValueError("Invalid receiver indices.")
+        try:
+            pair_idx = self.pair_idx[(receiver_idx1, receiver_idx2)]
+        except KeyError:
+            raise KeyError("Receiver indices not found in self.pair_idx dict")
         return self.pairwise_time_intervals[:, pair_idx, :]
 
     def _make_grid(self, filter_to_convex_hull=True):
@@ -86,44 +84,41 @@ class SpatialGrid:
         """
 
         # make a grid of all the points between the min and max possible coordinates of the recorder positions
-        x = np.arange(
-            np.floor(np.min(self.recorder_positions[:, 0])) - self.margin,
-            np.ceil(np.max(self.recorder_positions[:, 0])) + self.margin,
+        self.x = np.arange(
+            np.floor(np.min(self.receiver_positions[:, 0])) - self.margin,
+            np.ceil(np.max(self.receiver_positions[:, 0])) + self.margin,
             self.resolution,
         )
-        y = np.arange(
-            np.floor(np.min(self.recorder_positions[:, 1])) - self.margin,
-            np.ceil(np.max(self.recorder_positions[:, 1])) + self.margin,
+        self.xidx = {x_val: idx for idx, x_val in enumerate(self.x)}
+        self.y = np.arange(
+            np.floor(np.min(self.receiver_positions[:, 1])) - self.margin,
+            np.ceil(np.max(self.receiver_positions[:, 1])) + self.margin,
             self.resolution,
         )
+        self.yidx = {y_val: idx for idx, y_val in enumerate(self.y)}
 
         if self.dimensions == 2:
-            grid = np.array(np.meshgrid(x, y)).T.reshape(-1, 2)
+            search_points = np.array(np.meshgrid(self.x, self.y)).T.reshape(-1, 2)
         else:
-            z = np.arange(
-                np.floor(np.min(self.recorder_positions[:, 2])) - self.margin,
-                np.ceil(np.max(self.recorder_positions[:, 2])) + self.margin,
+            self.z = np.arange(
+                np.floor(np.min(self.receiver_positions[:, 2])) - self.margin,
+                np.ceil(np.max(self.receiver_positions[:, 2])) + self.margin,
                 self.resolution,
             )
-            grid = np.array(np.meshgrid(x, y, z)).T.reshape(-1, 3)
+            self.zidx = {z_val: idx for idx, z_val in enumerate(self.z)}
+
+            search_points = np.array(np.meshgrid(self.x, self.y, self.z)).T.reshape(
+                -1, 3
+            )
 
         if filter_to_convex_hull:
-            hull = ConvexHull(self.recorder_positions)
-            # only keep the points that are inside the convex hull of the recorder positions
-            # hull.equations is the equation of the hyperplane of each face of the convex hull
-            # apply the equation of each face to the grid points to check if they are inside the convex hull
-            eps = 1e-6
-            # add a small epsilon to the margin to ensure that points on the edge of the convex hull are included
-            mask = np.all(
-                hull.equations[:, :-1].dot(grid.T) + hull.equations[:, -1][:, None]
-                <= self.margin + eps,
-                axis=0,
+            search_points = filter_points_to_convex_hull(
+                search_points, self.receiver_positions, self.margin
             )
-            grid = grid[mask]
 
-        return grid
+        self.search_points = search_points
 
-    def subset(self, grid_points):
+    def subset(self, receiver_positions):
         """
         Create a copy of the SpatialGrid, filtering points and time_intervals to only those within the convex hull of the recorder positions
         Args:
@@ -135,39 +130,40 @@ class SpatialGrid:
 
         subset_grid = copy.deepcopy(self)
 
-        # find indices of self.recorder_positions, first match for each of grid_points
-        grid_points = np.array(grid_points)[:, : self.recorder_positions.shape[1]]
-        grid_point_idx_to_keep = [
-            np.where((self.recorder_positions == point).all(axis=1))[0][0]
-            for point in grid_points
-        ]
+        # what do we do when there are pairs in the opposite order?
+
+        # find indices of receiver positions in original grid
+        receiver_positions = np.array(receiver_positions)
+        receiver_indices = [self.receiver_idx[tuple(pos)] for pos in receiver_positions]
+
+        # find indices of receiver pairs in the original grid
+        # and create list of indices for [pairs of receiver indices]
+        rec_idx_pairs = itertools.combinations(receiver_indices, 2)
+        pair_indices = [self.pair_idx[pair] for pair in rec_idx_pairs]
 
         if self.dimensions == 2:
-            hull = ConvexHull(grid_points[:, :2])
+            hull = ConvexHull(receiver_positions[:, :2])
         else:
-            hull = ConvexHull(grid_points)
+            hull = ConvexHull(receiver_positions)
 
         # only keep the points that are inside the convex hull of the recorder positions
         # hull.equations is the equation of the hyperplane of each face of the convex hull
         # apply the equation of each face to the grid points to check if they are inside the convex hull
         eps = 1e-6
         # add a small epsilon to the margin to ensure that points on the edge of the convex hull are included
-        mask = np.all(
-            hull.equations[:, :-1].dot(self.grid.T) + hull.equations[:, -1][:, None]
+        point_mask = np.all(
+            hull.equations[:, :-1].dot(self.search_points.T)
+            + hull.equations[:, -1][:, None]
             <= self.margin + eps,
             axis=0,
         )
-        subset_grid.grid = self.grid[mask]
+        subset_grid.search_points = self.search_points[point_mask]
+
         if subset_grid.pairwise_time_intervals is not None:
-            # we need to subset the pairwise_time_intervals to only include the receiver pairs that are in the subset grid
-            # TODO: check that this always creates the correct pair order for the recorder subset
-            pair_mask = [
-                idx1 in grid_point_idx_to_keep and idx2 in grid_point_idx_to_keep
-                for idx1, idx2 in self.pair_idx_lookup.keys()
-            ]
+            # subset pairwise time intervals by included points [axis 1] then by receiver pairs [axis 2]
             subset_grid.pairwise_time_intervals = self.pairwise_time_intervals[
-                :, mask, :
-            ][:, :, pair_mask]
+                :, point_mask, :
+            ][:, :, pair_indices]
 
         return subset_grid
 
@@ -178,15 +174,28 @@ class SpatialGrid:
             pairwise_time_intervals: a dict with keys 'T1' and 'T2' containing the valid time-delay intervals for each point in the grid
         """
         self.pairwise_time_intervals, receiver_idx_pairs = compute_time_delay_intervals(
-            receiver_positions=self.recorder_positions,
-            grid_positions=self.grid,
+            receiver_positions=self.receiver_positions,
+            grid_positions=self.search_points,
             sample_rate=self.sample_rate,
             speed_of_sound=self.speed_of_sound,
             resolution=self.resolution,
         )
-        self.pair_idx_lookup = {
-            (i, j): idx for idx, (i, j) in enumerate(receiver_idx_pairs.T)
-        }
+        self.pair_idx = {(i, j): idx for idx, (i, j) in enumerate(receiver_idx_pairs.T)}
+
+
+def filter_points_to_convex_hull(points, boundary_points, margin=0):
+    hull = ConvexHull(boundary_points)
+    # only keep the points that are inside the convex hull of the boundary points + margin
+    # hull.equations is the equation of the hyperplane of each face of the convex hull
+    # apply the equation of each face to the grid points to check if they are inside the convex hull
+    eps = 1e-6
+    # add a small epsilon to the margin to ensure that points on the edge of the convex hull are included
+    mask = np.all(
+        hull.equations[:, :-1].dot(points.T) + hull.equations[:, -1][:, None]
+        <= margin + eps,
+        axis=0,
+    )
+    return points[mask]
 
 
 def compute_time_delay_intervals(
@@ -219,15 +228,13 @@ def compute_time_delay_intervals(
 
     sr = sample_rate  # for brevity
 
-    # Number of pairwise comparisons of receivers
-    n_receiver_pairs = n_receivers * (n_receivers - 1) // 2
-
     # Create list of all pairwise comparisons
-    import itertools
-
-    receiver_idx_pairs = np.array(
-        list(itertools.combinations(range(n_receivers), 2)), dtype=int
+    # NOTE: was .combinations to exploit symmetry, but using .permutations so that we can look up (a,b) and (b,a)
+    rec_idx_pairs = np.array(
+        list(itertools.permutations(range(n_receivers), 2)), dtype=int
     ).T
+    # Number of pairwise comparisons of receivers
+    n_receiver_pairs = rec_idx_pairs.shape[1]
     T1 = np.zeros((len(grid_positions), n_receiver_pairs), dtype=int)
     T2 = np.zeros((len(grid_positions), n_receiver_pairs), dtype=int)
 
@@ -244,16 +251,10 @@ def compute_time_delay_intervals(
         gradient_tau = np.array(
             [
                 (
-                    (
-                        grid_position[dim]
-                        - receiver_positions[receiver_idx_pairs[1], dim]
-                    )
-                    / receiver_dist[receiver_idx_pairs[1]]
-                    - (
-                        grid_position[dim]
-                        - receiver_positions[receiver_idx_pairs[0], dim]
-                    )
-                    / receiver_dist[receiver_idx_pairs[0]]
+                    (grid_position[dim] - receiver_positions[rec_idx_pairs[1], dim])
+                    / receiver_dist[rec_idx_pairs[1]]
+                    - (grid_position[dim] - receiver_positions[rec_idx_pairs[0], dim])
+                    / receiver_dist[rec_idx_pairs[0]]
                 )
                 / speed_of_sound
                 for dim in range(dims)
@@ -304,7 +305,7 @@ def compute_time_delay_intervals(
         # distance to plane in y: d_y = (resolution / 2) / np.abs(np.sin(phi) * np.sin(theta))
         # distance to plane in z: d_z = (resolution / 2) / np.abs(np.cos(theta))
         if dims < 3:
-            theta = np.repeat(np.pi / 2, receiver_idx_pairs.shape[1])  # zero elevation
+            theta = np.repeat(np.pi / 2, rec_idx_pairs.shape[1])  # zero elevation
         else:
             theta = np.arccos(gradient_tau[2] / grad_mag)  # eq 13
         eps = 1e-12  # avoid divsion by zero; large vallues will be ignored because of min()
@@ -321,7 +322,7 @@ def compute_time_delay_intervals(
 
         # Compute time delays in seconds
         paired_distance_diff = (
-            receiver_dist[receiver_idx_pairs[1]] - receiver_dist[receiver_idx_pairs[0]]
+            receiver_dist[rec_idx_pairs[1]] - receiver_dist[rec_idx_pairs[0]]
         )
         dT1 = (paired_distance_diff) / speed_of_sound - grad_mag * d
         dT2 = (paired_distance_diff) / speed_of_sound + grad_mag * d
@@ -339,7 +340,7 @@ def compute_time_delay_intervals(
 
         pairwise_time_delay_intervals = np.array([T1, T2])
 
-    return pairwise_time_delay_intervals, receiver_idx_pairs
+    return pairwise_time_delay_intervals, rec_idx_pairs
 
 
 def compute_msrp(
@@ -455,7 +456,7 @@ def localize(
     search_map,
     freq_low=2000,
     freq_high=8000,
-    keep_power_map=True,
+    keep_maps=True,
 ):
     """Localize a sound source using MSRP algorithm.
 
@@ -498,8 +499,11 @@ def localize(
     # track time to perform localization
     locstarttime = time.time()
 
-    if search_map.pairwise_time_intervals is None:
-        search_map._make_time_intervals()
+    # extract relevant search points and recorder-pair time delay bounds
+    reduced_search_map = search_map.subset(receiver_positions)
+
+    if reduced_search_map.pairwise_time_intervals is None:
+        reduced_search_map._make_time_intervals()
 
     # Run MSRP
     power_map = compute_msrp(
@@ -508,18 +512,19 @@ def localize(
         sample_rate=search_map.sample_rate,
         freq_low=freq_low,
         freq_high=freq_high,
-        time_delay_intervals=search_map.pairwise_time_intervals,
+        time_delay_intervals=reduced_search_map.pairwise_time_intervals,
     )
 
     elapsed = time.time() - locstarttime
     # print(f"Localized detection in {elapsed:.1f} seconds.")
 
     # Extract global maximum location
-    location = search_map.grid[np.argmax(power_map)]
+    location = search_map.search_points[np.argmax(power_map)]
 
     # Build output dictionary
     out = {"location": location, "max_power": np.max(power_map)}
 
-    if keep_power_map:
+    if keep_maps:
         out["power_map"] = power_map
+        out["search_map"] = search_map
     return out

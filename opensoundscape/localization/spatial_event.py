@@ -415,9 +415,6 @@ class SpatialEvent:
         signals = []
         sample_rate = search_map.sample_rate
 
-        # make smaller search map corresponding to the included recorders
-        reduced_search_map = search_map.subset(self.receiver_locations)
-
         # load audio signals from each receiver
         # todo extend extracted clip by max_delay on either side? see spatial_event._estimate_delays
 
@@ -446,8 +443,8 @@ class SpatialEvent:
         result = msrp.localize(
             signals=signals,
             receiver_positions=self.receiver_locations,
-            search_map=reduced_search_map,
-            keep_power_map=keep_power_map,
+            search_map=search_map,
+            keep_maps=keep_power_map,
         )
         estimate = PositionEstimate(
             location_estimate=result["location"],
@@ -464,7 +461,7 @@ class SpatialEvent:
             # include the complete set of steered response power and associated positions
             # in the returned PositionEstimate
             estimate.power_map = result["power_map"]
-            estimate.search_map = reduced_search_map
+            estimate.search_map = result["search_map"]
 
         return estimate
 

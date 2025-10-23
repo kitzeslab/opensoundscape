@@ -58,22 +58,20 @@ def get_receiver_positions(file_coords):
     if not coord_cols:
         raise ValueError("file_coords must have at least 'x' and 'y' columns")
 
-    # Drop duplicate coordinate rows, preserving order
+    # Unique receiver positions
     receiver_positions = (
         file_coords[coord_cols].drop_duplicates().reset_index(drop=True)
     )
 
-    # Map each file path to its receiver index
-    # Use numpy broadcasting for efficiency
-    # coords_array = file_coords[coord_cols].to_numpy()
-    unique_array = receiver_positions[coord_cols].to_numpy()
+    # Use merge with an indicator for matching, preserving NaNs properly
+    merged = file_coords.reset_index().merge(
+        receiver_positions.reset_index().rename(columns={"index": "rec_idx"}),
+        on=coord_cols,
+        how="left",
+    )
 
-    # Compute mapping by matching rows
-    # (this assumes exact floating point matches)
-    file_to_recorder_idx = {}
-    for i, (path, row) in enumerate(file_coords.iterrows()):
-        idx = np.where((unique_array == row[coord_cols].to_numpy()).all(axis=1))[0][0]
-        file_to_recorder_idx[path] = int(idx)
+    # Map file path (index of file_coords) to receiver index
+    file_to_recorder_idx = merged.set_index(file_coords.index.name)["rec_idx"].to_dict()
 
     return receiver_positions, file_to_recorder_idx
 
@@ -121,7 +119,7 @@ class SynchronizedRecorderArray:
 
         # create df of the unique receiver positions
         # file_to_recorder_idx maps from file path to row index in receiver_positions
-        self.receiver_positions, self.file_to_recorder_idx = get_receiver_positions(
+        self.receiver_positions, self.file_to_receiver_idx = get_receiver_positions(
             file_coords
         )
 
@@ -353,7 +351,7 @@ class SynchronizedRecorderArray:
                 audio_sample_rate is not None
             ), "must provide audio_sample_rate for msrp localization if not providing spatial_grid"
 
-            spatial_grid = msrp.SpatialGrid(
+            spatial_grid = msrp.SearchMap(
                 recorder_positions=self.receiver_positions.values,
                 sample_rate=audio_sample_rate,
                 resolution=resolution,
@@ -488,7 +486,7 @@ class SynchronizedRecorderArray:
         """
         # check that all files have coordinates in file_coords
         if len(self.check_files_missing_coordinates(detections)) > 0:
-            raise UserWarning(
+            warnings.warn(
                 "WARNING: Not all audio files have corresponding coordinates in self.file_coords."
                 "Check file_coords.index contains each file in detections.index. "
                 "Use self.check_files_missing_coordinates() for list of files. "

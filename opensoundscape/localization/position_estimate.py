@@ -136,7 +136,7 @@ class PositionEstimate:
         from matplotlib import pyplot as plt
 
         search_map = self.search_map
-        heights = np.unique(search_map.grid[:, 2])
+        heights = np.unique(search_map.search_points[:, 2])
         heights = select_evenly_spaced_values(heights, max_plots)
         n_plots = len(heights)
 
@@ -146,10 +146,10 @@ class PositionEstimate:
 
         for i, height in enumerate(heights):
             ax = axs[i]
-            grid_at_height_mask = search_map.grid[:, 2] == height
+            grid_at_height_mask = search_map.search_points[:, 2] == height
             # select x and y values from search_mask.grid using mask
-            x = search_map.grid[grid_at_height_mask, 0]
-            y = search_map.grid[grid_at_height_mask, 1]
+            x = search_map.search_points[grid_at_height_mask, 0]
+            y = search_map.search_points[grid_at_height_mask, 1]
             power = self.power_map[grid_at_height_mask]
             rec = self.receiver_locations
 
