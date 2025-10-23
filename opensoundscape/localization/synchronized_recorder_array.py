@@ -305,6 +305,7 @@ class SynchronizedRecorderArray:
         spatial_grid=None,
         num_workers=1,
         keep_power_map=False,
+        **kwargs,
     ):
         """localizes events in parallel using modified steered response power algorithm
 
@@ -334,6 +335,7 @@ class SynchronizedRecorderArray:
             localization_algorithm="msrp",
             search_map=spatial_grid,
             keep_power_map=keep_power_map,
+            **kwargs,
         )
 
     def localize_detections_msrp(
@@ -349,6 +351,7 @@ class SynchronizedRecorderArray:
         spatial_grid=None,
         num_workers=1,
         keep_power_map=False,
+        **kwargs,
     ):
         """localizes detections using modified steered response power algorithm
 
@@ -378,6 +381,7 @@ class SynchronizedRecorderArray:
             spatial_grid=spatial_grid,
             num_workers=num_workers,
             keep_power_map=keep_power_map,
+            **kwargs,
         )
 
         return position_estimates

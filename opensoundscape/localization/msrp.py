@@ -407,6 +407,7 @@ def compute_msrp(
             tmax = t1.at[grid_point, rec_pair]
             if tmax >= tmin:
                 # >0 interval of valid time delays for this receiver pair in this grid cell
+                # include the cc values from this interval in aggregated steered response power
                 cell_ccs.extend(pairwise_cc[rec_pair][tmin : tmax + 1])
 
         # Aggregation: default is to sum the ccs for this cell over all receiver pairs
