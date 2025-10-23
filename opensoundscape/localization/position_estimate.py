@@ -136,24 +136,16 @@ class PositionEstimate:
         from matplotlib import pyplot as plt
 
         search_map = self.search_map
-        heights = np.unique(search_map.search_points[:, 2])
-        heights = select_evenly_spaced_values(heights, max_plots)
-        n_plots = len(heights)
+        dims = search_map.search_points.shape[1]
+        if dims == 2:
+            fig, ax = plt.subplots(1, 1)
 
-        # look at one specific height
-        fig, axs = plt.subplots((n_plots // n_col) + 1, n_col)
-        axs = axs.flatten()
-
-        for i, height in enumerate(heights):
-            ax = axs[i]
-            grid_at_height_mask = search_map.search_points[:, 2] == height
-            # select x and y values from search_mask.grid using mask
-            x = search_map.search_points[grid_at_height_mask, 0]
-            y = search_map.search_points[grid_at_height_mask, 1]
-            power = self.power_map[grid_at_height_mask]
+            x = search_map.search_points.values[:, 0]
+            y = search_map.search_points.values[:, 1]
+            power = self.power_map.values
             rec = self.receiver_locations
 
-            ax.scatter(x, y, c=power)
+            sc = ax.scatter(x, y, c=power)
             ax.scatter(
                 rec[:, 0],
                 rec[:, 1],
@@ -171,12 +163,51 @@ class PositionEstimate:
                 marker="x",
                 s=200,
             )
-            ax.set_title(f"height: {height}")
+            fig.colorbar(sc, ax=ax, label="Power")
+            ax.set_title("M-SRP-PHAT Power Map")
+        else:
 
-        # remove unused axes
-        if n_plots < len(axs):
-            for ax in axs[n_plots:]:
-                ax.remove()
+            heights = np.unique(search_map.search_points.values[:, 2])
+            heights = select_evenly_spaced_values(heights, max_plots)
+            n_plots = len(heights)
+
+            # look at one specific height
+            fig, axs = plt.subplots((n_plots // n_col) + 1, n_col)
+            axs = axs.flatten()
+
+            for i, height in enumerate(heights):
+                ax = axs[i]
+                grid_at_height_mask = search_map.search_points.values[:, 2] == height
+                # select x and y values from search_mask.grid using mask
+                x = search_map.search_points.values[grid_at_height_mask, 0]
+                y = search_map.search_points.values[grid_at_height_mask, 1]
+                power = self.power_map[grid_at_height_mask].values
+                rec = self.receiver_locations
+
+                ax.scatter(x, y, c=power)
+                ax.scatter(
+                    rec[:, 0],
+                    rec[:, 1],
+                    c="Grey",
+                    label="Receivers",
+                    marker=".",
+                    s=100,
+                )
+
+                ax.scatter(
+                    self.location_estimate[0],
+                    self.location_estimate[1],
+                    c="Red",
+                    label="Estimated Source",
+                    marker="x",
+                    s=200,
+                )
+                ax.set_title(f"height: {height}")
+
+            # remove unused axes
+            if n_plots < len(axs):
+                for ax in axs[n_plots:]:
+                    ax.remove()
 
         axs[0].legend()
         return fig, axs

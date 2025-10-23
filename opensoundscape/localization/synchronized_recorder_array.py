@@ -320,7 +320,7 @@ class SynchronizedRecorderArray:
             ), "must provide audio_sample_rate for msrp localization if not providing spatial_grid"
 
             spatial_grid = msrp.SearchMap(
-                receiver_positions=self.receiver_positions.values,
+                receiver_positions=self.receiver_positions,
                 sample_rate=audio_sample_rate,
                 resolution=resolution,
                 margin=margin,

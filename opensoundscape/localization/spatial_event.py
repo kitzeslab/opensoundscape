@@ -410,7 +410,7 @@ class SpatialEvent:
                 d[key] = str(d[key])
         return d
 
-    def localize_msrp(self, search_map, keep_power_map=False):
+    def localize_msrp(self, search_map, keep_power_map=False, **kwargs):
         """perform M-SRP-PHAT localization on a SpatialEvent"""
         from opensoundscape.localization import msrp
 
@@ -437,17 +437,22 @@ class SpatialEvent:
         # combine into np.array with consistent signal length
         min_len = np.min([len(s) for s in signals])
         signals = np.array([s[:min_len] for s in signals])
+        signals = {rec: s for rec, s in zip(self.receivers, signals)}
+
+        if self.bandpass_range is None:
+            low_f, high_f = None, None
+        else:
+            low_f, high_f = self.bandpass_range
 
         # run msrp localization
-        # TODO:
-        # msrp.localize assumes that the order of signals/receiver positions will
-        # match search_map.pairwise_time_delays when iterating pairs as double-loop
-        # so we should make sure to subset search_map.pairwise_time_delays accordingly
         result = msrp.localize(
             signals=signals,
-            receiver_positions=self.receiver_locations,
             search_map=search_map,
+            freq_low=low_f,
+            freq_high=high_f,
             keep_maps=keep_power_map,
+            cc_filter=self.cc_filter,
+            **kwargs,
         )
         estimate = PositionEstimate(
             location_estimate=result["location"],
