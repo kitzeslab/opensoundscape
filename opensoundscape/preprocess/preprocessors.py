@@ -1,6 +1,7 @@
 """Preprocessor classes: tools for preparing and augmenting audio samples"""
 
 from pathlib import Path
+from matplotlib import transforms
 import pandas as pd
 import copy
 import time
@@ -597,6 +598,140 @@ class SpectrogramPreprocessor(BasePreprocessor):
         sample.channels = self.channels
 
         return sample
+
+
+@register_preprocessor_cls
+class TorchSpectrogramPreprocessor(BasePreprocessor):
+    """Spectrogram Preprocessor using torchvision.transforms for export to ONNX
+
+    loads audio, creates torch spectrogram, performs augmentations
+
+    audio is resampled to self.sample_rate
+
+    dimensions of output spectrogram are unmodified by default
+
+    Args:
+        sample_duration:
+            length in seconds of audio samples generated
+            If not None, longer clips are trimmed to this length. By default,
+            shorter clips will be extended (modify random_trim_audio and
+            trim_audio to change behavior).
+        sample_rate:
+            sample rate to which audio files are resampled when loaded
+        overlay_df: if not None, will include an overlay action drawing
+            samples from this df
+        torch_transforms: optionally pass custom list of torchvision transforms
+            to use instead of default set
+
+    """
+
+    def __init__(
+        self,
+        sample_duration,
+        sample_rate,
+        overlay_df=None,
+        torch_transforms=None,
+    ):
+        super().__init__(sample_duration=sample_duration)
+        self.channels = 1
+
+        try:
+            import torchaudio, torchvision
+        except ImportError:
+            raise ImportError(
+                "TorchSpectrogramPreprocessor requires torchaudio and torchvision packages. Please install them to use this preprocessor."
+            )
+
+        # define an Action that runs a set of torchvision/torchaudio transforms
+        if torch_transforms is None:
+            # define default set of torchvision transforms
+            torch_transforms = [
+                # could normalize audio signal here if desired
+                torchaudio.transforms.Spectrogram(
+                    n_fft=512,
+                    win_length=512,
+                    hop_length=256,
+                ),
+                torchaudio.transforms.AmplitudeToDB(top_db=100),
+            ]
+        transform_action = actions.TorchTransforms(transforms=torch_transforms)
+        # to override the transforms list, use:
+        # self.pipeline['transform'].transforms=[list of torchvision transforms]
+
+        # define a default set of Actions
+        # each Action's .__call__ method is called during preprocessing
+        # the .__call__ method takes an AudioSample object as an argument
+        # and modifies it _in place_!!
+        self.pipeline = pd.Series(
+            {
+                # load a segment of an audio file into an Audio object
+                # references AudioSample attributes: start_time and duration
+                "load_audio": AudioClipLoader(
+                    out_of_bounds_mode="ignore", sample_rate=sample_rate
+                ),
+                # if we are augmenting and get a long file, take a random trim from it
+                "random_trim_audio": AudioTrim(
+                    target_duration=sample_duration,
+                    is_augmentation=True,
+                    random_trim=True,
+                ),
+                # otherwise, we expect to get the correct duration. no random trim
+                # trim or extend (w/silence) clips to correct length
+                "trim_audio": AudioTrim(
+                    target_duration=sample_duration, random_trim=False
+                ),
+                # extract samples from Audio object
+                "to_tensor": actions.AudioToSamplesTensor(),
+                # convert Audio object to PyTorch tensor spectrogram
+                "transform": transform_action,
+                "overlay": (
+                    Overlay(
+                        is_augmentation=True,
+                        overlay_df=pd.DataFrame() if overlay_df is None else overlay_df,
+                        update_labels=True,
+                    )
+                ),
+                # add vertical (time) and horizontal (frequency) masking bars
+                "time_mask": Action(action_functions.time_mask, is_augmentation=True),
+                "frequency_mask": Action(
+                    action_functions.frequency_mask, is_augmentation=True
+                ),
+                # add noise to the sample
+                "add_noise": Action(
+                    action_functions.tensor_add_noise, is_augmentation=True, std=0.005
+                ),
+                # linearly scale the _values_ of the sample
+                # "rescale": Action(action_functions.scale_tensor),
+                # apply random affine (rotation, translation, scaling, shearing) augmentation
+                # default values are reasonable for spectrograms: no shearing or rotation
+                "random_affine": Action(
+                    action_functions.torch_random_affine, is_augmentation=True
+                ),
+            }
+        )
+
+        # bypass overlay if overlay_df was not provided (None)
+        # keep the action in the pipeline for ease of enabling it later
+        if overlay_df is None or len(overlay_df) < 1:
+            self.pipeline["overlay"].bypass = True
+
+        # self.sample_rate = sample_rate  # updates load_audio action
+
+    @property
+    def sample_rate(self):
+        return self.pipeline["load_audio"].get("sample_rate")
+
+    @sample_rate.setter
+    def sample_rate(self, value):
+        self.pipeline["load_audio"].set(sample_rate=value)
+
+    @classmethod
+    def from_dict(cls, dict):
+        # extract sample rate from load_audio action
+        sr = dict["pipeline"]["load_audio"]["params"].get("sample_rate")
+        dict["init_kwargs"]["sample_rate"] = sr
+
+        return super().from_dict(dict)
 
 
 class PCENPreprocessor(preprocessors.SpectrogramPreprocessor):

@@ -7,14 +7,14 @@ They take a single sample of a specific type and return the transformed
 or augmented sample, which may or may not be the same type as the original.
 
 See the action_functions.py module for functions that can be used to create actions using the Action class.
-Pass the Action class any function to the action_fn argument, and pass additional arguments to 
-set parameters of the Action's .params dictionary. 
+Pass the Action class any function to the action_fn argument, and pass additional arguments to
+set parameters of the Action's .params dictionary.
 
 Note on converting to/from dictionary/json/yaml:
-This will break if you use non-built-in preprocessing operations. 
-However, will work if you provide any custom functions/classes and 
-decorate them with @register_action_cls or @register_action_fn. 
-See the docstring of `action_from_dict()` for examples. 
+This will break if you use non-built-in preprocessing operations.
+However, will work if you provide any custom functions/classes and
+decorate them with @register_action_cls or @register_action_fn.
+See the docstring of `action_from_dict()` for examples.
 
 See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
@@ -23,6 +23,7 @@ for details on how to use and create your own actions.
 import random
 import warnings
 import numpy as np
+import torch
 import torchvision
 import pandas as pd
 import copy
@@ -277,6 +278,14 @@ class Action(BaseAction):
 
 
 @register_action_cls
+class AudioToSamplesTensor(BaseAction):
+    """extract Audio.samples to a PyTorch tensor and add channel dimensions"""
+
+    def __call__(self, sample, **kwargs):
+        sample.data = torch.tensor(sample.data.samples).unsqueeze(0)
+
+
+@register_action_cls
 class AudioClipLoader(Action):
     """Action to load clips from an audio file
 
@@ -412,3 +421,104 @@ class SpectrogramToTensor(Action):
         # use info from sample for desired shape and n channels
         kwargs.update(shape=[sample.height, sample.width], channels=sample.channels)
         sample.data = self.action_fn(sample.data, **dict(self.params, **kwargs))
+
+
+@register_action_cls
+class TorchTransforms(BaseAction):
+    """Action to apply torchvision transforms to sample
+
+    Args:
+        transforms: list of torchvision transform objects to apply in sequence
+            see https://pytorch.org/vision/stable/transforms.html
+            and https://pytorch.org/audio/stable/transforms.html
+    """
+
+    def __init__(self, transforms):
+        super().__init__()
+        self.transforms = transforms
+
+    @property
+    def transforms(self):
+        return self._transforms_composed
+
+    @transforms.setter
+    def transforms(self, value):
+        """convert list of transforms to torchvision.transforms.Compose object"""
+        if isinstance(value, torchvision.transforms.Compose):
+            self._transforms_composed = value
+        else:
+            self._transforms_composed = torchvision.transforms.Compose(value)
+
+    def __call__(self, sample):
+        sample.data = self.transforms(sample.data)
+        return sample
+
+    def to_dict(self, ignore_attributes=()):
+        """export the composed transforms and their parameters to a dictionary
+
+        useful for saving to JSON
+
+        Will fail if any of the transforms or their parameters are not serializable.
+        """
+        d = super().to_dict(
+            ignore_attributes=ignore_attributes + ("transforms", "_transforms_composed")
+        )
+        try:
+            d["transforms"] = [
+                serialize_transform(t) for t in self.transforms.transforms
+            ]
+        except Exception as e:
+            raise ValueError(f"Could not serialize torch transforms") from e
+
+        return d
+
+    @classmethod
+    def from_dict(cls, dict):
+        """initialize from dictionary created by .to_dict()"""
+        try:
+            transforms = [
+                deserialize_transform(t_dict) for t_dict in dict["transforms"]
+            ]
+        except Exception as e:
+            raise ValueError(f"Could not deserialize torch transforms") from e
+
+        return cls(transforms=transforms)
+
+
+import inspect
+
+
+def serialize_transform(transform):
+    """
+    Convert a torchvision/torchaudio transform object into a JSON-serializable dict.
+    """
+    cls = transform.__class__
+    params = {}
+
+    # Try to extract the constructor arguments (safe for most TorchVision/Audio transforms)
+    sig = inspect.signature(cls.__init__)
+    for name, param in sig.parameters.items():
+        if name == "self":
+            continue
+        if hasattr(transform, name):
+            value = getattr(transform, name)
+            # Convert tensors, enums, etc. to JSON-friendly types
+            if hasattr(value, "tolist"):
+                value = value.tolist()
+            params[name] = value
+
+    return {"module": cls.__module__, "class": cls.__name__, "params": params}
+
+
+def deserialize_transform(transform_dict):
+    """
+    Recreate a transform from a serialized dict.
+    """
+    module_name = transform_dict["module"]
+    class_name = transform_dict["class"]
+    params = transform_dict["params"]
+
+    # Dynamically import module and class
+    module = __import__(module_name, fromlist=[class_name])
+    cls = getattr(module, class_name)
+    return cls(**params)

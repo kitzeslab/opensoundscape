@@ -1,0 +1,146 @@
+from opensoundscape.ml.cnn_architectures import set_layer_from_name
+import copy
+import warnings
+import torch
+
+
+class ONNXModel(torch.nn.Module):
+    def __init__(self, sequential_models, outputs=None):
+        super(ONNXModel, self).__init__()
+
+        for key, m in sequential_models.items():
+            try:
+                m.eval()
+            except:
+                pass
+            if hasattr(m, "modules"):
+                # Freeze batchnorm layers to avoid onnx export issue with indirect reference
+                for module in m.modules():
+                    if isinstance(module, torch.nn.BatchNorm2d):
+                        module.eval()
+                        module.track_running_stats = False
+        self.sequential_models = sequential_models
+
+        # determine which of the sequential model outputs to include in output dict
+        if outputs is None:
+            # retain outputs of each sequential model by default
+            outputs = list(sequential_models.keys())
+        self.outputs = outputs
+
+    def forward(self, x):
+        outs = {}
+        for name, m in self.sequential_models.items():
+            x = m(x)
+            if name in self.outputs:
+                # only include the outputs if listed in self.outputs
+                outs[name] = x.clone()
+        return outs
+
+
+def to_onnx_program(
+    preprocessing_transforms,
+    torch_model,
+    input_length,
+    include_preprocessor_output=True,
+    include_embedding_output=True,
+    include_classifier_output=True,
+):
+    """Export a torch model with preprocessing transforms to ONNX format
+
+    Attempts to separate embedding and classifier outputs from torch_model, if
+    torch_model has attribute 'classifier_layer' indicating the name of the layer
+    that should be considered the "classifier". The remaining layers are considered
+    the "embedding" portion of the network. There should be no layers after the
+    classifier layer.
+
+    Args:
+        preprocessing_transforms: torch.nn.Module, preprocessing transforms to apply to raw audio
+        torch_model: torch.nn.Module, model to export
+        input_length: int, length of input audio samples in number of samples
+        include_preprocessor_output: bool, whether to include preprocessor output in ONNX model outputs
+        include_embedding_output: bool, whether to include embedding output in ONNX model outputs
+        include_classifier_output: bool, whether to include classifier output in ONNX model outputs
+
+    Returns:
+        onnx_model: ONNX program model object
+
+    Example:
+    ```python
+    from opensoundscape import Audio, Spectrogram, CNN, BoxedAnnotations, preprocessors
+
+    model = CNN(
+        architecture="efficientnet_b0",
+        classes=[0, 1, 2, 3],
+        sample_duration=3,
+        preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+        sample_rate=32000,
+    )
+    # a list of torchaudio preprocesesing transforms such as Spectrogram, MelSpectrogram, etc.
+    transforms=model.preprocessor["transforms"].transforms
+
+    # expected number of samples in input audio: 3*32000
+    input_length = model.preprocessor.sample_rate * model.preprocessor.sample_duration
+
+    onnx_program = to_onnx_program(
+        preprocessing_transforms=transforms,
+        torch_model=model.network,
+        input_length=input_length,
+        include_preprocessor_output=True,
+    )
+    onnx_program.save("efficientnet_b0.onnx")
+    ```
+    """
+    # attempt to separate embeddings and classifier outputs
+    outputs = []
+    if include_preprocessor_output:
+        outputs.append("sample")
+    if include_embedding_output:
+        outputs.append("embedding")
+    if include_classifier_output:
+        outputs.append("classifier")
+
+    try:
+        # if torch_model.network.classifier_layer is specified, we can separate embedding and classifier
+        # portions of the network
+        assert hasattr(torch_model, "classifier_layer")
+        embedding_model = copy.deepcopy(torch_model)
+        set_layer_from_name(
+            embedding_model, embedding_model.classifier_layer, torch.nn.Identity()
+        )
+        classifier = torch.nn.Module.get_submodule(
+            torch_model, torch_model.classifier_layer
+        )
+        onnx_model = ONNXModel(
+            {
+                "sample": preprocessing_transforms,
+                "embedding": embedding_model,
+                "classifier": classifier,
+            },
+            outputs=outputs,
+        )
+    except:
+        if include_embedding_output:
+            outputs.remove("embedding")
+            warnings.warn(
+                """Could not separate embedding and classifier outputs; exporting
+                model without embedding outputs. To separate, make sure
+                torch_model has attribute 'classifier_layer' indicating the name
+                of the layer to separate embeddings from classifier."""
+            )
+        onnx_model = ONNXModel(
+            {
+                "sample": preprocessing_transforms,
+                "classifier": torch_model,
+            }
+        )
+
+    input_batch = torch.rand(2, 1, input_length)
+
+    return torch.onnx.export(
+        onnx_model,
+        (input_batch,),
+        dynamic_shapes=[{0: "dim_x"}],
+        report=True,
+        dynamo=True,
+        output_names=outputs,
+    )
