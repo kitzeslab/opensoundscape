@@ -356,6 +356,21 @@ def test_adaptive_random_gain_actually_changes_audio(sample_audio):
     assert not np.array_equal(result.samples, original_samples)
 
 
+def test_random_lowpass(sample_audio):
+    """Test that random_lowpass actually applies a lowpass filter"""
+    original_samples = sample_audio.data.samples.copy()
+
+    result = action_functions.random_lowpass(
+        sample_audio.data,
+        cutoff_range=(1000, 5000),
+        probability=1.0,
+        order_range=(1, 2),
+    )
+
+    # Audio should be different from original (high freq content reduced)
+    assert not np.array_equal(result.samples, original_samples)
+
+
 def test_adaptive_random_gain_with_action_wrapper():
     """Test adaptive_random_gain works with Action wrapper"""
     audio = Audio.noise(duration=1, sample_rate=22050, dBFS=0)

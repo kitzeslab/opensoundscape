@@ -54,6 +54,7 @@ def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
     return audio.apply_gain(dB=gain, clip_range=clip_range)
 
 
+@register_action_fn
 def adaptive_random_gain(
     audio, gain_range=(-30, 0), min_output_level=-40, clip_range=[-1, 1]
 ):
@@ -81,6 +82,7 @@ def adaptive_random_gain(
     )
 
 
+@register_action_fn
 def adaptive_random_noise(audio, snr_range=(-20, 0), signal_dB=0, color="white"):
     """apply random noise, selecting from a signal to noise ratio range
 
@@ -145,6 +147,35 @@ def audio_add_noise(audio, noise_dB=-30, signal_dB=0, color="white"):
     )
 
     return mix([audio, noise], gain=[signal_dB, 0])
+
+
+@register_action_fn
+def random_lowpass(
+    audio, cutoff_range=(3000, 9000), probability=0.5, order_range=(1, 1)
+):
+    """randomly apply lowpass filter to audio
+
+    Args:
+        audio: an Audio object
+        cutoff_range: (min,max) frequency range in Hz for cutoff frequency
+            - cutoff frequency is chosen randomly from this range with uniform distribution
+        probability: probability of applying the lowpass filter
+        order_range: (min,max) range of filter orders to choose from
+            - order is chosen randomly from this range with uniform distribution
+            - higher order = steeper filter rolloff; default 1 = gentle rolloff
+            2 already creates steep enough rollof to eliminate most high freq content
+
+    Returns:
+        Audio object, possibly lowpass filtered
+    """
+    if random.random() > probability:
+        # don't augment
+        return audio
+
+    cutoff_freq = random.uniform(cutoff_range[0], cutoff_range[1])
+    order = random.randint(order_range[0], order_range[1])
+
+    return audio.lowpass(cutoff_f=cutoff_freq, order=order)
 
 
 @register_action_fn
