@@ -2387,7 +2387,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         Exporting an EfficientNet model to ONNX format:
         ```python
-        from opensoundscape import Audio, Spectrogram, CNN, BoxedAnnotations, preprocessors
+        from opensoundscape import CNN, preprocessors
 
         model = CNN(
             architecture="efficientnet_b0",
@@ -2431,6 +2431,52 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         outs_dict = {name: ort_outs[i] for i, name in enumerate(output_names)}
         print(f"shape of outputs for inference on one batch of batch size {batch_size}:")
         print({k: v.shape for k, v in outs_dict.items()})
+        ```
+
+        Example 2: Exporting a model with customized preprocessing transforms
+
+        ```python
+        from opensoundscape import CNN, preprocessors
+
+        model = CNN(
+            architecture="efficientnet_b0",
+            classes=[0, 1, 2, 3],
+            sample_duration=3,
+            preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+            sample_rate=32000,
+            bandpass_range=(3000, 10000),
+            lower_dB_range=-30,
+            rescale_mean_sd=(-30, 20),
+            spec_nfft=512,
+            spec_window_length=512,
+            spec_hop_length=128,
+            # resize_ft=(200, 512), # using resize_ft breaks serialization for json save/load!
+            mel_scale=True,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet_melspec.onnx")
+        ```
+
+        Example 3: Writing a custom list of preprocessing transforms
+
+        ```python
+        import torchaudio
+        from opensoundscape import CNN, preprocessors
+        model = CNN("resnet18", classes=[0], sample_duration=5)
+        # custom list of torchaudio and torchvision transforms
+        my_transforms = [
+            torchaudio.transforms.Spectrogram(
+                n_fft=512,
+                win_length=512,
+                hop_length=128,
+            ),
+            torchaudio.transforms.AmplitudeToDB(top_db=80),
+        ]
+        model.preprocessor = preprocessors.TorchSpectrogramPreprocessor(
+            sample_rate=32000,
+            sample_duration=model.preprocessor.sample_duration,
+            torch_transforms=my_transforms,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet_custom.onnx")
         ```
         """
 

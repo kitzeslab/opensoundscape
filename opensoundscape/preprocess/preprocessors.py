@@ -602,28 +602,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
 
 @register_preprocessor_cls
 class TorchSpectrogramPreprocessor(BasePreprocessor):
-    """Spectrogram Preprocessor using torchvision.transforms for export to ONNX
-
-    loads audio, creates torch spectrogram, performs augmentations
-
-    audio is resampled to self.sample_rate
-
-    dimensions of output spectrogram are unmodified by default
-
-    Args:
-        sample_duration:
-            length in seconds of audio samples generated
-            If not None, longer clips are trimmed to this length. By default,
-            shorter clips will be extended (modify random_trim_audio and
-            trim_audio to change behavior).
-        sample_rate:
-            sample rate to which audio files are resampled when loaded
-        overlay_df: if not None, will include an overlay action drawing
-            samples from this df
-        torch_transforms: optionally pass custom list of torchvision transforms
-            to use instead of default set
-
-    """
+    """Spectrogram Preprocessor using torchvision.transforms for export to ONNX"""
 
     def __init__(
         self,
@@ -631,7 +610,91 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
         sample_rate,
         overlay_df=None,
         torch_transforms=None,
+        spec_nfft=512,
+        spec_window_length=None,
+        spec_hop_length=None,
+        lower_dB_range=-80,
+        bandpass_range=None,
+        rescale_mean_sd=None,
+        resize_ft=None,
+        n_mels=None,
     ):
+        """Spectrogram Preprocessor using torchvision.transforms, allows export to ONNX
+
+        loads audio, creates torch spectrogram, performs augmentations
+
+        audio is resampled to self.sample_rate unless sample_rate is None
+
+        to update the list of torchaudio/torchvision transforms, use:
+        self.pipeline['transform'].transforms=[list of torchvision transforms]
+
+        Only the contents of the torchvision transforms will be exported to ONNX.
+        Any random augmentations on audio and spectrograms are not included in the
+        torchvision transforms and will not be exported to ONNX.
+
+        Args:
+            sample_duration:
+                length in seconds of audio samples generated
+                If not None, longer clips are trimmed to this length. By default,
+                shorter clips will be extended (modify random_trim_audio and
+                trim_audio to change behavior).
+            sample_rate:
+                sample rate to which audio files are resampled when loaded
+            overlay_df: if not None, will include an overlay action drawing
+                samples from this df
+            torch_transforms: optionally pass custom list of torchvision transforms
+                to use instead of default set
+            spec_nfft: number of FFT components for spectrogram
+                ignored if torch_transforms is provided
+            spec_window_length: window length for spectrogram
+                [default: None, uses spec_nfft]
+                ignored if torch_transforms is provided
+            spec_hop_length: hop length for spectrogram
+                [default: None, uses spec_window_length // 2]
+                ignored if torch_transforms is provided
+            lower_dB_range: dynamic range for spectrogram in decibels
+                -1*lower_dB_range is passed to AmplitudeToDB transform
+                ignored if torch_transforms is provided
+            bandpass_range: tuple (min_f, max_f) frequency range to crop spectrogram
+                [default: None, no bandpass]
+                ignored if torch_transforms is provided
+            normalize_mean_std: tuple (mean, std) for rescaling values as (x - mean) / std
+                [default: None, no normalization]
+                ignored if torch_transforms is provided
+            resize_ft: tuple (frequency dim, time dim) to resize spectrogram [default: None]
+                Note: including this transform will make the preprocessor non-serializable
+                i.e. cannot be saved to JSON/YAML. We recommend using default "None"
+                for no resizing.
+                ignored if torch_transforms is provided
+            n_mels: if not None, use MelScale transform to convert to mel spectrogram
+                with n_mels frequency bins
+                [default: None]
+                ignored if torch_transforms is provided
+
+        Returns:
+            initialized TorchSpectrogramPreprocessor object
+
+        Example:
+        Initialize with a custom list of transforms:
+        ```python
+        import torchaudio
+        from opensoundscape import preprocessors
+        my_transforms = [
+            torchaudio.transforms.Spectrogram(
+                n_fft=512,
+                win_length=512,
+                hop_length=128,
+            ),
+            torchaudio.transforms.AmplitudeToDB(top_db=80),
+        ]
+        preprocessor = preprocessors.TorchSpectrogramPreprocessor(
+            sample_rate=32000,
+            sample_duration=5,
+            torch_transforms=my_transforms,
+        )
+        ```
+
+        """
         super().__init__(sample_duration=sample_duration)
         self.channels = 1
 
@@ -645,23 +708,60 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
         # define an Action that runs a set of torchvision/torchaudio transforms
         if torch_transforms is None:
             # define default set of torchvision transforms
-            torch_transforms = [
-                # could normalize audio signal here if desired
-                torchaudio.transforms.Spectrogram(
-                    n_fft=512,
-                    win_length=512,
-                    hop_length=256,
-                ),
-                torchaudio.transforms.AmplitudeToDB(top_db=100),
-            ]
-        transform_action = actions.TorchTransforms(transforms=torch_transforms)
-        # to override the transforms list, use:
-        # self.pipeline['transform'].transforms=[list of torchvision transforms]
 
-        # define a default set of Actions
-        # each Action's .__call__ method is called during preprocessing
-        # the .__call__ method takes an AudioSample object as an argument
-        # and modifies it _in place_!!
+            # spectrogram transform:
+            torch_transforms = [
+                torchaudio.transforms.Spectrogram(
+                    n_fft=spec_nfft,
+                    win_length=spec_window_length,
+                    hop_length=spec_hop_length,
+                )
+            ]
+            if n_mels is not None:
+                if bandpass_range is not None:
+                    f_min, f_max = bandpass_range
+                else:
+                    f_min, f_max = 0, None
+
+                torch_transforms.append(
+                    actions.MelScale(
+                        n_mels=n_mels,
+                        sample_rate=sample_rate,
+                        n_stft=spec_nfft // 2 + 1,
+                        f_max=f_max,
+                        f_min=f_min,
+                    )
+                )
+                # add an attribute .n_stft so that it can re-load properly
+
+            torch_transforms.append(
+                torchaudio.transforms.AmplitudeToDB(top_db=-1 * lower_dB_range),
+            )
+            if bandpass_range is not None and n_mels is None:
+                f_min, f_max = bandpass_range
+                torch_transforms.append(
+                    actions.TorchCropFreq(
+                        f_min=f_min,
+                        f_max=f_max,
+                        sample_rate=sample_rate,
+                        n_fft=spec_nfft,
+                    )
+                )
+            if rescale_mean_sd is not None:
+                mean, std = rescale_mean_sd
+                # note that the confusingly-named Normalize transform performs
+                # (x - mean) / std, not per-sample normalization
+                torch_transforms.append(
+                    torchvision.transforms.Normalize(mean=mean, std=std)
+                )
+            if resize_ft is not None:
+                torch_transforms.append(torchvision.transforms.Resize(resize_ft))
+        transform_action = actions.TorchTransforms(transforms=torch_transforms)
+
+        # the pipeline first loads audio clips and trims them to the correct length
+        # then applies the torchvision transforms to create spectrogram tensors
+        # random augmentations on audio and spectrograms are not included in the
+        # torchvision transforms and will not be exported to ONNX
         self.pipeline = pd.Series(
             {
                 # load a segment of an audio file into an Audio object
@@ -714,8 +814,6 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
         # keep the action in the pipeline for ease of enabling it later
         if overlay_df is None or len(overlay_df) < 1:
             self.pipeline["overlay"].bypass = True
-
-        # self.sample_rate = sample_rate  # updates load_audio action
 
     @property
     def sample_rate(self):

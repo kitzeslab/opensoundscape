@@ -485,6 +485,37 @@ class TorchTransforms(BaseAction):
         return cls(transforms=transforms)
 
 
+import torchaudio
+
+
+class MelScale(torchaudio.transforms.MelScale):
+    """Patch of torchaudio.transforms.MelScale that saves n_stft attribute
+
+    This allows re-loading from a dictionary with the correct n_stft value.
+    """
+
+    def __init__(
+        self,
+        n_mels=128,
+        sample_rate=16000,
+        f_min=0.0,
+        f_max=None,
+        n_stft=201,
+        norm=None,
+        mel_scale="htk",
+    ):
+        super().__init__(
+            n_mels=n_mels,
+            sample_rate=sample_rate,
+            n_stft=n_stft,
+            f_min=f_min,
+            f_max=f_max,
+            norm=norm,
+            mel_scale=mel_scale,
+        )
+        self.n_stft = n_stft
+
+
 import inspect
 
 
@@ -522,3 +553,26 @@ def deserialize_transform(transform_dict):
     module = __import__(module_name, fromlist=[class_name])
     cls = getattr(module, class_name)
     return cls(**params)
+
+
+import torch
+
+
+class TorchCropFreq(torch.nn.Module):
+
+    # note: only for linear frequency spectrograms
+    # for MelSpectrograms, specify f_min and f_max during MelSpectrogram creation
+    def __init__(self, f_min, f_max, sample_rate, n_fft):
+        super().__init__()
+        self.f_min = f_min
+        self.f_max = f_max
+        self.sample_rate = sample_rate
+        self.n_fft = n_fft
+
+    def forward(self, tensor):
+        freq_res = self.sample_rate / self.n_fft
+        min_bin = int(self.f_min / freq_res)
+        max_bin = int(self.f_max / freq_res)
+        return torchvision.transforms.functional.crop(
+            tensor, min_bin, 0, max_bin - min_bin, tensor.shape[-1]
+        )
