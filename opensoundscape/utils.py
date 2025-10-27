@@ -346,7 +346,7 @@ def make_clip_df(
 
         if label_df is not None:
             # copy labels for this file to all of its clips
-            clips[label_df.columns] = label_df.loc[f]
+            clips[label_df.columns] = label_df.loc[f].values
 
         clip_dfs.append(clips)
 
