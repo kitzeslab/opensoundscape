@@ -1092,9 +1092,13 @@ class BoxedAnnotations:
                 annotations result in at least one clip being labeled 1
                 (if there are no gaps between clips).
             full_duration: The amount of time (seconds) to split into clips for each file
-                float or `None`; if `None`, attempts to get each file's duration
+                any of float, list, or `None`
+                - if `None`, attempts to get each file's duration
                 using `librosa.get_duration(path=file)` where file is the value
                 of `audio` for each row of self.df
+                - if float: uses this fixed duration for all files
+                - if list: should be same length as `audio_files`, giving duration
+                for each file
             class_subset: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
             audio_files: list of audio file paths (as str or pathlib.Path)
@@ -1159,15 +1163,32 @@ class BoxedAnnotations:
                     argument to `clip_labels()` will avoid the attempt to get 
                     audio file durations from file paths."""
                 ) from exc
-        else:  # use fixed full_duration for all files
-            # make a clip df, will be re-used for each file
-            clip_df_template = generate_clip_times_df(
-                full_duration=full_duration, clip_duration=clip_duration, **kwargs
-            )
-            # make a clip df for all files
-            clip_df = pd.concat([clip_df_template] * len(audio_files))
-            # add file column, repeating value of file across each clip
-            clip_df["file"] = np.repeat(audio_files, len(clip_df_template))
+        else:
+            # clip_duration is fixed for all files, or is a list of durations for each file
+            if isinstance(full_duration, (list, np.ndarray)):
+                assert len(full_duration) == len(audio_files), (
+                    "`full_duration` should be a float or a list/array "
+                    "with same length as `audio_files`, or None. Length did not match audio_files."
+                )
+            else:
+                # same duration for all files
+                assert isinstance(full_duration, (int, float)), (
+                    "`full_duration` should be a float or a list/array "
+                    f"with same length as `audio_files`, or None. Got type {type(full_duration)}."
+                )
+                full_duration = [full_duration] * len(audio_files)
+
+            dfs = []
+            for i, file in enumerate(audio_files):
+
+                df = generate_clip_times_df(
+                    full_duration=full_duration[i],
+                    clip_duration=clip_duration,
+                    **kwargs,
+                )
+                df["file"] = file
+                dfs.append(df)
+            clip_df = pd.concat(dfs).reset_index(drop=True)
             clip_df = clip_df.set_index(["file", "start_time", "end_time"])
 
         # call labels_on_index with clip_df

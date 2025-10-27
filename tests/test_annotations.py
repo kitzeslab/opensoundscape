@@ -543,6 +543,31 @@ def test_clip_labels(boxed_annotations):
     assert list(labels.multihot_dense) == [[1], [0], [0], [0], [0]]
 
 
+def test_clip_labels_full_duration_per_file(boxed_annotations_2_files):
+
+    # test full_duration is list one value per audio file
+    labels = boxed_annotations_2_files.clip_labels(
+        full_duration=[1, 2],
+        clip_duration=1.0,
+        clip_overlap=0,
+        class_subset=["a"],
+        min_label_overlap=0.25,
+        return_type="multihot",
+    )
+    assert np.array_equal(labels.values, np.array([[1, 0, 0]]).transpose())
+
+    # should raise error if length of full_duration list doesn't match audio files
+    with pytest.raises(AssertionError):
+        labels = boxed_annotations_2_files.clip_labels(
+            full_duration=[1, 1, 2, 3],  # too long
+            clip_duration=1.0,
+            clip_overlap=0,
+            class_subset=["a"],
+            min_label_overlap=0.25,
+            return_type="multihot",
+        )
+
+
 def test_clip_labels_overlap_fraction(boxed_annotations):
     # test that min_label_fraction argument works as expected.
     # expected behavior is that all clips with at least 50% are labeled, even if
