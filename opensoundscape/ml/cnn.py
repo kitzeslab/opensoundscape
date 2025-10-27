@@ -724,6 +724,38 @@ class SpectrogramModule(BaseModule):
             self._init_torch_metrics()
             self.loss_fn = CrossEntropyLoss_hot() if st else BCEWithLogitsLoss_hot()
 
+    def _generate_wandb_config(self):
+        # create a dictionary of parameters to save for this run
+        wandb_config = dict(
+            architecture=io.build_name(self.network),
+            sample_duration=self.preprocessor.sample_duration,
+            cuda_device_count=torch.cuda.device_count(),
+            mps_available=torch.backends.mps.is_available(),
+            classes=self.classes,
+            single_target=self.single_target,
+            opensoundscape_version=self.opensoundscape_version,
+        )
+        if "weight_decay" in self.optimizer_params:
+            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
+        else:
+            wandb_config["l2_regularization"] = "n/a"
+
+        if "lr" in self.optimizer_params:
+            wandb_config["learning_rate"] = self.optimizer_params["lr"]
+        else:
+            wandb_config["learning_rate"] = "n/a"
+
+        try:
+            wandb_config["sample_shape"] = [
+                self.preprocessor.height,
+                self.preprocessor.width,
+                self.preprocessor.channels,
+            ]
+        except:
+            wandb_config["sample_shape"] = "n/a"
+
+        return wandb_config
+
     def _init_torch_metrics(self):
         if self.single_target:
             self.torch_metrics = {
@@ -1430,38 +1462,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # return a single overall score for the epoch
         return self.train_metrics[self.current_epoch]
-
-    def _generate_wandb_config(self):
-        # create a dictionary of parameters to save for this run
-        wandb_config = dict(
-            architecture=io.build_name(self.network),
-            sample_duration=self.preprocessor.sample_duration,
-            cuda_device_count=torch.cuda.device_count(),
-            mps_available=torch.backends.mps.is_available(),
-            classes=self.classes,
-            single_target=self.single_target,
-            opensoundscape_version=self.opensoundscape_version,
-        )
-        if "weight_decay" in self.optimizer_params:
-            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
-        else:
-            wandb_config["l2_regularization"] = "n/a"
-
-        if "lr" in self.optimizer_params:
-            wandb_config["learning_rate"] = self.optimizer_params["lr"]
-        else:
-            wandb_config["learning_rate"] = "n/a"
-
-        try:
-            wandb_config["sample_shape"] = [
-                self.preprocessor.height,
-                self.preprocessor.width,
-                self.preprocessor.channels,
-            ]
-        except:
-            wandb_config["sample_shape"] = "n/a"
-
-        return wandb_config
 
     def train(
         self,

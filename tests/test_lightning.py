@@ -75,6 +75,37 @@ def test_lightning_spectrogram_module_train(model, train_df_clips, model_save_di
     )
 
 
+def test_lightning_spectrogram_module_train_wandb(
+    model, train_df_clips, model_save_dir
+):
+    # with weights and biases
+    try:
+        import wandb
+
+        session = wandb.init(
+            entity="kitzeslab", project="opensoundscape-test", reinit=True
+        )
+    except:
+        pytest.skip("Could not init wandb session")
+
+    model.fit_with_trainer(
+        train_df=train_df_clips,
+        validation_df=train_df_clips,
+        epochs=1,
+        batch_size=8,
+        accelerator="auto",
+        save_path=model_save_dir,
+        wandb_session=session,
+    )
+    session.finish()
+
+    # clean up wandb files
+    import os
+
+    if os.path.exists("wandb"):
+        shutil.rmtree("wandb")
+
+
 def test_lightning_spectrogram_module_predict(model, train_df_clips):
     preds = model.predict_with_trainer(
         samples=train_df_clips,

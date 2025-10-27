@@ -186,6 +186,37 @@ def test_train_single_target(train_df, temp_model_dir):
     # No need to manually remove directory - fixture handles cleanup
 
 
+def test_train_wandb(train_df, temp_model_dir):
+    # with weights and biases
+    try:
+        import wandb
+
+        session = wandb.init(
+            entity="kitzeslab", project="opensoundscape-test", reinit=True
+        )
+    except:
+        pytest.skip("Could not init wandb session")
+
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model.train(
+        train_df,
+        train_df,
+        save_path=temp_model_dir,
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+        wandb_session=session,
+    )
+    session.finish()
+
+    # clean up wandb files
+    import os
+
+    if os.path.exists("wandb"):
+        shutil.rmtree("wandb")
+
+
 def test_train_multi_target(train_df, temp_model_dir):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     model.train(
