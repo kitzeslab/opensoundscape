@@ -8,17 +8,12 @@ class ONNXModel(torch.nn.Module):
     def __init__(self, sequential_models, outputs=None):
         super(ONNXModel, self).__init__()
 
-        for key, m in sequential_models.items():
+        for name, m in sequential_models.items():
             try:
                 m.eval()
             except:
                 pass
-            if hasattr(m, "modules"):
-                # Freeze batchnorm layers to avoid onnx export issue with indirect reference
-                for module in m.modules():
-                    if isinstance(module, torch.nn.BatchNorm2d):
-                        module.eval()
-                        module.track_running_stats = False
+
         self.sequential_models = sequential_models
 
         # determine which of the sequential model outputs to include in output dict
