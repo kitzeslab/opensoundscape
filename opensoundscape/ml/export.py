@@ -39,6 +39,7 @@ def to_onnx_program(
     include_preprocessor_output=True,
     include_embedding_output=True,
     include_classifier_output=True,
+    opset_version=18,
 ):
     """Export a torch model with preprocessing transforms to ONNX format
 
@@ -129,6 +130,9 @@ def to_onnx_program(
             }
         )
 
+    # the input size to the model will include a channel dimension of size 1
+    # we pass an example input with batch size 2 for ONNX export
+    # the resulting model allows dynamic batch size
     input_batch = torch.rand(2, 1, input_length)
 
     return torch.onnx.export(
@@ -138,4 +142,5 @@ def to_onnx_program(
         report=True,
         dynamo=True,
         output_names=outputs,
+        opset_version=opset_version,
     )
