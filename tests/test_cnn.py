@@ -744,6 +744,16 @@ def test_prediction_warns_different_classes(train_df):
             all_warnings += str(wi.message)
         assert "classes" in all_warnings
 
+    # also for embed()
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        # raises warning bc test_df columns != model.classes
+        model.embed(train_df)
+        all_warnings = ""
+        for wi in w:
+            all_warnings += str(wi.message)
+        assert "classes" in all_warnings
+
 
 def test_train_raises_wrong_class_list(train_df):
     model = cnn.CNN(architecture="resnet18", classes=["different"], sample_duration=5.0)

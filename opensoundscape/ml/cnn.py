@@ -911,7 +911,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
             eval: evaluate performance by applying self.torch_metrics to predictions and labels
 
-            run_validation: test accuracy by running inference on a validation set and computing
+            run_evaluation: generate predictions and evaluate performance on samples with labels
 
             metrics change_classes: change the classes that the model predicts
 
@@ -1109,8 +1109,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             for that sample will be np.nan
 
         """
-        if audio_root is not None:  # add this to dataloader keyword arguments
+        if audio_root is not None:  # add this arg to dataloader keyword arguments
             dataloader_kwargs.update(dict(audio_root=audio_root))
+
+        # check for matching class list
+        samples = _check_classes_inference(samples, self.classes)
+
         # create dataloader to generate batches of AudioSamples
         dataloader = self.predict_dataloader(
             samples,
@@ -1129,14 +1133,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # check size of output
         _warn_output_size(dataloader, len(self.classes), output_size_warning)
-
-        # check for matching class list
-        if len(dataloader.dataset.dataset.classes) > 0 and list(self.classes) != list(
-            dataloader.dataset.dataset.classes
-        ):
-            warnings.warn(
-                "The columns of input samples df differ from `model.classes`."
-            )
 
         # Initialize Weights and Biases (wandb) logging
         if wandb_session is not None:
@@ -1345,10 +1341,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         return metrics
 
-    def run_validation(self, validation_df, progress_bar=True, **kwargs):
-        """run validation on a validation set
+    def run_evaluation(self, validation_df, progress_bar=True, **kwargs):
+        """Generate predictions on labeled data and compute evaluation metrics
 
-        override this to customize the validation step
+        override this to customize the validation step during training
         eg, could run validation on multiple datasets and save performance of each
         in self.valid_metrics[current_epoch][validation_dataset_name]
 
@@ -1363,7 +1359,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Effects:
             updates self.valid_metrics[current_epoch] with metrics for the current epoch
         """
-        # run inference
+        # run inference, generating 0-1 prediction scores for each sample and class
         validation_scores = self.predict(
             validation_df,
             activation_layer=("softmax" if self.single_target else "sigmoid"),
@@ -1688,7 +1684,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             if epoch % validation_interval == 0:
                 if validation_df is not None:
                     self._log("\nValidation.")
-                    val_metrics = self.run_validation(
+                    val_metrics = self.run_evaluation(
                         validation_df,
                         batch_size=batch_size,
                         num_workers=num_workers,
@@ -2291,6 +2287,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             dataloader_kwargs.update(dict(num_workers=num_workers))
         if not avgpool:  # cannot create a DataFrame with >2 dimensions
             return_dfs = False
+        samples = _check_classes_inference(samples, self.classes)
 
         # if target_layer is None, attempt to retrieve default target layers of network
         if target_layer is None:
@@ -2366,6 +2363,20 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 CNN = SpectrogramClassifier
 register_model_cls(CNN)
 CNN.__doc__ = SpectrogramClassifier.__doc__
+
+
+def _check_classes_inference(samples, model_classes):
+    if (
+        isinstance(samples, pd.DataFrame)
+        and len(samples.columns) > 0
+        and list(model_classes) != list(samples.columns)
+    ):
+        warnings.warn(
+            "The columns of input samples df differ from `model.classes`. "
+            "Discarding sample df columns."
+        )
+        samples = samples.copy()[[]]
+    return samples
 
 
 def use_resample_loss(model, train_df):
