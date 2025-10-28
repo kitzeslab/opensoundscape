@@ -589,7 +589,7 @@ class SpectrogramModule(BaseModule):
             architecture = cnn_architectures.ARCH_DICT[architecture](
                 len(classes), num_channels=self.preprocessor.channels
             )
-        else:
+        else:  # user passed a torch.nn.Module object rather than a string
             assert issubclass(
                 type(architecture), torch.nn.Module
             ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
@@ -623,13 +623,7 @@ class SpectrogramModule(BaseModule):
                     )
                     self.preprocessor.channels = arch_channels
             except:
-                # can we try to check if first layer expects input with channels=channels?
-                warnings.warn(
-                    f"Failed to detect expected # input channels of this architecture."
-                    "Make sure your architecture expects the number of channels "
-                    f"equal to `channels` argument {self.preprocessor.channels}). "
-                    f"Pytorch architectures generally expect 3 channels by default."
-                )
+                pass  # couldn't check channel dim
 
         self.network = architecture
         """a pytorch Module such as Resnet18 or a custom object
