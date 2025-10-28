@@ -104,6 +104,45 @@ def test_construct_spectrogram():
     Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20))
 
 
+def test_construct_spectrogram_with_power_spectrogram():
+    Spectrogram(
+        spectrogram=None,
+        power_spectrogram=np.zeros((5, 10)),
+        frequencies=np.zeros((5)),
+        times=np.zeros((10)),
+        window_samples=100,
+        hop_samples=50,
+        audio_sample_rate=44100,
+    )
+
+
+def test_spawn(spec):
+    sp = spec._spawn(
+        power_spectrogram=np.ones((3, 4)),
+        frequencies=np.array([10, 20, 30]),
+        times=np.array([0.1, 0.2, 0.3, 0.4]),
+    )
+    assert np.array_equal(sp.power_spectrogram, np.ones((3, 4)))
+    assert np.array_equal(sp.frequencies, np.array([10, 20, 30]))
+    assert np.array_equal(sp.times, np.array([0.1, 0.2, 0.3, 0.4]))
+    # make sure it retained other properties
+    assert sp.window_samples == spec.window_samples
+    assert sp.hop_samples == spec.hop_samples
+    assert sp.audio_sample_rate == spec.audio_sample_rate
+
+
+def test_construct_spectrogram_with_stft():
+    Spectrogram(
+        spectrogram=None,
+        stft=np.zeros((5, 10), dtype=complex),
+        frequencies=np.zeros((5)),
+        times=np.zeros((10)),
+        window_samples=100,
+        hop_samples=50,
+        audio_sample_rate=44100,
+    )
+
+
 def test_bandpass_spectrogram(spec):
     spec = spec.bandpass(25, 75)
     assert np.allclose(spec.frequencies, np.array([25, 50, 75]))
@@ -146,7 +185,8 @@ def test_limit_range():
     s = Spectrogram(
         np.random.normal(0, 200, [5, 10]), np.zeros((5)), np.zeros((10))
     ).limit_range(-100, -20)
-    assert np.max(s.spectrogram) <= -20 and np.min(s.spectrogram) >= -100
+    eps = 1e-6  # some error from float operations after dB conversion
+    assert np.max(s.spectrogram) <= -20 + eps and np.min(s.spectrogram) >= -100 - eps
 
 
 def test_plot_spectrogram():
@@ -192,6 +232,32 @@ def test_to_image_with_bandpass():
         ).to_image(),
         Image,
     )
+
+
+def test_rms_similar_to_signal(veryshort_wav_str):
+    """
+    Test that spectrogram.rms is similar to the RMS of the original signal
+    when created with rectangular window and normalize_by_window_length=False
+    """
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    spec = Spectrogram.from_audio(
+        audio,
+        window_fn=torch.ones,
+        normalize_by_window_length=False,
+        hop_samples=512 - 384,
+    )
+    spec_rms = spec.rms
+    # compute RMS of original signal in same frames
+    window_samples = spec.window_samples
+    hop_samples = spec.hop_samples
+    signal = audio.samples
+    rms_list = []
+    for start in range(0, len(signal) - window_samples + 1, hop_samples):
+        window = signal[start : start + window_samples]
+        rms = np.sqrt(np.mean(window**2))
+        rms_list.append(rms)
+    signal_rms = np.array(rms_list)
+    assert np.allclose(spec_rms, signal_rms, atol=1e-2)
 
 
 def test_melspectrogram_underflow():
