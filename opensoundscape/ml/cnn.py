@@ -594,25 +594,6 @@ class SpectrogramModule(BaseModule):
                 type(architecture), torch.nn.Module
             ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
 
-            # warn user if this architecture is not "registered", since we won't be able to reload it
-            if (
-                not hasattr(architecture, "constructor_name")
-                or architecture.constructor_name
-                not in cnn_architectures.ARCH_DICT.keys()
-            ):
-                warnings.warn(
-                    """
-                    This architecture is not listed in opensoundscape.ml.cnn_architectures.ARCH_DICT.
-                    It will not be available for loading after saving the model with .save() (unless using pickle=True). 
-                    To make it re-loadable, define a function that generates the architecture from arguments: (n_classes, n_channels) 
-                    then use opensoundscape.ml.cnn_architectures.register_architecture() to register the generating function.
-
-                    The function can also set the returned object's .constructor_name to the registered string key in ARCH_DICT
-                    to avoid this warning and ensure it is reloaded correctly by opensoundscape.ml.load_model().
-
-                    See opensoundscape.ml.cnn_architectures module for examples of constructor functions
-                    """
-                )
             # try to update channels arg to match architecture
             try:
                 arch_channels = get_channel_dim(architecture)
@@ -1837,9 +1818,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             # save a pickled model object; may not work across opso versions
             torch.save(model_copy, path)
         else:
-            # save dictionary of separate components
-            # better for cross-version compatability
-            # dictionary can be loaded with torch.load() to inspect individual components
             try:
                 arch_name = self.network.constructor_name
             except AttributeError:
@@ -1847,6 +1825,30 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 warnings.warn(
                     "Could not determine architecture constructor name for saved model"
                 )
+
+            # warn user if this architecture is not "registered", since we won't be able to reload it
+            if (
+                not hasattr(self.network, "constructor_name")
+                or self.network.constructor_name
+                not in cnn_architectures.ARCH_DICT.keys()
+            ):
+                warnings.warn(
+                    """
+                    This architecture is not listed in opensoundscape.ml.cnn_architectures.ARCH_DICT.
+                    It will not be available for loading after saving the model with .save() (unless using pickle=True). 
+                    To make it re-loadable, define a function that generates the architecture from arguments: (n_classes, n_channels) 
+                    then use opensoundscape.ml.cnn_architectures.register_architecture() to register the generating function.
+
+                    The function can also set the returned object's .constructor_name to the registered string key in ARCH_DICT
+                    to avoid this warning and ensure it is reloaded correctly by opensoundscape.ml.load_model().
+
+                    See opensoundscape.ml.cnn_architectures module for examples of constructor functions
+                    """
+                )
+
+            # save dictionary of separate components
+            # better for cross-version compatability
+            # dictionary can be loaded with torch.load() to inspect individual components
             torch.save(
                 {
                     "weights": self.network.state_dict(),
