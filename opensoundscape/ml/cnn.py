@@ -2063,9 +2063,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         """
 
         ## INPUT VALIDATION ##
-        # allow single file -> list of one file
-        if isinstance(samples, (str, Path)):
-            samples = [samples]
 
         if classes is not None:  # check that classes are in model.classes
             assert np.all(
@@ -2133,9 +2130,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # create dataloader, collate using `identity` to return list of AudioSample
         # rather than (samples, labels) tensors
-        dataloader = self.inference_dataloader_cls(
-            samples, self.preprocessor, shuffle=False, collate_fn=identity, **kwargs
-        )
+        dataloader = self.predict_dataloader(samples, collate_fn=identity, **kwargs)
 
         ## GENERATE SAMPLES ##
 
@@ -2258,13 +2253,15 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         like .predict() (return_dfs=True). If avgpool=False, return_dfs is forced to False since we
         can't create a DataFrame with >2 dimensions.
 
+        For advanced use cases (e.g. multiple target layers), use self.__call__() directly.
+
         Args:
-            samples: same as CNN.predict(): list of file paths, OR pd.DataFrame with index
+            samples: same as CNN.predict(): file path, list of file paths, OR pd.DataFrame with index
                 containing audio file paths, OR a pd.DataFrame with multi-index (file, start_time,
                 end_time)
             batch_size: batch size to use for dataloader [default: 1]
             num_workers: number of parallel CPU workers to use for dataloader [default: 0]
-            target_layers: layers from self.model._modules to
+            target_layer: layer from self.model._modules to
                 extract outputs from - if None, attempts to use self.model.embedding_layer as
                 default
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
@@ -2303,7 +2300,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 raise AttributeError(
                     "Please specify target_layer. Models trained with older versions of Opensoundscape, "
                     "or custom architectures, do not have default `.network.embedding_layer`. "
-                    "e.g. For a ResNET model, try target_layers=[self.model.layer4]"
+                    "e.g. For a ResNET model, try target_layer=self.model.layer4"
                 ) from exc
         else:  # check that target_layers are modules of self.model
             assert (
