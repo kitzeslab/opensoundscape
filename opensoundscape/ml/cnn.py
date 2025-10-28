@@ -661,6 +661,9 @@ class SpectrogramModule(BaseModule):
             log_graph=False,
         )
 
+        self.compute_per_class_metrics = True
+        """if True, compute and log per-class metrics during training/validation"""
+
     def change_classes(self, new_classes):
         """change the classes that the model predicts
 
@@ -1330,6 +1333,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
                 if reset_metrics:
                     metric.reset()
+
+            if self.compute_per_class_metrics:
+                metrics.update(self.per_class_metrics(targets, scores))
+
         else:
             # compute each TorchMetrics overal value from accumulated values
             # since .reset() was last called
@@ -1339,6 +1346,51 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 if reset_metrics:
                     metric.reset()
 
+        return metrics
+
+    def per_class_metrics(self, targets, scores):
+        """compute per-class metrics: au_roc, avg precision
+
+        can override this method to customize per-class metrics
+
+        Args:
+            targets: 2d array of 0/1 for each sample and each class
+            scores: 2d array of continuous valued score for each sample and class
+        Returns:
+            dictionary of per-class metrics
+                {class_name: {metric_name: value}}
+        """
+        import sklearn.metrics as M
+
+        if isinstance(targets, torch.Tensor):
+            targets = targets.cpu().numpy()
+        if isinstance(scores, torch.Tensor):
+            scores = scores.cpu().numpy()
+
+        metrics = {}
+        for i, class_i in enumerate(self.classes):
+            n = int(np.sum(np.array(targets)[:, i]))
+
+            # au_roc and avg precision are not defined if all samples are from one class
+            try:
+                rocauc = M.roc_auc_score(
+                    np.array(targets)[:, i], np.array(scores)[:, i]
+                )
+                avgp = M.average_precision_score(
+                    np.array(targets)[:, i], np.array(scores)[:, i]
+                )
+            except ValueError:
+                rocauc = np.nan
+                avgp = np.nan
+
+            metrics.update(
+                {
+                    class_i: {
+                        "au_roc": rocauc,
+                        "avg_precision": avgp,
+                    }
+                }
+            )
         return metrics
 
     def run_evaluation(self, validation_df, progress_bar=True, **kwargs):
@@ -1623,16 +1675,21 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                         ),
                         self.wandb_logging["n_preview_samples"],
                     ),
-                    "validation_samples": wandb_table(
-                        AudioFileDataset(
-                            validation_df,
-                            self.preprocessor,
-                            bypass_augmentations=True,
-                        ),
-                        self.wandb_logging["n_preview_samples"],
-                    ),
                 }
             )
+            if validation_df is not None:
+                wandb_session.log(
+                    {
+                        "validation_samples": wandb_table(
+                            AudioFileDataset(
+                                validation_df,
+                                self.preprocessor,
+                                bypass_augmentations=True,
+                            ),
+                            self.wandb_logging["n_preview_samples"],
+                        )
+                    },
+                )
 
         # Move network to device
         self.network.to(self.device)
