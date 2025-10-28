@@ -55,7 +55,7 @@ class Spectrogram:
 
     Properties:
         spectrogram: returns the dB-valued power spectrogram
-        magnitude: returns the linear-valued STFT magnnitude (sqrt(self.power_spectrogram))
+        magnitude: returns the linear-valued STFT magnitude (sqrt(self.power_spectrogram))
         shape: returns the shape of the spectrogram array as (n_frequencies, n_times)
         duration: returns the duration of the audio signal in seconds
         window_length_seconds: length of a single fft window, in seconds
@@ -136,7 +136,7 @@ class Spectrogram:
 
     @property
     def magnitude(self):
-        """returns the linear-valued STFT magnnitude (sqrt(self.power_spectrogram))"""
+        """returns the linear-valued STFT magnitude (sqrt(self.power_spectrogram))"""
         return np.sqrt(self.power_spectrogram)
 
     @property
@@ -144,13 +144,10 @@ class Spectrogram:
         """calculate time-windowed amplitude ie ~rms~ (see NOTE for caveats)
 
         NOTE: the computed values will only be equivalent to the rms of the original signal
-        if the spectrogram was created with a rectangular window, and with
-        normalize_by_window_length=False. e.g.:
+        if the spectrogram was created with a rectangular window, e.g.
 
         ```python
-        spec = Spectrogram.from_audio(audio, window_fn=torch.ones,
-            normalize_by_window_length=False)
-        rms = spec.rms
+        Spectrogram.from_audio(audio, window_fn=torch.ones).rms
         ```
 
         (see https://github.com/librosa/librosa/issues/1795 for details)
@@ -158,6 +155,11 @@ class Spectrogram:
         Returns:
             np.ndarray: time-windowed amplitude measurement
         """
+        assert (
+            self.window_samples is not None and self.fft_size is not None
+        ), """Cannot compute rms without knowing window_samples and fft_size used to
+          create spectrogram. Make sure self.window_samples and self.fft_size are not None."""
+
         power = self.power_spectrogram
 
         # Adjust the DC and sr/2 Nyquist frequency components
@@ -166,7 +168,7 @@ class Spectrogram:
             power[..., -1, :] *= 0.5
 
         # Calculate power time series by summing over each frame
-        power = 2 * np.sum(power, axis=-2, keepdims=True) / self.window_samples**2
+        power = 2 * np.sum(power, axis=-2, keepdims=False) / self.window_samples
 
         # Take the square root to get RMS (amplitude, not power)
         return np.sqrt(power)
@@ -180,7 +182,6 @@ class Spectrogram:
         hop_samples=None,
         overlap_fraction=None,
         fft_size=None,
-        normalize_by_window_length=True,
         **kwargs,
     ):
         """
@@ -218,20 +219,24 @@ class Spectrogram:
 
 
         ### Notes on spectrogram creation:
-        We use torchaudio.transforms.Spectrogram to create the spectrogram.
-        This formulation is equilvalent to librosa.magphase(librosa.stft(x,...),power=power).
-        By comparison, scipy returns spec/window_length, which retains the time-domain norm.
+        We use torchaudio.transforms.Spectrogram to create the STFT power spectrogram, then normalize
+        by window length to preserve time-domain signal norm (ie similar values regardless of
+        window size parameter).
+        This formulation is equilvalent to librosa.magphase(librosa.stft(x,...),power=2)/window_length.
+        Scipy returns spec/window_length, while librosa and torchaudio do not normalize by the window length.
+        A result equivalen to librosa or torchaudio can be obtained via self.power_spectrogram * self.window_samples.
         Scipy also detrends frame-by-frame by default, resulting in ~0 energy in 0 Hz bin.
 
         ### Notes on recovering rms amplitude from spectrogram:
-        To recover a windowed signal RMS from a spectrogram, use window_fn=torch.ones, normalize_by_window_length=False
+        To recover a windowed signal RMS from a spectrogram, use window_fn=torch.ones
         then use the self.rms property to calculate windowed RMS amplitude.
 
         ```python
-        spec = Spectrogram.from_audio(audio, window_fn=torch.ones, normalize_by_window_length=False)
+        spec = Spectrogram.from_audio(audio, window_fn=torch.ones)
         rms = spec.rms
         # similar to:
-        # S=librosa.magphase(librosa.stft(audio.samples, window=np.ones, center=False,win_length=w,n_fft=w,hop_length=w//2))[0]
+        # S=librosa.magphase(librosa.stft(audio.samples, window=np.ones, center=False,
+        #   win_length=w,n_fft=w,hop_length=w//2))[0]
         # rms = librosa.feature.rms(S=S, frame_length=w)
         ```
 
@@ -279,12 +284,11 @@ class Spectrogram:
         )
         spectrogram = to_spec(torch.tensor(audio.samples))
 
-        # optionally rescale by window length to preserve time norm
+        # rescale by window length to preserve time norm
         # this results in approximately consistent values across window sizes
         # and matches scipy's default behavior, but is not the default for librosa or torchaudio
-        if normalize_by_window_length:
-            # note: normalize by window_samples** (power / 2), but we use power=2 here
-            spectrogram = spectrogram / (window_samples)
+        # note: in general, normalize by window_samples** (power / 2), but we use power=2 here
+        spectrogram = spectrogram / window_samples
 
         # Compute frequency and time vectors associated with the 2d array
 
@@ -299,11 +303,9 @@ class Spectrogram:
             np.arange(0, to_spec.n_fft // 2 + 1) * audio.sample_rate / to_spec.n_fft
         )
 
-        # convert to decibels
-        spectrogram = torch_to_dB(spectrogram, power=2)
-
         return cls(
-            spectrogram=spectrogram.numpy(),
+            spectrogram=None,
+            power_spectrogram=spectrogram.numpy(),
             frequencies=frequencies,
             times=center_times,
             window_samples=window_samples,
@@ -546,28 +548,14 @@ class Spectrogram:
 
         return ax
 
-    def amplitude(self, freq_range=None):
-        """create an amplitude vs time signal from spectrogram
+    def amplitude(self, dB=False):
+        """removed in favor of .rms property"""
+        raise AttributeError(
+            "Spectrogram.amplitude() has been removed. Use the .rms property instead."
+        )
 
-        by summing pixels in the vertical dimension
-
-        Args
-            freq_range=None: sum Spectrogrm only in this range of [low, high] frequencies in Hz
-            (if None, all frequencies are summed)
-
-        Returns:
-            a time-series array of the vertical sum of spectrogram value
-
-        """
-        if freq_range is None:
-            return np.sum(self.spectrogram, 0)
-        else:
-            return np.sum(self.bandpass(freq_range[0], freq_range[1]).spectrogram, 0)
-
-    def net_amplitude(
-        self, signal_band, reject_bands=None
-    ):  # used to be called "net_power_signal" which is misleading (not power)
-        """create amplitude signal in signal_band and subtract amplitude from reject_bands
+    def net_amplitude(self, signal_band, reject_bands=None):
+        """create RMS amplitude signal in signal_band and subtract amplitude from reject_bands
 
         rescale the signal and reject bands by dividing by their bandwidths in Hz
         (amplitude of each reject_band is divided by the total bandwidth of all reject_bands.
@@ -580,12 +568,10 @@ class Spectrogram:
         return: time-series array of net amplitude"""
 
         # find the amplitude signal for the desired frequency band
-        signal_band_amplitude = self.amplitude(signal_band)
-
-        signal_band_bandwidth = signal_band[1] - signal_band[0]
-
-        # rescale amplitude by 1 / size of frequency band in Hz
-        # ("amplitude per unit Hz" ~= color on a spectrogram)
+        f_low, f_high = signal_band
+        signal_band_amplitude = self.bandpass(f_low, f_high).rms
+        signal_band_bandwidth = f_high - f_low
+        # normalize by frequency bandwidth
         net_amplitude = signal_band_amplitude / signal_band_bandwidth
 
         # then subtract the energy in the the reject_bands from the
@@ -597,14 +583,15 @@ class Spectrogram:
 
             # subtract reject_band_amplitude
             for reject_band in reject_bands:
-                reject_band_amplitude = self.amplitude(reject_band)
+                f_low, f_high = reject_band
+                reject_band_amplitude = self.bandpass(f_low, f_high).rms
                 net_amplitude = net_amplitude - (
                     reject_band_amplitude / reject_bands_total_bandwidth
                 )
 
             # negative signal shouldn't be kept, because it means reject was
             # stronger than signal. Zero it:
-            net_amplitude = [max(0, s) for s in net_amplitude]
+            net_amplitude = np.maximum(net_amplitude, 0)
 
         return net_amplitude
 

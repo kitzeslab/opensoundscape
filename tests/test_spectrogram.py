@@ -205,10 +205,38 @@ def test_amplitude_spectrogram():
     ).amplitude()
 
 
+def test_rms_spectrogram():
+    s = Spectrogram(
+        np.zeros((5, 10)),
+        np.linspace(0, 100, 5),
+        np.linspace(0, 10, 10),
+        (-100, -20),
+        window_samples=100,
+        fft_size=256,
+    )
+    rms = s.rms
+    assert rms.shape == (10,)
+
+    with pytest.raises(AssertionError):
+        # should raise because window_samples and fft_size are required
+        s_no_window = Spectrogram(
+            np.zeros((5, 10)),
+            np.linspace(0, 100, 5),
+            np.linspace(0, 10, 10),
+            (-100, -20),
+        )
+        rms = s_no_window.rms
+
+
 def test_net_amplitude_spectrogram():
-    Spectrogram(
-        np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10), (-100, -20)
-    ).net_amplitude([50, 100], [[0, 10], [20, 30]])
+    s = Spectrogram(
+        np.zeros((5, 10)),
+        np.linspace(0, 100, 5),
+        np.linspace(0, 10, 10),
+        (-100, -20),
+        window_samples=100,
+    )
+    s.net_amplitude([50, 100], [[0, 10], [20, 30]])
 
 
 def test_to_image():
@@ -237,13 +265,12 @@ def test_to_image_with_bandpass():
 def test_rms_similar_to_signal(veryshort_wav_str):
     """
     Test that spectrogram.rms is similar to the RMS of the original signal
-    when created with rectangular window and normalize_by_window_length=False
+    when created with rectangular window
     """
     audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
     spec = Spectrogram.from_audio(
         audio,
         window_fn=torch.ones,
-        normalize_by_window_length=False,
         hop_samples=512 - 384,
     )
     spec_rms = spec.rms
