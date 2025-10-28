@@ -95,7 +95,11 @@ Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 
 ### Load and use a model from the Bioacoustics Model Zoo
 The [Bioacoustics Model Zoo](https://github.com/kitzeslab/bioacoustics-model-zoo) hosts models in a repository that can be installed as a package and are compatible with OpenSoundscape. To install, use
-`pip install bioacoustics-model-zoo==0.12.0`
+`pip install --upgrade bioacoustics-model-zoo`
+
+To install additional dependencies for specific models, use patterns like 
+
+`pip install --upgrade bioacoustics-model-zoo[hawkears]`
 
 Load up a model and apply it to your own audio right away:
 
@@ -105,15 +109,24 @@ import bioacoustics_model_zoo as bmz
 #list available models
 print(bmz.utils.list_models())
 
-#generate class predictions and embedding vectors with Perch
-perch = bmz.Perch()
-scores = perch.predict(files)
-embeddings = perch.generate_embeddings(files)
+#generate class predictions and embedding vectors with HawkEars...
+hawkears = bmz.HawkEars()
+scores = hawkears.predict(files)
+embeddings = hawkears.embed(files)
 
-#...or BirdNET
+#...or BirdNET...
+# (you'll need ai-edge-litert in your environment, run `pip install bioacoustics-model-zoo[birdnet]`)
 birdnet = bmz.BirdNET()
 scores = birdnet.predict(files)
-embeddings = birdnet.generate_embeddings(files)
+embeddings = birdnet.embed(files)
+
+# or Perch2
+# `pip install bioacoustics-model-zoo[perch]` will install tensorflow and tensorflow-hub
+#...or BirdNET...
+# (you'll need ai-edge-litert in your environment, run `pip install bioacoustics-model-zoo[birdnet]`)
+perch2 = bmz.Perch2()
+scores = perch2.predict(files)
+embeddings = perch2.embed(files)
 ```
 
 See the tutorial notebooks for examples of training and fine-tuning models from the model zoo with your own annotations. 
