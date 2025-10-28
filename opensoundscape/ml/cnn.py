@@ -2008,6 +2008,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Args:
             samples: (same as CNN.predict())
                 the files to generate predictions for. Can be:
+                - a file path (str or Path) to a single audio file, OR
                 - a dataframe with index containing audio paths, OR
                 - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
@@ -2052,6 +2053,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         """
 
         ## INPUT VALIDATION ##
+        # allow single file -> list of one file
+        if isinstance(samples, (str, Path)):
+            samples = [samples]
 
         if classes is not None:  # check that classes are in model.classes
             assert np.all(
