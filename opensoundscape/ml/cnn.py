@@ -589,7 +589,7 @@ class SpectrogramModule(BaseModule):
             architecture = cnn_architectures.ARCH_DICT[architecture](
                 len(classes), num_channels=self.preprocessor.channels
             )
-        else:
+        else:  # user passed a torch.nn.Module object rather than a string
             assert issubclass(
                 type(architecture), torch.nn.Module
             ), "architecture must be a string or an instance of a subclass of torch.nn.Module"
@@ -623,13 +623,7 @@ class SpectrogramModule(BaseModule):
                     )
                     self.preprocessor.channels = arch_channels
             except:
-                # can we try to check if first layer expects input with channels=channels?
-                warnings.warn(
-                    f"Failed to detect expected # input channels of this architecture."
-                    "Make sure your architecture expects the number of channels "
-                    f"equal to `channels` argument {self.preprocessor.channels}). "
-                    f"Pytorch architectures generally expect 3 channels by default."
-                )
+                pass  # couldn't check channel dim
 
         self.network = architecture
         """a pytorch Module such as Resnet18 or a custom object
@@ -869,6 +863,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         single_target=False,
         preprocessor_dict=None,
         preprocessor_cls=SpectrogramPreprocessor,
+        device=None,
         **preprocessor_kwargs,
     ):
         """defines pure pytorch train, predict, and eval methods for a spectrogram classifier
@@ -891,6 +886,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             preprocessor_cls:
                 a class object that inherits from BasePreprocessor
                 if preprocessor_dict is None, this class will be instantiated to set self.preprocessor
+            device: (torch.device or str) device to use for training and inference
+                For example, 'cpu', 'cuda:0', 'mps', or torch.device('cuda:0')
+                [default: None] if None, uses GPU if available, otherwise CPU
             **preprocessor_kwargs: additional arguments to pass to the initialization of the preprocessor class
                 this is ignored if preprocessor_dict is not None
                 for the default SpectrogramPreprocessor, can pass any of:
@@ -994,7 +992,13 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         self.train_metrics = {}
         self.valid_metrics = {}
 
-        self.device = _gpu_if_available()  # device to use for training and inference
+        # device (eg CPU, GPU) to use for training and inference
+        if device is None:
+            self.device = _gpu_if_available()
+        else:
+
+            self.device = torch.device(device)
+            self.network.to(self.device)
 
     def _log(self, message, level=1):
         txt = str(message)
@@ -2014,6 +2018,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Args:
             samples: (same as CNN.predict())
                 the files to generate predictions for. Can be:
+                - a file path (str or Path) to a single audio file, OR
                 - a dataframe with index containing audio paths, OR
                 - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
@@ -2058,6 +2063,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         """
 
         ## INPUT VALIDATION ##
+        # allow single file -> list of one file
+        if isinstance(samples, (str, Path)):
+            samples = [samples]
 
         if classes is not None:  # check that classes are in model.classes
             assert np.all(
