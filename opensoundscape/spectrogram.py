@@ -159,7 +159,7 @@ class Spectrogram:
         ), """Cannot compute rms without knowing window_samples and fft_size used to
           create spectrogram. Make sure self.window_samples and self.fft_size are not None."""
 
-        power = self.power_spectrogram
+        power = self.power_spectrogram.copy()
 
         # Adjust the DC and sr/2 Nyquist frequency components
         power[..., 0, :] *= 0.5
