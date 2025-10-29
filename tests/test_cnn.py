@@ -679,6 +679,20 @@ def test_train_early_stopping(train_df, temp_model_dir):
     # No need to manually remove directory - fixture handles cleanup
 
 
+def test_train_revert_to_best_epoch(train_df, temp_model_dir):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model.train(
+        train_df,
+        train_df,
+        save_path=temp_model_dir,
+        epochs=1,
+        batch_size=2,
+        save_interval=1,
+        num_workers=0,
+        reload_best_at_end=True,
+    )
+
+
 def test_save_and_load_model(model_save_path):
     classes = [0, 1]
 

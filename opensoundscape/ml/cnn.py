@@ -1538,6 +1538,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         wandb_session=None,
         progress_bar=True,
         audio_root=None,
+        reload_best_at_end=False,
         **dataloader_kwargs,
     ):
         """train the model on samples from train_dataset
@@ -1604,6 +1605,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 - `audio_root` is prepended to each file path
                 - if None (default), samples must contain full paths to files
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
+            reload_best_at_end: if True, after training completes, reloads the best
+                model weights into self.network [default: False]
+                Best model is determined by validation set's self.score_metric score
             **dataloader_kwargs: additional arguments passed to train_dataloader()
         Effects:
             If wandb_session is provided, logs progress and samples to Weights
@@ -1726,7 +1730,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # Note: loss function (self.loss_fn) was initialized at __init__
         # can override like model.loss_fn = SomeLossCls()
 
-        self.best_score = 0.0
+        self.best_score = -np.inf
         self.best_epoch = 0
 
         ### Train ###
@@ -1798,6 +1802,16 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             # Early stopping (only check if validation score was updated this epoch)
             if stop_early:
                 break  # exit training loop
+
+        ### Post-Training ###
+        # optionally reload best epoch model weights at end of training
+        if reload_best_at_end:
+            best_model_path = f"{self.save_path}/best.pickle"
+            self._log(
+                f"Reloading best model from epoch {self.best_epoch} at end of training",
+                level=2,
+            )
+            self.load(best_model_path)
 
         ### Logging ###
         self._log("Training complete", level=2)
