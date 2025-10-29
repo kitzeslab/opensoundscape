@@ -984,6 +984,30 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             self.device = torch.device(device)
             self.network.to(self.device)
 
+        # Configure early stopping
+        self.early_stopping_config = {
+            "enabled": False,
+            "patience": 10,
+            "min_delta": 0.0,
+            "mode": "min",
+        }
+        """Early stopping configuration dictionary.
+
+        Early stopping halts training if the validation score does not improve
+        for a specified number of epochs (patience).
+
+        The metric monitored for improvement is defined by self.score_metric, but
+        adjust "mode" according to whether the score should be minimized (loss) or
+        maximized (accuracy, f1, auroc, avg precision, etc).
+
+        To enable early stopping, set `self.early_stopping_config['enabled']=True`
+        and modify other parameters as desired. 
+
+        'patience': number of epochs with no improvement before stopping
+        'min_delta': minimum change in the monitored quantity to qualify as an improvement
+        'mode': 'max' or 'min', whether to look for maximum or minimum of the monitored quantity
+        """
+
     def _log(self, message, level=1):
         txt = str(message)
         if self.logging_level >= level and self.log_file is not None:
@@ -1748,11 +1772,15 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                     self.save(save_path, pickle=False)
                     self.save(pickle_path, pickle=True)
 
-            # save pickled model every n epochs
+                stop_early = self._check_early_stopping(score, epoch)
+
+            # save pickled model every n epochs and at end of training
             # pickled model file allows us to resume training
             if (
-                self.current_epoch + 1
-            ) % self.save_interval == 0 or epoch == epochs - 1:
+                (self.current_epoch + 1) % self.save_interval == 0
+                or epoch == epochs - 1
+                or stop_early
+            ):
                 save_path = f"{self.save_path}/epoch-{self.current_epoch}.model"
                 self._log(f"Saving model to {save_path}", level=2)
                 try:
@@ -1766,6 +1794,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             if wandb_session is not None:
                 wandb_session.log({"epoch": epoch})
             self.current_epoch += 1
+
+            # Early stopping (only check if validation score was updated this epoch)
+            if stop_early:
+                break  # exit training loop
 
         ### Logging ###
         self._log("Training complete", level=2)
@@ -1782,6 +1814,43 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             level=2,
         )
         self._log(f"List of invalid samples: {invalid_samples}", level=3)
+
+    def _check_early_stopping(self, current_score, current_epoch):
+        """check if training should stop early based on validation score
+
+        and self.early_stopping_config settings
+
+        Args:
+            current_score: score from this epoch to compare against
+                self._best_early_stopping_score
+            current_epoch: current epoch number
+
+        Returns:
+            True if training should stop early, False otherwise
+        """
+        if self.early_stopping_config["enabled"]:
+            if current_epoch == 0:
+                self._best_score_early_stopping = current_score
+                self._best_epoch_early_stopping = 0
+            else:
+                improvement = current_score - self._best_score_early_stopping
+                if self.early_stopping_config["mode"] == "min":
+                    improvement = -improvement
+
+                if improvement > self.early_stopping_config["min_delta"]:
+                    # reset counter if we see improvement over min_delta
+                    # (but not necessarily best score overall: incremental progress
+                    # <min_delta on best score does not update epoch or score)
+                    self._best_score_early_stopping = current_score
+                    self._best_epoch_early_stopping = current_epoch
+            epochs_no_improve = current_epoch - self._best_epoch_early_stopping
+            if epochs_no_improve >= self.early_stopping_config["patience"]:
+                self._log(
+                    f"Early stopping triggered at epoch {current_epoch}. No improvement in "
+                    f"{self.early_stopping_config['patience']} epochs.",
+                )
+                return True
+        return False
 
     def save(self, path, save_hooks=False, pickle=False):
         """save model with weights using torch.save()

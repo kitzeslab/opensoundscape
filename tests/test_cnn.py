@@ -659,6 +659,26 @@ def test_predict_splitting_short_file(short_file_df):
         assert "prediction_dataset" in all_warnings
 
 
+def test_train_early_stopping(train_df, temp_model_dir):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model.early_stopping_config.update(
+        {"patience": 2, "min_delta": 0.01, "enabled": True}
+    )
+    assert model.early_stopping_config["enabled"] is True
+    model.train(
+        train_df,
+        train_df,
+        save_path=temp_model_dir,
+        epochs=2,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    assert hasattr(model, "_best_score_early_stopping")
+    assert hasattr(model, "_best_epoch_early_stopping")
+    # No need to manually remove directory - fixture handles cleanup
+
+
 def test_save_and_load_model(model_save_path):
     classes = [0, 1]
 
