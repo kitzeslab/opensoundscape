@@ -3,7 +3,6 @@
 import warnings
 import os
 
-from librosa import ParameterError
 import scipy
 import numpy as np
 import librosa.filters
@@ -109,7 +108,7 @@ class Spectrogram:
             _check_shape_and_type(spectrogram, frequencies, times)
             power_spectrogram = 10 ** (spectrogram / 10)
         elif power_spectrogram is not None:
-            assert stft is None, "Cannot specify both power_spectrogram and magnitude"
+            assert stft is None, "Cannot specify both power_spectrogram and stft"
             assert (
                 spectrogram is None
             ), "Cannot specify spectrogram when providing power_spectrogram or magnitude"
@@ -160,7 +159,7 @@ class Spectrogram:
         ), """Cannot compute rms without knowing window_samples and fft_size used to
           create spectrogram. Make sure self.window_samples and self.fft_size are not None."""
 
-        power = self.power_spectrogram
+        power = self.power_spectrogram.copy()
 
         # Adjust the DC and sr/2 Nyquist frequency components
         power[..., 0, :] *= 0.5
@@ -222,7 +221,7 @@ class Spectrogram:
         We use torchaudio.transforms.Spectrogram to create the STFT power spectrogram, then normalize
         by window length to preserve time-domain signal norm (ie similar values regardless of
         window size parameter).
-        This formulation is equilvalent to librosa.magphase(librosa.stft(x,...),power=2)/window_length.
+        This formulation is equivalent to librosa.magphase(librosa.stft(x,...),power=2)/window_length.
         Scipy returns spec/window_length, while librosa and torchaudio do not normalize by the window length.
         A result equivalen to librosa or torchaudio can be obtained via self.power_spectrogram * self.window_samples.
         Scipy also detrends frame-by-frame by default, resulting in ~0 energy in 0 Hz bin.
@@ -744,7 +743,7 @@ class Spectrogram:
         # update any user-specified values
         slots.update(kwargs)
 
-        if not "spectrogram" in slots:
+        if "spectrogram" not in slots:
             # required arg, but usually initialized from power_spectrogram
             slots["spectrogram"] = None
         # create new instance of the class
