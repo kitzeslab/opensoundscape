@@ -593,6 +593,18 @@ def test_predict_wrong_input_error(test_df):
         model.predict(ds)
 
 
+def test_profile(train_df):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    profile = model.profile(
+        train_df,
+        batch_size=2,
+        num_workers=0,
+    )
+    assert "preprocess_profile" in profile
+    assert "preprocess_time_per_sample" in profile
+    assert "backward_time_per_batch" in profile
+
+
 def test_train_predict_inception(train_df, temp_model_dir):
     model = cnn.InceptionV3([0, 1], 5.0, weights=None)
     model.train(

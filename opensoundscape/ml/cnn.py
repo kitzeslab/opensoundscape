@@ -4,6 +4,7 @@ For tutorials, see notebooks on opensoundscape.org
 """
 
 from pathlib import Path
+from time import time
 import warnings
 import numpy as np
 import pandas as pd
@@ -2139,6 +2140,115 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         if len(intermediate_layers) > 0:
             return pred_scores, intermediate_outputs
         return pred_scores
+
+    def profile(
+        self,
+        samples,
+        batch_size=1,
+        num_workers=0,
+        forward=True,
+        backward=True,
+        bypass_augmentations=False,
+    ):
+        """Profile the model preprocessing, forward, and backward speeds on a set of samples
+
+        Args:
+            samples: (same as CNN.predict())
+                the files to generate predictions for. Can be:
+                - a file path (str or Path) to a single audio file, OR
+                - a dataframe with index containing audio paths, OR
+                - a dataframe with multi-index (file, start_time, end_time), OR
+                - a list (or np.ndarray) of audio file paths
+            batch_size: number of samples to process simultaneously
+            num_workers: number of parallel CPU tasks for preprocessing
+            forward: bool, if True, profiles forward pass time [default: True]
+            backward: bool, if True, profiles backward pass time [default: True]
+            bypass_augmentations: bool, if True, bypasses data augmentations
+                during preprocessing [default: False]
+        Returns:
+            a dictionary with timing information for:
+                - breakdown of time spent on each preprocessing step
+                    (measured for one sample)
+                - preprocessing time per batch and per sample (seconds)
+                If forward=True:
+                - forward pass time per batch and per sample (seconds)
+                If backward=True:
+                - backward pass time per batch and per sample (seconds)
+
+        Example:
+        ```python
+        m=opso.CNN('resnet18',[0,1],1)
+        # m.device='cpu' # optionally set a specific device
+        m.network.to(m.device)
+        samples = opso.utils.make_clip_df([opso.birds_path]*10,clip_duration=1)
+        results_dict = m.profile(samples,batch_size=32,num_workers=0)
+        ```
+        """
+        if backward and not forward:
+            raise ValueError(
+                "Cannot profile backward pass without profiling forward pass"
+            )
+
+        dataloader = self.predict_dataloader(
+            samples, batch_size=batch_size, num_workers=num_workers
+        )
+        dataloader.dataset.dataset.bypass_augmentations = bypass_augmentations
+
+        # move network to device
+        self.network.to(self.device)
+        self.network.eval()
+
+        # store results
+        profile_dict = {
+            "batch_size": batch_size,
+            "num_workers": num_workers,
+            "device": str(self.device),
+        }
+        preprocess_times = []
+        forward_times = []
+        backward_times = []
+
+        # profile preprocessing steps for one sample
+        first_sample = dataloader.dataset.dataset.label_df.iloc[0]
+        sample = self.preprocessor.forward(
+            first_sample, profile=True, bypass_augmentations=bypass_augmentations
+        )
+        profile_dict["preprocess_profile"] = sample.runtime.to_dict()
+
+        # iterate batches
+        start_time = time()
+        for i, (batch_tensors, _) in enumerate(tqdm(dataloader)):
+            preprocess_times.append(time() - start_time)
+            batch_tensors = batch_tensors.to(self.device)
+            batch_tensors.requires_grad = True
+
+            if forward:
+                start_time = time()
+                logits = self.network(batch_tensors)
+                forward_times.append(time() - start_time)
+
+            if backward:
+                start_time = time()
+                loss = logits.sum()
+                loss.backward()
+                backward_times.append(time() - start_time)
+            start_time = time()  # reset for next iteration
+
+        profile_dict["preprocess_time_per_batch"] = float(np.mean(preprocess_times))
+        profile_dict["preprocess_time_per_sample"] = float(
+            np.mean(preprocess_times) / batch_size
+        )
+        if forward:
+            profile_dict["forward_time_per_batch"] = float(np.mean(forward_times))
+            profile_dict["forward_time_per_sample"] = float(
+                np.mean(forward_times) / batch_size
+            )
+        if backward:
+            profile_dict["backward_time_per_batch"] = float(np.mean(backward_times))
+            profile_dict["backward_time_per_sample"] = float(
+                np.mean(backward_times) / batch_size
+            )
+        return profile_dict
 
     def generate_cams(
         self,
