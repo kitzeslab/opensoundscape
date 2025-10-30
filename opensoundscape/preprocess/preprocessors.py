@@ -617,19 +617,16 @@ class PCENPreprocessor(preprocessors.SpectrogramPreprocessor):
         """
         super().__init__(*args, **kwargs)
 
-        # need to pass linear-value spectrogram to pcen
-        self.pipeline["to_spec"].set(dB_scale=False)
-
         # use Librosa implementation of PCEN (could use a pytorch implementation in the future, and make it trainable)
         pcen_action = actions.Action(fn=action_functions.pcen, is_augmentation=False)
         self.insert_action(action_index="pcen", action=pcen_action, after_key="to_spec")
 
         # normalize PCEN output to [0,1]
         def normalize_to_01(s):
-            new_s = (s.spectrogram - s.spectrogram.min()) / (
-                s.spectrogram.max() - s.spectrogram.min()
+            new_s = (s.power_spectrogram - s.power_spectrogram.min()) / (
+                s.power_spectrogram.max() - s.power_spectrogram.min()
             )
-            return s._spawn(spectrogram=new_s)
+            return s._spawn(power_spectrogram=new_s)
 
         self.insert_action(
             action_index="normalize",
@@ -637,7 +634,9 @@ class PCENPreprocessor(preprocessors.SpectrogramPreprocessor):
             after_key="pcen",
         )
 
-        self.pipeline.to_tensor.set(range=[0, 1])
+        # when extracting tensor from Spectrogram, use the .power_spectrogram attribute
+        # (linear values normalized to 0-1) rather than .spectrogram (dB values)
+        self.pipeline.to_tensor.set(range=[0, 1], dB=False)
 
 
 @register_preprocessor_cls
