@@ -185,8 +185,8 @@ def fit(
     model.to(device)
 
     # convert x and y to tensors and move to the device
-    train_features = torch.tensor(train_features, dtype=torch.float32, device=device)
-    train_labels = torch.tensor(train_labels, dtype=torch.float32, device=device)
+    train_features = torch.as_tensor(train_features, dtype=torch.float32, device=device)
+    train_labels = torch.as_tensor(train_labels, dtype=torch.float32, device=device)
 
     train_dataset = EmbeddingDataset(train_features, train_labels)
     train_loader = DataLoader(
