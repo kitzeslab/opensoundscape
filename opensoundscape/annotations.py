@@ -1281,8 +1281,12 @@ class BoxedAnnotations:
         train_idx, test_idx = train_test_split(range(len(self.audio_files)), **kwargs)
         train_files = np.array(self.audio_files)[train_idx]
         test_files = np.array(self.audio_files)[test_idx]
-        train_ann_files = np.array(self.annotation_files)[train_idx]
-        test_ann_files = np.array(self.annotation_files)[test_idx]
+        if self.annotation_files is None:
+            train_ann_files = None
+            test_ann_files = None
+        else:
+            train_ann_files = np.array(self.annotation_files)[train_idx]
+            test_ann_files = np.array(self.annotation_files)[test_idx]
 
         # find class dynamically so that this method works if BoxedAnnotations is subclassed
         cls = type(self)

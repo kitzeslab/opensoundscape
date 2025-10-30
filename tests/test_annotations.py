@@ -1160,3 +1160,18 @@ def test_train_test_split(boxed_annotations_2_files):
     assert len(train.df) + len(test.df) == len(boxed_annotations_2_files.df)
     assert isinstance(train, BoxedAnnotations)
     assert isinstance(test, BoxedAnnotations)
+
+
+def test_train_test_split_ann_files_None(boxed_annotations_2_files):
+    boxed_annotations_2_files.annotation_files = None
+    train, test = boxed_annotations_2_files.train_test_split(
+        train_size=0.5, random_state=0
+    )
+    assert len(train.audio_files) == 1
+    assert len(test.audio_files) == 1
+    assert train.audio_files[0] != test.audio_files[0]
+    assert len(train.df) + len(test.df) == len(boxed_annotations_2_files.df)
+    assert isinstance(train, BoxedAnnotations)
+    assert isinstance(test, BoxedAnnotations)
+    assert train.annotation_files is None
+    assert test.annotation_files is None
