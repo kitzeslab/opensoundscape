@@ -36,10 +36,11 @@ def to_onnx_program(
     preprocessing_transforms,
     torch_model,
     input_length,
+    activation_layer=None,
     include_preprocessor_output=True,
     include_embedding_output=True,
     include_classifier_output=True,
-    opset_version=18,
+    **kwargs,
 ):
     """Export a torch model with preprocessing transforms to ONNX format
 
@@ -49,14 +50,18 @@ def to_onnx_program(
     the "embedding" portion of the network. There should be no layers after the
     classifier layer.
 
+    Optionally adds a sigmoid or softmax activation layer on the classifier outputs.
+
     Args:
         preprocessing_transforms: torch.nn.Module, preprocessing transforms to apply to raw audio
         torch_model: torch.nn.Module, model to export
         input_length: int, length of input audio samples in number of samples
+        activation_layer: str or None, activation layer to apply to classifier outputs
+            options: None, 'softmax', 'sigmoid'
         include_preprocessor_output: bool, whether to include preprocessor output in ONNX model outputs
         include_embedding_output: bool, whether to include embedding output in ONNX model outputs
         include_classifier_output: bool, whether to include classifier output in ONNX model outputs
-
+        **kwargs: additional keyword arguments to pass to torch.onnx.export
     Returns:
         onnx_model: ONNX program model object
 
@@ -95,9 +100,9 @@ def to_onnx_program(
     if include_classifier_output:
         outputs.append("classifier")
 
+    # attempt to separate embeddings and classifier layers, based on the
+    # torch_model.network.classifier_layer attribute
     try:
-        # if torch_model.network.classifier_layer is specified, we can separate embedding and classifier
-        # portions of the network
         assert hasattr(torch_model, "classifier_layer")
         embedding_model = copy.deepcopy(torch_model)
         set_layer_from_name(
@@ -106,15 +111,8 @@ def to_onnx_program(
         classifier = torch.nn.Module.get_submodule(
             torch_model, torch_model.classifier_layer
         )
-        onnx_model = ONNXModel(
-            {
-                "sample": preprocessing_transforms,
-                "embedding": embedding_model,
-                "classifier": classifier,
-            },
-            outputs=outputs,
-        )
     except:
+        classifier = torch_model
         if include_embedding_output:
             outputs.remove("embedding")
             warnings.warn(
@@ -123,24 +121,46 @@ def to_onnx_program(
                 torch_model has attribute 'classifier_layer' indicating the name
                 of the layer to separate embeddings from classifier."""
             )
+
+    # add the optional activation layer to the classifier
+    if activation_layer is None:
+        pass
+    elif activation_layer == "softmax":
+        activation_module = torch.nn.Softmax(dim=1)
+        classifier = torch.nn.Sequential(classifier, activation_module)
+    elif activation_layer == "sigmoid":
+        activation_module = torch.nn.Sigmoid()
+        classifier = torch.nn.Sequential(classifier, activation_module)
+    else:
+        raise ValueError(f"invalid option for activation_layer: {activation_layer}")
+
+    if "embedding" in outputs:
         onnx_model = ONNXModel(
             {
                 "sample": preprocessing_transforms,
-                "classifier": torch_model,
+                "embedding": embedding_model,
+                "classifier": classifier,
+            }
+        )
+    else:
+        onnx_model = ONNXModel(
+            {
+                "sample": preprocessing_transforms,
+                "classifier": classifier,
             }
         )
 
+    # create a sample input tensor for ONNX export
     # the input size to the model will include a channel dimension of size 1
     # we pass an example input with batch size 2 for ONNX export
     # the resulting model allows dynamic batch size
-    input_batch = torch.rand(2, 1, input_length)
+    example_input_batch = torch.rand(2, 1, input_length)
 
     return torch.onnx.export(
         onnx_model,
-        (input_batch,),
-        dynamic_shapes=[{0: "dim_x"}],
-        report=True,
+        (example_input_batch,),
+        dynamic_shapes=[{0: "dim_x"}],  # allow dynamic batch size
         dynamo=True,
         output_names=outputs,
-        opset_version=opset_version,
+        **kwargs,  # e.g. report=True, opset_version=18
     )

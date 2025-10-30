@@ -1093,9 +1093,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 Optionally apply an activation layer such as sigmoid or
                 softmax to the raw outputs of the model.
                 options:
-                - None: no activation, return raw scores (ie logit, [-inf:inf])
-                - 'softmax': scores all classes sum to 1
-                - 'sigmoid': all scores in [0,1] but don't sum to 1
+                - None: no activation, return raw logit scores [-inf:inf]
+                - 'softmax': scores all classes sum to 1, scores between 0 and 1
+                - 'sigmoid': each class is independent, scores between 0 and 1
                 - 'softmax_and_logit': applies softmax first then logit
                 [default: None]
             split_files_into_clips:
@@ -2613,6 +2613,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
     def save_onnx(
         self,
         path,
+        activation_layer=None,
         include_preprocessor_output=True,
         include_embedding_output=True,
         include_classifier_output=True,
@@ -2627,6 +2628,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Args:
             path: file path to save the ONNX model
                 if None, returns an in-memory ONNX model object without saving to disk
+            activation_layer: if provided, applies an activation layer to classifier outputs
+                options: 'softmax', 'sigmoid', or None [default: None]
             include_preprocessor_output: if True, includes the output of the preprocessor
                 in the ONNX model outputs [default: True]
             include_embedding_output: if True, includes the output of the embedding layer
@@ -2763,6 +2766,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             preprocessing_transforms=transforms,
             torch_model=self.network,
             input_length=n_audio_samples_per_input,
+            activation_layer=activation_layer,
             include_embedding_output=include_embedding_output,
             include_classifier_output=include_classifier_output,
             include_preprocessor_output=include_preprocessor_output,
