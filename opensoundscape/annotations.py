@@ -1593,7 +1593,7 @@ class CategoricalLabels:
             multihot_df_dense: dense dataframe of multi-hot labels
         """
         # for convenience, if labels is a list of single items, convert to list of lists
-        if labels and all(not isinstance(l, list) for l in labels):
+        if len(labels) > 0 and all(not isinstance(l, list) for l in labels):
             labels = [[l] for l in labels]
 
         # labels can be list of lists of class names or list of lists of integer class indices
