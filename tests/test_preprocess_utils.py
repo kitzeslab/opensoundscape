@@ -16,6 +16,7 @@ def test_get_args():
         "transform_from_zero_centered": True,
         "invert": False,
         "cmap": None,
+        "axis": None,
     }
     assert args == expected_args
 
