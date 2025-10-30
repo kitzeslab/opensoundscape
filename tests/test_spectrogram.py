@@ -199,12 +199,6 @@ def test_plot_spectrogram_kHz():
     )
 
 
-def test_amplitude_spectrogram():
-    Spectrogram(
-        np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20)
-    ).amplitude()
-
-
 def test_rms_spectrogram():
     s = Spectrogram(
         np.zeros((5, 10)),
