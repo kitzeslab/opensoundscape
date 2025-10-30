@@ -1035,8 +1035,7 @@ def test_estimate_delay_with_bandpass(veryshort_audio):
         signal,
         ref_sig,
         max_delay=max_delay,
-        bandpass_range=[100, 10000],
-        bandpass_order=5,
+        frequency_range=[100, 10000],
     )
     assert math.isclose(dly, delay, abs_tol=1e-4)
 

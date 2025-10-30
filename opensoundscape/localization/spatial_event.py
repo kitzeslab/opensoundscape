@@ -31,7 +31,7 @@ class SpatialEvent:
         class_name=None,
         bandpass_range=None,
         cc_threshold=0,
-        cc_filter=None,
+        cc_filter="phat",
         speed_of_sound=SPEED_OF_SOUND,
     ):
         """
@@ -55,6 +55,13 @@ class SpatialEvent:
             cc_threshold: float. This acts as a minimum threshold for cross correlation. If the cross correlation at the estimated time delay is is below this value, the corresponding time delay is discarded and not used during localization.
                 NOTE: The scale of the cross correlation values depends on the cc_filter used.
                 default: None. Do not discard any time delays.
+            cc_filter: filter for generalized cross correlation, see opensoundscape.signal_processing.gcc()
+                'phat' - Phase transform. Default.
+                'roth' - Roth correlation (1971)
+                'scot' - Smoothed Coherence Transform,
+                'ht' - Hannan and Thomson
+                'cc' - normal cross correlation with no filter
+                'cc_norm' - normal cross correlation normalized by the length and amplitude of the signal
             speed_of_sound: float, optional. Speed of sound in meters per second.
                 Default: opensoundscape.localization.localization_algorithms.SPEED_OF_SOUND
 
@@ -118,7 +125,7 @@ class SpatialEvent:
 
     def estimate_location(
         self,
-        localization_algorithm="gillette",
+        localization_algorithm="least_squares",
         use_stored_tdoas=True,
     ):
         """
@@ -136,8 +143,8 @@ class SpatialEvent:
 
         Args:
             - localization_algorithm: algorithm to use for estimating the location of a sound event
-              from the locations and time delays of a set of detections. Options are 'gillette' or
-              'soundfinder'. Default is 'gillette'.
+              from the locations and time delays of a set of detections. Options are 'least_squares',
+              'soundfinder', or 'gillette' Default is 'least_squares'.
             - use_stored_tdoas: if True, uses the tdoas stored in self.tdoas to estimate the
               location.
                 If False, first calls self._estimate_delays() to estimate the tdoas. default: True
@@ -207,7 +214,7 @@ class SpatialEvent:
                 If None, defaults to self.max_delay
             bandpass_range: bandpass audio to [low, high] frequencies in Hz before
                 cross correlation
-                If None, defaults to self.bandpass_range=
+                If None, defaults to self.bandpass_range
 
         Returns:
             list of time delays, list of max cross correlation values
@@ -225,7 +232,7 @@ class SpatialEvent:
         if self.receiver_start_time_offsets is None:
             assert (
                 self.start_timestamp is not None
-            ), "must set .receiver_start_time_offsets or .start_timestamp. Both were None."
+            ), "must set .receiver_start_time_offsets or .start_timestamp to estimate tdoas. Both were None."
             # sets the .receiver_start_time_offsets using start_timestamp and receiver start times
             self._calculate_receiver_start_time_offsets()
 
@@ -245,12 +252,6 @@ class SpatialEvent:
             self.tdoas = None
             self.cc_maxs = None
             return None, None
-
-        # bandpass once now to avoid repeating operation for each receiver
-        if self.bandpass_range is not None:
-            reference_audio = reference_audio.bandpass(
-                low_f=self.bandpass_range[0], high_f=self.bandpass_range[1], order=9
-            )
 
         # estimate time difference of arrival (tdoa) for each file relative to the first
         # skip the first because we don't need to cross correlate a file with itself
@@ -275,19 +276,17 @@ class SpatialEvent:
             )
 
             # catch edge cases where the audio lengths do not match.
-            if (
-                abs(len(audio2.samples) - len(reference_audio.samples)) > 1
-            ):  # allow for 1 sample difference
+            # allow for 1 sample difference
+            if abs(len(audio2.samples) - len(reference_audio.samples)) > 1:
                 bad_receivers_index.append(index)
             else:
                 tdoa, cc_max = audio.estimate_delay(
                     primary_audio=audio2,
                     reference_audio=reference_audio,
                     max_delay=self.max_delay,
-                    bandpass_range=self.bandpass_range,
+                    frequency_range=self.bandpass_range,
                     cc_filter=self.cc_filter,
                     return_cc_max=True,
-                    skip_ref_bandpass=True,
                 )
                 tdoas.append(tdoa)
                 cc_maxs.append(cc_max)
@@ -296,6 +295,7 @@ class SpatialEvent:
         self.cc_maxs = np.array(cc_maxs)
 
         # delete the bad receivers from this SpatialEvent
+        # i.e. those that had audio length mismatches
         if len(bad_receivers_index) > 0:
             print(
                 f"Warning: {len(bad_receivers_index)} receivers were discarded because their audio files were not the same length as the primary receiver."
@@ -329,8 +329,8 @@ class SpatialEvent:
         tdoas = self.tdoas
         locations = self.receiver_locations
 
-        # apply the cc_threshold filter
-        # only keep receivers that have a cc_max above the cc_threshold
+        # apply the cross correlation maximum filter:
+        # only use tdoas from receivers that have a cc_max above the cc_threshold
         rec_mask = self.cc_maxs > self.cc_threshold
         tdoas = tdoas[rec_mask]
         locations = locations[rec_mask]

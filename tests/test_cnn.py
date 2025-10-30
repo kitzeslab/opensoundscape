@@ -594,6 +594,18 @@ def test_predict_wrong_input_error(test_df):
         model.predict(ds)
 
 
+def test_profile(train_df):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    profile = model.profile(
+        train_df,
+        batch_size=2,
+        num_workers=0,
+    )
+    assert "preprocess_profile" in profile
+    assert "preprocess_time_per_sample" in profile
+    assert "backward_time_per_batch" in profile
+
+
 def test_train_predict_inception(train_df, temp_model_dir):
     model = cnn.InceptionV3([0, 1], 5.0, weights=None)
     model.train(
@@ -658,6 +670,40 @@ def test_predict_splitting_short_file(short_file_df):
         for wi in w:
             all_warnings += str(wi.message)
         assert "prediction_dataset" in all_warnings
+
+
+def test_train_early_stopping(train_df, temp_model_dir):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model.early_stopping_config.update(
+        {"patience": 2, "min_delta": 0.01, "enabled": True}
+    )
+    assert model.early_stopping_config["enabled"] is True
+    model.train(
+        train_df,
+        train_df,
+        save_path=temp_model_dir,
+        epochs=2,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    assert hasattr(model, "_best_score_early_stopping")
+    assert hasattr(model, "_best_epoch_early_stopping")
+    # No need to manually remove directory - fixture handles cleanup
+
+
+def test_train_revert_to_best_epoch(train_df, temp_model_dir):
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model.train(
+        train_df,
+        train_df,
+        save_path=temp_model_dir,
+        epochs=1,
+        batch_size=2,
+        save_interval=1,
+        num_workers=0,
+        reload_best_at_end=True,
+    )
 
 
 def test_save_and_load_model(model_save_path):
@@ -740,6 +786,16 @@ def test_prediction_warns_different_classes(train_df):
         warnings.simplefilter("always")
         # raises warning bc test_df columns != model.classes
         model.predict(train_df)
+        all_warnings = ""
+        for wi in w:
+            all_warnings += str(wi.message)
+        assert "classes" in all_warnings
+
+    # also for embed()
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        # raises warning bc test_df columns != model.classes
+        model.embed(train_df)
         all_warnings = ""
         for wi in w:
             all_warnings += str(wi.message)
