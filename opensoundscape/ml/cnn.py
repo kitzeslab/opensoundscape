@@ -2169,15 +2169,19 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         embedding_exists_mode="skip",  # skip, error, add
         commit_frequency_batches=1,
         overflow_mode="warn",
+        embedding_dim=None,
         **dataloader_kwargs,
     ):
         """Run inference on a dataloader, saving 1D outputs of target_layer to a hoplite database
 
         Args:
             samples: (same as CNN.predict())
-            db: a hoplite database object
-            dataset_name: name of the dataset to save embeddings under
-
+            db: a hoplite database object or a path to a hoplite database folder
+                - if a path is provided, the database will be created if it does not exist
+                - when creating a new db, the embedding_dim argument must be provided
+            dataset_name: name of the dataset to save embeddings within
+                - if the dataset does not exist in the db, it will be created
+                - one hoplite database can contain multiple datasets
             target_layer: the layer to extract features from (must be a layer in self.network)
                 if None [default], attempts to use architecture's default target_layer
                 Note: only architectures created with opensoundscape 0.9.0+ will
@@ -2196,12 +2200,17 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             commit_frequency_batches: int, commit to db after every N batches[default: 1]
             overflow_mode: 'warn', 'error', or 'ignore' behvior when embedding values exceed
                 the range of float16, which is the range of values allowed in hoplite db
+            embedding_dim: int, dimension of the embeddings to be stored
+                - only used when creating a new hoplite db
+                - must match the output dimension of the model's target_layer
+                - if creating new db and embedding_dim is None, guesses based on self.classifier.in_features
             **dataloader_kwargs: additional keyword arguments to pass to the dataloader
 
         Returns:
-            dict with info about failed samples
+            (embedding_db, dict with info about failed samples)
         """
         try:
+            import perch_hoplite
             from perch_hoplite.db import interface as hoplite_interface
         except ImportError as e:
             raise ImportError(
@@ -2210,6 +2219,14 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # potentially: store db.metadata.dataset_paths -> dataset_name:audio_root mapping in db
         # and warn user if overwriting an existing mapping with a different audio_root
+
+        # load or create hoplite db if a path is provided (if hoplite db is passed, use it directly)
+        if embedding_dim is None:
+            try:
+                embedding_dim = self.classifier.in_features
+            except:
+                pass  # keep None value
+        db = load_or_create_hoplite_usearch_db(db, embedding_dim=embedding_dim)
 
         # create dataloader, collate using `identity` to return list of AudioSample
         # rather than (samples, labels) tensors
@@ -2254,7 +2271,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             if new_len == 0:
                 # all samples already have embeddings, nothing to do
                 print("all samples already have embeddings in the database")
-                return
+                return db, {}
         # elif embedding_exists_mode == "add": # do nothing, allow duplicates
 
         # move network to device
@@ -2320,6 +2337,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                     # otherwise clip without warnings/errors
                 batch_emb = batch_emb.clip(-max_float16, max_float16).astype(np.float16)
 
+                # insert each embedding in the batch into the database, one-by-one
                 for j in range(batch_tensors.shape[0]):
                     file = batch_samples[j].source
                     if audio_root is not None:
@@ -2349,21 +2367,21 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 # accidentally reuse them
                 stored_embedding["batch"] = None
 
-                # commit once per batch
-                # could commit at the end, which would make more sense if batch_size=1
+                # commit once per commit_frequency_batches batches
                 # committing is relatively slow, but we don't want to lose progress if interrupted
                 if (i + 1) % commit_frequency_batches == 0:
                     db.commit()
 
             # end of batch loop
+
         # commit any remaining embeddings!
         db.commit()
 
         # clean up by removing forward hooks
         embedding_hook_handle.remove()
 
-        # return info about any failed samples
-        return {"failed_samples": dataloader.dataset.report()}
+        # return database object and info about any failed samples
+        return (db, {"failed_samples": dataloader.dataset.report()})
 
     def similarity_search_hoplite_db(
         self,
@@ -3218,3 +3236,51 @@ def _gpu_if_available():
     else:
         device = torch.device("cpu")
     return device
+
+
+def load_or_create_hoplite_usearch_db(db, embedding_dim=None):
+    """helper function to load or create a hoplite database object
+
+    Args:
+        db: a hoplite database object or a path to a hoplite database (folder)
+            - if a path is provided, the database will be created if it does not exist,
+                and passing embedding_dim is required in this case
+                if it does exist, it will be loaded
+            - if a hoplite database object is provided, it will be returned as is
+        embedding_dim: int, dimension of the embeddings to be stored in the database
+            - only required when creating a new database
+    Returns:
+        a hoplite database object
+    """
+    try:
+        import perch_hoplite
+        from perch_hoplite.db.sqlite_usearch_impl import (
+            SQLiteUsearchDB,
+            get_default_usearch_config,
+        )
+    except ImportError as e:
+        raise ImportError(
+            "hoplite package is required to use hoplite databases. "
+            "Please install with `pip install perch-hoplite`"
+        ) from e
+
+    if isinstance(db, (str, Path)):
+        db_path = Path(db)
+        if db_path.exists():
+            print(f"Connecting to existing db at {db_path}")
+            db = SQLiteUsearchDB.create(db_path)
+            print(
+                f"Connected database has {db.count_embeddings():,} embeddings from {len(db.get_dataset_names())} dataset{'' if len(db.get_dataset_names()) == 1 else 's'}."
+            )
+        else:
+            assert (
+                embedding_dim is not None
+            ), "embedding_dim must be provided when creating a new hoplite database"
+            print(f"Creating new db at {db_path}")
+            usearch_cfg = get_default_usearch_config(embedding_dim)
+            db = SQLiteUsearchDB.create(db_path, usearch_cfg)
+    else:
+        assert isinstance(
+            db, perch_hoplite.db.interface.HopliteDBInterface
+        ), "db must be a hoplite database object or a path to a hoplite database"
+    return db
