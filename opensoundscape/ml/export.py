@@ -40,6 +40,7 @@ def to_onnx_program(
     include_preprocessor_output=True,
     include_embedding_output=True,
     include_classifier_output=True,
+    opset_version=18,
     **kwargs,
 ):
     """Export a torch model with preprocessing transforms to ONNX format
@@ -52,6 +53,8 @@ def to_onnx_program(
 
     Optionally adds a sigmoid or softmax activation layer on the classifier outputs.
 
+    Requires that onnx, onnxruntime, and onnxscript are packages are installed
+
     Args:
         preprocessing_transforms: torch.nn.Module, preprocessing transforms to apply to raw audio
         torch_model: torch.nn.Module, model to export
@@ -61,6 +64,9 @@ def to_onnx_program(
         include_preprocessor_output: bool, whether to include preprocessor output in ONNX model outputs
         include_embedding_output: bool, whether to include embedding output in ONNX model outputs
         include_classifier_output: bool, whether to include classifier output in ONNX model outputs
+        opset_version: int, ONNX opset version to use for export
+            currently defaults to 18 because of issues with dynamic shapes in 20 with pytorch 2.9.0;
+            should upgrade to 20 when stable fixes are released
         **kwargs: additional keyword arguments to pass to torch.onnx.export
     Returns:
         onnx_model: ONNX program model object
@@ -91,6 +97,13 @@ def to_onnx_program(
     onnx_program.save("efficientnet_b0.onnx")
     ```
     """
+    # check for dependency packages
+    try:
+        import onnx, onnxruntime, onnxscript
+    except ImportError:
+        warnings.warn(
+            "to_onnx_program may fail since at least one of onnx, onnxruntime, and onnxscript packages are not installed"
+        )
     # attempt to separate embeddings and classifier outputs
     outputs = []
     if include_preprocessor_output:
@@ -162,5 +175,6 @@ def to_onnx_program(
         dynamic_shapes=[{0: "dim_x"}],  # allow dynamic batch size
         dynamo=True,
         output_names=outputs,
-        **kwargs,  # e.g. report=True, opset_version=18
+        opset_version=opset_version,
+        **kwargs,  # e.g. report=True
     )

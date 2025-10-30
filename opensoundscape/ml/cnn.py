@@ -2617,6 +2617,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         include_preprocessor_output=True,
         include_embedding_output=True,
         include_classifier_output=True,
+        **kwargs,
     ):
         """Export the model to ONNX format
 
@@ -2624,6 +2625,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         torch.nn.Modules in preprocessor.pipeline['transform'].transforms
         (see example below)
 
+        Requires that onnx, onnxruntime, and onnxscript are packages are installed
 
         Args:
             path: file path to save the ONNX model
@@ -2636,7 +2638,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 in the ONNX model outputs [default: True]
             include_classifier_output: if True, includes the output of the classifier
                 in the ONNX model outputs [default: True]
-
+            **kwargs: additional keyword arguments passed to
+                opensoundscape.ml.export.to_onnx_program()
         Returns:
             onnx_program: an in-memory ONNX program object
 
@@ -2770,6 +2773,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             include_embedding_output=include_embedding_output,
             include_classifier_output=include_classifier_output,
             include_preprocessor_output=include_preprocessor_output,
+            **kwargs,
         )
         if path is not None:
             onnx_program.save(path)
