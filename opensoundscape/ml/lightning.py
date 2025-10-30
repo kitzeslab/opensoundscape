@@ -19,6 +19,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.lightning_mode = True
+        self.compute_per_class_metrics = False
         self.save_hyperparameters()
 
     def train(self, *args, **kwargs):

@@ -30,19 +30,44 @@ def get_reqd_args(func):
 
 
 def process_tensor_for_display(
-    tensor, channel=None, transform_from_zero_centered=True, invert=False
+    tensor,
+    channel=None,
+    normalize_from_range=[-1, 1],
+    invert=False,
+    clip=None,
 ):
+    """process tensor for display as image
+
+    Moves channel axis from first to third position, converts
+    torch.Tensor to numpy array, rescales values from [min,max] to [0,1]
+
+    Args:
+        tensor: torch.Tensor of shape [c,w,h]
+        channel: specify an integer to plot only one channel (axis 0)
+            otherwise will return all channels
+        normalize_from_range: list of [min,max] values to normalize tensor from
+        invert: if true, flips value range via x=1-x
+        clip: if specified, tuple of (min,max) to clip values to after normalization
+
+    Returns:
+        numpy array of shape [w,h] or [w,h,c]
+    """
 
     tensor = copy.deepcopy(tensor)
 
-    if transform_from_zero_centered:
-        tensor = tensor / 2 + 0.5
+    if normalize_from_range is not None:
+        min_val, max_val = normalize_from_range
+        tensor = (tensor - min_val) / (max_val - min_val)
 
     if invert:
         tensor = 1 - tensor
 
     # re-arrange dimensions for img plotting
     sample = tensor.detach().numpy().transpose([1, 2, 0])
+
+    if clip is not None:
+        min_clip, max_clip = clip
+        sample = np.clip(sample, min_clip, max_clip)
 
     if channel is not None:
         sample = sample[:, :, channel]
@@ -53,9 +78,10 @@ def process_tensor_for_display(
 def show_tensor(
     tensor,
     channel=None,
-    transform_from_zero_centered=True,
+    normalize_from_range=[-1, 1],
     invert=False,
     cmap=None,
+    clip=[0, 1],
     axis=None,
 ):
     """helper function for displaying a sample as an image
@@ -69,13 +95,15 @@ def show_tensor(
             if true, flips value range via x=1-x
         cmap: matplotlib colormap passed to plt.imshow()
             - if None, will choose 'Greys' if only one channel
+        clip: if specified, tuple of (min,max) to clip values to after normalization
         axis: matplotlib axis to plot on, if None will create new figure
     """
     sample = process_tensor_for_display(
         tensor,
         channel=channel,
-        transform_from_zero_centered=transform_from_zero_centered,
+        normalize_from_range=normalize_from_range,
         invert=invert,
+        clip=clip,
     )
 
     if cmap is None:
@@ -96,30 +124,87 @@ def show_tensor(
 def show_tensor_grid(
     tensors,
     columns,
-    channel=None,
-    transform_from_zero_centered=True,
-    invert=False,
     labels=None,
+    channel=None,
+    normalize_from_range=[-1, 1],
+    invert=False,
+    cmap=None,
+    clip=[0, 1],
+    axes=None,
+    pad=0.05,  # outer margin
+    gap=0.05,  # inner gap between images
+    title_height=0.07,  # extra top margin for titles
 ):
-    """create image of nxn tensors
+    """Create a tightly packed image grid of tensors.
 
     Args:
-        tensors:list of samples
-        columns: number of columns in grid
-        labels: title of each subplot
-        for other args, see show_tensor()
+        tensors: list of torch.Tensor objects to display
+        columns: number of columns in the grid
+        labels: optional list of titles for each tensor
+        channel: specify an integer to plot only one channel, otherwise will
+            attempt to plot all channels
+        normalize_from_range: list of [min,max] values to normalize tensor from
+        invert: if true, flips value range via x=1-x
+        cmap: matplotlib colormap passed to plt.imshow()
+            - if None, will choose 'Greys' if only one channel
+        clip: if specified, tuple of (min,max) to clip values to after normalization
+        axes: optional matplotlib axes to plot on, if None will create new figure
+        pad: outer margin around the grid (fraction of figure size)
+        gap: inner gap between images (fraction of figure size)
+        title_height: extra top margin for titles (fraction of figure size)
 
     Returns:
-        fig, axs = matplotlib figure and axes array
+        axes: numpy array of matplotlib axes objects
     """
+
     if labels is not None:
         assert len(labels) == len(tensors)
 
-    fig, axs = plt.subplots(np.ceil(len(tensors) / columns).astype(int), columns)
-    axs = axs.flatten()
-    for i, s in enumerate(tensors):
-        show_tensor(s, channel, transform_from_zero_centered, invert, axis=axs[i])
-        if labels is not None:
-            axs[i].set_title(labels[i])
-    plt.tight_layout()
-    return fig, axs
+    n = len(tensors)
+    n_rows = int(np.ceil(n / columns))
+
+    if labels is None:
+        title_height = 0.0
+
+    if axes is None:
+        fig, axes = plt.subplots(
+            n_rows,
+            columns,
+            squeeze=False,
+            constrained_layout=False,
+        )
+
+    axes_flat = axes.flatten()
+
+    for i, ax in enumerate(axes_flat):
+        ax.axis("off")
+        if i < n:
+            show_tensor(
+                tensors[i],
+                axis=ax,
+                channel=channel,
+                normalize_from_range=normalize_from_range,
+                invert=invert,
+                cmap=cmap,
+                clip=clip,
+            )
+            if labels is not None:
+                ax.set_title(labels[i], fontsize=8, pad=3)
+        else:
+            ax.set_visible(False)
+
+    # Adjust spacing: minimal vertical/horizontal whitespace
+    plt.subplots_adjust(
+        left=pad,
+        right=1 - pad,
+        bottom=pad,
+        top=1 - pad,
+        wspace=gap,
+        hspace=gap + title_height,
+    )
+
+    # Prevent shrinking from aspect ratio differences
+    for ax in axes_flat[: len(tensors)]:
+        ax.set_aspect("auto")
+
+    return axes
