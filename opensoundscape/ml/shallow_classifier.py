@@ -123,7 +123,14 @@ class MLPClassifier(torch.nn.Module):
 
 
 class EmbeddingDataset(Dataset):
-    """simple dataset wrapper for embedding features and labels"""
+    """simple dataset wrapper for embedding features and labels
+
+    Args:
+        features: tensor or np.array of input features
+            first dimension should be samples
+        labels: tensor or np.array of target labels
+            first dimension should be samples
+    """
 
     def __init__(self, features, labels):
         self.features = features
