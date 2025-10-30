@@ -186,6 +186,281 @@ class EmbeddingDataset(Dataset):
         return self.features[idx], self.labels[idx]
 
 
+import numpy as np
+
+
+class HopliteDataset(Dataset):
+    """Dataset that retrieves embeddings from a HopliteDB for given files and start times"""
+
+    def __init__(self, db, label_df, dataset_name):
+        """Initialize the HopliteDataset
+
+        Args:
+            db: HopliteDB instance to retrieve embeddings from
+            label_df: DataFrame with multi-index (file, start_time, end_time) for samples and labels
+            dataset_name: name of the dataset in the HopliteDB to retrieve embeddings from
+        """
+        self.db = db
+        self.label_df = label_df
+        self.dataset_name = dataset_name
+        self.selection_mode = "first"  # first or random for matching embeddings
+
+    @property
+    def label_df(self):
+        return self._label_df
+
+    @label_df.setter
+    def label_df(self, new_df):
+        self._label_df = new_df
+        self.files = new_df.index.get_level_values("file").astype(str).to_numpy()
+        self.start_times = (
+            new_df.index.get_level_values("start_time").to_numpy().astype(np.float16)
+        )
+
+    def __len__(self):
+        return len(self.label_df)
+
+    def __getitem__(self, idx):
+        ids = self.db.get_embeddings_by_source(
+            self.dataset_name,
+            source_id=self.files[idx],
+            offsets=np.array([self.start_times[idx]], np.float16),
+        )
+        if self.selection_mode == "first":
+            id = ids[0]
+        elif self.selection_mode == "random":
+            id = np.random.choice(ids)
+        emb = self.db.get_embedding(id)
+
+        return emb, self.label_df.iloc[idx].values
+
+
+def fit_on_hoplite_db(
+    model,
+    hoplite_db,
+    dataset_name,
+    train_df,
+    validation_df=None,
+    batch_size=128,
+    steps=1000,
+    optimizer=None,
+    criterion=None,
+    device=torch.device("cpu"),
+    validation_interval=1,
+    logging_interval=100,
+    early_stopping_patience=None,
+):
+    """train a PyTorch model on Hoplite Embedding DB and labels with batching and early stopping
+
+    Defaults are for multi-target label problems and assume train_df is a dataframe of 0/1
+    per class with multi-index (file, start_time, end_time)
+
+    Args:
+        model: a torch.nn.Module object to train
+
+        hoplite_db: a HopliteDB instance containing the embeddings to train on
+
+        train_df: labels for training, generally one-hot encoded with shape
+        (n_samples,n_classes); should be a valid target for criterion()
+
+        validation_df: labels for validation; if None, does not perform validation
+
+        validation_labels: labels for validation; if None, does not perform validation
+
+        batch_size: batch size for training; if fewer samples than batch_size,
+            the entire dataset is used as a single batch
+            [Default: 128]
+
+        steps: number of training steps (epochs); each step, all data is passed forward and
+        backward, and the optimizer updates the weights
+            [Default: 1000]
+
+        optimizer: torch.optim optimizer to use; default None uses AdamW
+
+        criterion: loss function to use; default None uses BCEWithLogitsLoss (appropriate for
+        multi-label classification)
+
+        device: torch.device to use; default is torch.device('cpu')
+
+        validation_interval: how often to validate the model during training; if validation_features
+        and validation_labels are provided, validation is performed every validation_interval steps
+
+        logging_interval: how often to print training progress; progress is logged every
+        logging_interval steps when validation is performed
+
+        early_stopping_patience: if provided and validation data is available, training will stop
+        early if validation loss doesn't improve for this many steps (not validation evaluations)
+        [Default: None, which means no early stopping]
+    """
+    # if no optimizer or criterion provided, use default AdamW and BCEWithLogitsLoss
+    if optimizer is None:
+        optimizer = torch.optim.AdamW(model.parameters())
+    if criterion is None:
+        criterion = torch.nn.BCEWithLogitsLoss()
+
+    # move the model to the device
+    model.to(device)
+
+    train_dataset = HopliteDataset(hoplite_db, train_df, dataset_name)
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=0
+    )
+
+    # if validation data provided, convert to tensors and move to the device
+    best_val_loss = float("inf")
+    best_model_state = None
+    best_step = -1
+    if validation_df is not None:
+        validation_dataset = HopliteDataset(hoplite_db, validation_df, dataset_name)
+        validation_loader = DataLoader(
+            validation_dataset, batch_size=batch_size, shuffle=False, num_workers=0
+        )
+
+    for step in range(steps):
+        model.train()
+
+        # iterate over the training data in batches
+        for batch_features, batch_labels in train_loader:
+            batch_features = torch.as_tensor(batch_features, dtype=torch.float32).to(
+                device
+            )
+            batch_labels = torch.as_tensor(batch_labels, dtype=torch.float32).to(device)
+
+            # zero the gradients
+            optimizer.zero_grad()
+
+            # forward pass
+            outputs = model(batch_features)
+
+            # compute loss
+            loss = criterion(outputs, batch_labels)
+
+            # backward pass and optimization
+            loss.backward()
+            optimizer.step()
+
+        # Validation (optional)
+        if validation_df is not None and (step + 1) % validation_interval == 0:
+            model.eval()
+            with torch.no_grad():
+                # val_outputs = model(validation_features)
+                # val_loss = criterion(val_outputs, validation_labels)
+                val_outputs = []
+                val_loss = 0.0
+                for val_batch_features, val_batch_labels in validation_loader:
+                    val_batch_features = torch.as_tensor(
+                        val_batch_features, dtype=torch.float32
+                    ).to(device)
+                    val_batch_labels = torch.as_tensor(
+                        val_batch_labels, dtype=torch.float32
+                    ).to(device)
+
+                    # forward pass
+                    val_output = model(val_batch_features)
+                    val_outputs.append(val_output)
+
+                    # compute loss
+                    val_loss += criterion(val_output, val_batch_labels).item()
+                val_outputs = torch.cat(val_outputs, dim=0)
+                val_loss /= len(validation_loader)
+
+            # Check if this is the best validation loss and save model state
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_model_state = model.state_dict()
+                best_step = step
+
+            # Store metrics
+            try:
+                auroc = roc_auc_score(
+                    validation_df.values,
+                    val_outputs.detach().cpu().numpy(),
+                )
+            except:
+                auroc = float("nan")
+            try:
+                map = average_precision_score(
+                    validation_df.values,
+                    val_outputs.detach().cpu().numpy(),
+                )
+            except:
+                map = float("nan")
+
+            # log the loss and metrics
+            if (step + 1) % logging_interval == 0:
+                print(
+                    f"Epoch {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}"
+                )
+                print(f"\tval AU ROC: {auroc:0.3f}")
+                print(f"\tval MAP: {map:0.3f}")
+
+            # Check early stopping condition based on steps since last improvement
+            if early_stopping_patience is not None and best_step >= 0:
+                # Calculate steps since last improvement
+                steps_since_improvement = step - best_step
+                if steps_since_improvement >= early_stopping_patience:
+                    print(
+                        f"Early stopping triggered after {step + 1} steps (patience: {early_stopping_patience})"
+                    )
+                    print(
+                        f"Best validation loss: {best_val_loss:0.3f} at step {best_step + 1}"
+                    )
+                    break
+
+    # Load the best model state if validation was used
+    if validation_df is not None and best_model_state is not None:
+        model.load_state_dict(best_model_state)
+        print(
+            f"Loaded best model with validation loss: {best_val_loss:0.3f} at step {best_step + 1} of {steps}"
+        )
+        # compute metrics for the best model
+        model.eval()
+        with torch.no_grad():
+            val_outputs = []
+            for val_batch_features, _ in validation_loader:
+                val_batch_features = torch.as_tensor(
+                    val_batch_features, dtype=torch.float32
+                ).to(device)
+                val_output = model(val_batch_features)
+                val_outputs.append(val_output)
+            val_outputs = torch.cat(val_outputs, dim=0)
+        try:
+            auroc = roc_auc_score(
+                validation_df.values,
+                val_outputs.detach().cpu().numpy(),
+            )
+        except:
+            auroc = float("nan")
+        try:
+            map = average_precision_score(
+                validation_df.values,
+                val_outputs.detach().cpu().numpy(),
+            )
+        except:
+            map = float("nan")
+        per_class_auroc = []
+        for i in range(validation_df.shape[1]):
+            try:
+                per_class_auroc.append(
+                    roc_auc_score(
+                        validation_df.values[:, i],
+                        val_outputs[:, i].detach().cpu().numpy(),
+                    )
+                )
+            except:
+                per_class_auroc.append(float("nan"))
+        best_model_val_metrics = {
+            "loss": best_val_loss,
+            "auroc": auroc,
+            "map": map,
+            "per_class_auroc": per_class_auroc,
+        }
+    else:
+        best_model_val_metrics = None
+    print("Training complete")
+    return best_model_val_metrics
+
+
 def fit(
     model,
     train_features,
