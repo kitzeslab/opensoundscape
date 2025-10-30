@@ -199,10 +199,16 @@ def test_plot_spectrogram_kHz():
     )
 
 
-def test_amplitude_spectrogram():
-    Spectrogram(
-        np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20)
-    ).amplitude()
+def test_spectrogram_pcen():
+    s = Spectrogram(
+        np.random.normal(-40, 0, [20, 40]),
+        np.zeros((20)),
+        np.zeros((40)),
+        audio_sample_rate=200,
+        hop_samples=10,
+    )
+    pcen_s = s.pcen()
+    assert pcen_s.shape == s.power_spectrogram.shape
 
 
 def test_rms_spectrogram():
