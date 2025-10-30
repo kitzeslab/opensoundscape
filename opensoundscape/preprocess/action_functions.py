@@ -1,4 +1,4 @@
-"""preprocessing and augmentation functions 
+"""preprocessing and augmentation functions
 
 these can be passed to the Action class (action_fn=...) to create a preprocessing action that applies the function to a sample
 """
@@ -8,6 +8,7 @@ import random
 import librosa
 import torch
 import torchvision
+import numpy as np
 
 from opensoundscape.audio import Audio, mix, concat
 from opensoundscape.preprocess import tensor_augment, io
@@ -54,6 +55,64 @@ def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
 
 
 @register_action_fn
+def adaptive_random_gain(
+    audio, gain_range=(-30, 0), min_output_level=-40, clip_range=[-1, 1]
+):
+    """apply gain while maintaining a minimum resulting dBFS level
+
+    applies a randomly selected gain level to an Audio object,
+    while ensuring that the resulting audio has at least min_output_level dBFS
+    (while respecting the maximum gain allowed in the gain_range argument)
+
+    Args:
+        audio: an Audio object
+        gain_range: (min,max) decibels of gain to apply
+            - dB gain applied is chosen from a uniform random
+            distribution in this range
+        min_output_level: minimum dBFS level of resulting audio
+            - if audio.dBFS + gain < min_output_level, gain_range is
+            restricted to ensure resulting audio is at least min_output_level dBFS
+    """
+    # constrain the lower bound of the gain range to ensure we don't reduce
+    # the level below the desired minimum
+    gain_lower_bound = max(gain_range[0], min_output_level - audio.dBFS)
+
+    return audio_random_gain(
+        audio, dB_range=(gain_lower_bound, gain_range[1]), clip_range=clip_range
+    )
+
+
+@register_action_fn
+def adaptive_random_noise(audio, snr_range=(-20, 0), signal_dB=0, color="white"):
+    """apply random noise, selecting from a signal to noise ratio range
+
+    Args:
+        audio: an Audio object
+        snr_range: (min,max) decibels of signal to noise ratio
+            - SNR is defined here as signal_dB - noise_dBFS
+            - SNR is chosen from a uniform random distribution in this range
+        signal_dB: dB (decibels) gain to apply to the incoming Audio
+            before mixing with noise [default: 0 dB]
+        color: color of noise to add (see Audio.noise() `color` arg)
+            options: "white", "pink", "brownian", "brown", "violet", "blue"
+
+    Returns: Audio object with noise added
+    """
+    # add random noise with a level based on the signal level
+    # the signal to noise ratio relative to the input is chosen from snr_range
+    # signal_dB is the gain applied to the input signal before mixing with noise
+    # (can be negative to reduce signal level)
+    signal_level = audio.dBFS + signal_dB
+    noise_dB = signal_level + np.random.uniform(snr_range[0], snr_range[1])
+    return audio_add_noise(
+        audio,
+        noise_dB=noise_dB,
+        signal_dB=signal_dB,
+        color=color,
+    )
+
+
+@register_action_fn
 def audio_add_noise(audio, noise_dB=-30, signal_dB=0, color="white"):
     """Generates noise and adds to audio object
 
@@ -88,6 +147,35 @@ def audio_add_noise(audio, noise_dB=-30, signal_dB=0, color="white"):
     )
 
     return mix([audio, noise], gain=[signal_dB, 0])
+
+
+@register_action_fn
+def random_lowpass(
+    audio, cutoff_range=(3000, 9000), probability=0.5, order_range=(1, 1)
+):
+    """randomly apply lowpass filter to audio
+
+    Args:
+        audio: an Audio object
+        cutoff_range: (min,max) frequency range in Hz for cutoff frequency
+            - cutoff frequency is chosen randomly from this range with uniform distribution
+        probability: probability of applying the lowpass filter
+        order_range: (min,max) range of filter orders to choose from
+            - order is chosen randomly from this range with uniform distribution
+            - higher order = steeper filter rolloff; default 1 = gentle rolloff
+            2 already creates steep enough rollof to eliminate most high freq content
+
+    Returns:
+        Audio object, possibly lowpass filtered
+    """
+    if random.random() > probability:
+        # don't augment
+        return audio
+
+    cutoff_freq = random.uniform(cutoff_range[0], cutoff_range[1])
+    order = random.randint(order_range[0], order_range[1])
+
+    return audio.lowpass(cutoff_f=cutoff_freq, order=order)
 
 
 @register_action_fn
@@ -296,15 +384,20 @@ def random_wrap_audio(audio, probability=0.5, max_shift=None):
 
 @register_action_fn
 def audio_time_mask(
-    audio, max_masks=10, max_width=0.02, noise_dBFS=-15, noise_color="white"
+    audio, max_masks=10, max_width=0.02, noise_to_signal_dB=10, noise_color="white"
 ):
     """randomly replace time slices with  noise
+
+    Adaptively selects noise level relative to the signal level of the input audio
 
     Args:
         audio: input Audio object
         max_masks: maximum number of white noise time masks [default: 10]
         max_width: maximum size of bars as fraction of sample width [default: 0.02]
-        noise_dBFS & noise_color: see Audio.noise() `dBFS` and `color` args
+        noise_to_signal_dB: desired noise:signal ratio in dB. Positive values
+            mean noise is louder than signal, negative values mean noise is quieter.
+            Signal level is calculated as audio.dBFS ie the temporal average level.
+        noise_color: see Audio.noise() `dBFS` and `color` args
 
     Returns:
         augmented Audio object
@@ -334,6 +427,9 @@ def audio_time_mask(
         np.array(unmasked_segment_starts[:-1]) + np.array(unmasked_segment_lens)
     )
 
+    # choose noise dBFS based on signal level and desired noise:signal ratio
+    noise_dBFS = audio.dBFS + noise_to_signal_dB
+
     samples = []
     for i in range(n_masks):
         samples.extend(
@@ -350,6 +446,8 @@ def audio_time_mask(
     # add the last segment of original audio, making sure we end up with correct total number of samples
     samples.extend(audio.samples[len(samples) - len(audio.samples) :])
 
+    # mix with original audio
+    samples = (np.array(samples) + audio.samples).clip(-1, 1)
     return audio._spawn(samples=samples)
 
 
