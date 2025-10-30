@@ -26,8 +26,6 @@ class MLPClassifier(torch.nn.Module):
     ):
         super().__init__()
 
-        # constructor_name tuple hints to .load()
-        # how to recreate the network with the appropriate shape
         self.in_features = input_size
         self.out_features = output_size
         self.hidden_layer_sizes = tuple(hidden_layer_sizes)
@@ -69,12 +67,37 @@ class MLPClassifier(torch.nn.Module):
         x = self.classifier(x)
         return x
 
-    def fit(self, *args, **kwargs):
-        """fit the MLP classifier on features and labels
-
-        Args: see shallow_classifier.fit()
-        """
-        fit(self, *args, **kwargs)
+    def fit(
+        self,
+        train_features,
+        train_labels,
+        validation_features=None,
+        validation_labels=None,
+        batch_size=128,
+        steps=1000,
+        optimizer=None,
+        criterion=None,
+        device=torch.device("cpu"),
+        validation_interval=1,
+        logging_interval=100,
+        early_stopping_patience=None,
+    ):
+        # note that docstring is copied from fit()
+        fit(
+            model=self,
+            train_features=train_features,
+            train_labels=train_labels,
+            validation_features=validation_features,
+            validation_labels=validation_labels,
+            batch_size=batch_size,
+            steps=steps,
+            optimizer=optimizer,
+            criterion=criterion,
+            device=device,
+            validation_interval=validation_interval,
+            logging_interval=logging_interval,
+            early_stopping_patience=early_stopping_patience,
+        )
 
     def save(self, path):
         torch.save(
@@ -163,7 +186,8 @@ def fit(
         criterion: loss function to use; default None uses BCEWithLogitsLoss (appropriate for
         multi-label classification)
 
-        device: torch.device to use; default is torch.device('cpu')
+        device: torch.device to use; default is torch.device('cpu'); can also be e.g.
+        torch.device('cuda:0') for first CUDA GPU or torch.device('mps') for Mac with M1/M2
 
         validation_interval: how often to validate the model during training; if validation_features
         and validation_labels are provided, validation is performed every validation_interval steps
@@ -344,6 +368,10 @@ def fit(
         best_model_val_metrics = None
     print("Training complete")
     return best_model_val_metrics
+
+
+# copy fit docstring to MLPClassifier.fit
+MLPClassifier.fit.__doc__ = fit.__doc__
 
 
 def augmented_embed(
