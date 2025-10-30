@@ -172,6 +172,28 @@ class Spectrogram:
         # Take the square root to get RMS (amplitude, not power)
         return np.sqrt(power)
 
+    def pcen(self, **kwargs):
+        """apply per-channel energy normalization (PCEN) to spectrogram, return 2d numpy array
+
+        see: https://librosa.org/doc/latest/generated/librosa.pcen.html#librosa.pcen
+
+        Args:
+            **kwargs: keyword arguments passed to librosa.pcen()
+            including time_constant, gain, bias, power, eps, b
+
+        Returns:
+            2d numpy array with PCEN applied to self.power_spectrogram
+        """
+        assert (
+            self.audio_sample_rate is not None and self.hop_samples is not None
+        ), """self.audio_sample_rate or self.hop_samples was None, cannot compute PCEN"""
+        return librosa.pcen(
+            S=self.power_spectrogram,
+            sr=self.audio_sample_rate,
+            hop_length=self.hop_samples,
+            **kwargs,
+        )
+
     @classmethod
     def from_audio(
         cls,
@@ -180,6 +202,7 @@ class Spectrogram:
         window_length_sec=None,
         hop_samples=None,
         overlap_fraction=None,
+        overlap_samples=None,
         fft_size=None,
         **kwargs,
     ):
@@ -201,13 +224,14 @@ class Spectrogram:
             window_length_sec: length of a single window in seconds
                 - Note: cannot specify both window_samples and window_length_sec
                 - Warning: specifying this parameter often results in less efficient
-                    spectrogram computation because window_samples will not be
-                    a power of 2.
+                    spectrogram computation because fft_size will not be an optimal value.
             hop_samples: number of samples between the start of consecutive windows
-                - Note: must not specify both hop_samples and overlap_fraction
+                - Note: specify at most one of (hop_samples, overlap_fraction, overlap_samples)
             overlap_fraction: fractional temporal overlap between consecutive windows
-                - Defaults to 0.5 if hop_samples and overlap_fraction are None
-                - Note: cannot specify both hop_samples and overlap_fraction
+                - Defaults to 0.5 if hop_samples, overlap_fraction, and overlap_samples are None
+                - Note: specify at most one of (hop_samples, overlap_fraction, overlap_samples)
+            overlap_samples: number of samples overlapped in consecutive windows
+                - Note: specify at most one of (hop_samples, overlap_fraction, overlap_samples)
             fft_size: number of fft points, see torchaudio.transforms.Spectrogram
                 If None, defaults to window_samples
 
@@ -221,10 +245,12 @@ class Spectrogram:
         We use torchaudio.transforms.Spectrogram to create the STFT power spectrogram, then normalize
         by window length to preserve time-domain signal norm (ie similar values regardless of
         window size parameter).
-        This formulation is equivalent to librosa.magphase(librosa.stft(x,...),power=2)/window_length.
-        Scipy returns spec/window_length, while librosa and torchaudio do not normalize by the window length.
-        A result equivalen to librosa or torchaudio can be obtained via self.power_spectrogram * self.window_samples.
-        Scipy also detrends frame-by-frame by default, resulting in ~0 energy in 0 Hz bin.
+        This formulation is equivalent to
+        `librosa.magphase(librosa.stft(x,...),power=2)/window_length`.
+        Scipy returns spec/window_length, while librosa and torchaudio do not normalize by the
+        window length. A result equivalent to librosa or torchaudio can be obtained via
+        self.power_spectrogram * self.window_samples. Scipy also detrends frame-by-frame by default,
+        resulting in ~0 energy in the 0 Hz bin.
 
         ### Notes on recovering rms amplitude from spectrogram:
         To recover a windowed signal RMS from a spectrogram, use window_fn=torch.ones
@@ -258,19 +284,20 @@ class Spectrogram:
         # else: use user-provided window_samples argument
 
         # determine hop_samples
-        if hop_samples is not None and overlap_fraction is not None:
-            raise ValueError(
-                "You may not specify both `hop_samples` and `overlap_fraction`"
-            )
-        elif hop_samples is None and overlap_fraction is None:
+        # make sure at most one of (hop_samples, overlap_fraction, overlap_samples) is specified
+        assert (
+            sum(x is not None for x in (hop_samples, overlap_fraction, overlap_samples))
+            <= 1
+        ), "Specify at most one of (hop_samples, overlap_fraction, overlap_samples)"
+        if hop_samples is not None:
+            pass  # use provided hop_samples argument
+        elif overlap_fraction is not None:
+            hop_samples = int(window_samples * (1 - overlap_fraction))
+        elif overlap_samples is not None:
+            hop_samples = window_samples - overlap_samples
+        else:
             # default is 50% overlap
             hop_samples = window_samples // 2
-        elif overlap_fraction is not None:
-            assert (
-                overlap_fraction >= 0 and overlap_fraction < 1
-            ), "overlap_fraction must be >=0 and <1"
-            hop_samples = int(window_samples * (1 - overlap_fraction))
-        # else: use the provided hop_samples argument
 
         # create the spectrogram 2d array using torchaudio
         to_spec = torchaudio.transforms.Spectrogram(
@@ -509,6 +536,7 @@ class Spectrogram:
         range=(-80, 0),
         kHz=False,
         cmap="Greys",
+        dB=True,
     ):
         """
         Plot a spectrogram (e.g., mel) with evenly sized pixels and *evenly spaced y-ticks*,
@@ -520,6 +548,7 @@ class Spectrogram:
             range (tuple): (min, max) dB range for color normalization.
             kHz (bool): Plot y-axis in kHz instead of Hz.
             cmap (str): Colormap to use for the spectrogram.
+            dB (bool): If True, plot self.spectrogram (dB values). If False, plot self.power_spectrogram.
 
         Returns:
             matplotlib.axes.Axes
@@ -534,7 +563,7 @@ class Spectrogram:
         im = ax.pcolormesh(
             self.times,
             freqs,
-            self.spectrogram,
+            self.spectrogram if dB else self.power_spectrogram,
             norm=norm,
             cmap=cmap,
         )
@@ -602,7 +631,7 @@ class Spectrogram:
         invert=False,
         return_type="pil",
         range=(-80, 0),
-        use_skimage=False,
+        dB=True,
     ):
         """Create an image from spectrogram (array, tensor, or PIL.Image)
 
@@ -621,15 +650,16 @@ class Spectrogram:
             colormap:
                 if None, greyscale spectrogram is generated
                 Can be any matplotlib colormap name such as 'jet'
+            invert: if True, inverts colors (eg black->white, white->black) via 1-x
+                [default: False]
             return_type: type of returned object
-                - 'pil': PIL.Image
+                - [default] 'pil': PIL.Image
                 - 'np': numpy.ndarray
                 - 'torch': torch.tensor
             range: tuple of (min,max) values of .spectrogram to map to the lowest/highest
                 pixel values. Values outside this range will be clipped to the min/max values
-            use_skimage: if True, use skimage.transform.resize to resize the image
-                [default: False] is recommended and 10-100x faster, but True can be used
-                to match the behavior of OpenSoundscape <0.11.0
+            dB: if True, use self.spectrogram (dB values) for scaling. If False, use
+                self.power_spectrogram (linear values). [default: True]
         Returns:
             Image/array with type depending on `return_type`:
             - PIL.Image with c channels and shape w,h given by `shape`
@@ -648,69 +678,60 @@ class Spectrogram:
                 channels == 3
             ), f"Channels must be 3 to use colormap. Specified {channels}"
 
+        # select spectrogram type based on dB flag
+        spec = self.spectrogram if dB else self.power_spectrogram
+
         # rescale spec_range to [1, 0]
         # note the low values represent silence, so a silent img would be black
         # if plotted directly from these values.
-        array = linear_scale(self.spectrogram, in_range=range, out_range=(0, 1))
+        spec = linear_scale(spec, in_range=range, out_range=(0, 1))
 
         # clip values to [0,1]
-        array = np.clip(array, 0, 1)
+        spec = np.clip(spec, 0, 1)
 
         # flip up-down so that frequency increases from bottom to top
-        array = array[::-1, :]
+        spec = spec[::-1, :]
 
         # invert if desired
         if invert:
-            array = 1 - array
+            spec = 1 - spec
 
         # apply colormaps
         if colormap is not None:  # apply a colormap to get RGB channels
             cm = matplotlib.pyplot.get_cmap(colormap)
-            array = cm(array)[..., :3]  # remove alpha channel (4)
+            spec = cm(spec)[..., :3]  # remove alpha channel (4)
 
         # determine output height and width
         if shape is None:  # if None, use original shape
-            shape = np.shape(array)
+            shape = np.shape(spec)
         else:
             # if height or width are None, use original sizes
             if shape[0] is None:
-                shape[0] = np.shape(array)[0]
+                shape[0] = np.shape(spec)[0]
             if shape[1] is None:
-                shape[1] = np.shape(array)[1]
+                shape[1] = np.shape(spec)[1]
 
-        if use_skimage:
-            # match legacy behavior of OpenSoundscape <0.11.0
-            # skimage is 10-100x slower than torch
-            image = skimage.transform.resize(array, (shape[0], shape[1], channels))
-            image = torch.Tensor(image)
-            if len(image.shape) == 2:  # add channel dim to front
-                image = image.unsqueeze(0)
-            else:  # move channel dim to front
-                image = image.permute(2, 0, 1)
-        else:
-            # use torch, much faster than skimage
+        # make tensor; copy to avoid an error about -1 stride
+        tensor = torch.Tensor(spec.copy())
 
-            # make tensor; copy to avoid an error about -1 stride
-            tensor = torch.Tensor(array.copy())
-
-            if len(tensor.shape) == 2:  # add channel dim to front
-                tensor = tensor.unsqueeze(0)
-            else:  # move channel dim to front
-                tensor = tensor.permute(2, 0, 1)
-            # add batch dim
+        if len(tensor.shape) == 2:  # add channel dim to front
             tensor = tensor.unsqueeze(0)
+        else:  # move channel dim to front
+            tensor = tensor.permute(2, 0, 1)
+        # add batch dim
+        tensor = tensor.unsqueeze(0)
 
-            # copy over channel dimension if needed
-            tensor = tensor.expand(-1, channels, -1, -1)
+        # copy over channel dimension if needed
+        tensor = tensor.expand(-1, channels, -1, -1)
 
-            # interpolate to desired shape
-            image = F.interpolate(
-                tensor,
-                size=(shape[0], shape[1]),
-                mode="bilinear",
-                align_corners=False,
-            )
-            image = image.squeeze(0)  # remove leading batch dim
+        # interpolate to desired shape
+        image = F.interpolate(
+            tensor,
+            size=(shape[0], shape[1]),
+            mode="bilinear",
+            align_corners=False,
+        )
+        image = image.squeeze(0)  # remove leading batch dim
 
         if return_type == "np":
             image = image.numpy()
@@ -751,17 +772,10 @@ class Spectrogram:
 
 
 class MelSpectrogram(Spectrogram):
-    """Immutable mel-spectrogram container
+    """MelSpectrogram class storing mel-frequency spectrogram values and metadata
 
     A mel spectrogram is a spectrogram with pseudo-logarithmically spaced
-    frequency bins (see literature) rather than linearly spaced bins.
-
-    See Spectrogram class an Librosa's melspectrogram for detailed documentation.
-
-    NOTE: Here we rely on scipy's spectrogram function (via Spectrogram)
-    rather than on librosa's _spectrogram or melspectrogram, because the
-    amplitude of librosa's spectrograms do not match expectations. We only
-    use the mel frequency bank from Librosa.
+    frequency bins rather than linearly spaced bins.
     """
 
     def __repr__(self):
@@ -770,7 +784,7 @@ class MelSpectrogram(Spectrogram):
             "frequencies={self.frequencies.shape}, times={self.times.shape})>"
         )
 
-    @classmethod  # TODO use torchaudio's MelSpectrogram
+    @classmethod
     def from_audio(
         cls,
         audio,
@@ -778,8 +792,8 @@ class MelSpectrogram(Spectrogram):
         window_length_sec=None,
         hop_samples=None,
         overlap_fraction=None,
-        n_fft=None,
-        dB_scale=True,
+        overlap_samples=None,
+        fft_size=None,
         n_mels=64,
         f_min=0,
         f_max=None,
@@ -808,12 +822,14 @@ class MelSpectrogram(Spectrogram):
             window_length_sec: length of a single window in seconds
                 - Note: cannot specify both window_samples and window_length_sec
             hop_samples: number of samples between consecutive windows
-                - Note: cannot specify both hop_samples and overlap_fraction
+                - Note: specify at most one of (hop_samples, overlap_fraction, overlap_samples)
             overlap_fraction: fractional temporal overlap between consecutive windows
                 - Defaults to 0.5 if hop_samples and overlap_fraction are None
-                - Note: cannot specify both hop_samples and overlap_fraction
-            n_fft: see scipy.signal.spectrogram's `nfft` parameter
-            dB_scale: If True, rescales values to decibels
+                - Note: specify at most one of (hop_samples, overlap_fraction, overlap_samples)
+            overlap_samples=None,: number of overlapping samples between consecutive windows
+                - Note: specify at most one of (hop_samples, overlap_fraction, overlap_samples)
+            fft_size: number of fft points, see torchaudio.transforms.Spectrogram
+                If None, defaults to window_samples
             n_mels: Number of mel bands to generate [default: 128]
                 Note: n_mels should be chosen for compatibility with the
                 Spectrogram parameter `window_samples`. Choosing a value
@@ -847,7 +863,8 @@ class MelSpectrogram(Spectrogram):
             window_length_sec=window_length_sec,
             hop_samples=hop_samples,
             overlap_fraction=overlap_fraction,
-            fft_size=n_fft,
+            overlap_samples=overlap_samples,
+            fft_size=fft_size,
             **kwargs,
         )
 
