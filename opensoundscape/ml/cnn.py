@@ -2081,6 +2081,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # initialize scores
         pred_scores = []
+        
+        # Track invalid indices across all batches
+        # (samples that failed preprocessing and were substituted)
+        invalid_indices_list = []
 
         # init a variable to save outputs of each batch for each target layer
         intermediate_layers = intermediate_layers or []
@@ -2107,9 +2111,23 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
-            for i, (batch_tensors, _) in enumerate(
+            batch_start_idx = 0  # track the overall index of the first sample in each batch
+            for i, batch_data in enumerate(
                 tqdm(dataloader, disable=not progress_bar)
             ):
+                # Handle both old-style (2-tuple) and new-style (3-tuple) collate functions
+                # Old style: (batch_tensors, labels)
+                # New style: (batch_tensors, labels, invalid_flags)
+                if len(batch_data) == 3:
+                    batch_tensors, _, invalid_flags = batch_data
+                    # Track which indices in this batch are invalid (substitute samples)
+                    for batch_idx, is_invalid in enumerate(invalid_flags):
+                        if is_invalid:
+                            invalid_indices_list.append(batch_start_idx + batch_idx)
+                else:
+                    # Old-style collate function (2-tuple)
+                    batch_tensors, _ = batch_data
+                
                 batch_tensors = batch_tensors.to(self.device)
                 batch_tensors.requires_grad = False
 
@@ -2118,6 +2136,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
                 # disable gradients on returned values
                 pred_scores.extend(list(logits.detach().cpu().numpy()))
+                
+                # Update batch_start_idx for next iteration
+                batch_start_idx += len(batch_tensors)
 
                 if wandb_session is not None:
                     wandb_session.log(
@@ -2147,9 +2168,16 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             # replace scores with nan for samples that failed in preprocessing
             # (we predicted on substitute-samples rather than
             # skipping the samples that failed preprocessing)
-            pred_scores[dataloader.dataset._invalid_indices, :] = np.nan
-            for i in range(len(intermediate_outputs)):
-                intermediate_outputs[i][dataloader.dataset._invalid_indices, :] = np.nan
+            
+            # Combine invalid indices from both sources:
+            # 1. invalid_indices_list: collected from collate function (works with num_workers>0)
+            # 2. dataloader.dataset._invalid_indices: collected in main process (works with num_workers=0)
+            all_invalid_indices = list(set(invalid_indices_list) | set(dataloader.dataset._invalid_indices))
+            
+            if len(all_invalid_indices) > 0:
+                pred_scores[all_invalid_indices, :] = np.nan
+                for i in range(len(intermediate_outputs)):
+                    intermediate_outputs[i][all_invalid_indices, :] = np.nan
         else:
             pred_scores = None
 

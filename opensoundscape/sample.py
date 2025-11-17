@@ -165,6 +165,9 @@ def collate_audio_samples_to_dict(samples):
 
     assumes that s.data is a Tensor and s.labels is a list/array
     for each sample S, and that every sample has labels for the same classes.
+    
+    Also tracks which samples are substitutes for failed samples by checking for
+    the _is_substitute_sample attribute (set by SafeDataset when num_workers>0).
 
     Args:
 
@@ -175,11 +178,19 @@ def collate_audio_samples_to_dict(samples):
         dictionary of {
             "samples":batched tensor of samples,
             "labels": batched tensor of labels,
+            "invalid_flags": list of boolean values indicating which samples are substitutes
         }
     """
+    # Track which samples in this batch are substitutes for failed samples
+    invalid_flags = []
+    for s in samples:
+        is_substitute = getattr(s, '_is_substitute_sample', False)
+        invalid_flags.append(is_substitute)
+    
     return {
         "samples": torch.stack([s.data for s in samples]),
         "labels": torch.Tensor(np.vstack([s.labels.values for s in samples])),
+        "invalid_flags": invalid_flags,
     }
 
 
@@ -190,14 +201,27 @@ def collate_audio_samples(samples):
     assumes that s.data is a Tensor and s.labels is a list/array
     for each item in samples, and that every sample has labels for the same classes.
 
+    Also tracks which samples are substitutes for failed samples by checking for
+    the _is_substitute_sample attribute (set by SafeDataset when num_workers>0).
+
     Args:
         samples: iterable of AudioSample objects (or other objects
             with attributes .data as Tensor and .labels as list/array)
 
     Returns:
-        (samples, labels) tensors of shape (batch_size, *) & (batch_size, n_classes)
+        (samples, labels, invalid_flags) where:
+        - samples: tensor of shape (batch_size, *)
+        - labels: tensor of shape (batch_size, n_classes)
+        - invalid_flags: list of boolean values indicating which samples are substitutes
     """
+    # Track which samples in this batch are substitutes for failed samples
+    invalid_flags = []
+    for s in samples:
+        is_substitute = getattr(s, '_is_substitute_sample', False)
+        invalid_flags.append(is_substitute)
+    
     return (
         torch.stack([s.data for s in samples]),
         torch.Tensor(np.vstack([s.labels.values for s in samples])),
+        invalid_flags,
     )

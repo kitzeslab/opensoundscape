@@ -159,11 +159,21 @@ class SafeDataset:
         if self.invalid_sample_behavior == "substitute":
             # try to load the sample at idx, if it fails, try the next sample
             # until we find one that works or have tried all samples
+            original_idx = idx  # remember the original requested index
             attempts = 0
             sample_or_exc = Exception  # placeholder
             while attempts < len(self.dataset):
                 sample_or_exc = self._safe_get_item(idx)
                 if not isinstance(sample_or_exc, Exception):
+                    # Mark the sample with metadata if it's a substitute
+                    if idx != original_idx:
+                        # This is a substitute sample - mark it with the original index
+                        sample_or_exc._is_substitute_sample = True
+                        sample_or_exc._original_index = original_idx
+                    else:
+                        # This is the originally requested sample
+                        sample_or_exc._is_substitute_sample = False
+                        sample_or_exc._original_index = original_idx
                     return sample_or_exc
                 idx += 1
                 attempts += 1
