@@ -432,6 +432,7 @@ class BaseModule:
         samples,
         bypass_augmentations=False,
         collate_fn=collate_audio_samples,
+        raise_errors=False,
         **kwargs,
     ):
         """generate dataloader for training
@@ -455,11 +456,14 @@ class BaseModule:
             shuffle=True,  # SHUFFLE SAMPLES because we are training
             # use pin_memory=True when loading files on CPU and training on CUDA GPU
             pin_memory=self.device.type == "cuda",
+            invalid_sample_behavior="raise" if raise_errors else "substitute",
             collate_fn=collate_fn,
             **kwargs,
         )
 
-    def predict_dataloader(self, samples, collate_fn=collate_audio_samples, **kwargs):
+    def predict_dataloader(
+        self, samples, collate_fn=collate_audio_samples, raise_errors=False, **kwargs
+    ):
         """generate dataloader for inference (predict/validate/test)
 
         Args: see self.inference_dataloader_cls docstring for arguments
@@ -477,6 +481,7 @@ class BaseModule:
             shuffle=False,  # keep original order
             pin_memory=self.device.type == "cuda",
             collate_fn=collate_fn,
+            invalid_sample_behavior="raise" if raise_errors else "placeholder",
             **kwargs,
         )
 
@@ -1160,6 +1165,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
+            collate_fn=identity,  # yield AudioSample list not (tensors,labels)
             **dataloader_kwargs,
         )
 
@@ -1192,7 +1198,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
-        pred_scores = self.__call__(
+        pred_scores = self(
             dataloader=dataloader,
             wandb_session=wandb_session,
             progress_bar=progress_bar,
@@ -2051,6 +2057,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         Args:
             dataloader: DataLoader object to create samples, e.g. from .predict_dataloader()
+                Note: expects list of AudioSample objects, not (tensors, labels)
+                This means you should use SafeAudioDataloader(...,collate_fn=identity)
             wandb_session: a wandb session to log progress to (e.g. return value of wandb.init())
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             intermediate_layers: list of layers to return outputs from
@@ -2107,14 +2115,36 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
-            for i, (batch_tensors, _) in enumerate(
-                tqdm(dataloader, disable=not progress_bar)
-            ):
-                batch_tensors = batch_tensors.to(self.device)
+            for i, samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
+                batch_tensors = torch.stack([s.data for s in samples]).to(self.device)
                 batch_tensors.requires_grad = False
 
                 # forward pass of network: feature extractor + classifier
+                # also runs forward hooks to save intermediate outputs
                 logits = self.network(batch_tensors)
+
+                # mask outputs for any invalid samples (samples that failed in preprocessing)
+                # with np.nan, since the returned values don't correspond to the sample
+                # (the preprocessor instead returned a placeholder value for the sample)
+                invalid_sample_mask = [s.is_alternative for s in samples]
+                logits[invalid_sample_mask] = np.nan
+
+                # need to do the same for intermediate outputs, keeping their shape but
+                # filling values with nan
+                for output_idx in range(len(intermediate_outputs)):
+                    # get the shape of the intermediate output for this batch
+                    batch_output_shape = intermediate_outputs[output_idx][i].shape
+                    # create a mask of the same shape as the intermediate output
+                    # where the values for invalid samples are True
+                    invalid_sample_mask_expanded = (
+                        torch.tensor(invalid_sample_mask)
+                        .unsqueeze(1)
+                        .expand(-1, batch_output_shape[1])
+                    )
+                    # set the values for invalid samples to nan
+                    intermediate_outputs[output_idx][i][
+                        invalid_sample_mask_expanded
+                    ] = np.nan
 
                 # disable gradients on returned values
                 pred_scores.extend(list(logits.detach().cpu().numpy()))
@@ -2143,13 +2173,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             intermediate_outputs = [
                 torch.vstack(x).detach().cpu().numpy() for x in intermediate_outputs
             ]
-
-            # replace scores with nan for samples that failed in preprocessing
-            # (we predicted on substitute-samples rather than
-            # skipping the samples that failed preprocessing)
-            pred_scores[dataloader.dataset._invalid_indices, :] = np.nan
-            for i in range(len(intermediate_outputs)):
-                intermediate_outputs[i][dataloader.dataset._invalid_indices, :] = np.nan
         else:
             pred_scores = None
 
@@ -2317,7 +2340,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 a pd.Series indexed by class name
             **kwargs are passed to SafeAudioDataloader
                 (incl: batch_size, num_workers, split_file_into_clips, bypass_augmentations,
-                raise_errors, overlap_fraction, final_clip, other DataLoader args)
+                invalid_sample_behavior, overlap_fraction, final_clip, other DataLoader args)
 
         Returns:
             a list of AudioSample objects with .cam attribute, an instance of the CAM class (
@@ -2573,7 +2596,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
+        dataloader = self.predict_dataloader(
+            samples, collate_fn=identity, **dataloader_kwargs
+        )
 
         # warn the user if the output size is very large
         try:

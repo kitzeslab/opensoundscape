@@ -37,7 +37,12 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             see `opensoundscape.utils.generate_clip_times_df`
         overlap_fraction: deprecated alias for clip_overlap_fraction
         bypass_augmentations: if True, don't apply any augmentations [default: True]
-        raise_errors: if True, raise errors during preprocessing [default: False]
+        invalid_sample_behavior: how to handle samples that fail to preprocess,
+            one of "substitute", "placeholder", "raise", or "none"
+            - "substitute": pick another sample
+            - "placeholder": return a placeholder value (zeros) for the sample
+            - "raise": raise the error
+            - "none": return None
         collate_fn: function to collate list of AudioSample objects into batches
             [default: idenitty] returns list of AudioSample objects,
             use collate_fn=opensoundscape.sample.collate_audio_samples to return
@@ -63,7 +68,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         overlap_fraction=None,
         final_clip=None,
         bypass_augmentations=True,
-        raise_errors=False,
+        invalid_sample_behavior="placeholder",
         collate_fn=identity,
         audio_root=None,
         **kwargs,
@@ -158,12 +163,9 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             )
 
         # If unsafe_behavior= "substitute", a SafeDataset will not fail on bad files,
-        # but will provide a different sample! Later we go back and replace scores
-        # with np.nan for the bad samples (using safe_dataset._invalid_indices)
-        # this approach to error handling feels hacky
-        # however, returning None would break the batching of samples
-        # "raise" behavior will raise exceptions
-        invalid_sample_behavior = "raise" if raise_errors else "substitute"
+        # but will provide a different sample! This is useful in training
+        # "placeholder" returns a zero-valued sample for samples that fail to preprocess,
+        # but we still need to replace these with NaN later since the output doesn't correspond to the sample
 
         safe_dataset = SafeDataset(
             dataset, invalid_sample_behavior=invalid_sample_behavior
@@ -174,9 +176,4 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             dataset=safe_dataset,
             collate_fn=collate_fn,
             **kwargs,
-        )
-
-        # add any paths that failed to generate a clip df to _invalid_samples
-        self.dataset._invalid_samples = self.dataset._invalid_samples.union(
-            dataset.invalid_samples
         )
