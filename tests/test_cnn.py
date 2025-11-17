@@ -583,6 +583,42 @@ def test_predict_missing_file_is_invalid_sample(missing_file_df, test_df):
     assert missing_file_df.index.values[0] in invalid_samples
 
 
+def test_predict_missing_file_with_num_workers(missing_file_df, test_df):
+    """Test that invalid samples get NaN scores with num_workers>0"""
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+
+    # Test with num_workers=0 (baseline - should work before and after fix)
+    scores_0, invalid_samples_0 = model.predict(
+        pd.concat([missing_file_df, test_df.head(2)]), 
+        return_invalid_samples=True,
+        num_workers=0,
+    )
+    assert len(scores_0) == 3  # missing file + 2 good files
+    isnan = lambda x: x != x
+    # First row should be NaN for the missing file
+    assert np.all([isnan(score) for score in scores_0.iloc[0].values])
+    # Remaining rows should have numeric scores
+    assert np.all([not isnan(score) for score in scores_0.iloc[1].values])
+    assert np.all([not isnan(score) for score in scores_0.iloc[2].values])
+    assert len(invalid_samples_0) == 1
+    assert missing_file_df.index.values[0] in invalid_samples_0
+
+    # Test with num_workers>0 (this is what the bug fix addresses)
+    scores_2, invalid_samples_2 = model.predict(
+        pd.concat([missing_file_df, test_df.head(2)]), 
+        return_invalid_samples=True,
+        num_workers=2,
+    )
+    assert len(scores_2) == 3  # missing file + 2 good files
+    # First row should be NaN for the missing file (this would fail before the fix)
+    assert np.all([isnan(score) for score in scores_2.iloc[0].values])
+    # Remaining rows should have numeric scores
+    assert np.all([not isnan(score) for score in scores_2.iloc[1].values])
+    assert np.all([not isnan(score) for score in scores_2.iloc[2].values])
+    assert len(invalid_samples_2) == 1
+    assert missing_file_df.index.values[0] in invalid_samples_2
+
+
 def test_predict_wrong_input_error(test_df):
     """cannot pass a preprocessor or dataset to predict. only file paths as list or df"""
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
