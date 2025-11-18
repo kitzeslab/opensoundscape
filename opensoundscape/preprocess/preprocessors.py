@@ -24,7 +24,7 @@ from opensoundscape.sample import AudioSample
 from opensoundscape.preprocess.actions import ACTION_CLS_DICT
 from opensoundscape.preprocess import io
 from opensoundscape.preprocess import preprocessors, actions
-
+from opensoundscape.utils import make_clip_df
 
 PREPROCESSOR_CLS_DICT = {}
 
@@ -493,6 +493,12 @@ class SpectrogramPreprocessor(BasePreprocessor):
             Deprecated in favor of using height, width, channels
             - if not None, will override height, width, channels
             [default: None] means use height, width, channels arguments
+        sample_rate: target sample rate. [default: None] does not resample
+        overlay_files: list of file paths to use for overlay augmentation
+            - ignored if overlay_df is provided
+            - if provided, creates a dataframe of non-overlapping clips from the files
+                to use for overlay augmentation
+            For example, `overlay_files = glob.glob(".../background_samples/*.wav")`
     """
 
     def __init__(
@@ -504,6 +510,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
         channels=1,
         sample_shape=None,
         sample_rate=None,
+        overlay_files=None,
     ):
         super().__init__(sample_duration=sample_duration)
 
@@ -521,6 +528,10 @@ class SpectrogramPreprocessor(BasePreprocessor):
         self.height = height
         self.width = width
         self.channels = channels
+
+        # allow user to pass list of overlay_files -> convert to clip dataframe
+        if overlay_df is None and overlay_files is not None:
+            overlay_df = make_clip_df(overlay_files, sample_duration)
 
         # define a default set of Actions
         # each Action's .__call__ method is called during preprocessing
