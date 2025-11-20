@@ -23,7 +23,7 @@ import scipy.sparse
 
 try:
     import crowsetta
-except ImportError:
+except:
     crowsetta = None
 
 
