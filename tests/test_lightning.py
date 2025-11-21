@@ -37,7 +37,8 @@ def model_save_dir(request):
 
     # always delete this at the end
     def fin():
-        shutil.rmtree(path)
+        if path.exists():
+            shutil.rmtree(path)
 
         # lightning logs to a folder in the current dir by default
         # might want to change this to log to save_dir instead?
