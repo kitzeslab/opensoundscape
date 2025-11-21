@@ -4,6 +4,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 import opensoundscape
 from opensoundscape.ml.utils import _version_mismatch_warn
 from torch.utils.data import DataLoader, Dataset
+from opensoundscape.ml.loss import BCELossWeakNegatives
 
 
 class MLPClassifier(torch.nn.Module):
@@ -277,8 +278,9 @@ def fit_on_hoplite_db(
 
         optimizer: torch.optim optimizer to use; default None uses AdamW
 
-        criterion: loss function to use; default None uses BCEWithLogitsLoss (appropriate for
-        multi-label classification)
+        criterion: loss function to use; default None uses BCELossWeakNegatives() (appropriate for
+        multi-label classification); this loss function treats NaN labels as weak negatives,
+            using a default weight of 0.01 for NaN labels compared to strong labels
 
         device: torch.device to use; default is torch.device('cpu')
 
@@ -296,7 +298,7 @@ def fit_on_hoplite_db(
     if optimizer is None:
         optimizer = torch.optim.AdamW(model.parameters())
     if criterion is None:
-        criterion = torch.nn.BCEWithLogitsLoss()
+        criterion = BCELossWeakNegatives()
 
     # move the model to the device
     model.to(device)
@@ -508,8 +510,9 @@ def fit(
 
         optimizer: torch.optim optimizer to use; default None uses AdamW
 
-        criterion: loss function to use; default None uses BCEWithLogitsLoss (appropriate for
-        multi-label classification)
+        criterion: loss function to use; default None uses BCELossWeakNegatives() (appropriate for
+        multi-label classification); this loss function treats NaN labels as weak negatives,
+        using a default weight of 0.01 for NaN labels compared to strong labels
 
         device: torch.device to use; default is torch.device('cpu')
 
@@ -527,7 +530,7 @@ def fit(
     if optimizer is None:
         optimizer = torch.optim.AdamW(model.parameters())
     if criterion is None:
-        criterion = torch.nn.BCEWithLogitsLoss()
+        criterion = BCELossWeakNegatives()
 
     # move the model to the device
     model.to(device)

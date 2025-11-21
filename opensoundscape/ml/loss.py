@@ -38,6 +38,7 @@ class BCELossWeakNegatives(nn.BCEWithLogitsLoss):
 
     def forward(self, x, target):
         target = target.float()  # avoid complaints about long dtype
+        x = x.float()  # avoid complaints about long dtype
 
         # Create a weight tensor based on the target
         weight = torch.ones_like(target)
