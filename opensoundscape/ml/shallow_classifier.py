@@ -196,6 +196,8 @@ class HopliteDataset(Dataset):
     def __init__(self, db, label_df, dataset_name):
         """Initialize the HopliteDataset
 
+        #TODO: to go fast, do we need to do batched retrieval?
+
         Args:
             db: HopliteDB instance to retrieve embeddings from
             label_df: DataFrame with multi-index (file, start_time, end_time) for samples and labels
