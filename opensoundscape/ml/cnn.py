@@ -451,7 +451,7 @@ class BaseModule:
             preprocessor=self.preprocessor,
             split_files_into_clips=True,
             clip_overlap=0,
-            final_clip=None,
+            final_clip="extend",
             bypass_augmentations=bypass_augmentations,
             shuffle=True,  # SHUFFLE SAMPLES because we are training
             # use pin_memory=True when loading files on CPU and training on CUDA GPU
@@ -1056,7 +1056,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         clip_overlap_fraction=None,
         clip_step=None,
         overlap_fraction=None,
-        final_clip=None,
+        final_clip="extend",
         bypass_augmentations=True,
         invalid_samples_log=None,
         raise_errors=False,

@@ -1,4 +1,4 @@
-""" Detect periodic vocalizations with RIBBIT
+"""Detect periodic vocalizations with RIBBIT
 
 This module provides functionality to search audio for periodically fluctuating vocalizations.
 """
@@ -80,7 +80,7 @@ def ribbit(
     clip_overlap=None,
     clip_overlap_fraction=None,
     clip_step=None,
-    final_clip=None,
+    final_clip="extend",
     noise_bands=None,
     spec_clip_range=(-100, -20),
     plot=False,

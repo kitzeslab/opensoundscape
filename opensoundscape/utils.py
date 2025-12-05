@@ -129,7 +129,7 @@ def generate_clip_times_df(
     clip_overlap=None,
     clip_overlap_fraction=None,
     clip_step=None,
-    final_clip=None,
+    final_clip="extend",
     rounding_precision=10,
 ):
     """generate start and end times for even-lengthed clips
@@ -153,13 +153,13 @@ def generate_clip_times_df(
             clip_duration seconds long [default: None].
             Options:
                 - None:         Discard the remainder (do not make a clip)
-                - "extend":     Extend the final clip beyond full_duration to reach clip_duration
-                  length
+                - "extend":     Extend the final clip beyond full_duration with zeros to reach
+                  clip_duration length
                 - "remainder":  Use only remainder of full_duration (final clip will be shorter than
                   clip_duration)
                 - "full":       Increase overlap with previous clip to yield a clip with
-                  clip_duration length.
-                    Note: returns entire original audio if it is shorter than clip_duration
+                  clip_duration length. Note: returns entire original audio if it is shorter than
+                  clip_duration
         rounding_precision (int or None): number of decimals to round start/end times to
             - pass None to skip rounding
 
@@ -248,7 +248,7 @@ def make_clip_df(
     clip_overlap=None,
     clip_overlap_fraction=None,
     clip_step=None,
-    final_clip=None,
+    final_clip="extend",
     return_invalid_samples=False,
     raise_exceptions=False,
     audio_root=None,

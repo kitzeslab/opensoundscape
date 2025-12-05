@@ -66,7 +66,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         clip_overlap_fraction=None,
         clip_step=None,
         overlap_fraction=None,
-        final_clip=None,
+        final_clip="extend",
         bypass_augmentations=True,
         invalid_sample_behavior="placeholder",
         collate_fn=identity,
