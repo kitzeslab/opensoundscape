@@ -7,7 +7,7 @@ from opensoundscape.preprocess.preprocessors import (
 )
 from opensoundscape.preprocess.utils import PreprocessingError
 import warnings
-from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
+from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml import datasets
 
 
@@ -240,7 +240,7 @@ def test_overlay_criterion_fn(dataset_df, overlay_pre):
 
 
 def test_audio_splitting_dataset(dataset_df, pre):
-    dataset = AudioSplittingDataset(dataset_df, pre)
+    dataset = AudioFileDataset(dataset_df, pre)
     assert len(dataset) == 10
 
     # load a sample
@@ -248,7 +248,7 @@ def test_audio_splitting_dataset(dataset_df, pre):
 
 
 def test_audio_splitting_dataset_overlap(dataset_df, pre):
-    dataset = AudioSplittingDataset(dataset_df, pre, clip_overlap_fraction=0.5)
+    dataset = AudioFileDataset(dataset_df, pre, clip_overlap_fraction=0.5)
     assert len(dataset) == 18
 
     # load a sample
@@ -259,7 +259,7 @@ def test_audio_splitting_dataset_overlap_rounding(dataset_df):
     audio_pre = AudioPreprocessor(sample_duration=2.0, sample_rate=48000)
     # issue #945 some overlap fractions like .1 caused rounding errors
     # modified AudioSample.from_series to round duration
-    dataset = AudioSplittingDataset(
+    dataset = AudioFileDataset(
         dataset_df, audio_pre, clip_overlap_fraction=0.1, final_clip=None
     )
     for x in dataset:
@@ -270,7 +270,7 @@ def test_audio_splitting_dataset_overlap_rounding(dataset_df):
     # testing a case where it would fail if the fix was not implemented
     audio_pre.pipeline.trim_audio.bypass = True
     with pytest.raises(AssertionError):
-        dataset = AudioSplittingDataset(
+        dataset = AudioFileDataset(
             dataset_df, audio_pre, clip_overlap_fraction=0.1, final_clip=None
         )
         for x in dataset:

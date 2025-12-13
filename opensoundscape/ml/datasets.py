@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from opensoundscape.annotations import CategoricalLabels
 from opensoundscape.utils import make_clip_df
 from opensoundscape.sample import AudioSample
 
@@ -41,9 +42,12 @@ class AudioFileDataset(torch.utils.data.Dataset):
         preprocessor:
             an object of BasePreprocessor or its children which defines
             the operations to perform on input samples
+        bypass_augmentations:
+            if True, skips Actions with .is_augmentation=True
         audio_root:
             optionally pass a root directory (pathlib.Path or str) to prepend to each file path
             - if None (default), samples must contain full paths to files
+        **kwargs:
 
     Returns:
         sample (AudioSample object)
@@ -57,7 +61,12 @@ class AudioFileDataset(torch.utils.data.Dataset):
     """
 
     def __init__(
-        self, samples, preprocessor, bypass_augmentations=False, audio_root=None
+        self,
+        samples,
+        preprocessor,
+        bypass_augmentations=False,
+        audio_root=None,
+        **kwargs,
     ):
         super().__init__()
 
@@ -67,56 +76,23 @@ class AudioFileDataset(torch.utils.data.Dataset):
         msg = f"audio_root must be str, Path, or None. Got {type(audio_root)}"
         assert isinstance(audio_root, (str, Path, type(None))), msg
 
-        # validate type of samples: list or np array of files, or df
-        assert type(samples) in (
-            list,
-            np.ndarray,
-            pd.DataFrame,
-        ), (
-            f"samples must be type list/np.ndarray of file paths, "
-            f"or pd.DataFrame with index containing path (or multi-index of "
-            f"path, start_time, end_time). Got {type(samples)}."
-        )
-        if type(samples) == list or type(samples) == np.ndarray:
-            df = pd.DataFrame(index=samples)
-        elif type(samples) == pd.DataFrame:
-            # can either have index of file path or multi-index (file_path,start_time,end_time)
-            df = samples
-        # if the dataframe has a multi-index, it should be (file,start_time,end_time)
-        self.has_clips = type(df.index) == pd.core.indexes.multi.MultiIndex
-        if self.has_clips:
-            assert list(df.index.names) == [
-                "file",
-                "start_time",
-                "end_time",
-            ], "multi-index must be ('file','start_time','end_time')"
-
-        # give helpful warnings for incorret df, but don't raise Exception
-        if len(df) > 0:
-            first_path = df.index[0][0] if self.has_clips else df.index[0]
-            if audio_root is not None:
-                first_path = Path(audio_root) / first_path
-            if not Path(first_path).exists():
-                warnings.warn(
-                    "Index of dataframe passed to "
-                    f"preprocessor must be a file path. First sample {df.index[0]} was not found."
-                )
-        elif len(df) > 0 and len(df.columns) > 0 and not df.values[0, 0] in (0, 1):
-            warnings.warn("if label_df has labels, they must take values of 0 and 1")
-
-        if len(df) == 0:
+        # ingest various formats for samples
+        samples, invalid_samples = _ingest_samples_argument(samples, audio_root)
+        _check_first_path(samples)
+        _check_label_types(samples)
+        if len(samples) == 0:
             warnings.warn("Zero samples!")
 
-        self.classes = df.columns
+        self.classes = samples.columns
         """list of classes to which multi-hot labels correspond"""
 
-        self.label_df = df
+        self.label_df = samples
         """dataframe containing file paths, clip times, and multi-hot labels (one column per class)"""
 
         self.preprocessor = preprocessor
         """Preprocessor object containing a .pipeline of ordered preprocessing operations"""
 
-        self.invalid_samples = set()
+        self.invalid_samples = set(invalid_samples)
         """set of file paths that raised exceptions during preprocessing"""
 
         self.audio_root = audio_root
@@ -227,46 +203,110 @@ class AudioFileDataset(torch.utils.data.Dataset):
         return new_ds
 
 
-class AudioSplittingDataset(AudioFileDataset):
-    """class to load clips of longer files rather than one sample per file
-
-    Internally creates even-lengthed clips split from long audio files.
-
-    If file labels are provided, applies copied labels to all clips from a file
-
-    NOTE: If you've already created a dataframe with clip start and end times,
-    you can use AudioFileDataset. This class is only necessary if you wish to
-    automatically split longer files into clips (providing only the file paths).
+def _ingest_samples_argument(samples, audio_root=None, preprocessor=None, **kwargs):
+    """create clip df with MultiIndex (file,start_time,end_time)
 
     Args:
-        samples and preprocessor are passed to AudioFileDataset.__init__
-        **kwargs are passed to opensoundscape.utils.make_clip_df
+        samples: input samples, can be any of:
+        - list of file paths
+        - Dataframe with file as index
+        - Dataframe with (file, start_time, end_time) of clips as MultiIndex
+        - Dataframe with (file, start_time, end_time) as columns
+        - Dataframe with (file, start_time) as column
+        - Dataframe with (file) as column
+        - CategoricalLabels object
+
     """
+    invalid_samples = set()
+    if isinstance(samples, (str, Path)):
+        samples = [samples]
+    elif isinstance(samples, CategoricalLabels):
+        # extract sparse multihot label df
+        samples = samples.mutihot_df_sparse
 
-    def __init__(
-        self,
-        samples,
-        preprocessor,
-        bypass_augmentations=False,
-        audio_root=None,
-        **kwargs,
-    ):
-        super().__init__(
-            samples=samples,
-            preprocessor=preprocessor,
-            bypass_augmentations=bypass_augmentations,
-            audio_root=audio_root,
-        )
+    # validate type of samples: list or np array of files, or df
+    assert type(samples) in (
+        list,
+        np.ndarray,
+        pd.DataFrame,
+    ), (
+        f"samples must be type list/np.ndarray of file paths, "
+        f"or pd.DataFrame with index containing path (or multi-index of "
+        f"path, start_time, end_time). Got {type(samples)}."
+    )
 
-        self.has_clips = True
-
+    if type(samples) == list or type(samples) == np.ndarray:
         # create clip df
         # self.label_df will have multi-index (file,start_time,end_time)
         # can contain rows with start/end time np.nan for failed samples
-        self.label_df, self.invalid_samples = make_clip_df(
+        samples, invalid_samples = make_clip_df(
             files=samples,
             clip_duration=preprocessor.sample_duration,
             return_invalid_samples=True,
             audio_root=audio_root,
             **kwargs,
+        )
+    elif type(samples) == pd.DataFrame:
+        samples = samples.copy()  # avoid modifying original df object
+        keys = ["file", "start_time", "end_time"]
+        # 1. already has file, start_time, end_time in index: do nothing
+        if isinstance(samples.index, pd.MultiIndex):
+            pass
+        # 2: columns for file, start_time, end_time -> just set index
+        elif all(col in samples.columns for col in keys):
+            samples = samples.set_index(keys)
+        else:
+            # one row per file, "file" is either a column or the index
+
+            if not "file" in samples.columns:
+                # 3. File as index of df -> move to "file" column for [4]
+                assert isinstance(samples.index.values[0], (str, Path))
+                samples.index.name = "file"
+                samples = samples.reset_index()
+
+            # 4. Samples dataframe has a column for "file"
+            # First, make a clip df
+            clip_df, invalid_samples = make_clip_df(
+                files=samples["file"],
+                clip_duration=preprocessor.sample_duration,
+                return_invalid_samples=True,
+                audio_root=audio_root,
+                **kwargs,
+            ).reset_index()
+            # Second, copy labels from original sample df to each row of the clip_df
+            # corresponding to the same file
+            clip_df = clip_df.merge(
+                samples,
+                on="file",
+                how="left",
+            ).set_index(keys)
+    else:
+        raise ValueError(f"Unsupported type for samples: {type(samples)}")
+
+    return samples, invalid_samples
+
+
+def _check_first_path(samples, audio_root=None):
+    """check that first item in samples is a valid file path"""
+    if len(samples) > 0:
+        first_path, start, end = samples.index[0]
+        if audio_root is not None:
+            first_path = Path(audio_root) / first_path
+        assert isinstance(
+            first_path, (str, Path)
+        ), f"Expected str or Path, got {type(first_path)}"
+        assert Path(
+            first_path
+        ).exists(), f"First file {samples.index[0]} was not found."
+
+
+def _check_label_types(samples):
+    if (
+        len(samples) > 0
+        and len(samples.columns) > 0
+        and not samples.values[0, 0] in (0, 1, True, False, None, np.nan)
+    ):
+        warnings.warn(
+            "If `samples` has labels, they are expected to be one of: (0, 1, True, False, None, np.nan). First value is "
+            f"{samples.values[0, 0]}."
         )

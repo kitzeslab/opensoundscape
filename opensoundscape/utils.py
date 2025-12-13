@@ -396,9 +396,3 @@ def set_seed(seed, verbose=False):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-
-
-def _check_is_path(path):
-    assert isinstance(path, str) or isinstance(
-        path, Path
-    ), f"Expected str or Path, got {type(path)}. Did you set the index correctly?"

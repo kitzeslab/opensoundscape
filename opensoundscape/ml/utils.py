@@ -138,7 +138,7 @@ def collate_audio_samples_to_tensors(batch):
     """
     takes a list of AudioSample objects, returns batched tensors
 
-    use this collate function with DataLoader if you want to use AudioFileDataset (or AudioSplittingDataset)
+    use this collate function with DataLoader if you want to use AudioFileDataset (or AudioFileDataset)
     but want the traditional output of PyTorch Dataloaders (returns two tensors:
         the first is a tensor of the data with dim 0 as batch dimension,
         the second is a tensor of the labels with dim 0 as batch dimension)
