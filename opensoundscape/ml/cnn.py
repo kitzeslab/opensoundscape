@@ -17,7 +17,11 @@ from tqdm.autonotebook import tqdm
 
 import opensoundscape
 from opensoundscape.ml import cnn_architectures
-from opensoundscape.ml.utils import apply_activation_layer, check_labels
+from opensoundscape.ml.utils import (
+    apply_activation_layer,
+    check_labels,
+    _version_mismatch_warn,
+)
 from opensoundscape.preprocess.preprocessors import (
     SpectrogramPreprocessor,
     BasePreprocessor,
@@ -29,7 +33,7 @@ from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.sample import collate_audio_samples
 from opensoundscape.utils import identity
 from opensoundscape.logging import wandb_table
-
+from opensoundscape.ml import shallow_classifier
 from opensoundscape.ml.cam import CAM
 import pytorch_grad_cam
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -230,16 +234,6 @@ class BaseModule:
             self.scaler.step(self.optimizer)
             self.scaler.update()
             self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
-        # else:
-        #     output = self.network(batch_tensors)
-        #     loss = self.loss_fn(output, batch_labels)
-        #     if not self.lightning_mode:
-        #         # if not using Lightning, we manually call
-        #         # loss.backward() and optimizer.step()
-        #         # Lightning does this behind the scenes
-        #         loss.backward()
-        #         self.optimizer.step()
-        #         self.optimizer.zero_grad()
 
         # single-target torchmetrics expect labels as integer class indices rather than one-hot
         y = batch_labels.argmax(dim=1) if self.single_target else batch_labels
@@ -438,6 +432,7 @@ class BaseModule:
         samples,
         bypass_augmentations=False,
         collate_fn=collate_audio_samples,
+        raise_errors=False,
         **kwargs,
     ):
         """generate dataloader for training
@@ -456,16 +451,19 @@ class BaseModule:
             preprocessor=self.preprocessor,
             split_files_into_clips=True,
             clip_overlap=0,
-            final_clip=None,
+            final_clip="extend",
             bypass_augmentations=bypass_augmentations,
             shuffle=True,  # SHUFFLE SAMPLES because we are training
             # use pin_memory=True when loading files on CPU and training on CUDA GPU
             pin_memory=self.device.type == "cuda",
+            invalid_sample_behavior="raise" if raise_errors else "substitute",
             collate_fn=collate_fn,
             **kwargs,
         )
 
-    def predict_dataloader(self, samples, collate_fn=collate_audio_samples, **kwargs):
+    def predict_dataloader(
+        self, samples, collate_fn=collate_audio_samples, raise_errors=False, **kwargs
+    ):
         """generate dataloader for inference (predict/validate/test)
 
         Args: see self.inference_dataloader_cls docstring for arguments
@@ -483,6 +481,7 @@ class BaseModule:
             shuffle=False,  # keep original order
             pin_memory=self.device.type == "cuda",
             collate_fn=collate_fn,
+            invalid_sample_behavior="raise" if raise_errors else "placeholder",
             **kwargs,
         )
 
@@ -646,37 +645,66 @@ class SpectrogramModule(BaseModule):
         self.compute_per_class_metrics = True
         """if True, compute and log per-class metrics during training/validation"""
 
-    def change_classes(self, new_classes):
+    def change_classes(self, new_classes, hidden_layers=None):
         """change the classes that the model predicts
 
         replaces the network's final linear classifier layer with a new layer
         with random weights and the correct number of output features
 
-        will raise an error if self.network.classifier_layer is not the name of
-        a torch.nn.Linear layer, since we don't know how to replace it otherwise
+        Supports torch.nn.Linear and opensoundscape.ml.shallow_classifier.MLPClassifier as the
+        classifier layer to update. Will raise an error if self.network.classifier_layer is a
+        different type
 
         Args:
             new_classes: list of class names
+            hidden_layers: list of hidden layer sizes for the new classifier
+                - None: creates a single torch.nn.Linear layer
+                - (int, ...): creates an MLPClassifier object with hidden layers
+                    of the specified sizes; eg (100, 50) creates 2 hidden layers
+                    with 100 and 50 neurons, respectively.
+                - (): empty tuple creates an MLPClassifier with no hidden layers
         """
         assert len(new_classes) > 0, "new_classes must have >0 elements"
 
-        assert isinstance(self.classifier, torch.nn.Linear), (
-            f"Expected self.classifier to be a torch.nn.Linear layer, "
-            f"but found {type(self.classifier)}. Cannot automatically replace this layer to "
-            "achieve desired number of output features."
+        # assert isinstance(self.classifier, torch.nn.Linear), (
+        assert isinstance(
+            self.classifier, (torch.nn.Linear, shallow_classifier.MLPClassifier)
+        ), (
+            f"Expected self.classifier to be a torch.nn.Linear or opensoundscape.ml.shallow_classifier.MLPClassifier, "
+            f"but found {type(self.classifier)}."
         )
 
-        # replace fully-connected final classifier layer
+        # get the number of input features to the classifier layer
+        # for torch.nn.Linear and MLPClassifier, this is the in_features attribute
+        in_features = self.classifier.in_features
+
+        # create a new classifier layer with the correct number of output features
+        if hidden_layers is None:
+            new_layer = torch.nn.Linear(in_features, len(new_classes))
+        elif isinstance(hidden_layers, (list, tuple)):
+            # create an MLPClassifier with the specified hidden layers
+            new_layer = shallow_classifier.MLPClassifier(
+                input_size=in_features,
+                output_size=len(new_classes),
+                hidden_layer_sizes=hidden_layers,
+                classes=new_classes,
+            )
+        else:
+            raise ValueError(
+                "hidden_layers must be None (for torch.nn.Linear), or list/tuple of integers (for MLPClassifier). "
+                f"Got {hidden_layers} instead."
+            )
+
+        # replace the classifier layer with a new layer
         clf_layer_name = self.network.classifier_layer
-        new_layer = cnn_architectures.change_fc_output_size(
-            self.classifier, len(new_classes)
-        )
         cnn_architectures.set_layer_from_name(self.network, clf_layer_name, new_layer)
 
         # update class list
         self.classes = new_classes
 
         # re-initialize metrics, using the new number of classes
+        # otherwise we'll get errors when computing metrics
+        # (plus we should discard any old metrics after changing classes)
         self._init_torch_metrics()
 
     @property
@@ -1060,7 +1088,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         clip_overlap_fraction=None,
         clip_step=None,
         overlap_fraction=None,
-        final_clip=None,
+        final_clip="extend",
         bypass_augmentations=True,
         invalid_samples_log=None,
         raise_errors=False,
@@ -1169,6 +1197,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
+            collate_fn=identity,  # yield AudioSample list not (tensors,labels)
             **dataloader_kwargs,
         )
 
@@ -1201,7 +1230,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
-        pred_scores = self.__call__(
+        pred_scores = self(
             dataloader=dataloader,
             wandb_session=wandb_session,
             progress_bar=progress_bar,
@@ -1970,31 +1999,24 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Note: Note that if you used pickle=True when saving, the model object might not load properly
         across different versions of OpenSoundscape.
         """
-        model_dict = torch.load(path, weights_only=not unpickle)
+        loaded_content = torch.load(path, weights_only=not unpickle)
 
-        opso_version = (
-            model_dict.pop("opensoundscape_version")
-            if isinstance(model_dict, dict)
-            else model_dict.opensoundscape_version
-        )
-        if opso_version != opensoundscape.__version__:
-            warnings.warn(
-                f"Model was saved with OpenSoundscape version {opso_version}, "
-                f"but you are currently using version {opensoundscape.__version__}. "
-                "This might not be an issue but you should confirm that the model behaves as expected."
-            )
-
-        if isinstance(model_dict, dict):
+        if isinstance(loaded_content, dict):
+            _version_mismatch_warn(loaded_content.pop("opensoundscape_version"))
             # load up the weights and instantiate from dictionary keys
             # includes preprocessing parameters and settings
-            state_dict = model_dict.pop("weights")
-            class_name = model_dict.pop("class")
-            model = cls(**model_dict)
+            state_dict = loaded_content.pop("weights")
+            class_name = loaded_content.pop("class")
+            if not class_name == io.build_name(cls):
+                warnings.warn(
+                    f"Using .load method of {io.build_name(cls)} but the "
+                    f"loaded model class is {class_name}."
+                )
+            model = cls(**loaded_content)
             model.network.load_state_dict(state_dict)
-        else:
-            model = model_dict  # entire pickled object, not dictionary
-            opso_version = model.opensoundscape_version
-
+        else:  # entire pickled object, not dictionary
+            _version_mismatch_warn(loaded_content.opensoundscape_version)
+            model = loaded_content
         return model
 
     def save_weights(self, path):
@@ -2035,6 +2057,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         Args:
             dataloader: DataLoader object to create samples, e.g. from .predict_dataloader()
+                Note: expects list of AudioSample objects, not (tensors, labels)
+                This means you should use SafeAudioDataloader(...,collate_fn=identity)
             wandb_session: a wandb session to log progress to (e.g. return value of wandb.init())
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             intermediate_layers: list of layers to return outputs from
@@ -2091,14 +2115,36 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # disable gradient updates during inference
         with torch.set_grad_enabled(False):
-            for i, (batch_tensors, _) in enumerate(
-                tqdm(dataloader, disable=not progress_bar)
-            ):
-                batch_tensors = batch_tensors.to(self.device)
+            for i, samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
+                batch_tensors = torch.stack([s.data for s in samples]).to(self.device)
                 batch_tensors.requires_grad = False
 
                 # forward pass of network: feature extractor + classifier
+                # also runs forward hooks to save intermediate outputs
                 logits = self.network(batch_tensors)
+
+                # mask outputs for any invalid samples (samples that failed in preprocessing)
+                # with np.nan, since the returned values don't correspond to the sample
+                # (the preprocessor instead returned a placeholder value for the sample)
+                invalid_sample_mask = [s.is_alternative for s in samples]
+                logits[invalid_sample_mask] = np.nan
+
+                # need to do the same for intermediate outputs, keeping their shape but
+                # filling values with nan
+                for output_idx in range(len(intermediate_outputs)):
+                    # get the shape of the intermediate output for this batch
+                    batch_output_shape = intermediate_outputs[output_idx][i].shape
+                    # create a mask of the same shape as the intermediate output
+                    # where the values for invalid samples are True
+                    invalid_sample_mask_expanded = (
+                        torch.tensor(invalid_sample_mask)
+                        .unsqueeze(1)
+                        .expand(-1, batch_output_shape[1])
+                    )
+                    # set the values for invalid samples to nan
+                    intermediate_outputs[output_idx][i][
+                        invalid_sample_mask_expanded
+                    ] = np.nan
 
                 # disable gradients on returned values
                 pred_scores.extend(list(logits.detach().cpu().numpy()))
@@ -2127,13 +2173,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             intermediate_outputs = [
                 torch.vstack(x).detach().cpu().numpy() for x in intermediate_outputs
             ]
-
-            # replace scores with nan for samples that failed in preprocessing
-            # (we predicted on substitute-samples rather than
-            # skipping the samples that failed preprocessing)
-            pred_scores[dataloader.dataset._invalid_indices, :] = np.nan
-            for i in range(len(intermediate_outputs)):
-                intermediate_outputs[i][dataloader.dataset._invalid_indices, :] = np.nan
         else:
             pred_scores = None
 
@@ -2301,7 +2340,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 a pd.Series indexed by class name
             **kwargs are passed to SafeAudioDataloader
                 (incl: batch_size, num_workers, split_file_into_clips, bypass_augmentations,
-                raise_errors, overlap_fraction, final_clip, other DataLoader args)
+                invalid_sample_behavior, overlap_fraction, final_clip, other DataLoader args)
 
         Returns:
             a list of AudioSample objects with .cam attribute, an instance of the CAM class (
@@ -2557,7 +2596,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
+        dataloader = self.predict_dataloader(
+            samples, collate_fn=identity, **dataloader_kwargs
+        )
 
         # warn the user if the output size is very large
         try:
@@ -2896,63 +2937,14 @@ class InceptionV3(SpectrogramClassifier):
         batch_size = len(batch_tensors)
 
         # automatic mixed precision
-        # can get rid of if/else blocks and use enabled=true
-        # once mps is supported https://github.com/pytorch/pytorch/pull/99272
-        # but right now, raises error if enabled=True and device is mps
-
-        # self.scaler = torch.amp.GradScaler(enabled=self.use_amp)
-        # with torch.autocast(
-        #     device_type=self.device, dtype=torch.float16, enabled=self.use_amp
-        # ):
-        #     output = self.network(input)
-        #     loss = self.loss_fn(output, batch_labels)
-
-        # if not self.lightning_mode:
-        #     # if not using Lightning, we manually call
-        #     # loss.backward() and optimizer.step()
-        #     # Lightning does this behind the scenes
-        #     self.scaler.scale(loss).backward()
-        #     self.scaler.step(self.optimizer)
-        #     self.scaler.update()
-        #     self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
-
-        # if self.use_amp is False, GradScaler with enabled=False should have no effect
-        if "mps" in str(self.device):
-            use_amp = False  # Not using amp: not implemented for mps as of 2024-07-11
+        self.scaler = torch.amp.GradScaler(enabled=self.use_amp)
+        if "cuda" in str(self.device):
+            device_type = "cuda"
+            dtype = torch.float16
         else:
-            use_amp = self.use_amp
-
-        if use_amp:  # as of 7/11/24, torch.autocast is not supported for mps
-            self.scaler = torch.amp.GradScaler(enabled=self.use_amp)
-            if "cuda" in str(self.device):
-                device_type = "cuda"
-                dtype = torch.float16
-            else:
-                device_type = "cpu"
-                dtype = torch.bfloat16
-            with torch.autocast(
-                device_type=device_type, dtype=dtype
-            ):  # , enabled=self.use_amp
-                # ):
-                inception_outs = self.network(batch_tensors)
-                logits = inception_outs.logits
-                aux_logits = inception_outs.aux_logits
-
-                loss1 = self.loss_fn(logits, batch_labels)
-                loss2 = self.loss_fn(aux_logits, batch_labels)
-                loss = loss1 + 0.4 * loss2
-            if not self.lightning_mode:
-                # if not using Lightning, we manually call
-                # loss.backward() and optimizer.step()
-                # Lightning does this behind the scenes
-                self.scaler.scale(loss).backward()
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-                self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
-        else:
-            output = self.network(batch_tensors)
-
-            # calculate loss
+            device_type = "cpu"
+            dtype = torch.bfloat16
+        with torch.autocast(device_type=device_type, dtype=dtype):
             inception_outs = self.network(batch_tensors)
             logits = inception_outs.logits
             aux_logits = inception_outs.aux_logits
@@ -2960,14 +2952,15 @@ class InceptionV3(SpectrogramClassifier):
             loss1 = self.loss_fn(logits, batch_labels)
             loss2 = self.loss_fn(aux_logits, batch_labels)
             loss = loss1 + 0.4 * loss2
-
-            if not self.lightning_mode:
-                # if not using Lightning, we manually call
-                # loss.backward() and optimizer.step()
-                # Lightning does this behind the scenes
-                loss.backward()
-                self.optimizer.step()
-                self.optimizer.zero_grad()
+        if not self.lightning_mode:
+            # if not using Lightning, we manually call
+            # loss.backward() and optimizer.step()
+            # Lightning does this behind the scenes
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
+        # else, Lightning handles optimization steps
 
         # compute and log any metrics in self.torch_metrics
         batch_metrics = {
@@ -3033,28 +3026,22 @@ def load_model(path, device=None, unpickle=True):
         )
 
         if isinstance(loaded_content, dict):
+            # warn the user if loaded model's opso version doesn't match the current one
+            _version_mismatch_warn(loaded_content.pop("opensoundscape_version"))
             model_cls = MODEL_CLS_DICT[loaded_content.pop("class")]
             model = model_cls(**loaded_content)
             model.network.load_state_dict(loaded_content["weights"])
-        else:
+        else:  # entire pickled object was loaded
+            _version_mismatch_warn(loaded_content.opensoundscape_version)
             model = loaded_content
 
         # now we can set the selected device
         model.device = device
         model.network.to(device)
 
-        # warn the user if loaded model's opso version doesn't match the current one
-        if model.opensoundscape_version != opensoundscape.__version__:
-            warnings.warn(
-                f"This model was saved with an earlier version of opensoundscape "
-                f"({model.opensoundscape_version}) and will not work properly in "
-                f"the current opensoundscape version ({opensoundscape.__version__}). "
-                f"To use models across package versions use .save_torch_dict and "
-                f".load_torch_dict"
-            )
-
         model.device = device
         return model
+
     except ModuleNotFoundError as e:
         raise ModuleNotFoundError(
             """

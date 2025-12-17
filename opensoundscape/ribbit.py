@@ -84,7 +84,7 @@ def ribbit(
     clip_overlap=None,
     clip_overlap_fraction=None,
     clip_step=None,
-    final_clip=None,
+    final_clip="extend",
     noise_bands=None,
     spec_clip_range=(-100, -20),
     plot=False,

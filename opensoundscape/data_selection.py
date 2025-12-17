@@ -2,6 +2,52 @@
 
 import itertools
 import pandas as pd
+import warnings
+
+
+def train_test_split(df, test_size=0.2, random_state=None, by_file=True):
+    """split a multi-index label df into train and evaluation (i.e. validation or test) splits by file
+
+    Input dataframes should have a multi-index of (file,start_time,end_time).
+
+    By default, the split is done by file name, so that all rows with the same file name are in the
+    same set. This is to prevent data leakage between the sets, since rows with the same file name
+    are likely to be similar. Set `by_file=False` to split by row instead, which randomly assigns
+    each row to a split.
+
+    Args:
+        df: dataframe with multi-hot encoded labels: multi-index is (file,start_time,end_time)
+        test_size: proportion of samples to include in the test set
+        random_state: passed to np.random calls. If None, random state is not fixed.
+        by_file: if True, split by file name (i.e. all rows with the same file name go in the same set)
+            If False, split by row (i.e. rows with the same file name can be in different sets)
+
+    Returns:
+        train_df: dataframe with multi-hot encoded labels for the training set
+        test_df: dataframe with multi-hot encoded labels for the test set
+    """
+    if by_file:
+        # split by file name
+        unique_files = df.index.get_level_values(0).unique()
+        test_files = unique_files.to_series().sample(
+            frac=test_size, random_state=random_state
+        )
+        train_files = unique_files.difference(test_files)
+        train_df = df[df.index.get_level_values(0).isin(train_files)]
+        test_df = df[df.index.get_level_values(0).isin(test_files)]
+    else:
+        # split by row
+        # give a warning if there are duplicate (file,start_time,end_time) indices
+        if df.index.duplicated().any():
+            warnings.warn(
+                "There are duplicate (file,start_time,end_time) indices in the input df. "
+                "Splitting by row may result in data leakage between train and test sets "
+                "(i.e. samples from the same file may end up in both sets)."
+            )
+        test_df = df.sample(frac=test_size, random_state=random_state)
+        train_df = df.drop(test_df.index)
+
+    return train_df, test_df
 
 
 def resample(

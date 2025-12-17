@@ -957,7 +957,7 @@ class Audio:
         prefix,
         clip_duration,
         clip_overlap=0,
-        final_clip=None,
+        final_clip="extend",
         dry_run=False,
     ):
         """Split audio into clips and save them to a folder
@@ -2017,7 +2017,7 @@ class MultiChannelAudio(Audio):
         prefix,
         clip_duration,
         clip_overlap=0,
-        final_clip=None,
+        final_clip="extend",
         dry_run=False,
     ):
         """Split audio into clips and save them to a folder
