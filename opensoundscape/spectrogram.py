@@ -25,19 +25,18 @@ class Spectrogram:
     Can be initialized directly from spectrogram, frequency, and time values or created from an
     Audio object using the .from_audio() method.
 
-    To initialize from the linear-valued power spectrogram or the raw STFT values,
-    pass the `power_spectrogram` or `magnitude` arguments to the constructor, and pass
-    `spectrogram=None`. Regardless of which input method is used, the stored attribute
-    self.power_spectrogram will always be the linear-valued power spectrogram, and
+    Initializing with pattern Spectrogram(spectrogram,frequencies,times) expects the values passed
+    to be the decibel-valued power spectrogram. To initialize from the linear-valued power
+    spectrogram or the raw STFT values, pass the `power_spectrogram` or `magnitude` arguments to the
+    constructor, and pass `spectrogram=None`. Regardless of which input method is used, the stored
+    attribute self.power_spectrogram will always be the linear-valued power spectrogram, and
     self.spectrogram property will return the decibel-valued power spectrogram.
 
-    Note: the spectrogram is defined as the absolute square of the
-    short-time Fourier transform (STFT) of the audio signal [1]. The attribute
-    self.power_spectrogram will always be the linear-valued power spectrogram
-    (i.e. abs(stft)**2). You can also retrieve the
-    magnitude of the STFT via the self.magnitude property (which takes the
-    square root of self.spectrogram), or the decibel-valued power via
-    self.spectrogram (which computes 10*log10(self.power_spectrogram)).
+    Note: the spectrogram is defined as the absolute square of the short-time Fourier transform
+    (STFT) of the audio signal [1]. The attribute self.power_spectrogram will always be the
+    linear-valued power spectrogram (i.e. abs(stft)**2). You can also retrieve the magnitude of the
+    STFT via the self.magnitude property (which takes the square root of self.spectrogram), or the
+    decibel-valued power via self.spectrogram (which computes 10*log10(self.power_spectrogram)).
 
     Attributes:
         power_spectrogram: (np.ndarray) 2d array of power spectrogram (not dB-scaled)
@@ -59,6 +58,9 @@ class Spectrogram:
         duration: returns the duration of the audio signal in seconds
         window_length_seconds: length of a single fft window, in seconds
         window_hop_seconds: time difference (sec) between consecutive windows' centers
+
+    [1] Karlheinz Gröchenig: “Foundations of Time-Frequency Analysis”, Birkhäuser Boston 2001,
+    DOI:10.1007/978-1-4612-0003-1
     """
 
     __slots__ = (
