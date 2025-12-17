@@ -2161,7 +2161,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         self,
         samples,
         db,
-        dataset_name,
+        deployment=None,
+        project=None,
         target_layer=None,
         wandb_session=None,
         progress_bar=True,
@@ -2212,6 +2213,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         try:
             import perch_hoplite
             from perch_hoplite.db import interface as hoplite_interface
+            from opensoundscape.vector_database import (
+                load_or_create_hoplite_usearch_db,
+                _handle_existing_windows,
+                _insert_embeddings,
+                _collate_search_results,
+            )
         except ImportError as e:
             raise ImportError(
                 "hoplite is not installed. Please install hoplite to use this feature."
@@ -2228,51 +2235,32 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 pass  # keep None value
         db = load_or_create_hoplite_usearch_db(db, embedding_dim=embedding_dim)
 
+        # add deployment if provided and not yet in db
+        from ml_collections import config_dict
+
+        if deployment is not None: #TODO: should we only match within project?
+            matching = db.get_all_deployments(config_dict.create(eq=dict(name=deployment)))
+            if len(matching) == 0:
+                deployment_id = db.insert_deployment(name=deployment, project=project or "")
+            else:
+                deployment_id = matching[0].id
+
         # create dataloader, collate using `identity` to return list of AudioSample
         # rather than (samples, labels) tensors
-        dataloader = self.inference_dataloader_cls(
+        dataloader = self.predict_dataloader(
             samples,
-            self.preprocessor,
-            shuffle=False,
             collate_fn=identity,
             audio_root=audio_root,
             **dataloader_kwargs,
         )
 
-        if embedding_exists_mode in ["skip", "error"]:
-            # filter dataloader to only samples that don't already have embeddings
-            # dataloader.dataset/
-            index_values = list(dataloader.dataset.dataset.label_df.index)
-
-            # check if each exists
-            keep_idxs = []
-            for i, (file, start_time, _) in enumerate(index_values):
-                matching_ids = db.get_embeddings_by_source(
-                    dataset_name=dataset_name,
-                    source_id=str(file),
-                    offsets=np.array([start_time], dtype=np.float16),
-                )
-                if len(matching_ids) == 0:
-                    keep_idxs.append(i)
-                elif embedding_exists_mode == "error":
-                    # don't allow adding or skipping duplicated entries
-                    raise ValueError(
-                        f"Embedding already exists for {file}:{start_time} in dataset {dataset_name}"
-                        " and embedding_exists_mode='error'. Other options are 'skip' or 'add'. "
-                    )
-
-            # subset the label_df to exclude duplicated_idxs
-            original_len = len(dataloader.dataset.dataset.label_df)
-            dataloader.dataset.dataset.label_df = (
-                dataloader.dataset.dataset.label_df.iloc[keep_idxs]
-            )
-            new_len = len(dataloader.dataset.dataset.label_df)
-
-            if new_len == 0:
-                # all samples already have embeddings, nothing to do
-                print("all samples already have embeddings in the database")
-                return db, {}
+        # avoid duplicating embeddings in the db depending on embedding_exists_mode
+        # TODO: should we care if deployment and project match, or just (file, start, end)?
+        _handle_existing_windows(db,dataloader.dataset.dataset.label_df, embedding_exists_mode)
         # elif embedding_exists_mode == "add": # do nothing, allow duplicates
+
+        # check current files in db
+        file_to_id = {rec.filename: rec.id for rec in db.get_all_recordings()}
 
         # move network to device
         self.network.to(self.device)
@@ -2323,45 +2311,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                             "total_batches": len(dataloader),
                         }
                     )
-
-                # insert the embeddings one-by-one to the hoplite db
-
-                max_float16 = np.finfo(np.float16).max
-                batch_emb = stored_embedding["batch"].detach().cpu().numpy()
-                # we clip values to the float16 range before casting, to avoid overfloat -> inf values
-                if np.abs(batch_emb).max() > max_float16:
-                    if overflow_mode == "warn":
-                        warnings.warn("clipping embedding values to float16 range")
-                    elif overflow_mode == "error":
-                        raise ValueError("Embeddings exceeded float16 range")
-                    # otherwise clip without warnings/errors
-                batch_emb = batch_emb.clip(-max_float16, max_float16).astype(np.float16)
-
-                # insert each embedding in the batch into the database, one-by-one
-                for j in range(batch_tensors.shape[0]):
-                    file = batch_samples[j].source
-                    if audio_root is not None:
-                        # use the relative path for the source name stored in the db
-                        file = str(Path(file).relative_to(audio_root))
-                    start_time = batch_samples[j].start_time
-
-                    # save embeddings to hoplite db
-                    # TODO: configure root_audio_path & match with embedding db
-                    # the embedding source object stores the relative file path and offset (start time)
-                    # with an associated embedding_id.
-                    # retrieval:
-                    # ids = db.get_embedding_ids()
-                    # returned_ids, emb = db.get_embeddings(ids[0:2]) # NOT IN ORDER of ids passed!
-                    # slower but in order:
-                    # emb = np.array([db.get_embedding(id) for id in ids]) # TODO compare speed on large db
-                    # source = db.get_embedding_source(ids[0]) # to get_embedding_sources
-
-                    emb_source = hoplite_interface.EmbeddingSource(
-                        dataset_name=dataset_name,
-                        source_id=file,
-                        offsets=np.array([start_time], np.float16),
-                    )
-                    db.insert_embedding(batch_emb[j], emb_source)
+                batch_embeddings = stored_embedding["batch"].detach().cpu().numpy()
+                _insert_embeddings(db, batch_samples, batch_embeddings, overflow_mode, file_to_id, audio_root=audio_root, deployment_id=deployment_id)
+                    
 
                 # clear the temp storage for batch embeddings, to make sure we don't
                 # accidentally reuse them
@@ -2390,7 +2342,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         num_results=5,
         exact_search=False,
         search_subset_size=None,
-        # datasets=None, # would like to implement filtering to specific datasets
+        # filters=None, # config_dict.create(...)
         target_score=None,
         audio_root=None,
         search_kwargs=None,
@@ -2479,19 +2431,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 for k, d in zip(ann_matches.keys, ann_matches.distances):
                     results.update(search_results.SearchResult(k, d))
 
-            # extract relevant info for each match into dictionaries
-            results_list = []
-            for match in results.search_results:
-                clip_info = db.get_embedding_source(match.embedding_id)
-                results_list.append(
-                    {
-                        "embedding_id": match.embedding_id,
-                        "score": match.sort_score,
-                        "dataset_name": clip_info.dataset_name,
-                        "source_id": clip_info.source_id,
-                        "offset": clip_info.offsets[0],
-                    }
-                )
+            # we have a TopKSearchResults object with .search_results containing
+            # a list of num_results SearchResult objects with .window_id and .sort_score
             compiled_search_results.append(
                 {
                     "query": {
@@ -2501,7 +2442,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                         # "embedding": query_embedding,
                         "audio_root": audio_root,
                     },
-                    "results": results_list,
+                    "results": _collate_search_results(db, results),
                 }
             )
         return compiled_search_results
@@ -3236,51 +3177,3 @@ def _gpu_if_available():
     else:
         device = torch.device("cpu")
     return device
-
-
-def load_or_create_hoplite_usearch_db(db, embedding_dim=None):
-    """helper function to load or create a hoplite database object
-
-    Args:
-        db: a hoplite database object or a path to a hoplite database (folder)
-            - if a path is provided, the database will be created if it does not exist,
-                and passing embedding_dim is required in this case
-                if it does exist, it will be loaded
-            - if a hoplite database object is provided, it will be returned as is
-        embedding_dim: int, dimension of the embeddings to be stored in the database
-            - only required when creating a new database
-    Returns:
-        a hoplite database object
-    """
-    try:
-        import perch_hoplite
-        from perch_hoplite.db.sqlite_usearch_impl import (
-            SQLiteUsearchDB,
-            get_default_usearch_config,
-        )
-    except ImportError as e:
-        raise ImportError(
-            "hoplite package is required to use hoplite databases. "
-            "Please install with `pip install perch-hoplite`"
-        ) from e
-
-    if isinstance(db, (str, Path)):
-        db_path = Path(db)
-        if db_path.exists():
-            print(f"Connecting to existing db at {db_path}")
-            db = SQLiteUsearchDB.create(db_path)
-            print(
-                f"Connected database has {db.count_embeddings():,} embeddings from {len(db.get_dataset_names())} dataset{'' if len(db.get_dataset_names()) == 1 else 's'}."
-            )
-        else:
-            assert (
-                embedding_dim is not None
-            ), "embedding_dim must be provided when creating a new hoplite database"
-            print(f"Creating new db at {db_path}")
-            usearch_cfg = get_default_usearch_config(embedding_dim)
-            db = SQLiteUsearchDB.create(db_path, usearch_cfg)
-    else:
-        assert isinstance(
-            db, perch_hoplite.db.interface.HopliteDBInterface
-        ), "db must be a hoplite database object or a path to a hoplite database"
-    return db
