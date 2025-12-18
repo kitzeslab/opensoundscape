@@ -2217,7 +2217,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 load_or_create_hoplite_usearch_db,
                 _handle_existing_windows,
                 _insert_embeddings,
-                _collate_search_results,
             )
         except ImportError as e:
             raise ImportError(
@@ -2238,10 +2237,14 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # add deployment if provided and not yet in db
         from ml_collections import config_dict
 
-        if deployment is not None: #TODO: should we only match within project?
-            matching = db.get_all_deployments(config_dict.create(eq=dict(name=deployment)))
+        if deployment is not None:  # TODO: should we only match within project?
+            matching = db.get_all_deployments(
+                config_dict.create(eq=dict(name=deployment))
+            )
             if len(matching) == 0:
-                deployment_id = db.insert_deployment(name=deployment, project=project or "")
+                deployment_id = db.insert_deployment(
+                    name=deployment, project=project or ""
+                )
             else:
                 deployment_id = matching[0].id
 
@@ -2256,7 +2259,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # avoid duplicating embeddings in the db depending on embedding_exists_mode
         # TODO: should we care if deployment and project match, or just (file, start, end)?
-        _handle_existing_windows(db,dataloader.dataset.dataset.label_df, embedding_exists_mode)
+        _handle_existing_windows(
+            db, dataloader.dataset.dataset.label_df, embedding_exists_mode
+        )
         # elif embedding_exists_mode == "add": # do nothing, allow duplicates
 
         # check current files in db
@@ -2312,8 +2317,15 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                         }
                     )
                 batch_embeddings = stored_embedding["batch"].detach().cpu().numpy()
-                _insert_embeddings(db, batch_samples, batch_embeddings, overflow_mode, file_to_id, audio_root=audio_root, deployment_id=deployment_id)
-                    
+                _insert_embeddings(
+                    db,
+                    batch_samples,
+                    batch_embeddings,
+                    overflow_mode,
+                    file_to_id,
+                    audio_root=audio_root,
+                    deployment_id=deployment_id,
+                )
 
                 # clear the temp storage for batch embeddings, to make sure we don't
                 # accidentally reuse them
@@ -2380,6 +2392,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             from perch_hoplite.db import brutalism
             from perch_hoplite.db import score_functions
             from perch_hoplite.db import search_results
+            from opensoundscape.vector_database import _collate_search_results
         except ImportError as e:
             raise ImportError(
                 "hoplite is not installed. Please install hoplite to use this feature."
