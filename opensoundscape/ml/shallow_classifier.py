@@ -27,8 +27,6 @@ class MLPClassifier(torch.nn.Module):
     ):
         super().__init__()
 
-        # constructor_name tuple hints to .load()
-        # how to recreate the network with the appropriate shape
         self.in_features = input_size
         self.out_features = output_size
         self.hidden_layer_sizes = tuple(hidden_layer_sizes)
@@ -174,7 +172,14 @@ class MLPClassifier(torch.nn.Module):
 
 
 class EmbeddingDataset(Dataset):
-    """simple dataset wrapper for embedding features and labels"""
+    """simple dataset wrapper for embedding features and labels
+
+    Args:
+        features: tensor or np.array of input features
+            first dimension should be samples
+        labels: tensor or np.array of target labels
+            first dimension should be samples
+    """
 
     def __init__(self, features, labels):
         self.features = features
@@ -516,7 +521,8 @@ def fit(
         multi-label classification); this loss function treats NaN labels as weak negatives,
         using a default weight of 0.01 for NaN labels compared to strong labels
 
-        device: torch.device to use; default is torch.device('cpu')
+        device: torch.device to use; default is torch.device('cpu'); can also be e.g.
+        torch.device('cuda:0') for first CUDA GPU or torch.device('mps') for Mac with M1/M2
 
         validation_interval: how often to validate the model during training; if validation_features
         and validation_labels are provided, validation is performed every validation_interval steps
@@ -538,8 +544,8 @@ def fit(
     model.to(device)
 
     # convert x and y to tensors and move to the device
-    train_features = torch.tensor(train_features, dtype=torch.float32, device=device)
-    train_labels = torch.tensor(train_labels, dtype=torch.float32, device=device)
+    train_features = torch.as_tensor(train_features, dtype=torch.float32, device=device)
+    train_labels = torch.as_tensor(train_labels, dtype=torch.float32, device=device)
 
     train_dataset = EmbeddingDataset(train_features, train_labels)
     train_loader = DataLoader(
@@ -697,6 +703,10 @@ def fit(
         best_model_val_metrics = None
     print("Training complete")
     return best_model_val_metrics
+
+
+# copy fit docstring to MLPClassifier.fit
+MLPClassifier.fit.__doc__ = fit.__doc__
 
 
 def augmented_embed(

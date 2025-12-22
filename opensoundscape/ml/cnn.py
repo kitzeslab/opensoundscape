@@ -430,6 +430,7 @@ class BaseModule:
         samples,
         bypass_augmentations=False,
         collate_fn=collate_audio_samples,
+        raise_errors=False,
         **kwargs,
     ):
         """generate dataloader for training
@@ -448,16 +449,19 @@ class BaseModule:
             preprocessor=self.preprocessor,
             split_files_into_clips=True,
             clip_overlap=0,
-            final_clip=None,
+            final_clip="extend",
             bypass_augmentations=bypass_augmentations,
             shuffle=True,  # SHUFFLE SAMPLES because we are training
             # use pin_memory=True when loading files on CPU and training on CUDA GPU
             pin_memory=self.device.type == "cuda",
+            invalid_sample_behavior="raise" if raise_errors else "substitute",
             collate_fn=collate_fn,
             **kwargs,
         )
 
-    def predict_dataloader(self, samples, collate_fn=None, **kwargs):
+    def predict_dataloader(
+        self, samples, collate_fn=None, raise_errors=False, **kwargs
+    ):
         """generate dataloader for inference (predict/validate/test)
 
         Args: see self.inference_dataloader_cls docstring for arguments
@@ -475,6 +479,7 @@ class BaseModule:
             shuffle=False,  # keep original order
             pin_memory=self.device.type == "cuda",
             collate_fn=collate_fn,
+            invalid_sample_behavior="raise" if raise_errors else "placeholder",
             **kwargs,
         )
 
@@ -638,6 +643,7 @@ class SpectrogramModule(BaseModule):
         self.compute_per_class_metrics = True
         """if True, compute and log per-class metrics during training/validation"""
 
+    def change_classes(self, new_classes, hidden_layers=None):
     def change_classes(self, new_classes, hidden_layers=None):
         """change the classes that the model predicts
 
@@ -1049,7 +1055,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         clip_overlap_fraction=None,
         clip_step=None,
         overlap_fraction=None,
-        final_clip=None,
+        final_clip="extend",
         bypass_augmentations=True,
         invalid_samples_log=None,
         raise_errors=False,
@@ -1190,7 +1196,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         ### Prediction/Inference ###
         # iterate dataloader and run inference (forward pass) to generate scores
-        pred_scores = self.__call__(
+        pred_scores = self(
             dataloader=dataloader,
             wandb_session=wandb_session,
             progress_bar=progress_bar,
@@ -2049,6 +2055,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         Args:
             dataloader: DataLoader object to create samples, e.g. from .predict_dataloader()
+                Note: expects list of AudioSample objects, not (tensors, labels)
+                This means you should use SafeAudioDataloader(...,collate_fn=identity)
             wandb_session: a wandb session to log progress to (e.g. return value of wandb.init())
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             targets: list of layers to return outputs from. -1 corresponds to final layer outputs
@@ -2073,15 +2081,27 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         targets = [] if targets is None else targets
         outs = {k: [] for k in targets}
 
+        # perform the collate_fn after getting batching, so that we have access to AudioSample objects
+        collate_fn = dataloader.collate_fn
+        dataloader.collate_fn = opensoundscape.utils.identity
+
         # disable gradient updates during inference
-        for i, (batch_data, _) in enumerate(tqdm(dataloader, disable=not progress_bar)):
-            out = self.batch_forward(
+        for i, samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
+            (batch_data, _) = collate_fn(samples) 
+            batch_outs = self.batch_forward(
                 batch_data,
                 targets=targets,
                 avgpool=avgpool_intermediates,
             )
-            for k, v in out.items():
-                outs[k].append(v)
+            invalid_sample_mask = [s.is_alternative for s in samples]
+            # process and store outputs from batch
+            for k, v in batch_outs.items():
+                # mask outputs for any invalid samples (samples that failed in preprocessing)
+                # with np.nan, since the returned values don't correspond to the sample
+                # (the preprocessor instead returned a placeholder value for the sample)
+                # first dimension of v corresponds to batch dimension, all others to output shape
+                v[invalid_sample_mask, ...] = np.nan
+                outs[k].append(v) # store outputs for this batch
             if wandb_session is not None:
                 wandb_session.log(
                     {
@@ -2095,10 +2115,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         if len(list(outs.values())[0]) > 0:
             for k in outs.keys():
                 outs[k] = np.vstack(outs[k])
-                # replace scores with nan for samples that failed in preprocessing
-                # (we predicted on substitute-samples rather than
-                # skipping the samples that failed preprocessing)
-                outs[k][dataloader.dataset._invalid_indices, :] = np.nan
         return outs
 
     def embed_to_hoplite_db(
@@ -2545,7 +2561,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 a pd.Series indexed by class name
             **kwargs are passed to SafeAudioDataloader
                 (incl: batch_size, num_workers, split_file_into_clips, bypass_augmentations,
-                raise_errors, overlap_fraction, final_clip, other DataLoader args)
+                invalid_sample_behavior, overlap_fraction, final_clip, other DataLoader args)
 
         Returns:
             a list of AudioSample objects with .cam attribute, an instance of the CAM class (
@@ -2836,7 +2852,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         target_layer = self._check_or_get_default_embedding_layer(target_layer)
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
+        dataloader = self.predict_dataloader(
+            samples, **dataloader_kwargs
+        )
 
         # warn the user if the output size is very large
         try:
