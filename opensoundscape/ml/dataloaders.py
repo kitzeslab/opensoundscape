@@ -182,9 +182,10 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         )
 
         # add any paths that failed to generate a clip df to _invalid_samples
-        self.dataset._invalid_samples = self.dataset._invalid_samples.union(
-            dataset.invalid_samples
-        )
+        # self.dataset._invalid_samples = self.dataset._invalid_samples.union(
+        #     dataset.invalid_samples
+        # )
+        # TODO _invalid_samples no longer an attribute - is this happening internally?
 
 
 def collate_audio_samples_to_dict(samples):

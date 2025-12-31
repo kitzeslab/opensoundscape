@@ -644,7 +644,6 @@ class SpectrogramModule(BaseModule):
         """if True, compute and log per-class metrics during training/validation"""
 
     def change_classes(self, new_classes, hidden_layers=None):
-    def change_classes(self, new_classes, hidden_layers=None):
         """change the classes that the model predicts
 
         replaces the network's final linear classifier layer with a new layer
@@ -2170,6 +2169,14 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Returns:
             (embedding_db, dict with info about failed samples)
         """
+        #TODO: when passing a dataframe as sampels, we should be able to provide
+        # per-row deployment info (eg recorder id, point name, lat, lon, project),
+        # recording info (filename, timestamp), 
+        # that gets inserted into the db and associated with the embeddings
+        # alternative api:
+        # embed_to_hoplite_db(samples_df, project_metadata)
+        # where project metadata is essentially info to merge with samples_df,
+        # what do we use as the merging index? need a file:deployment mapping
         try:
             import perch_hoplite
 
