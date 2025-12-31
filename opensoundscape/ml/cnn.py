@@ -2122,6 +2122,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         db,
         deployment,
         project=None,
+        file_to_datetime=None,
         target_layer=None,
         wandb_session=None,
         progress_bar=True,
@@ -2142,6 +2143,13 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             deployment: name of deployment to associate embeddings with
                 - if deployment does not exist in db, it will be created
             project: optional project name to associate deployment with
+            file_to_datetime: optional function or dictionary mapping filenames to datetime objects
+                - used to set recording start times in the database
+                - if None, recording start times will not be set
+                - if a function is provided, it should take a single argument (filename: str)
+                    and return a datetime.datetime object
+                - if a dictionary is provided, it should map filenames (str) to
+                    datetime.datetime objects
             target_layer: layer to extract embeddings from
                 if None [default], attempts to use architecture's default target_layer
                 Note: only architectures created with opensoundscape 0.9.0+ will
@@ -2168,10 +2176,15 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         Returns:
             (embedding_db, dict with info about failed samples)
+
+        Effects:
+            Inserts embeddings into the provided hoplite database
+            Adds deployment (and project) if they do not already exist in the database
+
         """
         #TODO: when passing a dataframe as sampels, we should be able to provide
         # per-row deployment info (eg recorder id, point name, lat, lon, project),
-        # recording info (filename, timestamp), 
+        # recording info (filename, timestamp)
         # that gets inserted into the db and associated with the embeddings
         # alternative api:
         # embed_to_hoplite_db(samples_df, project_metadata)
@@ -2223,7 +2236,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # avoid duplicating embeddings in the db depending on embedding_exists_mode
         # TODO: should we care if deployment and project match, or just (file, start, end)?
         _handle_existing_windows(
-            db, dataloader.dataset.dataset.label_df, embedding_exists_mode
+            db, dataloader.dataset.dataset.label_df, embedding_exists_mode, audio_root=audio_root
         )
 
         # check current files in db
@@ -2249,6 +2262,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 batch_embeddings=outs[target_layer],
                 overflow_mode=overflow_mode,
                 file_to_id=file_to_id,
+                file_to_datetime=file_to_datetime,
                 audio_root=audio_root,
                 deployment_id=deployment_id,
             )

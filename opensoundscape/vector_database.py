@@ -4,12 +4,13 @@
 (possibly other vector database libraries in the future)
 """
 
+from datetime import datetime
 import numpy as np
 from pathlib import Path
 import warnings
 
 
-def load_or_create_hoplite_usearch_db(db, embedding_dim=None):
+def load_or_create_hoplite_usearch_db(db, embedding_dim=None, cfg=None):
     """helper function to load or create a hoplite database object
 
     Args:
@@ -20,6 +21,19 @@ def load_or_create_hoplite_usearch_db(db, embedding_dim=None):
             - if a hoplite database object is provided, it will be returned as is
         embedding_dim: int, dimension of the embeddings to be stored in the database
             - only required when creating a new database
+        cfg: optional config_dict.ConfigDict object with usearch configuration
+            - only used when creating a new database
+            - if None, default usearch config will be used
+            Keys: 'embedding_dim', 'dtype', 'metric_name', 'expansion_add', 'expansion_search'
+            Example (default values):
+            ```python
+            usearch_cfg = config_dict.ConfigDict()
+            usearch_cfg.embedding_dim = embedding_dim
+            usearch_cfg.dtype = 'float16'
+            usearch_cfg.metric_name = 'IP'
+            usearch_cfg.expansion_add = 256
+            usearch_cfg.expansion_search = 128
+            ```
     Returns:
         a hoplite database object
     """
@@ -50,8 +64,9 @@ def load_or_create_hoplite_usearch_db(db, embedding_dim=None):
                 embedding_dim is not None
             ), "embedding_dim must be provided when creating a new hoplite database"
             print(f"Creating new db at {db_path}")
-            usearch_cfg = get_default_usearch_config(embedding_dim)
-            db = SQLiteUSearchDB.create(db_path, usearch_cfg)
+            if cfg is None:
+                cfg = get_default_usearch_config(embedding_dim)
+            db = SQLiteUSearchDB.create(db_path, cfg)
     else:
         assert isinstance(
             db, perch_hoplite.db.interface.HopliteDBInterface
@@ -65,22 +80,43 @@ def _insert_embeddings(
     batch_embeddings,
     overflow_mode,
     file_to_id,
+    file_to_datetime=None,
     audio_root=None,
     deployment_id=None,
 ):
+    """insert a batch of embeddings into a hoplite database
+    Args:
+        db: a hoplite database object
+        batch_samples: list of AudioSample objects corresponding to the embeddings
+        batch_embeddings: np.ndarray of shape (batch_size, embedding_dim)
+        overflow_mode: str, one of ["warn", "error", "clip"], how to handle float overflow
+            when casting embeddings to database dtype (typically float16)
+        file_to_id: dict mapping filename to recording_id in the hoplite db
+        file_to_datetime: optional dict or mapping filename to datetime, or function that takes
+            filename and returns datetime; if provided, used to set the datetime field when inserting
+            new recordings into the hoplite db; if None, datetime will be left as None
+        audio_root: optional Path, root directory for audio files, used to store relative paths
+            in the database
+        deployment_id: optional int, deployment_id to associate with the recordings
+
+    Effects:
+        inserts the embeddings into the hoplite database
+        adds new recordings to the database as needed
+    """
     # insert the embeddings one-by-one to the hoplite db
     # TODO: get the dtype of the embeddings from hoplite db
-    max_float16 = np.finfo(np.float16).max
+    db_dtype=db.get_embedding_dtype()
+    max_float = np.finfo(np.dtype(db_dtype)).max
 
-    # we clip values to the float16 range before casting, to avoid overfloat -> inf values
-    if np.abs(batch_embeddings).max() > max_float16:
+    # we clip values to the database dtype range before casting, to avoid overfloat -> inf values
+    if np.abs(batch_embeddings).max() > max_float:
         if overflow_mode == "warn":
-            warnings.warn("clipping embedding values to float16 range")
+            warnings.warn(f"clipping embedding values to database dtype ({db_dtype}) range")
         elif overflow_mode == "error":
-            raise ValueError("Embeddings exceeded float16 range")
+            raise ValueError(f"Embeddings exceeded database dtype  ({db_dtype}) range")
         # otherwise clip without warnings/errors
-    batch_embeddings = batch_embeddings.clip(-max_float16, max_float16).astype(
-        np.float16
+    batch_embeddings = batch_embeddings.clip(-max_float, max_float).astype(
+        np.dtype(db_dtype)
     )
 
     # insert each embedding in the batch into the database, one-by-one
@@ -92,8 +128,16 @@ def _insert_embeddings(
         if file in file_to_id:  # already in recording table of db
             recording_id = file_to_id[file]
         else:  # add this file to recording table in db
+            # file_to_datetime is optional mapping of filename -> datetime
+            # or function that takes filename and returns datetime
+            if callable(file_to_datetime):
+                datetime = file_to_datetime(file)
+            elif file_to_datetime and file in file_to_datetime:
+                datetime = file_to_datetime[file]
+            else:
+                datetime = None
             recording_id = db.insert_recording(
-                filename=file, deployment_id=deployment_id
+                filename=file, deployment_id=deployment_id, datetime=datetime,
             )
             file_to_id[file] = recording_id
         start_time = audiosample.start_time
