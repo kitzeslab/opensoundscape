@@ -2242,6 +2242,11 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # check current files in db
         file_to_id = {rec.filename: rec.id for rec in db.get_all_recordings()}
 
+        # if file_to_datetime is a function, pre-compute look-up dictionary
+        # to avoid recomputing datetime from file string for each embedding (many per file)
+        if callable(file_to_datetime):
+            file_to_datetime = {f: file_to_datetime(f) for f in file_to_id.keys()}
+
         # move network to device
         self.network.to(self.device)
         self.network.eval()
@@ -2363,7 +2368,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         )
         compiled_search_results = []
         for (qfile, qstart_time, qend_time), emb in embeddings.iterrows():
-            query_embedding = emb.values.astype(np.float16)
+            query_embedding = emb.values.astype(db.get_embedding_dtype())
             if exact_search:
                 score_fn = score_functions.get_score_fn(
                     "dot", target_score=target_score

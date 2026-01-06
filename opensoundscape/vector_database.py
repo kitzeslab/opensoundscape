@@ -149,20 +149,32 @@ def _insert_embeddings(
             offsets=np.array([start_time, end_time]),
         )
 
-
 def _handle_existing_windows(db, clips, embedding_exists_mode, audio_root=None):
     """remove samples from clips dataframe that already have embeddings in the db"""
-
+    if len(clips) == 0:
+            # all samples already have embeddings, nothing to do
+            print("Zero samples passed to _handle_existing_windows")
+            return db, {}
+    
     # TODO: consider wither we should also match on deployment_id and/or project_id
     # as well as (filename, start_time, end_time)
+    from ml_collections import config_dict
+
     if embedding_exists_mode in ["skip", "error"]:
 
-        # match dtype of index level
+        # first make list of files in input clips dataframe
+        file_list = clips.index.get_level_values(0).to_series().astype(str).unique().tolist()
+        
+        # get all windows from db for these files
+        recordings_filter = config_dict.create(
+            isin=dict(filename=file_list)
+        )
+        window_ids = db.match_window_ids(recordings_filter=recordings_filter)
+        windows = db.get_all_windows(filter=config_dict.create(isin=dict(id=window_ids)))
 
-        windows = db.get_all_windows(include_embedding=False)
+        # windows = db.get_all_windows(include_embedding=False)
 
-        def resolve_path(rec_id):
-            rec = db.get_recording(rec_id)
+        def resolve_path(rec):
             if audio_root is not None:
                 p = Path(rec.filename).relative_to(audio_root)
             else:
@@ -174,7 +186,7 @@ def _handle_existing_windows(db, clips, embedding_exists_mode, audio_root=None):
             return p
 
         id_to_recording = {
-            rec.id: resolve_path(rec.id) for rec in db.get_all_recordings()
+            rec.id: resolve_path(rec) for rec in db.get_all_recordings()
         }
         # be ware of type mismatch with Path vs str and float vs float32
         existing_index_tuples = {
