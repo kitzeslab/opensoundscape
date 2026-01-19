@@ -128,14 +128,14 @@ def test_generate_clip_times_df_overlap():
     clip_df = utils.generate_clip_times_df(
         full_duration=10, clip_duration=5, clip_overlap=2.5
     )
-    assert clip_df.shape[0] == 3
+    assert clip_df.shape[0] == 4
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert clip_df.iloc[1]["start_time"] == 2.5
     assert clip_df.iloc[1]["end_time"] == 7.5
 
     clip_df = utils.generate_clip_times_df(
-        full_duration=10, clip_duration=5, clip_overlap_fraction=0.5
+        full_duration=10, clip_duration=5, clip_overlap_fraction=0.5, final_clip=None
     )
     assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -146,11 +146,11 @@ def test_generate_clip_times_df_overlap():
     clip_df = utils.generate_clip_times_df(
         full_duration=10, clip_duration=5, clip_step=2.5
     )
-    assert clip_df.shape[0] == 3
+    assert clip_df.shape[0] == 4  # final clip default mode now "extend"
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert clip_df.iloc[1]["start_time"] == 2.5
-    assert clip_df.iloc[1]["end_time"] == 7.5
+    assert clip_df.iloc[-1]["end_time"] == 12.5
 
 
 def test_generate_clip_times_df_overlap_raises_overspecified():
@@ -223,7 +223,7 @@ def test_make_clip_df_from_label_df(silence_10s_mp3_str, metadata_wav_str):
         {"a": [0, 1, 2]},
         index=[silence_10s_mp3_str, silence_10s_mp3_str, metadata_wav_str],
     )
-    clip_df = utils.make_clip_df(label_df, clip_duration=5.0)
+    clip_df = utils.make_clip_df(label_df, clip_duration=5.0, final_clip=None)
 
     # should copy labels for each file to all clips of that file
     # duplicate file should have labels from _first_ occurrence in label_df
