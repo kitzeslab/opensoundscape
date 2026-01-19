@@ -26,7 +26,7 @@ from opensoundscape.ml.shallow_classifier import MLPClassifier
 from opensoundscape.sample import AudioSample
 from opensoundscape.ml.cam import CAM
 
-from opensoundscape.utils import make_clip_df
+from opensoundscape.utils import make_clip_df, identity
 
 
 @pytest.fixture()

@@ -2052,6 +2052,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         Optionally also return outputs from intermediate layers
 
+        The dataloader should provide lists of AudioSample objects when iterated.
+        This typically means using SafeAudioDataloader with collate_fn=identity, or eg
+        model.predict_dataloader(...,collate_fn=identity)
+
         Args:
             dataloader: DataLoader object to create samples, e.g. from .predict_dataloader()
                 Note: expects list of AudioSample objects, not (tensors, labels)
