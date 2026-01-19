@@ -66,8 +66,17 @@ def not_a_file_str():
 
 
 @pytest.fixture()
-def out_path():
-    return "tests/audio/audio_out"
+def out_path(request):
+    path = Path("tests/audio/audio_out")
+    if not path.exists():
+        path.mkdir()
+
+    def fin():
+        if path.exists():
+            path.rmdir()
+
+    request.addfinalizer(fin)
+    return path
 
 
 @pytest.fixture()
@@ -778,9 +787,9 @@ def test_audio_constructor_should_fail_on_non_integer_sample_rate():
         Audio(np.zeros(10), "fail...")
 
 
-def test_split_and_save_default(silence_10s_mp3_pathlib):
+def test_split_and_save_default(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
-    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5.0, dry_run=True)
+    clip_df = audio.split_and_save(out_path, "unnecessary", 5.0, dry_run=True)
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
@@ -788,20 +797,20 @@ def test_split_and_save_default(silence_10s_mp3_pathlib):
     assert clip_df.iloc[1]["end_time"] == 10.0
 
 
-def test_split_and_save_default_overlay(silence_10s_mp3_pathlib):
+def test_split_and_save_default_overlay(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
-    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5.0, 1.0, dry_run=True)
-    assert clip_df.shape[0] == 2
+    clip_df = audio.split_and_save(out_path, "unnecessary", 5.0, 1.0, dry_run=True)
+    assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert clip_df.iloc[1]["start_time"] == 4.0
     assert clip_df.iloc[1]["end_time"] == 9.0
 
 
-def test_split_and_save_default_full(silence_10s_mp3_pathlib):
+def test_split_and_save_default_full(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
     clip_df = audio.split_and_save(
-        "unnecessary", "unnecessary", 5.0, 1.0, final_clip="full", dry_run=True
+        out_path, "unnecessary", 5.0, 1.0, final_clip="full", dry_run=True
     )
     assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -812,10 +821,10 @@ def test_split_and_save_default_full(silence_10s_mp3_pathlib):
     assert clip_df.iloc[2]["end_time"] == 10.0
 
 
-def test_split_and_save_default_extend(silence_10s_mp3_pathlib):
+def test_split_and_save_default_extend(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
     clip_df = audio.split_and_save(
-        "unnecessary", "unnecessary", 5.0, 1.0, final_clip="extend", dry_run=True
+        out_path, "unnecessary", 5.0, 1.0, final_clip="extend", dry_run=True
     )
     assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -826,18 +835,20 @@ def test_split_and_save_default_extend(silence_10s_mp3_pathlib):
     assert clip_df.iloc[2]["end_time"] == 13.0
 
 
-def test_non_integer_source_split_and_save_default(silence_10s_mp3_pathlib):
+def test_non_integer_source_split_and_save_default(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
-    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5, dry_run=True)
+    clip_df = audio.split_and_save(
+        out_path, "unnecessary", 5, dry_run=True, final_clip=None
+    )
     assert clip_df.shape[0] == 1
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
 
 
-def test_non_integer_source_split_and_save_remainder(silence_10s_mp3_pathlib):
+def test_non_integer_source_split_and_save_remainder(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
     clip_df = audio.split_and_save(
-        "unnecessary", "unnecessary", 5, dry_run=True, final_clip="remainder"
+        out_path, "unnecessary", 5, dry_run=True, final_clip="remainder"
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -846,10 +857,10 @@ def test_non_integer_source_split_and_save_remainder(silence_10s_mp3_pathlib):
     assert abs(clip_df.iloc[1]["end_time"] - 8.2) < 0.1
 
 
-def test_non_integer_source_split_and_save_full(silence_10s_mp3_pathlib):
+def test_non_integer_source_split_and_save_full(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
     clip_df = audio.split_and_save(
-        "unnecessary", "unnecessary", 5, dry_run=True, final_clip="full"
+        out_path, "unnecessary", 5, dry_run=True, final_clip="full"
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -858,10 +869,10 @@ def test_non_integer_source_split_and_save_full(silence_10s_mp3_pathlib):
     assert abs(clip_df.iloc[1]["end_time"] - 8.2) < 0.1
 
 
-def test_non_integer_source_split_and_save_extend(silence_10s_mp3_pathlib):
+def test_non_integer_source_split_and_save_extend(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
     clip_df = audio.split_and_save(
-        "unnecessary", "unnecessary", 5, dry_run=True, final_clip="extend"
+        out_path, "unnecessary", 5, dry_run=True, final_clip="extend"
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -870,20 +881,22 @@ def test_non_integer_source_split_and_save_extend(silence_10s_mp3_pathlib):
     assert (clip_df.iloc[1]["end_time"] - 10.0) < 0.1
 
 
-def test_non_integer_cliplen_split_and_save(silence_10s_mp3_pathlib):
+def test_non_integer_cliplen_split_and_save(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
-    clip_df = audio.split_and_save("unnecessary", "unnecessary", 4.5, dry_run=True)
-    assert clip_df.shape[0] == 2
+    clip_df = audio.split_and_save(
+        out_path, "unnecessary", 4.5, dry_run=True, final_clip="extend"
+    )
+    assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 4.5
     assert clip_df.iloc[1]["start_time"] == 4.5
     assert clip_df.iloc[1]["end_time"] == 9.0
 
 
-def test_non_integer_overlaplen_split_and_save(silence_10s_mp3_pathlib):
+def test_non_integer_overlaplen_split_and_save(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
-    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5.0, 0.5, dry_run=True)
-    assert clip_df.shape[0] == 2
+    clip_df = audio.split_and_save(out_path, "unnecessary", 5.0, 0.5, dry_run=True)
+    assert clip_df.shape[0] == 3  # default is 'extend' for final clip
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert clip_df.iloc[1]["start_time"] == 4.5

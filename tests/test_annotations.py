@@ -456,7 +456,7 @@ def test_labels_on_index_overlap(boxed_annotations):
     labels = boxed_annotations.labels_on_index(
         clip_df, class_subset=["a"], min_label_overlap=0.25
     )
-    assert np.array_equal(labels.values, np.array([[1, 1, 0, 0, 0]]).transpose())
+    assert np.array_equal(labels.values, np.array([[1, 1, 0, 0, 0, 0]]).transpose())
 
 
 def test_clip_labels_with_audio_file(
@@ -663,6 +663,7 @@ def test_clip_labels_overlap(boxed_annotations):
         clip_overlap=0.5,
         class_subset=["a"],
         min_label_overlap=0.25,
+        final_clip=None,
     )
     assert np.array_equal(labels.values, np.array([[1, 1, 0, 0, 0]]).transpose())
 
