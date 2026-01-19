@@ -26,7 +26,7 @@ from opensoundscape.ml.shallow_classifier import MLPClassifier
 from opensoundscape.sample import AudioSample
 from opensoundscape.ml.cam import CAM
 
-from opensoundscape.utils import make_clip_df
+from opensoundscape.utils import make_clip_df, identity
 
 
 @pytest.fixture()
@@ -1154,7 +1154,7 @@ def test_call_with_intermediate_layers(test_df):
     model = cnn.SpectrogramClassifier(
         architecture="resnet18", classes=[0, 1], sample_duration=5.0
     )
-    dl = model.predict_dataloader(test_df)
+    dl = model.predict_dataloader(test_df, collate_fn=identity)
     preds, intermediate_outs = model(
         dl, intermediate_layers=[model.network.layer1, model.network.layer4]
     )
