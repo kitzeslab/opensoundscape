@@ -74,6 +74,9 @@ def test_lightning_spectrogram_module_train(model, train_df_clips, model_save_di
         accelerator="auto",
         save_path=model_save_dir,
     )
+    # remove saved checkpoints after test
+    for f in model_save_dir.glob("*.*"):
+        f.unlink()
 
 
 def test_lightning_spectrogram_module_train_wandb(
