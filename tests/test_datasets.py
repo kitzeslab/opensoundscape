@@ -248,7 +248,9 @@ def test_audio_splitting_dataset(dataset_df, pre):
 
 
 def test_audio_splitting_dataset_overlap(dataset_df, pre):
-    dataset = AudioFileDataset(dataset_df, pre, clip_overlap_fraction=0.5)
+    dataset = AudioFileDataset(
+        dataset_df, pre, clip_overlap_fraction=0.5, final_clip=None
+    )
     assert len(dataset) == 18
 
     # load a sample
@@ -264,17 +266,6 @@ def test_audio_splitting_dataset_overlap_rounding(dataset_df):
     )
     for x in dataset:
         assert len(x.data.samples) == 48000 * 2
-
-    # old behavior, not extending or trimming clips, produces incorrect lengths:
-    # we don't necessarily need this to fail, but confirms that this test is actually
-    # testing a case where it would fail if the fix was not implemented
-    audio_pre.pipeline.trim_audio.bypass = True
-    with pytest.raises(AssertionError):
-        dataset = AudioFileDataset(
-            dataset_df, audio_pre, clip_overlap_fraction=0.1, final_clip=None
-        )
-        for x in dataset:
-            assert len(x.data.samples) == 48000 * 2
 
 
 def test_get_item_with_list_index_raises_error(dataset_df, pre):

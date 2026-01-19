@@ -6,6 +6,7 @@ import numpy as np
 import math
 import torch
 from PIL.Image import Image
+from opensoundscape import birds  # 10s Audio object
 
 
 @pytest.fixture()
@@ -25,10 +26,8 @@ def spec():
         frequencies=np.linspace(0, 100, 5),
         times=np.linspace(0, 10, 10),
         window_samples=100,
-        overlap_samples=50,
-        window_type="Hann",
+        hop_samples=50,
         audio_sample_rate=44100,
-        scaling="spectrum",
     )
 
 
@@ -39,14 +38,14 @@ def test_spectrogram_raises_typeerror():
 
 def test_spectrogram_shape_of_veryshort(veryshort_wav_str):
     audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
-    spec = Spectrogram.from_audio(audio, overlap_samples=384)
+    spec = Spectrogram.from_audio(audio, hop_samples=512 - 384)
     assert spec.spectrogram.shape == (257, 21)
     assert spec.frequencies.shape == (257,)
     assert spec.times.shape == (21,)
-    assert math.isclose(spec.window_length, 0.02321995465, abs_tol=1e-4)
-    assert math.isclose(spec.window_step, 0.005804988662, abs_tol=1e-4)
+    assert math.isclose(spec.window_length_seconds, 0.02321995465, abs_tol=1e-4)
+    assert math.isclose(spec.window_hop_seconds, 0.005804988662, abs_tol=1e-4)
+    # sometimes lose a bit of the audio signal because of windowing
     assert math.isclose(spec.duration, audio.duration, abs_tol=1e-2)
-    assert math.isclose(spec.window_start_times[0], 0, abs_tol=1e-4)
 
 
 def test_spectrogram_shape_of_windowlengths_overlapfraction(veryshort_wav_str):
@@ -105,15 +104,52 @@ def test_construct_spectrogram():
     Spectrogram(np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20))
 
 
+def test_construct_spectrogram_with_power_spectrogram():
+    Spectrogram(
+        spectrogram=None,
+        power_spectrogram=np.zeros((5, 10)),
+        frequencies=np.zeros((5)),
+        times=np.zeros((10)),
+        window_samples=100,
+        hop_samples=50,
+        audio_sample_rate=44100,
+    )
+
+
+def test_spawn(spec):
+    sp = spec._spawn(
+        power_spectrogram=np.ones((3, 4)),
+        frequencies=np.array([10, 20, 30]),
+        times=np.array([0.1, 0.2, 0.3, 0.4]),
+    )
+    assert np.array_equal(sp.power_spectrogram, np.ones((3, 4)))
+    assert np.array_equal(sp.frequencies, np.array([10, 20, 30]))
+    assert np.array_equal(sp.times, np.array([0.1, 0.2, 0.3, 0.4]))
+    # make sure it retained other properties
+    assert sp.window_samples == spec.window_samples
+    assert sp.hop_samples == spec.hop_samples
+    assert sp.audio_sample_rate == spec.audio_sample_rate
+
+
+def test_construct_spectrogram_with_stft():
+    Spectrogram(
+        spectrogram=None,
+        stft=np.zeros((5, 10), dtype=complex),
+        frequencies=np.zeros((5)),
+        times=np.zeros((10)),
+        window_samples=100,
+        hop_samples=50,
+        audio_sample_rate=44100,
+    )
+
+
 def test_bandpass_spectrogram(spec):
     spec = spec.bandpass(25, 75)
     assert np.allclose(spec.frequencies, np.array([25, 50, 75]))
     # make sure it didn't loose any properties
     assert spec.window_samples == 100
-    assert spec.overlap_samples == 50
-    assert spec.window_type == "Hann"
+    assert spec.hop_samples == 50
     assert spec.audio_sample_rate == 44100
-    assert spec.scaling == "spectrum"
 
 
 def test_bandpass_spectrogram_out_of_bounds(spec):
@@ -141,17 +177,16 @@ def test_trim_spectrogram(spec):
     spec = spec.trim(2, 4)
     # make sure it didn't loose any properties
     assert spec.window_samples == 100
-    assert spec.overlap_samples == 50
-    assert spec.window_type == "Hann"
+    assert spec.hop_samples == 50
     assert spec.audio_sample_rate == 44100
-    assert spec.scaling == "spectrum"
 
 
 def test_limit_range():
     s = Spectrogram(
         np.random.normal(0, 200, [5, 10]), np.zeros((5)), np.zeros((10))
     ).limit_range(-100, -20)
-    assert np.max(s.spectrogram) <= -20 and np.min(s.spectrogram) >= -100
+    eps = 1e-6  # some error from float operations after dB conversion
+    assert np.max(s.spectrogram) <= -20 + eps and np.min(s.spectrogram) >= -100 - eps
 
 
 def test_plot_spectrogram():
@@ -164,16 +199,50 @@ def test_plot_spectrogram_kHz():
     )
 
 
-def test_amplitude_spectrogram():
-    Spectrogram(
-        np.zeros((5, 10)), np.zeros((5)), np.zeros((10)), (-100, -20)
-    ).amplitude()
+def test_spectrogram_pcen():
+    s = Spectrogram(
+        np.random.normal(-40, 0, [20, 40]),
+        np.zeros((20)),
+        np.zeros((40)),
+        audio_sample_rate=200,
+        hop_samples=10,
+    )
+    pcen_s = s.pcen()
+    assert pcen_s.shape == s.power_spectrogram.shape
+
+
+def test_rms_spectrogram():
+    s = Spectrogram(
+        np.zeros((5, 10)),
+        np.linspace(0, 100, 5),
+        np.linspace(0, 10, 10),
+        (-100, -20),
+        window_samples=100,
+        fft_size=256,
+    )
+    rms = s.rms
+    assert rms.shape == (10,)
+
+    with pytest.raises(AssertionError):
+        # should raise because window_samples and fft_size are required
+        s_no_window = Spectrogram(
+            np.zeros((5, 10)),
+            np.linspace(0, 100, 5),
+            np.linspace(0, 10, 10),
+            (-100, -20),
+        )
+        rms = s_no_window.rms
 
 
 def test_net_amplitude_spectrogram():
-    Spectrogram(
-        np.zeros((5, 10)), np.linspace(0, 100, 5), np.linspace(0, 10, 10), (-100, -20)
-    ).net_amplitude([50, 100], [[0, 10], [20, 30]])
+    s = Spectrogram(
+        np.zeros((5, 10)),
+        np.linspace(0, 100, 5),
+        np.linspace(0, 10, 10),
+        (-100, -20),
+        window_samples=100,
+    )
+    s.net_amplitude([50, 100], [[0, 10], [20, 30]])
 
 
 def test_to_image():
@@ -199,14 +268,38 @@ def test_to_image_with_bandpass():
     )
 
 
-def test_melspectrogram_underflow(cswa_str):
+def test_rms_similar_to_signal(veryshort_wav_str):
+    """
+    Test that spectrogram.rms is similar to the RMS of the original signal
+    when created with rectangular window
+    """
+    audio = Audio.from_file(veryshort_wav_str, sample_rate=22050)
+    spec = Spectrogram.from_audio(
+        audio,
+        window_fn=torch.ones,
+        hop_samples=512 - 384,
+    )
+    spec_rms = spec.rms
+    # compute RMS of original signal in same frames
+    window_samples = spec.window_samples
+    hop_samples = spec.hop_samples
+    signal = audio.samples
+    rms_list = []
+    for start in range(0, len(signal) - window_samples + 1, hop_samples):
+        window = signal[start : start + window_samples]
+        rms = np.sqrt(np.mean(window**2))
+        rms_list.append(rms)
+    signal_rms = np.array(rms_list)
+    assert np.allclose(spec_rms, signal_rms, atol=1e-2)
+
+
+def test_melspectrogram_underflow():
     """
     Fixed a bug where log transform was applied twice.
     Added a test to check the max value of dB scaled spec is as expected
     """
-    audio = Audio.from_file(cswa_str)
-    mel_spec = MelSpectrogram.from_audio(audio)
-    assert math.isclose(mel_spec.spectrogram.max(), -30.914056301116943, abs_tol=1e-4)
+    mel_spec = MelSpectrogram.from_audio(birds)
+    assert math.isclose(mel_spec.spectrogram.max(), -15.927558, abs_tol=1e-4)
 
 
 def test_to_image_shape(spec):

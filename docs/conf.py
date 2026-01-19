@@ -94,6 +94,7 @@ autodoc_mock_imports = [
     "librosa",
     "ray",
     "torch",
+    "torchaudio",
     "sklearn",
     "numpy",
     "schema",

@@ -355,7 +355,7 @@ def tensor_add_noise(tensor, std=1):
 
 @register_action_fn
 def pcen(s, **kwargs):
-    return s._spawn(spectrogram=librosa.pcen(S=s.spectrogram, **kwargs))
+    return s._spawn(power_spectrogram=librosa.pcen(S=s.power_spectrogram, **kwargs))
 
 
 @register_action_fn

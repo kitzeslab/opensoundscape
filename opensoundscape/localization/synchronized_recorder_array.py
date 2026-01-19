@@ -90,7 +90,7 @@ class SynchronizedRecorderArray:
         self,
         detections,
         max_receiver_dist,
-        localization_algorithm="gillette",
+        localization_algorithm="least_squares",
         max_delay=None,
         min_n_receivers=3,
         cc_threshold=0,
@@ -171,10 +171,12 @@ class SynchronizedRecorderArray:
 
 
         Args:
-            detections: a dictionary of detections, with multi-index (file,start_time,end_time), and
-                one column per class with 0/1 values for non-detection/detection The times in the
-                index imply the same real world time across all files: eg 0 seconds assumes that the
-                audio files all started at the same time, not on different dates/times
+            detections: a dataframe of sound event detections with multi-index (file,start_time,end_time),
+                and one column per class with 0/1 values for non-detection/detection
+
+                The times in the index imply the same real world time across all files. E.g.,
+                 0 seconds assumes that the audio files all started at the same time, not on
+                    different dates/times
 
             max_receiver_dist : float (meters)
                 Radius around a recorder in which to use other recorders for localizing an event.
@@ -193,7 +195,8 @@ class SynchronizedRecorderArray:
 
             localization_algorithm : str, optional
                 algorithm to use for estimating the location of a sound event from the locations and
-                time delays of a set of detections. [Default: 'gillette'] Options:
+                time delays of a set of detections. [Default: 'least_squares'] Options:
+                    - 'least_squares': least squares optimization [default]
                     - 'gillette': linear closed-form algorithm of Gillette and Silverman 2008 [1]
                     - 'soundfinder': GPS location algorithm of Wilson et al. 2014 [2]
 

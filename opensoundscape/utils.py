@@ -306,7 +306,7 @@ def make_clip_df(
         # if paths are duplicated in index, keep only the first of each
         label_df = files[~files.index.duplicated(keep="first")]
     elif isinstance(files, (str, Path)):
-        files = [files]  # be lenient, turn single path into list
+        file_list = [files]  # be lenient, turn single path into list
     else:
         assert hasattr(files, "__iter__"), (
             f"`files` should be a dataframe with paths as "
