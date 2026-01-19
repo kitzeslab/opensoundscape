@@ -543,7 +543,7 @@ def test_predict_on_clip_df(test_df):
 def test_prediction_overlap(test_df):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     model.single_target = True
-    scores = model.predict(test_df, overlap_fraction=0.5)
+    scores = model.predict(test_df, overlap_fraction=0.5, final_clip=None)
 
     assert len(scores) == 3
 
@@ -695,12 +695,14 @@ def test_predict_splitting_short_file(short_file_df):
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        scores = model.predict(short_file_df)
+        scores = model.predict(short_file_df, final_clip=None)
         assert len(scores) == 0
         all_warnings = ""
         for wi in w:
             all_warnings += str(wi.message)
         assert "prediction_dataset" in all_warnings
+        scores = model.predict(short_file_df)
+        assert len(scores) == 1  # default mode now extend
 
 
 def test_train_early_stopping(train_df, temp_model_dir):
@@ -1050,20 +1052,22 @@ def test_predict_posixpath_missing_files(missing_file_df, test_df):
 
     missing_file_df.index = [Path(p) for p in missing_file_df.index]
     test_df.index = [Path(p) for p in test_df.index]
-    with pytest.raises(IndexError):
+    with pytest.raises(ValueError):
         # if all samples are invalid, will give IndexError
         model.predict(missing_file_df)
 
     scores, invalid_samples = model.predict(
-        pd.concat([missing_file_df, test_df.head(1)]), return_invalid_samples=True
+        pd.concat([test_df.head(1), missing_file_df]), return_invalid_samples=True
     )
     assert (
         len(scores) == 3
     )  # should have one row with nan values for the invalid sample
     isnan = lambda x: x != x
-    assert np.all([isnan(score) for score in scores.iloc[0].values])
+    assert np.all([isnan(score) for score in scores.iloc[2].values])
     assert len(invalid_samples) == 1
-    assert missing_file_df.index.values[0] in invalid_samples
+    assert (
+        missing_file_df.index.values[0] in invalid_samples.reset_index()["file"].values
+    )
 
 
 def test_predict_overlap_fraction_deprecated(test_df):
@@ -1076,7 +1080,7 @@ def test_predict_overlap_fraction_deprecated(test_df):
     """
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
     with pytest.warns(DeprecationWarning):
-        scores = model.predict(test_df, overlap_fraction=0.5)
+        scores = model.predict(test_df, overlap_fraction=0.5, final_clip=None)
         assert len(scores) == 3
     with pytest.raises(AssertionError):
         model.predict(test_df, overlap_fraction=0.5, clip_overlap_fraction=0.5)
