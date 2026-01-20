@@ -521,6 +521,7 @@ class SpectrogramModule(BaseModule):
         single_target=False,
         preprocessor_dict=None,
         preprocessor_cls=SpectrogramPreprocessor,
+        arch_weights="DEFAULT",
         **preprocessor_kwargs,
     ):
         """
@@ -539,6 +540,10 @@ class SpectrogramModule(BaseModule):
             preprocessor_cls:
                 a class object that inherits from BasePreprocessor
                 if preprocessor_dict is None, this class will be instantiated to set self.preprocessor
+            arch_weights: weights to initialize architecture with, following pytorch convention.
+                eg "DEFAULT" for pretrained weights or None for random initialization
+                only used if `architecture` is a string matching a key in cnn_architectures.ARCH_DICT
+                (ignored if `architecture` is a torch.nn.Module object)
             **preprocessor_kwargs: additional arguments to pass to the initialization of the preprocessor class
                 this is ignored if preprocessor_dict is not None
                 for the default SpectrogramPreprocessor, can pass any of:
@@ -585,7 +590,9 @@ class SpectrogramModule(BaseModule):
                 f"one of cnn_architectures.list_architectures() options. Got {architecture}"
             )
             architecture = cnn_architectures.ARCH_DICT[architecture](
-                len(classes), num_channels=self.preprocessor.channels
+                len(classes),
+                num_channels=self.preprocessor.channels,
+                weights=arch_weights,
             )
         else:  # user passed a torch.nn.Module object rather than a string
             assert issubclass(
