@@ -1,4 +1,4 @@
-""" Detect periodic vocalizations with RIBBIT
+"""Detect periodic vocalizations with RIBBIT
 
 This module provides functionality to search audio for periodically fluctuating vocalizations.
 """
@@ -18,6 +18,10 @@ def calculate_pulse_score(
     """Search for amplitude pulsing in an audio signal in a range of pulse repetition rates (PRR)
 
     scores an audio amplitude signal by highest value of power spectral density in the PRR range
+
+    Note: the implementation of Spectrogram.net_amplitude() changed in opensoundscape v0.13.0,
+    which results in vastly different absolute values of the RIBBiT function. However, relative
+    scores between audio files are typically similar.
 
     Args:
         amplitude: a time series of the audio signal's amplitude (for instance a smoothed raw
@@ -80,7 +84,7 @@ def ribbit(
     clip_overlap=None,
     clip_overlap_fraction=None,
     clip_step=None,
-    final_clip=None,
+    final_clip="extend",
     noise_bands=None,
     spec_clip_range=(-100, -20),
     plot=False,
@@ -190,7 +194,7 @@ def ribbit(
     time = spectrogram.times
     # we calculate the sample rate of the amplitude signal using the difference
     # in time between columns of the Spectrogram
-    sample_rate = 1 / spectrogram.window_step
+    sample_rate = 1 / spectrogram.window_hop_seconds
 
     # determine the start and end times of each clip to analyze
     clip_df = generate_clip_times_df(

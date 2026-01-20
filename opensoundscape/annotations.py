@@ -23,7 +23,7 @@ import scipy.sparse
 
 try:
     import crowsetta
-except ImportError:
+except:
     crowsetta = None
 
 
@@ -1281,8 +1281,12 @@ class BoxedAnnotations:
         train_idx, test_idx = train_test_split(range(len(self.audio_files)), **kwargs)
         train_files = np.array(self.audio_files)[train_idx]
         test_files = np.array(self.audio_files)[test_idx]
-        train_ann_files = np.array(self.annotation_files)[train_idx]
-        test_ann_files = np.array(self.annotation_files)[test_idx]
+        if self.annotation_files is None:
+            train_ann_files = None
+            test_ann_files = None
+        else:
+            train_ann_files = np.array(self.annotation_files)[train_idx]
+            test_ann_files = np.array(self.annotation_files)[test_idx]
 
         # find class dynamically so that this method works if BoxedAnnotations is subclassed
         cls = type(self)
@@ -1592,6 +1596,10 @@ class CategoricalLabels:
             multihot_df_sparse: sparse dataframe of multi-hot labels
             multihot_df_dense: dense dataframe of multi-hot labels
         """
+        # for convenience, if labels is a list of single items, convert to list of lists
+        if len(labels) > 0 and all(not isinstance(l, list) for l in labels):
+            labels = [[l] for l in labels]
+
         # labels can be list of lists of class names or list of lists of integer class indices
         # if classes are not provided, infer them from unique set of labels
         if classes is None:

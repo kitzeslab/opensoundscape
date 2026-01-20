@@ -257,6 +257,7 @@ def test_pcenpreprocessor(sample):
     # try using some different settings
     p1.pipeline.pcen.set(gain=0.5)
     s2 = p1.forward(sample, bypass_augmentations=True).data
+    assert isinstance(s2, torch.Tensor)
 
 
 def test_preprocessor_to_from_dict(preprocessor, sample):

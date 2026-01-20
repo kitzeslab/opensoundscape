@@ -13,9 +13,11 @@ def test_get_args():
     expected_args = {
         "tensor": inspect._empty,
         "channel": None,
-        "transform_from_zero_centered": True,
+        "normalize_from_range": [-1, 1],
         "invert": False,
         "cmap": None,
+        "clip": [0, 1],
+        "axis": None,
     }
     assert args == expected_args
 
@@ -40,3 +42,11 @@ def test_show_tensor_wrong_channel():
 def test_show_tensor_grid():
     tensors = [torch.empty((3, 224, 224)) for _ in range(12)]
     utils.show_tensor_grid(tensors, columns=3)
+
+
+def test_show_tensor_grid_on_provided_axes():
+    tensors = [torch.empty((3, 224, 224)) for _ in range(12)]
+    from matplotlib import pyplot as plt
+
+    fig, axes = plt.subplots(4, 3)
+    utils.show_tensor_grid(tensors, columns=3, axes=axes)

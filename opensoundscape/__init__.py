@@ -24,7 +24,7 @@ from .audio import Audio
 from .sample_data import birds, birds_path
 from .spectrogram import Spectrogram, MelSpectrogram
 
-from .ml.cnn import SpectrogramClassifier, CNN
+from .ml.cnn import SpectrogramClassifier, CNN, load_model
 from .ml.lightning import LightningSpectrogramModule
 from .ml.datasets import AudioFileDataset, AudioSplittingDataset
 from .preprocess.actions import Action

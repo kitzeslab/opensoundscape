@@ -19,6 +19,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.lightning_mode = True
+        self.compute_per_class_metrics = False
         self.save_hyperparameters()
 
     def train(self, *args, **kwargs):
@@ -282,7 +283,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             raise_errors=raise_errors,
             split_files_into_clips=True,
             clip_overlap=0,
-            final_clip=None,
+            final_clip="extend",
             bypass_augmentations=True,
         )
 
@@ -332,7 +333,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         clip_overlap_fraction=None,
         clip_step=None,
         overlap_fraction=None,
-        final_clip=None,
+        final_clip="extend",
         bypass_augmentations=True,
         invalid_samples_log=None,
         raise_errors=False,

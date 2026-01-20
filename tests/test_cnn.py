@@ -21,11 +21,12 @@ from opensoundscape.preprocess.utils import PreprocessingError
 
 from opensoundscape.ml.cnn_architectures import alexnet, resnet18
 from opensoundscape.ml import cnn_architectures
+from opensoundscape.ml.shallow_classifier import MLPClassifier
 
 from opensoundscape.sample import AudioSample
 from opensoundscape.ml.cam import CAM
 
-from opensoundscape.utils import make_clip_df
+from opensoundscape.utils import make_clip_df, identity
 
 
 @pytest.fixture()
@@ -118,13 +119,17 @@ def onemin_wav_df():
 
 
 def test_init_with_str():
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
 
 
 def test_save_load(model_save_path):
     classes = [0, 1]
     arch = resnet18(2, weights=None, num_channels=1)
-    m = cnn.SpectrogramClassifier(architecture=arch, classes=classes, sample_duration=3)
+    m = cnn.SpectrogramClassifier(
+        architecture=arch, classes=classes, sample_duration=3, arch_weights=None
+    )
     m.save(model_save_path)
     m2 = cnn.SpectrogramClassifier.load(model_save_path)
     assert m2.classes == classes
@@ -149,7 +154,7 @@ def test_save_load_pickel(train_df, model_save_path, temp_model_dir):
     """when saving with pickle, can resume training and have the same optimizer state"""
     classes = [0, 1]
     m = cnn.SpectrogramClassifier(
-        architecture="resnet18", classes=classes, sample_duration=3
+        architecture="resnet18", classes=classes, sample_duration=3, arch_weights=None
     )
     m.train(
         train_df,
@@ -172,7 +177,11 @@ def test_save_load_pickel(train_df, model_save_path, temp_model_dir):
 
 def test_train_single_target(train_df, temp_model_dir):
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, single_target=True
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        single_target=True,
+        arch_weights=None,
     )
     model.train(
         train_df,
@@ -187,7 +196,9 @@ def test_train_single_target(train_df, temp_model_dir):
 
 
 def test_train_multi_target(train_df, temp_model_dir):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
     model.train(
         train_df,
         train_df,
@@ -207,7 +218,9 @@ def test_train_on_clip_df(train_df_clips, temp_model_dir):
     should internally load a relevant clip from the audio
     file and get its labels from the dataframe
     """
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=1.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=1.0, arch_weights=None
+    )
     model.train(
         train_df_clips,
         train_df_clips,
@@ -227,7 +240,9 @@ def test_train_with_audio_root(train_df_relative, temp_model_dir):
     should internally load a relevant clip from the audio
     file and get its labels from the dataframe
     """
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=1.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=1.0, arch_weights=None
+    )
     model.train(
         train_df_relative,
         train_df_relative,
@@ -242,7 +257,9 @@ def test_train_with_audio_root(train_df_relative, temp_model_dir):
 
 
 def test_classifier_custom_lr(train_df, temp_model_dir):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
     model.optimizer_params["kwargs"]["lr"] = 0.001
     model.optimizer_params["classifier_lr"] = 0.02
     model.train(
@@ -263,7 +280,9 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df, temp_model_dir):
     import copy
     from opensoundscape.utils import set_seed
 
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
     set_seed(0)
     model.train(
         train_df,
@@ -331,7 +350,9 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df, temp_model_dir):
 
 
 def test_train_amp_cpu(train_df, temp_model_dir):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
     # first test with cpu
     model.device = "cpu"
     model.use_amp = True
@@ -349,7 +370,9 @@ def test_train_amp_cpu(train_df, temp_model_dir):
 
 
 def test_train_amp_cuda(train_df, temp_model_dir):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
     # if cuda is available, test with cuda
     if torch.cuda.is_available():
         assert model.device.type == "cuda"
@@ -370,7 +393,9 @@ def test_train_amp_cuda(train_df, temp_model_dir):
 
 
 def test_train_amp_mps(train_df, temp_model_dir):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
     if torch.mps.is_available():
         assert model.device.type == "mps"
     else:
@@ -390,7 +415,9 @@ def test_train_amp_mps(train_df, temp_model_dir):
 
 
 def test_train_resample_loss(train_df, temp_model_dir):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
     cnn.use_resample_loss(model, train_df=train_df)
     model.train(
         train_df,
@@ -409,6 +436,7 @@ def test_train_one_class(train_df, temp_model_dir):
         architecture="resnet18",
         classes=[0],
         sample_duration=5.0,
+        arch_weights=None,
     )
     model.train(
         train_df[[0]],
@@ -423,7 +451,9 @@ def test_train_one_class(train_df, temp_model_dir):
 
 
 def test_single_target_setter():
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
     assert model.single_target is False
     assert model._single_target == False
     assert isinstance(model.loss_fn, torch.nn.BCEWithLogitsLoss)
@@ -452,7 +482,9 @@ def test_single_target_setter():
 
 
 def test_single_target_prediction(train_df_clips):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=1.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=1.0, arch_weights=None
+    )
     model.single_target = True
     scores = model.predict(train_df_clips)
     assert len(scores) == 20
@@ -460,19 +492,34 @@ def test_single_target_prediction(train_df_clips):
 
 
 def test_predict_on_list_of_files(test_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     scores = model.predict(test_df.index.values)
     assert len(scores) == 2
 
 
 def test_predict_with_audio_root():
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     scores = model.predict(["silence_10s.mp3"], audio_root="tests/audio/")
     assert len(scores) == 2
 
 
 def test_predict_and_embed_on_df_with_file_index(train_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     scores = model.predict(train_df)
     emb = model.embed(train_df)
     assert len(scores) == 4
@@ -480,7 +527,12 @@ def test_predict_and_embed_on_df_with_file_index(train_df):
 
 
 def test_predict_on_empty_list():
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     scores = model.predict([])
     expected = ["file", "start_time", "end_time", 0, 1]
     assert list(scores.reset_index().columns) == expected
@@ -533,22 +585,37 @@ def test_predict_all_arch_1ch(test_df):
 
 
 def test_predict_on_clip_df(test_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=1.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=1.0,
+        arch_weights=None,
+    )
     clip_df = make_clip_df(test_df.index.values[0:1], clip_duration=1.0)
     scores = model.predict(clip_df)
     assert len(scores) == 10
 
 
 def test_prediction_overlap(test_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     model.single_target = True
-    scores = model.predict(test_df, overlap_fraction=0.5)
+    scores = model.predict(test_df, overlap_fraction=0.5, final_clip=None)
 
     assert len(scores) == 3
 
 
 def test_predict_on_one_file(test_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=10)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=10,
+        arch_weights=None,
+    )
     p = test_df.index.values[0]
     scores = model.predict(p)
     assert len(scores) == 1
@@ -557,40 +624,103 @@ def test_predict_on_one_file(test_df):
 
 
 def test_multi_target_prediction(train_df, test_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     scores = model.predict(test_df)
 
     assert len(scores) == 2
 
 
 def test_predict_missing_file_is_invalid_sample(missing_file_df, test_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
 
-    with pytest.raises(IndexError):
-        # if all samples are invalid, will give IndexError
+    with pytest.raises(ValueError):
+        # first file is bad, will give ValueError
         model.predict(missing_file_df)
 
+    good_then_bad_df = pd.concat([test_df.head(1), missing_file_df])
+
     scores, invalid_samples = model.predict(
-        pd.concat([missing_file_df, test_df.head(1)]), return_invalid_samples=True
+        good_then_bad_df, return_invalid_samples=True
+    )
+    assert (
+        len(scores) == 3
+    )  # should have second row with nan values for the invalid sample
+    isnan = lambda x: x != x
+    assert np.all([isnan(score) for score in scores.iloc[2].values])
+    assert len(invalid_samples) == 1
+
+    # repeat with num_workers > 0 (issue #1180)
+    scores, invalid_samples = model.predict(
+        good_then_bad_df,
+        return_invalid_samples=True,
+        num_workers=1,
     )
     assert (
         len(scores) == 3
     )  # should have one row with nan values for the invalid sample
-    isnan = lambda x: x != x
-    assert np.all([isnan(score) for score in scores.iloc[0].values])
-    assert len(invalid_samples) == 1
-    assert missing_file_df.index.values[0] in invalid_samples
+    assert np.all([isnan(score) for score in scores.iloc[2].values])
+    # assert len(invalid_samples) == 1 # doesn't work with multiprocessing mode
+
+    # repeat for embedding
+    emb = model.embed(
+        good_then_bad_df,
+        num_workers=1,
+    )
+    assert len(emb) == 3  # should have one row with nan values for the invalid sample
+    assert np.all([isnan(e) for e in emb.iloc[2].values])
+
+    # and for embedding without avg pool
+    # repeat for embedding
+    emb = model.embed(
+        good_then_bad_df,
+        num_workers=1,
+        avgpool=False,
+    )
+    assert (~np.isnan(emb[0:1, ::])).all()
+    assert (np.isnan(emb[2, ::])).all()
 
 
 def test_predict_wrong_input_error(test_df):
     """cannot pass a preprocessor or dataset to predict. only file paths as list or df"""
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     pre = SpectrogramPreprocessor(2.0)
     with pytest.raises(AssertionError):
         model.predict(pre)
     with pytest.raises(AssertionError):
         ds = AudioFileDataset(test_df, pre)
         model.predict(ds)
+
+
+def test_profile(train_df):
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
+    profile = model.profile(
+        train_df,
+        batch_size=2,
+        num_workers=0,
+    )
+    assert "preprocess_profile" in profile
+    assert "preprocess_time_per_sample" in profile
+    assert "backward_time_per_batch" in profile
 
 
 def test_train_predict_inception(train_df, temp_model_dir):
@@ -624,7 +754,7 @@ def test_train_bad_index(train_df, temp_model_dir):
     """
     AssertionError catches case where index is not one of the allowed formats
     """
-    model = cnn.CNN("resnet18", [0, 1], sample_duration=2)
+    model = cnn.CNN("resnet18", [0, 1], sample_duration=2, arch_weights=None)
     # reset the index so that train_df index is integers (not an allowed format)
     train_df = make_clip_df(train_df.index.values, clip_duration=2).reset_index()
     train_df[0] = np.random.choice([0, 1], size=10)
@@ -642,29 +772,87 @@ def test_train_bad_index(train_df, temp_model_dir):
 
 
 def test_predict_without_splitting(test_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     scores = model.predict(test_df, split_files_into_clips=False)
     assert len(scores) == len(test_df)
 
 
 def test_predict_splitting_short_file(short_file_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        scores = model.predict(short_file_df)
+        scores = model.predict(short_file_df, final_clip=None)
         assert len(scores) == 0
         all_warnings = ""
         for wi in w:
             all_warnings += str(wi.message)
         assert "prediction_dataset" in all_warnings
+        scores = model.predict(short_file_df)
+        assert len(scores) == 1  # default mode now extend
+
+
+def test_train_early_stopping(train_df, temp_model_dir):
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
+    model.early_stopping_config.update(
+        {"patience": 2, "min_delta": 0.01, "enabled": True}
+    )
+    assert model.early_stopping_config["enabled"] is True
+    model.train(
+        train_df,
+        train_df,
+        save_path=temp_model_dir,
+        epochs=2,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+    )
+    assert hasattr(model, "_best_score_early_stopping")
+    assert hasattr(model, "_best_epoch_early_stopping")
+    # No need to manually remove directory - fixture handles cleanup
+
+
+def test_train_revert_to_best_epoch(train_df, temp_model_dir):
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
+    model.train(
+        train_df,
+        train_df,
+        save_path=temp_model_dir,
+        epochs=1,
+        batch_size=2,
+        save_interval=1,
+        num_workers=0,
+        reload_best_at_end=True,
+    )
 
 
 def test_save_and_load_model(model_save_path):
     classes = [0, 1]
-
-    cnn.CNN(architecture="alexnet", classes=classes, sample_duration=1.0).save(
-        model_save_path
-    )
+    cnn.CNN(
+        architecture="alexnet",
+        classes=classes,
+        sample_duration=1.0,
+        arch_weights=None,
+    ).save(model_save_path)
     m = cnn.load_model(model_save_path)
     assert m.classes == classes
     assert type(m) == cnn.CNN
@@ -734,7 +922,12 @@ def test_save_load_and_train_model_resample_loss(
 
 
 def test_prediction_warns_different_classes(train_df):
-    model = cnn.CNN(architecture="resnet18", classes=["a", "b"], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["a", "b"],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         # raises warning bc test_df columns != model.classes
@@ -744,16 +937,31 @@ def test_prediction_warns_different_classes(train_df):
             all_warnings += str(wi.message)
         assert "classes" in all_warnings
 
+    # also for embed()
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        # raises warning bc test_df columns != model.classes
+        model.embed(train_df)
+        all_warnings = ""
+        for wi in w:
+            all_warnings += str(wi.message)
+        assert "classes" in all_warnings
+
 
 def test_train_raises_wrong_class_list(train_df):
-    model = cnn.CNN(architecture="resnet18", classes=["different"], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["different"],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     with pytest.raises(AssertionError):
         # raises AssertionError bc test_df columns != model.classes
         model.train(train_df)
 
 
 def test_train_raises_labels_outside_range(train_df):
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None)
     train_df.iat[0, 0] = 2
     with pytest.raises(AssertionError):
         # raises AssertionError bc values outside [0,1] not allowed
@@ -761,7 +969,12 @@ def test_train_raises_labels_outside_range(train_df):
 
 
 def test_prediction_returns_consistent_values(train_df):
-    model = cnn.CNN(architecture="resnet18", classes=["a", "b"], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["a", "b"],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     a = model.predict(train_df)
     b = model.predict(train_df)
     assert np.allclose(a.values, b.values, 1e-6)
@@ -769,7 +982,12 @@ def test_prediction_returns_consistent_values(train_df):
 
 def test_save_and_load_weights(model_save_path):
     arch = resnet18(2, weights=None, num_channels=1)
-    model = cnn.CNN(architecture="resnet18", classes=["a", "b"], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["a", "b"],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     model.save_weights(model_save_path)
     model1 = cnn.CNN(arch, classes=["a", "b"], sample_duration=5.0)
     model1.load_weights(model_save_path)
@@ -780,13 +998,23 @@ def test_save_and_load_weights(model_save_path):
 
 
 def test_eval(train_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=2)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=2,
+        arch_weights=None,
+    )
     scores = model.predict(train_df, split_files_into_clips=False)
     model.eval(train_df.values, scores.values)
 
 
 def test_eval_raises_bad_labels(train_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=2)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=2,
+        arch_weights=None,
+    )
     scores = model.predict(train_df, split_files_into_clips=False)
     train_df.iat[0, 0] = 2
     with pytest.raises(AssertionError):
@@ -795,7 +1023,12 @@ def test_eval_raises_bad_labels(train_df):
 
 
 def test_train_no_validation(train_df, temp_model_dir):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=2)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=2,
+        arch_weights=None,
+    )
     model.train(train_df, save_path=temp_model_dir)
     # No need to manually remove directory - fixture handles cleanup
 
@@ -805,7 +1038,7 @@ def test_train_raise_errors(short_file_df, missing_file_df):
         [short_file_df, missing_file_df]
     )  # use 2 files. 1 file wrong is manually caught and userwarning raised
     files_df["class"] = [0, 1]  # add labels for training
-    model = cnn.CNN("resnet18", classes=["class"], sample_duration=2)
+    model = cnn.CNN("resnet18", classes=["class"], sample_duration=2, arch_weights=None)
     with pytest.raises(PreprocessingError):
         model.train(files_df, raise_errors=True)
 
@@ -814,7 +1047,12 @@ def test_predict_raise_errors(short_file_df, onemin_wav_df):
     files_df = pd.concat(
         [short_file_df, onemin_wav_df]
     )  # use 2 files. 1 file wrong is manually caught and userwarning raised
-    model = cnn.CNN(architecture="resnet18", classes=["class"], sample_duration=30)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["class"],
+        sample_duration=30,
+        arch_weights=None,
+    )
     model.preprocessor.pipeline.bandpass.bypass = False  # ensure bandpass happens
     # add a bad param. this should be min_f
     model.preprocessor.pipeline.bandpass.params["low"] = 1
@@ -824,7 +1062,12 @@ def test_predict_raise_errors(short_file_df, onemin_wav_df):
 
 
 def test_generate_cams(test_df):
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     samples = model.generate_cams(test_df)
     assert len(samples) == 2
     assert type(samples[0]) == AudioSample
@@ -839,7 +1082,12 @@ def test_generate_cams(test_df):
 
 def test_generate_samples(test_df):
     """should return list of AudioSample objects"""
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     samples = model.generate_samples(test_df)
     assert len(samples) == 2
     assert type(samples[0]) == AudioSample
@@ -849,20 +1097,20 @@ def test_generate_samples(test_df):
 
 def test_generate_cams_batch_size(test_df):
     """smoke test for batch size > 1"""
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None)
     _ = model.generate_cams(test_df, batch_size=2)
 
 
 def test_generate_cams_num_workers(test_df):
     """smoke test for num workers > 1"""
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None)
     _ = model.generate_cams(test_df, num_workers=2)
 
 
 def test_generate_cams_scorecam_devices(test_df):
     """In pytorch_grad_cam <1.5.0 scorecam had device mismatch"""
 
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None)
     import pytorch_grad_cam
 
     _ = model.generate_cams(
@@ -884,7 +1132,7 @@ def test_generate_cams_scorecam_devices(test_df):
 def test_generate_cams_methods(test_df):
     """test each supported method both by passing class and string name"""
 
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None)
     import pytorch_grad_cam
 
     methods_dict = {
@@ -925,7 +1173,12 @@ def test_generate_cam_all_architectures(test_df):
 
 def test_generate_cams_target_layers(test_df):
     """specify multiple target layers for cam"""
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     _ = model.generate_cams(
         test_df, target_layers=[model.network.layer3, model.network.layer4]
     )
@@ -935,7 +1188,12 @@ def test_train_with_posixpath(train_df, temp_model_dir):
     """test that train works with pathlib.Path objects"""
     from pathlib import Path
 
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
 
     # turn the file paths into Path objects.
     posix_paths = [Path(p) for p in train_df.index]
@@ -958,24 +1216,31 @@ def test_train_with_posixpath(train_df, temp_model_dir):
 
 def test_predict_posixpath_missing_files(missing_file_df, test_df):
     """Test that predict works with pathlib.Path objects"""
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
 
     missing_file_df.index = [Path(p) for p in missing_file_df.index]
     test_df.index = [Path(p) for p in test_df.index]
-    with pytest.raises(IndexError):
+    with pytest.raises(ValueError):
         # if all samples are invalid, will give IndexError
         model.predict(missing_file_df)
 
     scores, invalid_samples = model.predict(
-        pd.concat([missing_file_df, test_df.head(1)]), return_invalid_samples=True
+        pd.concat([test_df.head(1), missing_file_df]), return_invalid_samples=True
     )
     assert (
         len(scores) == 3
     )  # should have one row with nan values for the invalid sample
     isnan = lambda x: x != x
-    assert np.all([isnan(score) for score in scores.iloc[0].values])
+    assert np.all([isnan(score) for score in scores.iloc[2].values])
     assert len(invalid_samples) == 1
-    assert missing_file_df.index.values[0] in invalid_samples
+    assert (
+        missing_file_df.index.values[0] in invalid_samples.reset_index()["file"].values
+    )
 
 
 def test_predict_overlap_fraction_deprecated(test_df):
@@ -986,9 +1251,14 @@ def test_predict_overlap_fraction_deprecated(test_df):
 
     also, should raise AssertionError if both args are passed (over-specified)
     """
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+    )
     with pytest.warns(DeprecationWarning):
-        scores = model.predict(test_df, overlap_fraction=0.5)
+        scores = model.predict(test_df, overlap_fraction=0.5, final_clip=None)
         assert len(scores) == 3
     with pytest.raises(AssertionError):
         model.predict(test_df, overlap_fraction=0.5, clip_overlap_fraction=0.5)
@@ -1006,6 +1276,7 @@ def test_embed(test_df):
                 single_target=False,
                 architecture=arch,
                 sample_duration=5,
+                arch_weights=None,
             )
             embeddings = m.embed(samples=test_df, avgpool=True, progress_bar=False)
             assert embeddings.shape[0] == 2
@@ -1022,6 +1293,7 @@ def test_embed_no_avgpool(test_df):
         single_target=False,
         architecture="resnet18",
         sample_duration=5,
+        arch_weights=None,
     )
     embeddings = m.embed(
         samples=test_df,
@@ -1039,6 +1311,7 @@ def test_embed_return_array(test_df):
         single_target=False,
         architecture="resnet18",
         sample_duration=5,
+        arch_weights=None,
     )
     embeddings = m.embed(
         samples=test_df,
@@ -1056,6 +1329,7 @@ def test_embed_one_sample(train_df):
         single_target=False,
         architecture="resnet18",
         sample_duration=10,
+        arch_weights=None,
     )
     embeddings = m.embed(samples=train_df.head(1), avgpool=True, progress_bar=False)
     assert embeddings.shape == (1, 512)
@@ -1064,9 +1338,9 @@ def test_embed_one_sample(train_df):
 def test_call_with_intermediate_layers(test_df):
     """test that passing intermediate_layers to SpectrogramClassifier.__call__ returns tensors of expected shape"""
     model = cnn.SpectrogramClassifier(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
     )
-    dl = model.predict_dataloader(test_df)
+    dl = model.predict_dataloader(test_df, collate_fn=identity)
     preds, intermediate_outs = model(
         dl, intermediate_layers=[model.network.layer1, model.network.layer4]
     )
@@ -1082,7 +1356,7 @@ def test_call_with_intermediate_layers(test_df):
 
 def test_freeze_layers_except_and_unfreeze():
     model = cnn.SpectrogramClassifier(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
     )
     model.freeze_layers_except()
     for param in model.network.parameters():
@@ -1120,7 +1394,10 @@ def test_freeze_feature_extractor_all_arch():
                 num_classes=2, num_channels=1, weights=None
             )
             model = cnn.CNN(
-                architecture=arch, classes=[0, 1], sample_duration=5.0, channels=1
+                architecture=arch,
+                classes=[0, 1],
+                sample_duration=5.0,
+                channels=1,
             )
             model.freeze_feature_extractor()
 
@@ -1139,7 +1416,10 @@ def test_change_classes_all_arch():
     for arch_name in cnn_architectures.ARCH_DICT.keys():
         try:
             model = cnn.CNN(
-                architecture=arch_name, classes=[0, 1], sample_duration=5.0, channels=1
+                architecture=arch_name,
+                classes=[0, 1],
+                sample_duration=5.0,
+                channels=1,
             )
             if arch_name == "squeezenet1_0":
                 # has conv2d not linear layer
@@ -1151,3 +1431,232 @@ def test_change_classes_all_arch():
                 assert model.classifier.out_features == 3
         except Exception as e:
             raise Exception(f"{arch_name} failed") from e
+
+
+def test_change_classes_mlp_classifier():
+    """Test change_classes method with MLPClassifier hidden layers"""
+    # Create a CNN model with standard linear classifier
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["class_a", "class_b"],
+        sample_duration=5.0,
+        channels=1,
+        arch_weights=None,
+    )
+
+    # Store original classifier type and input features
+    original_in_features = model.classifier.in_features
+    assert isinstance(model.classifier, torch.nn.Linear)
+
+    # Test 1: Change to MLPClassifier with single hidden layer
+    new_classes = ["bird", "frog", "insect"]
+    hidden_layers = [128]
+
+    model.change_classes(new_classes, hidden_layers=hidden_layers)
+
+    # Verify the classifier was replaced with MLPClassifier
+    assert isinstance(model.classifier, MLPClassifier)
+    assert model.classes == new_classes
+    assert model.classifier.in_features == original_in_features
+    assert model.classifier.out_features == len(new_classes)
+    assert model.classifier.hidden_layer_sizes == tuple(hidden_layers)
+    assert model.classifier.classes == new_classes
+
+    # Test forward pass works
+    dummy_input = torch.randn(
+        2, 1, 224, 224
+    )  # batch_size=2, channels=1, height=224, width=224
+    output = model.network(dummy_input)
+    assert output.shape == (2, len(new_classes))
+
+
+def test_change_classes_mlp_multiple_hidden_layers():
+    """Test change_classes with MLPClassifier having multiple hidden layers"""
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["a", "b"],
+        sample_duration=5.0,
+        channels=1,
+        arch_weights=None,
+    )
+
+    original_in_features = model.classifier.in_features
+
+    # Test with multiple hidden layers
+    new_classes = ["dog", "cat", "bird", "other"]
+    hidden_layers = [256, 128, 64]
+
+    model.change_classes(new_classes, hidden_layers=hidden_layers)
+
+    assert isinstance(model.classifier, MLPClassifier)
+    assert model.classes == new_classes
+    assert model.classifier.in_features == original_in_features
+    assert model.classifier.out_features == len(new_classes)
+    assert model.classifier.hidden_layer_sizes == tuple(hidden_layers)
+    assert model.classifier.classes == new_classes
+
+    # Test forward pass
+    dummy_input = torch.randn(3, 1, 224, 224)
+    output = model.network(dummy_input)
+    assert output.shape == (3, len(new_classes))
+
+
+def test_change_classes_mlp_no_hidden_layers():
+    """Test change_classes with empty tuple for hidden layers (creates MLPClassifier with no hidden layers)"""
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["x", "y"],
+        sample_duration=5.0,
+        channels=1,
+        arch_weights=None,
+    )
+
+    original_in_features = model.classifier.in_features
+
+    # Test with empty tuple - should create MLPClassifier with no hidden layers
+    new_classes = ["noise", "signal"]
+    hidden_layers = ()
+
+    model.change_classes(new_classes, hidden_layers=hidden_layers)
+
+    assert isinstance(model.classifier, MLPClassifier)
+    assert model.classes == new_classes
+    assert model.classifier.in_features == original_in_features
+    assert model.classifier.out_features == len(new_classes)
+    assert model.classifier.hidden_layer_sizes == ()
+    assert model.classifier.classes == new_classes
+
+    # Test forward pass
+    dummy_input = torch.randn(1, 1, 224, 224)
+    output = model.network(dummy_input)
+    assert output.shape == (1, len(new_classes))
+
+
+def test_change_classes_back_to_linear():
+    """Test changing from MLPClassifier back to torch.nn.Linear"""
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["a", "b"],
+        sample_duration=5.0,
+        channels=1,
+        arch_weights=None,
+    )
+
+    original_in_features = model.classifier.in_features
+
+    # First change to MLPClassifier
+    model.change_classes(["x", "y", "z"], hidden_layers=[64])
+    assert isinstance(model.classifier, MLPClassifier)
+
+    # Then change back to Linear (hidden_layers=None)
+    new_classes = ["final_a", "final_b"]
+    model.change_classes(new_classes, hidden_layers=None)
+
+    assert isinstance(model.classifier, torch.nn.Linear)
+    assert model.classes == new_classes
+    assert model.classifier.in_features == original_in_features
+    assert model.classifier.out_features == len(new_classes)
+
+    # Test forward pass
+    dummy_input = torch.randn(2, 1, 224, 224)
+    output = model.network(dummy_input)
+    assert output.shape == (2, len(new_classes))
+
+
+def test_change_classes_mlp_from_existing_mlp():
+    """Test changing classes when starting with MLPClassifier"""
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["a", "b"],
+        sample_duration=5.0,
+        channels=1,
+        arch_weights=None,
+    )
+
+    # First create an MLPClassifier
+    model.change_classes(["x", "y"], hidden_layers=[32])
+    original_in_features = model.classifier.in_features
+    assert isinstance(model.classifier, MLPClassifier)
+
+    # Now change to a different MLPClassifier configuration
+    new_classes = ["class1", "class2", "class3", "class4"]
+    new_hidden_layers = [128, 64]
+
+    model.change_classes(new_classes, hidden_layers=new_hidden_layers)
+
+    assert isinstance(model.classifier, MLPClassifier)
+    assert model.classes == new_classes
+    assert model.classifier.in_features == original_in_features
+    assert model.classifier.out_features == len(new_classes)
+    assert model.classifier.hidden_layer_sizes == tuple(new_hidden_layers)
+    assert model.classifier.classes == new_classes
+
+    # Test forward pass
+    dummy_input = torch.randn(1, 1, 224, 224)
+    output = model.network(dummy_input)
+    assert output.shape == (1, len(new_classes))
+
+
+def test_change_classes_invalid_hidden_layers():
+    """Test change_classes with invalid hidden_layers parameter"""
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["a", "b"],
+        sample_duration=5.0,
+        channels=1,
+        arch_weights=None,
+    )
+
+    # Test with invalid hidden_layers type
+    with pytest.raises(ValueError, match="hidden_layers must be None"):
+        model.change_classes(["x", "y"], hidden_layers="invalid")
+
+    with pytest.raises(ValueError, match="hidden_layers must be None"):
+        model.change_classes(["x", "y"], hidden_layers=123)
+
+
+def test_change_classes_single_hidden_layer_list():
+    """Test change_classes with single hidden layer specified as list"""
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["a", "b"],
+        sample_duration=5.0,
+        channels=1,
+        arch_weights=None,
+    )
+
+    # Test with list instead of tuple
+    new_classes = ["bird", "noise"]
+    hidden_layers = [100]  # List instead of tuple
+
+    model.change_classes(new_classes, hidden_layers=hidden_layers)
+
+    assert isinstance(model.classifier, MLPClassifier)
+    assert model.classifier.hidden_layer_sizes == (100,)  # Should be converted to tuple
+    assert model.classifier.classes == list(new_classes)
+
+
+def test_change_classes_preserves_device():
+    """Test that change_classes preserves model device"""
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=["a", "b"],
+        sample_duration=5.0,
+        channels=1,
+        arch_weights=None,
+    )
+
+    # Move model to CPU explicitly (default but let's be explicit)
+    device = torch.device("cpu")
+    model = model.to(device)
+
+    # Change classes with MLPClassifier
+    model.change_classes(["x", "y", "z"], hidden_layers=[64])
+
+    # Check that new classifier is on the same device
+    assert next(model.classifier.parameters()).device == device
+
+    # Test forward pass on same device
+    dummy_input = torch.randn(1, 1, 224, 224).to(device)
+    output = model.network(dummy_input)
+    assert output.device == device

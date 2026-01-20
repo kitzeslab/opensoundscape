@@ -129,7 +129,7 @@ def generate_clip_times_df(
     clip_overlap=None,
     clip_overlap_fraction=None,
     clip_step=None,
-    final_clip=None,
+    final_clip="extend",
     rounding_precision=10,
 ):
     """generate start and end times for even-lengthed clips
@@ -153,13 +153,13 @@ def generate_clip_times_df(
             clip_duration seconds long [default: None].
             Options:
                 - None:         Discard the remainder (do not make a clip)
-                - "extend":     Extend the final clip beyond full_duration to reach clip_duration
-                  length
+                - "extend":     Extend the final clip beyond full_duration with zeros to reach
+                  clip_duration length
                 - "remainder":  Use only remainder of full_duration (final clip will be shorter than
                   clip_duration)
                 - "full":       Increase overlap with previous clip to yield a clip with
-                  clip_duration length.
-                    Note: returns entire original audio if it is shorter than clip_duration
+                  clip_duration length. Note: returns entire original audio if it is shorter than
+                  clip_duration
         rounding_precision (int or None): number of decimals to round start/end times to
             - pass None to skip rounding
 
@@ -248,7 +248,7 @@ def make_clip_df(
     clip_overlap=None,
     clip_overlap_fraction=None,
     clip_step=None,
-    final_clip=None,
+    final_clip="extend",
     return_invalid_samples=False,
     raise_exceptions=False,
     audio_root=None,
@@ -306,7 +306,7 @@ def make_clip_df(
         # if paths are duplicated in index, keep only the first of each
         label_df = files[~files.index.duplicated(keep="first")]
     elif isinstance(files, (str, Path)):
-        files = [files]  # be lenient, turn single path into list
+        file_list = [files]  # be lenient, turn single path into list
     else:
         assert hasattr(files, "__iter__"), (
             f"`files` should be a dataframe with paths as "
@@ -346,7 +346,7 @@ def make_clip_df(
 
         if label_df is not None:
             # copy labels for this file to all of its clips
-            clips[label_df.columns] = label_df.loc[f]
+            clips[label_df.columns] = label_df.loc[f].values
 
         clip_dfs.append(clips)
 

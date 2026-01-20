@@ -456,7 +456,7 @@ def test_labels_on_index_overlap(boxed_annotations):
     labels = boxed_annotations.labels_on_index(
         clip_df, class_subset=["a"], min_label_overlap=0.25
     )
-    assert np.array_equal(labels.values, np.array([[1, 1, 0, 0, 0]]).transpose())
+    assert np.array_equal(labels.values, np.array([[1, 1, 0, 0, 0, 0]]).transpose())
 
 
 def test_clip_labels_with_audio_file(
@@ -663,6 +663,7 @@ def test_clip_labels_overlap(boxed_annotations):
         clip_overlap=0.5,
         class_subset=["a"],
         min_label_overlap=0.25,
+        final_clip=None,
     )
     assert np.array_equal(labels.values, np.array([[1, 1, 0, 0, 0]]).transpose())
 
@@ -1103,6 +1104,30 @@ def test_categorical_labels_init(labels_df, labels_df_int):
     assert list(cl.multihot_labels_at_index(0)) == [1, 1, 0]
 
 
+def test_categorical_labels_init_from_single_values(labels_df):
+    # init with single string labels, internally converts them to lists
+    cl = annotations.CategoricalLabels(
+        files=labels_df["file"],
+        start_times=labels_df["start_time"],
+        end_times=labels_df["end_time"],
+        labels=["abc", "b", "b"],
+        classes=None,
+        integer_labels=False,
+    )
+    assert set(cl.classes) == set(["abc", "b"])
+
+    # init with single integer labels
+    cl = annotations.CategoricalLabels(
+        files=labels_df["file"],
+        start_times=labels_df["start_time"],
+        end_times=labels_df["end_time"],
+        labels=[0, 1, 0],
+        classes=["a", "b"],
+        integer_labels=True,
+    )
+    assert set(cl.classes) == set(["a", "b"])
+
+
 def test_categorical_labels_init_no_classes(labels_df):
 
     # init with classes=None
@@ -1160,3 +1185,18 @@ def test_train_test_split(boxed_annotations_2_files):
     assert len(train.df) + len(test.df) == len(boxed_annotations_2_files.df)
     assert isinstance(train, BoxedAnnotations)
     assert isinstance(test, BoxedAnnotations)
+
+
+def test_train_test_split_ann_files_None(boxed_annotations_2_files):
+    boxed_annotations_2_files.annotation_files = None
+    train, test = boxed_annotations_2_files.train_test_split(
+        train_size=0.5, random_state=0
+    )
+    assert len(train.audio_files) == 1
+    assert len(test.audio_files) == 1
+    assert train.audio_files[0] != test.audio_files[0]
+    assert len(train.df) + len(test.df) == len(boxed_annotations_2_files.df)
+    assert isinstance(train, BoxedAnnotations)
+    assert isinstance(test, BoxedAnnotations)
+    assert train.annotation_files is None
+    assert test.annotation_files is None

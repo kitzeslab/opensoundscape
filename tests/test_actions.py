@@ -186,33 +186,16 @@ def test_spectrogram_to_tensor_range(sample, sample_audio):
     assert isinstance(sample.data, torch.Tensor)
     assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
     assert math.isclose(sample.data.min(), 0.0, abs_tol=1e-6) and sample.data.max() < 1
-    assert math.isclose(sample.data.mean(), 0.040718697011470795, abs_tol=1e-6)
+    assert math.isclose(sample.data.mean(), 0.10102162, abs_tol=1e-6)
 
-    # and with lower db range
+    # and with lower db range: results in larger values
     sample.data = Spectrogram.from_audio(sample_audio.data)
     action.set(range=(-150, -90))
     action(sample)
     assert isinstance(sample.data, torch.Tensor)
     assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
     assert sample.data.min() > 0 and math.isclose(sample.data.max(), 1.0, abs_tol=1e-6)
-    assert math.isclose(sample.data.mean(), 0.8361802697181702, abs_tol=1e-6)
-
-    # test matching legacy behavior with use_skimage=True
-    action.set(use_skimage=True)
-    action.set(range=(-80, 0))
-    sample.data = Spectrogram.from_audio(sample_audio.data)
-    action(sample)  # converts .data from Spectrogram to Tensor
-    assert isinstance(sample.data, torch.Tensor)
-    assert list(sample.data.shape) == [1, 20, 30]  # note channels as dim0
-    assert math.isclose(sample.data.min(), 0.0, abs_tol=1e-6) and sample.data.max() < 1
-    assert math.isclose(sample.data.mean(), 0.044159847293801575, abs_tol=1e-6)
-
-    # repeat with lower range
-    action.set(range=(-150, -90))
-    sample.data = Spectrogram.from_audio(sample_audio.data)
-    action(sample)  # converts .data from Spectrogram to Tensor
-    assert sample.data.min() > 0 and math.isclose(sample.data.max(), 1.0, abs_tol=1e-6)
-    assert math.isclose(sample.data.mean(), 0.8427285774873222, abs_tol=1e-6)
+    assert math.isclose(sample.data.mean(), 0.987182, abs_tol=1e-6)
 
 
 def test_spectrogram_to_tensor_retain_shape(sample, sample_audio):
@@ -317,7 +300,7 @@ def test_overlay_to_from_dict(sample_df):
 
 
 def test_pcen(sample_audio):
-    sample_audio.data = Spectrogram.from_audio(sample_audio.data, dB_scale=False)
+    sample_audio.data = Spectrogram.from_audio(sample_audio.data)
     action = actions.Action(action_functions.pcen)
     original_spec = copy.copy(sample_audio.data.spectrogram)
     action(sample_audio)
@@ -353,6 +336,21 @@ def test_adaptive_random_gain_actually_changes_audio(sample_audio):
     )
 
     # Audio should be different from original
+    assert not np.array_equal(result.samples, original_samples)
+
+
+def test_random_lowpass(sample_audio):
+    """Test that random_lowpass actually applies a lowpass filter"""
+    original_samples = sample_audio.data.samples.copy()
+
+    result = action_functions.random_lowpass(
+        sample_audio.data,
+        cutoff_range=(1000, 5000),
+        probability=1.0,
+        order_range=(1, 2),
+    )
+
+    # Audio should be different from original (high freq content reduced)
     assert not np.array_equal(result.samples, original_samples)
 
 
