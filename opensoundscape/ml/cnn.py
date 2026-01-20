@@ -30,7 +30,7 @@ from opensoundscape.preprocess.preprocessors import (
 from opensoundscape.preprocess import io
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.cnn_architectures import inception_v3
-from opensoundscape.sample import collate_audio_samples
+from opensoundscape.ml.dataloaders import SafeAudioDataloader, collate_audio_samples
 from opensoundscape.utils import identity
 from opensoundscape.logging import wandb_table
 from opensoundscape.ml import shallow_classifier
@@ -56,8 +56,6 @@ from opensoundscape.ml.loss import (
     ResampleLoss,
 )
 
-from opensoundscape.ml.dataloaders import SafeAudioDataloader
-from opensoundscape.sample import collate_audio_samples
 
 import warnings
 
@@ -210,7 +208,7 @@ class BaseModule:
         Effects:
             logs metrics and loss to the current logger
         """
-        batch_tensors, batch_labels = samples
+        batch_tensors, batch_labels = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
         batch_labels = batch_labels.to(self.device)
 
@@ -432,7 +430,7 @@ class BaseModule:
         self,
         samples,
         bypass_augmentations=False,
-        collate_fn=collate_audio_samples,
+        collate_fn=identity,
         raise_errors=False,
         **kwargs,
     ):
@@ -463,7 +461,7 @@ class BaseModule:
         )
 
     def predict_dataloader(
-        self, samples, collate_fn=collate_audio_samples, raise_errors=False, **kwargs
+        self, samples, collate_fn=identity, raise_errors=False, **kwargs
     ):
         """generate dataloader for inference (predict/validate/test)
 
@@ -1181,7 +1179,6 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
-            collate_fn=identity,  # yield AudioSample list not (tensors,labels)
             **dataloader_kwargs,
         )
 
@@ -1218,7 +1215,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             dataloader=dataloader,
             wandb_session=wandb_session,
             progress_bar=progress_bar,
-        )
+        )[-1]
 
         ### Apply activation layer ###
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
@@ -1301,9 +1298,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         if audio_root is not None:  # add this to dataloader keyword arguments
             dataloader_kwargs.update(dict(audio_root=audio_root))
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(
-            samples, collate_fn=identity, **dataloader_kwargs
-        )
+        dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
 
         # move model to device
         try:
@@ -1735,8 +1730,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             self.network.train()
 
             # get one batch of training data and run training step
-            batch_tensors, batch_labels = next(train_loader)
-            loss = self.training_step((batch_tensors, batch_labels), step)
+            train_batch = next(train_loader)
+            loss = self.training_step(train_batch, step)
             self.loss_hist.append(loss.item())
 
             ###########
@@ -2054,7 +2049,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         dataloader,
         wandb_session=None,
         progress_bar=True,
-        intermediate_layers=None,
+        targets=(-1,),
         avgpool_intermediates=True,
     ):
         """Run inference on a dataloader, generating scores for each sample
@@ -2062,32 +2057,21 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Optionally also return outputs from intermediate layers
 
         The dataloader should provide lists of AudioSample objects when iterated.
-        This typically means using SafeAudioDataloader with collate_fn=identity, or eg
-        model.predict_dataloader(...,collate_fn=identity)
 
         Args:
             dataloader: DataLoader object to create samples, e.g. from .predict_dataloader()
                 Note: expects list of AudioSample objects, not (tensors, labels)
-                This means you should use SafeAudioDataloader(...,collate_fn=identity)
             wandb_session: a wandb session to log progress to (e.g. return value of wandb.init())
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
-            intermediate_layers: list of layers to return outputs from
-                [default: None] if None, only returns final layer outputs
-                if a list of layers is provided, returns a second value
-                with outputs from each layer. Example: [self.model.layer1]
+            targets: list of layers to return outputs from. -1 corresponds to final layer outputs
+                [default: (-1)]returns final layer outputs
             avgpool_intermediates: bool, if True, applies global average pooling to intermediate outputs
                 i.e. averages across all dimensions except first to get a 1D vector per sample
                 [default: True] (note that False may results in large memory usage)
 
         Returns:
-            if intermediate outputs is None, returns
-            `scores`: np.array of scores for each sample
-
-            if intermediate_outputs is not None, returns a tuple:
-            `(scores, intermediate_outputs)` where intermediate_outputs is
-            a list of tensors, the outputs from each layer in intermediate_layers
+            outs: dictionary with keys:
         """
-
         if not isinstance(dataloader, torch.utils.data.DataLoader):
             warnings.warn(
                 "dataloader is not an instance of torch.utils.data.DataLoader!"
@@ -2097,98 +2081,354 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         self.network.to(self.device)
         self.network.eval()
 
-        # initialize scores
-        pred_scores = []
-
-        # init a variable to save outputs of each batch for each target layer
-        intermediate_layers = intermediate_layers or []
-        intermediate_outputs = [[] for _ in intermediate_layers]
-
-        # define a function that will be used to save the output of each target layer
-        # during inference
-        def forward_hook_to_save_output(layer_name, idx):
-            def hook(module, input, output):
-                if avgpool_intermediates:
-                    # apply global average pooling to intermediate outputs
-                    # (average across all dimensions except first to get a 1D vector per sample)
-                    # (also skip batch dimension: so start averaging from dim 2)
-                    if output.dim() > 2:
-                        output = output.mean(list(range(2, output.dim())))
-                intermediate_outputs[idx].append(output)
-
-            return hook
-
-        # initialize forward hooks to save intermediate outputs
-        fhooks = []  # keep the handles so we can remove the hooks later
-        for idx, l in enumerate(intermediate_layers):
-            fhooks.append(l.register_forward_hook(forward_hook_to_save_output(l, idx)))
+        # initialize outputs dictionary
+        targets = [] if targets is None else targets
+        outs = {k: [] for k in targets}
 
         # disable gradient updates during inference
-        with torch.set_grad_enabled(False):
-            for i, samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
-                batch_tensors = torch.stack([s.data for s in samples]).to(self.device)
-                batch_tensors.requires_grad = False
 
-                # forward pass of network: feature extractor + classifier
-                # also runs forward hooks to save intermediate outputs
-                logits = self.network(batch_tensors)
-
+        for i, samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
+            (batch_data, _) = collate_audio_samples(samples)
+            batch_outs = self.batch_forward(
+                batch_data,
+                targets=targets,
+                avgpool=avgpool_intermediates,
+            )
+            invalid_sample_mask = [s.is_alternative for s in samples]
+            # process and store outputs from batch
+            for k, v in batch_outs.items():
                 # mask outputs for any invalid samples (samples that failed in preprocessing)
                 # with np.nan, since the returned values don't correspond to the sample
                 # (the preprocessor instead returned a placeholder value for the sample)
-                invalid_sample_mask = [s.is_alternative for s in samples]
-                logits[invalid_sample_mask] = np.nan
-
-                # need to do the same for intermediate outputs, keeping their shape but
-                # filling values with nan
-                for output_idx in range(len(intermediate_outputs)):
-                    # get the shape of the intermediate output for this batch
-                    batch_output_shape = intermediate_outputs[output_idx][i].shape
-                    # create a mask of the same shape as the intermediate output
-                    # where the values for invalid samples are True
-                    invalid_sample_mask_expanded = (
-                        torch.tensor(invalid_sample_mask)
-                        .unsqueeze(1)
-                        .expand(-1, batch_output_shape[1])
-                    )
-                    # set the values for invalid samples to nan
-                    intermediate_outputs[output_idx][i][
-                        invalid_sample_mask_expanded
-                    ] = np.nan
-
-                # disable gradients on returned values
-                pred_scores.extend(list(logits.detach().cpu().numpy()))
-
-                if wandb_session is not None:
-                    wandb_session.log(
-                        {
-                            "progress": i / len(dataloader),
-                            "completed_batches": i,
-                            "total_batches": len(dataloader),
-                        }
-                    )
-
-        # clean up by removing forward hooks
-        for fh in fhooks:
-            fh.remove()
+                # first dimension of v corresponds to batch dimension, all others to output shape
+                v[invalid_sample_mask, ...] = np.nan
+                outs[k].append(v)  # store outputs for this batch
+            if wandb_session is not None:
+                wandb_session.log(
+                    {
+                        "progress": i / len(dataloader),
+                        "completed_batches": i,
+                        "total_batches": len(dataloader),
+                    }
+                )
 
         # aggregate across all batches
-        if len(pred_scores) > 0:
-            pred_scores = np.array(pred_scores)
+        if len(list(outs.values())[0]) > 0:
+            for k in outs.keys():
+                outs[k] = np.vstack(outs[k])
+        return outs
 
-            # aggregate across batches
-            # note that shapes of elements in intermediate_outputs may vary
-            # (so we don't make one combined np.array)
-            # careful with squeezing: if we have a batch size of 1, we don't want to squeeze out the batch dimension
-            intermediate_outputs = [
-                torch.vstack(x).detach().cpu().numpy() for x in intermediate_outputs
-            ]
+    def embed_to_hoplite_db(
+        self,
+        samples,
+        db,
+        deployment,
+        project=None,
+        file_to_datetime=None,
+        target_layer=None,
+        wandb_session=None,
+        progress_bar=True,
+        audio_root=None,
+        embedding_exists_mode="skip",  # skip, error, add
+        commit_frequency_batches=100,
+        overflow_mode="warn",
+        embedding_dim=None,
+        **dataloader_kwargs,
+    ):
+        """Run inference on a dataloader, saving 1D outputs of target_layer to a hoplite database
+
+        Args:
+            samples: (same as CNN.predict())
+            db: a hoplite database object or a path to a hoplite database folder
+                - if a path is provided, the database will be created if it does not exist
+                - when creating a new db, the embedding_dim argument must be provided
+            deployment: name of deployment to associate embeddings with
+                - if deployment does not exist in db, it will be created
+            project: optional project name to associate deployment with
+            file_to_datetime: optional function or dictionary mapping filenames to datetime objects
+                - used to set recording start times in the database
+                - if None, recording start times will not be set
+                - if a function is provided, it should take a single argument (filename: str)
+                    and return a datetime.datetime object
+                - if a dictionary is provided, it should map filenames (str) to
+                    datetime.datetime objects
+            target_layer: layer to extract embeddings from
+                if None [default], attempts to use architecture's default target_layer
+                Note: only architectures created with opensoundscape 0.9.0+ will
+                have a default target layer. See pytorch_grad_cam docs for suggestions.
+                Note: if multiple layers are provided, the activations are merged across
+                    layers (rather than returning separate activations per layer)
+            wandb_session: a wandb session to log progress to (e.g. return value of wandb.init())
+            progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
+            audio_root: the root directory for relative paths to audio files
+            embedding_exists_mode: str, behavior when an embedding already exists for a given
+                (dataset_name, source_id, offset) tuple. Options are:
+                    "skip": skip inserting the embedding (default)
+                    "error": raise an error
+                    "add": add a new embedding entry to the db with the same source info
+                Note that hoplite doesn't currently support removing or replacing existing entries
+            commit_frequency_batches: int, commit to db after every N batches[default: 1]
+            overflow_mode: 'warn', 'error', or 'ignore' behvior when embedding values exceed
+                the range of float16, which is the range of values allowed in hoplite db
+            embedding_dim: int, dimension of the embeddings to be stored
+                - only used when creating a new hoplite db
+                - must match the output dimension of the model's target_layer
+                - if creating new db and embedding_dim is None, guesses based on self.classifier.in_features
+            **dataloader_kwargs: additional keyword arguments to pass to the dataloader
+
+        Returns:
+            (embedding_db, dict with info about failed samples)
+
+        Effects:
+            Inserts embeddings into the provided hoplite database
+            Adds deployment (and project) if they do not already exist in the database
+
+        """
+        # TODO: when passing a dataframe as sampels, we should be able to provide
+        # per-row deployment info (eg recorder id, point name, lat, lon, project),
+        # recording info (filename, timestamp)
+        # that gets inserted into the db and associated with the embeddings
+        # alternative api:
+        # embed_to_hoplite_db(samples_df, project_metadata)
+        # where project metadata is essentially info to merge with samples_df,
+        # what do we use as the merging index? need a file:deployment mapping
+        try:
+            import perch_hoplite
+
+        except ImportError as e:
+            raise ImportError(
+                "hoplite is not installed. Please install hoplite to use this feature."
+            ) from e
+        from perch_hoplite.db import interface as hoplite_interface
+        from opensoundscape.vector_database import (
+            load_or_create_hoplite_usearch_db,
+            _handle_existing_windows,
+            _insert_embeddings,
+        )
+
+        # load or create hoplite db if a path is provided (if hoplite db is passed, use it directly)
+        if embedding_dim is None:
+            try:
+                embedding_dim = self.classifier.in_features
+            except:
+                pass  # keep None value
+        db = load_or_create_hoplite_usearch_db(db, embedding_dim=embedding_dim)
+
+        # add deployment if provided and not yet in db
+        from ml_collections import config_dict
+
+        # create deployment in db if it doesnt exist yet
+        # TODO: should we only match within project?
+        matching = db.get_all_deployments(config_dict.create(eq=dict(name=deployment)))
+        if len(matching) == 0:
+            deployment_id = db.insert_deployment(name=deployment, project=project or "")
         else:
-            pred_scores = None
+            deployment_id = matching[0].id
 
-        if len(intermediate_layers) > 0:
-            return pred_scores, intermediate_outputs
-        return pred_scores
+        # create dataloader, collate using `identity` to return list of AudioSample
+        # rather than (samples, labels) tensors
+        dataloader = self.predict_dataloader(
+            samples,
+            audio_root=audio_root,
+            **dataloader_kwargs,
+        )
+
+        # avoid duplicating embeddings in the db depending on embedding_exists_mode
+        # TODO: should we care if deployment and project match, or just (file, start, end)?
+        _handle_existing_windows(
+            db,
+            dataloader.dataset.dataset.label_df,
+            embedding_exists_mode,
+            audio_root=audio_root,
+        )
+
+        # check current files in db
+        file_to_id = {rec.filename: rec.id for rec in db.get_all_recordings()}
+
+        # if file_to_datetime is a function, pre-compute look-up dictionary
+        # to avoid recomputing datetime from file string for each embedding (many per file)
+        if callable(file_to_datetime):
+            file_to_datetime = {f: file_to_datetime(f) for f in file_to_id.keys()}
+
+        # move network to device
+        self.network.to(self.device)
+        self.network.eval()
+
+        # use default target layer if none provided
+        target_layer = self._check_or_get_default_embedding_layer(target_layer)
+
+        for i, batch_samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
+
+            batch_data, _ = collate_audio_samples(batch_samples)
+
+            # forward pass of network, getting only target_layer outputs
+            outs = self.batch_forward(batch_data, targets=[target_layer], avgpool=True)
+
+            _insert_embeddings(
+                db=db,
+                batch_samples=batch_samples,
+                batch_embeddings=outs[target_layer],
+                overflow_mode=overflow_mode,
+                file_to_id=file_to_id,
+                file_to_datetime=file_to_datetime,
+                audio_root=audio_root,
+                deployment_id=deployment_id,
+            )
+
+            # commit once per commit_frequency_batches batches
+            # committing is relatively slow, but we don't want to lose progress if interrupted
+            if (i + 1) % commit_frequency_batches == 0:
+                db.commit()
+
+            if wandb_session is not None:
+                wandb_session.log(
+                    {
+                        "progress": i / len(dataloader),
+                        "completed_batches": i,
+                        "total_batches": len(dataloader),
+                    }
+                )
+        # end of batch loop
+
+        # commit any remaining uncommited db entries!
+        db.commit()
+
+        # return database object and info about any failed samples
+        return (db, {"failed_samples": dataloader.dataset.report()})
+
+    def similarity_search_hoplite_db(
+        self,
+        query_samples,
+        db,
+        num_results=5,
+        exact_search=False,
+        search_subset_size=None,
+        # filters=None, # config_dict.create(...)
+        target_score=None,
+        audio_root=None,
+        search_kwargs=None,
+        **embedding_kwargs,
+    ):
+        """Perform a similarity search in the Hoplite database.
+
+        Args:
+            query_samples: audio examples for which to find most similar examples
+                file path, list of paths, or dataframe with `file,start_time,end_time` multi-index
+            db: a Hoplite database containing embeddings from the same model
+            num_results: The number of results to return for each query
+            exact_search: default False for usearch (faster), if True uses brute force search
+            search_subset_size: Number of embeddings to compare with. If None, all embeddings
+                are used. For floats between 0 and 1, sample a proportion of the database.
+                For ints, sample the specified number of embeddings.
+                if None [default], searches all embeddings
+                Note: only implemented for exact_search=True
+            target_score: if specified, searches for similarity scores close to target_score
+                default [None] searches for most similar embeddings
+            audio_root: root directory for relative paths to query audio files
+            search_kwargs: dict of additional keyword arguments passed to db.ui.search() or
+                brutalism.threaded_brute_search() if exact_search=True
+                exact_search=False: radius, threads, exact, log, progress
+                exact_search=True: batch_size, max_workers, rng_seed
+            **embedding_kwargs: additional keyword arguments passed to self.embed(), such as
+                batch_size and num_workers
+        Returns:
+            A list of dictionaries with the search results, one item per query sample:
+            Each item is a dictionary with the following keys:
+                - "query": dictionary with query metadata
+                - "results": list of dictionaries with metadata for each retrieved sample
+        """
+        try:
+            from perch_hoplite.db import brutalism
+            from perch_hoplite.db import score_functions
+            from perch_hoplite.db import search_results
+            from opensoundscape.vector_database import _collate_search_results
+        except ImportError as e:
+            raise ImportError(
+                "hoplite is not installed. Please install hoplite to use this feature."
+            ) from e
+
+        if search_kwargs is None:
+            search_kwargs = {}
+
+        if not exact_search:
+            if search_subset_size is not None:
+                raise NotImplementedError(
+                    "search_subset_size is only implemented for exact_search=True"
+                )
+            if target_score is not None:
+                raise NotImplementedError(
+                    "target_score is only implemented for exact_search=True"
+                )
+
+        # generate embeddings for the query samples
+        print("embedding query samples")
+        embeddings = self.embed(
+            query_samples, audio_root=audio_root, **embedding_kwargs
+        )
+
+        print(
+            f"performing similarity search for each of {embeddings.shape[0]} query samples"
+        )
+        compiled_search_results = []
+        for (qfile, qstart_time, qend_time), emb in embeddings.iterrows():
+            query_embedding = emb.values.astype(db.get_embedding_dtype())
+            if exact_search:
+                score_fn = score_functions.get_score_fn(
+                    "dot", target_score=target_score
+                )
+                results, all_scores = brutalism.threaded_brute_search(
+                    db,
+                    query_embedding,
+                    num_results,
+                    score_fn=score_fn,
+                    sample_size=search_subset_size,
+                    **search_kwargs,
+                )
+
+            else:
+                ann_matches = db.ui.search(
+                    query_embedding, count=num_results, **search_kwargs
+                )
+                results = search_results.TopKSearchResults(top_k=num_results)
+                for k, d in zip(ann_matches.keys, ann_matches.distances):
+                    results.update(search_results.SearchResult(k, d))
+
+            # we have a TopKSearchResults object with .search_results containing
+            # a list of num_results SearchResult objects with .window_id and .sort_score
+            compiled_search_results.append(
+                {
+                    "query": {
+                        "file": qfile,
+                        "start_time": qstart_time,
+                        "end_time": qend_time,
+                        # "embedding": query_embedding,
+                        "audio_root": audio_root,
+                    },
+                    "results": _collate_search_results(db, results),
+                }
+            )
+        return compiled_search_results
+
+    def _check_or_get_default_embedding_layer(self, target_layer=None):
+        """helper function to get default target layer for embeddings
+
+        if target_layer is None, try to get the default embedding layer
+        otherwise, ensure that target_layer is a module of self.network
+        """
+        if target_layer is None:
+            try:
+                target_layer = self.network.get_submodule(self.network.embedding_layer)
+            except (AttributeError, KeyError) as exc:
+                raise AttributeError(
+                    "Please specify target_layer. Models trained with older versions of Opensoundscape, "
+                    "or custom architectures, do not have default `.network.embedding_layer`. "
+                    "e.g. For a ResNET model, try target_layers=[self.model.layer4]"
+                ) from exc
+        else:  # check that target_layers are modules of self.model
+            assert (
+                target_layer in self.network.modules()
+            ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
+        return target_layer
 
     def profile(
         self,
@@ -2431,9 +2671,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # rather than (samples, labels) tensors
         if audio_root is not None:
             dataloader_kwargs["audio_root"] = audio_root
-        dataloader = self.predict_dataloader(
-            samples, collate_fn=identity, **dataloader_kwargs
-        )
+        dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
 
         ## GENERATE SAMPLES ##
 
@@ -2532,6 +2770,57 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # return list of AudioSamples containing .cam attributes
         return generated_samples
 
+    def batch_forward(self, batch_data, targets=(-1,), avgpool=True):
+        """
+        Forward pass for a batch of data
+
+        Args:
+            batch_data: a batch of samples from a dataloader
+            targets: list of layers from self.network to extract intermediate outputs from
+                the key -1 in the returned dictionary corresponds to the final output of the model
+            avgpool: bool, if True, applies global average pooling to
+                intermediate outputs (average across all dimensions except first to get
+        Returns:
+            dictionary with key for each target layer. Key -1 corresponds to final model output.
+        """
+        outs = {k: None for k in targets}
+
+        # define a function that will be used to save the output of each target layer
+        # during inference
+        def forward_hook_to_save_output(layer_name):
+            def hook(module, input, output):
+                if avgpool:
+                    # apply global average pooling to intermediate outputs
+                    # (average across all dimensions except first to get a 1D vector per sample)
+                    # (also skip batch dimension: so start averaging from dim 2)
+                    if output.dim() > 2:
+                        output = output.mean(list(range(2, output.dim())))
+                outs[layer_name] = output.detach().cpu().numpy()
+
+            return hook
+
+        # initialize forward hooks to save intermediate outputs
+        fhooks = []  # keep the handles so we can remove the hooks later
+        for idx, l in enumerate(targets):
+            if l == -1:
+                continue  # final model output is handled separately
+            fhooks.append(l.register_forward_hook(forward_hook_to_save_output(l)))
+
+        batch_tensors = torch.as_tensor(batch_data).to(self.device)
+        batch_tensors.requires_grad = False
+
+        # forward pass of network: feature extractor + classifier
+        with torch.set_grad_enabled(False):
+            model_out = self.network(batch_tensors).detach().cpu().numpy()
+            if -1 in outs:
+                outs[-1] = model_out
+
+        # clean up by removing forward hooks
+        for fh in fhooks:
+            fh.remove()
+
+        return outs
+
     def embed(
         self,
         samples,
@@ -2584,37 +2873,19 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             types are pd.DataFrame if return_dfs=True, or np.array if return_dfs=False
 
         """
-        if dataloader_kwargs is None:
-            dataloader_kwargs = dict()
-        if audio_root is not None:
-            dataloader_kwargs.update(dict(audio_root=audio_root))
-        if batch_size is not None:
-            dataloader_kwargs.update(dict(batch_size=batch_size))
-        if num_workers is not None:
-            dataloader_kwargs.update(dict(num_workers=num_workers))
+        dataloader_kwargs.update(
+            dict(batch_size=batch_size, num_workers=num_workers, audio_root=audio_root)
+        )
         if not avgpool:  # cannot create a DataFrame with >2 dimensions
             return_dfs = False
         samples = _check_classes_inference(samples, self.classes)
 
         # if target_layer is None, attempt to retrieve default target layers of network
-        if target_layer is None:
-            try:
-                target_layer = self.network.get_submodule(self.network.embedding_layer)
-            except (AttributeError, KeyError) as exc:
-                raise AttributeError(
-                    "Please specify target_layer. Models trained with older versions of Opensoundscape, "
-                    "or custom architectures, do not have default `.network.embedding_layer`. "
-                    "e.g. For a ResNET model, try target_layer=self.model.layer4"
-                ) from exc
-        else:  # check that target_layers are modules of self.model
-            assert (
-                target_layer in self.network.modules()
-            ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
+        # if specified, check that target_layer is a module of self.network
+        target_layer = self._check_or_get_default_embedding_layer(target_layer)
 
         # create dataloader to generate batches of AudioSamples
-        dataloader = self.predict_dataloader(
-            samples, collate_fn=identity, **dataloader_kwargs
-        )
+        dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
 
         # warn the user if the output size is very large
         try:
@@ -2623,23 +2894,23 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             out_dim = 1000  # guess embedding size
         _warn_output_size(dataloader, out_dim, output_size_warning)
 
-        # run inference, returns (scores, intermediate_outputs)
-        preds, embeddings = self(
+        # run inference, returns dict with keys for each target (-1 is final model output)
+        outs = self(
             dataloader=dataloader,
             progress_bar=progress_bar,
-            intermediate_layers=[target_layer],
+            targets=[target_layer, -1] if return_preds else [target_layer],
             avgpool_intermediates=avgpool,
         )
+        embeddings = outs[target_layer]
 
         if return_dfs:
             # put embeddings in DataFrame with multi-index like .predict()
             embeddings = pd.DataFrame(
-                data=embeddings[0], index=dataloader.dataset.dataset.label_df.index
+                data=embeddings, index=dataloader.dataset.dataset.label_df.index
             )
-        else:
-            embeddings = embeddings[0]
 
         if return_preds:
+            preds = outs[-1]
             if return_dfs:
                 # put predictions in a DataFrame with same index as embeddings
                 preds = pd.DataFrame(

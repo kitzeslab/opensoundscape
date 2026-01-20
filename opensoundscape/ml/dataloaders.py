@@ -51,9 +51,9 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             - "raise": raise the error
             - "none": return None
         collate_fn: function to collate list of AudioSample objects into batches
-            [default: idenitty] returns list of AudioSample objects,
-            use collate_fn=opensoundscape.sample.collate_audio_samples to return
-            a tuple of (data, labels) tensors
+            if None (default), uses collate_fn=collate_audio_samples to return
+                a tuple of (data, labels) tensors
+            use opso.utils.identity to return list of AudioSample objects
         audio_root: optionally pass a root directory (pathlib.Path or str)
             - `audio_root` is prepended to each file path
             - if None (default), samples must contain full paths to files
@@ -99,6 +99,9 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             # extract sparse multihot label df
             samples = samples.mutihot_df_sparse
 
+        if collate_fn is None:
+            collate_fn = collate_audio_samples
+
         # setting these attributes seems to be necessary when using Lightning,
         # even though we don't need them as attributes in the DataLoader
         # this could be confusing because user should not modify dl.preprocessor,
@@ -143,3 +146,54 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             collate_fn=collate_fn,
             **kwargs,
         )
+
+        # add any paths that failed to generate a clip df to _invalid_samples
+        # self.dataset._invalid_samples = self.dataset._invalid_samples.union(
+        #     dataset.invalid_samples
+        # )
+        # TODO _invalid_samples no longer an attribute - is this happening internally?
+
+
+def collate_audio_samples_to_dict(samples):
+    """
+    generate batched tensors of data and labels (in a dictionary).
+    returns collated samples: a dictionary with keys "samples" and "labels"
+
+    assumes that s.data is a Tensor and s.labels is a list/array
+    for each sample S, and that every sample has labels for the same classes.
+
+    Args:
+
+        samples: iterable of AudioSample objects (or other objects
+        with attributes .data as Tensor and .labels as list/array)
+
+    Returns:
+        dictionary of {
+            "samples":batched tensor of samples,
+            "labels": batched tensor of labels,
+        }
+    """
+    return {
+        "samples": torch.stack([s.data for s in samples]),
+        "labels": torch.Tensor(np.vstack([s.labels.values for s in samples])),
+    }
+
+
+def collate_audio_samples(samples):
+    """
+    generate batched tensors of data and labels from list of AudioSample
+
+    assumes that s.data is a Tensor and s.labels is a list/array
+    for each item in samples, and that every sample has labels for the same classes.
+
+    Args:
+        samples: iterable of AudioSample objects (or other objects
+            with attributes .data as Tensor and .labels as list/array)
+
+    Returns:
+        (samples, labels) tensors of shape (batch_size, *) & (batch_size, n_classes)
+    """
+    return (
+        torch.stack([s.data for s in samples]),
+        torch.Tensor(np.vstack([s.labels.values for s in samples])),
+    )

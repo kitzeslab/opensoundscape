@@ -1335,23 +1335,18 @@ def test_embed_one_sample(train_df):
     assert embeddings.shape == (1, 512)
 
 
-def test_call_with_intermediate_layers(test_df):
+def test_call_with_targets(test_df):
     """test that passing intermediate_layers to SpectrogramClassifier.__call__ returns tensors of expected shape"""
     model = cnn.SpectrogramClassifier(
         architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
     )
-    dl = model.predict_dataloader(test_df, collate_fn=identity)
-    preds, intermediate_outs = model(
-        dl, intermediate_layers=[model.network.layer1, model.network.layer4]
-    )
-    assert len(intermediate_outs) == 2
-    assert np.shape(intermediate_outs[0]) == (2, 64)
-    assert np.shape(intermediate_outs[1]) == (2, 512)
-    preds, intermediate_outs = model(
-        dl, intermediate_layers=[model.network.layer4], avgpool_intermediates=False
-    )
-    assert len(intermediate_outs) == 1
-    assert np.shape(intermediate_outs[0]) == (2, 512, 7, 7)
+    dl = model.predict_dataloader(test_df)
+    outs = model(dl, targets=[model.network.layer1, model.network.layer4])
+    assert len(outs.keys()) == 2
+    assert np.shape(outs[model.network.layer1]) == (2, 64)
+    assert np.shape(outs[model.network.layer4]) == (2, 512)
+    outs = model(dl, targets=[model.network.layer4], avgpool_intermediates=False)
+    assert np.shape(outs[model.network.layer4]) == (2, 512, 7, 7)
 
 
 def test_freeze_layers_except_and_unfreeze():
