@@ -305,16 +305,26 @@ class SpatialEvent:
                 f"Warning: {len(bad_receivers_index)} receivers were discarded because their audio files were not the same length as the primary receiver."
             )
             # drop the bad receivers from the list of files and locations
-            self.receiver_files = [
-                file
-                for index, file in enumerate(self.receiver_files)
-                if index not in bad_receivers_index
-            ]
+            self.receiver_files = np.array(
+                [
+                    file
+                    for index, file in enumerate(self.receiver_files)
+                    if index not in bad_receivers_index
+                ]
+            )
 
             self.receiver_locations = np.array(
                 [
                     location
                     for index, location in enumerate(self.receiver_locations)
+                    if index not in bad_receivers_index
+                ]
+            )
+
+            self.receiver_start_time_offsets = np.array(
+                [
+                    offset
+                    for index, offset in enumerate(self.receiver_start_time_offsets)
                     if index not in bad_receivers_index
                 ]
             )

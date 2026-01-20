@@ -1063,22 +1063,22 @@ def load_channels_as_audio(
         metadata_dict = None
 
     ## Load samples ##
-    warnings.filterwarnings("ignore")
-    samples, sr = librosa.load(
-        path,
-        sr=sample_rate,
-        res_type=resample_type,
-        mono=False,
-        offset=offset,
-        duration=duration,
-        dtype=None,
-    )
-    # temporary workaround for soundfile issue #349
-    # which causes empty sample array if loading float32 from mp3:
-    # pass dtype=None, then change it afterwards
-    samples = samples.astype(dtype)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        samples, sr = librosa.load(
+            path,
+            sr=sample_rate,
+            res_type=resample_type,
+            mono=False,
+            offset=offset,
+            duration=duration,
+            dtype=None,
+        )
+        # temporary workaround for soundfile issue #349
+        # which causes empty sample array if loading float32 from mp3:
+        # pass dtype=None, then change it afterwards
+        samples = samples.astype(dtype)
 
-    warnings.resetwarnings()
     if len(np.shape(samples)) == 1:
         samples = [samples]
 
@@ -1715,21 +1715,22 @@ def _audio_from_file_handler(
         offset = 0
 
     ## Load samples ##
-    warnings.filterwarnings("ignore")
-    samples, sr = librosa.load(
-        path,
-        sr=sample_rate,
-        res_type=resample_type,
-        mono=to_mono,
-        offset=offset,
-        duration=duration,
-        dtype=None,
-    )
-    # temporary workaround for soundfile issue #349
-    # which causes empty sample array if loading float32 from mp3:
-    # pass dtype=None, then change it afterwards
-    samples = samples.astype(dtype)
-    warnings.resetwarnings()
+    
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        samples, sr = librosa.load(
+            path,
+            sr=sample_rate,
+            res_type=resample_type,
+            mono=to_mono,
+            offset=offset,
+            duration=duration,
+            dtype=None,
+        )
+        # temporary workaround for soundfile issue #349
+        # which causes empty sample array if loading float32 from mp3:
+        # pass dtype=None, then change it afterwards
+        samples = samples.astype(dtype)
 
     # out of bounds warning/exception user if no samples or too short
     if len(samples) == 0:
