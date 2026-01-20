@@ -1715,7 +1715,7 @@ def _audio_from_file_handler(
         offset = 0
 
     ## Load samples ##
-    
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         samples, sr = librosa.load(
