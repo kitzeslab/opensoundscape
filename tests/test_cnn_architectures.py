@@ -88,7 +88,7 @@ def test_load_default_weights():
 
 
 def test_load_specific_weights():
-    arch = cnn_architectures.resnet18(4, weights="IMAGENET1K_V2")
+    arch = cnn_architectures.resnet18(4, weights="IMAGENET1K_V1")
     assert isinstance(arch, torch.nn.Module)
 
 
