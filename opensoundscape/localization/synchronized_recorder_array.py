@@ -3,7 +3,7 @@ import numpy as np
 import datetime
 import pandas as pd
 
-from opensoundscape.audio import Audio
+from opensoundscape.audio import Audio, parse_metadata
 from opensoundscape.utils import cast_np_to_native
 from opensoundscape.localization.spatial_event import (
     SpatialEvent,
@@ -740,6 +740,8 @@ class SynchronizedRecorderArray:
 
 class GetStartTimestamp:
     def __init__(self) -> None:
+        # cache one file's timestamp to avoid repeated metadata parsing
+        # if fetching timestamps for multiple detections from the same file
         self.cached_file = ""
         self.cached_recording_start_time = None
 
@@ -757,9 +759,7 @@ class GetStartTimestamp:
             if file == self.cached_file:
                 recording_start_dt = self.cached_recording_start_time
             else:
-                recording_start_dt = Audio.from_file(file, duration=0.0001).metadata[
-                    "recording_start_time"
-                ]  # TODO: replace with audio.metadata_from_file after merging develop
+                recording_start_dt = parse_metadata(file)["recording_start_time"]
                 self.cached_file = file
                 self.cached_recording_start_time = recording_start_dt
         except Exception as exc:
