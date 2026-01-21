@@ -104,14 +104,15 @@ def _insert_embeddings(
         adds new recordings to the database as needed
     """
     # insert the embeddings one-by-one to the hoplite db
-    # TODO: get the dtype of the embeddings from hoplite db
-    db_dtype=db.get_embedding_dtype()
+    db_dtype = db.get_embedding_dtype()
     max_float = np.finfo(np.dtype(db_dtype)).max
 
     # we clip values to the database dtype range before casting, to avoid overfloat -> inf values
     if np.abs(batch_embeddings).max() > max_float:
         if overflow_mode == "warn":
-            warnings.warn(f"clipping embedding values to database dtype ({db_dtype}) range")
+            warnings.warn(
+                f"clipping embedding values to database dtype ({db_dtype}) range"
+            )
         elif overflow_mode == "error":
             raise ValueError(f"Embeddings exceeded database dtype  ({db_dtype}) range")
         # otherwise clip without warnings/errors
@@ -137,7 +138,9 @@ def _insert_embeddings(
             else:
                 datetime = None
             recording_id = db.insert_recording(
-                filename=file, deployment_id=deployment_id, datetime=datetime,
+                filename=file,
+                deployment_id=deployment_id,
+                datetime=datetime,
             )
             file_to_id[file] = recording_id
         start_time = audiosample.start_time
@@ -149,13 +152,14 @@ def _insert_embeddings(
             offsets=np.array([start_time, end_time]),
         )
 
+
 def _handle_existing_windows(db, clips, embedding_exists_mode, audio_root=None):
     """remove samples from clips dataframe that already have embeddings in the db"""
     if len(clips) == 0:
-            # all samples already have embeddings, nothing to do
-            print("Zero samples passed to _handle_existing_windows")
-            return db, {}
-    
+        # all samples already have embeddings, nothing to do
+        print("Zero samples passed to _handle_existing_windows")
+        return db, {}
+
     # TODO: consider wither we should also match on deployment_id and/or project_id
     # as well as (filename, start_time, end_time)
     from ml_collections import config_dict
@@ -163,14 +167,16 @@ def _handle_existing_windows(db, clips, embedding_exists_mode, audio_root=None):
     if embedding_exists_mode in ["skip", "error"]:
 
         # first make list of files in input clips dataframe
-        file_list = clips.index.get_level_values(0).to_series().astype(str).unique().tolist()
-        
-        # get all windows from db for these files
-        recordings_filter = config_dict.create(
-            isin=dict(filename=file_list)
+        file_list = (
+            clips.index.get_level_values(0).to_series().astype(str).unique().tolist()
         )
+
+        # get all windows from db for these files
+        recordings_filter = config_dict.create(isin=dict(filename=file_list))
         window_ids = db.match_window_ids(recordings_filter=recordings_filter)
-        windows = db.get_all_windows(filter=config_dict.create(isin=dict(id=window_ids)))
+        windows = db.get_all_windows(
+            filter=config_dict.create(isin=dict(id=window_ids))
+        )
 
         # windows = db.get_all_windows(include_embedding=False)
 
@@ -185,9 +191,7 @@ def _handle_existing_windows(db, clips, embedding_exists_mode, audio_root=None):
                 p = str(p)
             return p
 
-        id_to_recording = {
-            rec.id: resolve_path(rec) for rec in db.get_all_recordings()
-        }
+        id_to_recording = {rec.id: resolve_path(rec) for rec in db.get_all_recordings()}
         # be ware of type mismatch with Path vs str and float vs float32
         existing_index_tuples = {
             (id_to_recording[w.recording_id], float(w.offsets[0]), float(w.offsets[1]))
