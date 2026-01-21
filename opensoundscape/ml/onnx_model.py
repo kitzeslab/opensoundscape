@@ -1,4 +1,4 @@
-from opensoundscape.ml.base_model import BaseModel
+from opensoundscape.ml.cnn import BaseModule
 import onnxruntime as ort
 import onnx
 import numpy as np
@@ -7,9 +7,10 @@ from opensoundscape.preprocess.preprocessors import AudioPreprocessor
 import pandas as pd
 from opensoundscape.ml.cnn import _warn_output_size
 from opensoundscape.ml.utils import apply_activation_layer
+from opensoundscape.utils import identity
 
 
-class ONNXModel(BaseModel):
+class ONNXModel(BaseModule):
     """A model class for running ONNX models.
 
     The model is treated as frozen or immutable. If you wish to train a classifier on top of an
@@ -29,34 +30,73 @@ class ONNXModel(BaseModel):
         audio_sample_rate=None,
         sample_duration=None,
         classes=None,
-        class_outputs_key="class_logits",
-        embedding_outputs_key="embedding",
+        class_outputs_key=None,
+        embedding_outputs_key=None,
         execution_providers=("CPUExecutionProvider",),
     ):
         """
         Initialize the ONNXModel from a model file.
         Args:
-            onnx_session: Path to ONNX model file
+            onnx_model_path: Path to ONNX model file, or an ORT InferenceSession object
             audio_sample_rate: Sample rate model expects for input audio signals, Hz
+                - if None, attempts to read from model metadata 'sample_rate'
             sample_duration: Duration model expects for input audio signals, seconds
-            class_list: List of class names corresponding to model outputs
+                - if None, attempts to read from model metadata 'sample_duration'
+            classes: List of class names corresponding to model outputs
+                - if None, attempts to read from model metadata 'classes'
             class_outputs_key: Key to identify class output in model outputs
+                - if None, attempts to read from model metadata 'class_outputs_key'
             embedding_outputs_key: Key to identify embedding output in model outputs
+                - if None, attempts to read from model metadata 'embedding_outputs_key'
             execution_providers: Tuple of ONNX Runtime execution providers to use
                 Including: "CPUExecutionProvider", "CUDAExecutionProvider", "CoreMLExecutionProvider", etc.
         """
-        # is this necessary? If not, we could allow user to pass either path or ort session
-        onnx_model = onnx.load(str(onnx_model_path))
-        onnx.checker.check_model(onnx_model)
+        super().__init__()
 
-        self.ort_session = ort.InferenceSession(
-            str(onnx_model_path), providers=execution_providers
-        )
+        if isinstance(onnx_model_path, ort.InferenceSession):
+            self.ort_session = onnx_model_path
+        else:
+            self.ort_session = ort.InferenceSession(
+                str(onnx_model_path), providers=execution_providers
+            )
         self.ort_input = self.ort_session.get_inputs()[0].name
 
         # audio_sample_rate, sample_duration, class_list, class_outputs_key are
         # either extracted from the ONNX model metadata or passed directly
-        # TODO: implement metadata extraction from ONNX model
+        meta = self.ort_session.get_modelmeta().custom_metadata_map
+        missing_fields = []
+        if audio_sample_rate is None:
+            try:
+                audio_sample_rate = int(meta["sample_rate"])
+            except Exception:
+                missing_fields.append("audio_sample_rate")
+        if sample_duration is None:
+            try:
+                sample_duration = float(meta["sample_duration"])
+            except Exception:
+                missing_fields.append("sample_duration")
+        if classes is None:
+            try:
+                import json
+
+                classes = json.loads(meta["classes"])
+            except Exception:
+                missing_fields.append("classes")
+        if class_outputs_key is None:
+            try:
+                class_outputs_key = meta["class_outputs_key"]
+            except Exception:
+                pass
+        if embedding_outputs_key is None:
+            try:
+                embedding_outputs_key = meta["embedding_outputs_key"]
+            except Exception:
+                pass
+        if len(missing_fields) > 0:
+            raise ValueError(
+                f"ONNX model metadata is missing required model information: {missing_fields}. "
+                "Please provide these arguments when initializing ONNXModel."
+            )
         self.audio_sample_rate = audio_sample_rate
         self.sample_duration = sample_duration
         self.classes = classes
@@ -110,10 +150,11 @@ class ONNXModel(BaseModel):
         if output_keys is None:  # return all outputs
             output_keys = self.output_names
         batch_outputs = []
-        for X, _ in tqdm(dataloader, disable=not progress_bar):
-            X = X.detach().cpu().numpy() if X.requires_grad else X.cpu().numpy()
+        for batch in tqdm(dataloader, disable=not progress_bar):
+            # get audio samples from list of Audio objects, and add channel dimension
+            X = np.stack([s.data.samples[np.newaxis, :] for s in batch])
 
-            # compute ONNX Runtime output prediction
+            # run forward pass of ONNX model
             ort_outs = self.ort_session.run(None, {self.ort_input: X})
 
             # convert outputs to dict with named keys
@@ -192,6 +233,7 @@ class ONNXModel(BaseModel):
         )
         dataloader = self.predict_dataloader(
             samples,
+            collate_fn=identity,
             **dataloader_kwargs,
         )
 
@@ -222,7 +264,7 @@ class ONNXModel(BaseModel):
         samples,
         batch_size=1,
         num_workers=0,
-        output_keys=None,
+        output_key=None,
         progress_bar=True,
         return_dfs=True,
         audio_root=None,
@@ -232,7 +274,7 @@ class ONNXModel(BaseModel):
         """
         Generate embeddings for audio files/clips
 
-        Returns the model outputs for output key self.embedding_outputs_key.
+        Returns the model outputs for output key (defaults to self.embedding_outputs_key).
         To get multiple outputs, use .forward() instead.
 
         Args:
@@ -241,9 +283,8 @@ class ONNXModel(BaseModel):
                 end_time)
             batch_size: batch size to use for dataloader [default: 1]
             num_workers: number of parallel CPU workers to use for dataloader [default: 0]
-            output_keys: list or tuple of output keys to return from model outputs.
+            output_key: Which model output to return as embeddings.
                 See all available output keys in self.output_names.
-                E.g. ("embedding",) or ("embedding","class_logits")
                 Default [None] selects the output corresponding to self.embedding_outputs_key.
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             return_dfs: bool, if True, returns embeddings as pd.DataFrame with multi-index like
@@ -262,17 +303,23 @@ class ONNXModel(BaseModel):
             If return_dfs=False:
                 np.ndarray of shape (num_samples, ...embedding_shape...)
         """
+        output_key = output_key or self.embedding_outputs_key
+        if output_key is None:
+            raise ValueError(
+                "embedding_outputs_key is not set for this model. "
+                "Please specify output_key of desired outputs."
+            )
         return self.forward(
             samples,
             batch_size=batch_size,
             num_workers=num_workers,
-            output_keys=(self.embedding_outputs_key),
+            output_keys=(output_key,),
             progress_bar=progress_bar,
             return_dfs=return_dfs,
             audio_root=audio_root,
             output_size_warning=output_size_warning,
             **dataloader_kwargs,
-        )[self.embedding_outputs_key]
+        )[output_key]
 
     def predict(
         self,
@@ -366,7 +413,7 @@ class ONNXModel(BaseModel):
             samples,
             batch_size=batch_size,
             num_workers=num_workers,
-            output_keys=(self.class_outputs_key),
+            output_keys=(self.class_outputs_key,),
             progress_bar=progress_bar,
             audio_root=audio_root,
             output_size_warning=output_size_warning,

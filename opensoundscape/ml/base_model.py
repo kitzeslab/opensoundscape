@@ -388,7 +388,7 @@ class BaseModule:
             bypass_augmentations=bypass_augmentations,
             shuffle=True,  # SHUFFLE SAMPLES because we are training
             # use pin_memory=True when loading files on CPU and training on CUDA GPU
-            pin_memory=self.device.type == "cuda",
+            pin_memory=self._should_pin_memory(),
             invalid_sample_behavior="raise" if raise_errors else "substitute",
             collate_fn=collate_fn,
             **kwargs,
@@ -412,8 +412,21 @@ class BaseModule:
             samples=samples,
             preprocessor=self.preprocessor,
             shuffle=False,  # keep original order
-            pin_memory=self.device.type == "cuda",
+            pin_memory=self._should_pin_memory(),
             collate_fn=collate_fn,
             invalid_sample_behavior="raise" if raise_errors else "placeholder",
             **kwargs,
         )
+
+    def _should_pin_memory(self):
+        """determine whether to use pin_memory in dataloaders
+
+        returns True if Torch training/inference is on CUDA device
+        """
+        if (
+            hasattr(self, "device")
+            and isinstance(self.device, torch.device)
+            and self.device.type == "cuda"
+        ):
+            return True
+        return False

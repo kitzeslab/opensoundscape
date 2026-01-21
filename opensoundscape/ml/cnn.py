@@ -2413,7 +2413,34 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             **kwargs,
         )
         if path is not None:
+            # save model to disk
             onnx_program.save(path)
+
+            # re-load model to add metadata
+            import onnx
+            import json
+
+            om = onnx.load(path)
+
+            # add metadata properties
+            meta = om.metadata_props.add()
+            meta.key = "sample_duration"
+            meta.value = str(self.preprocessor.sample_duration)
+            meta = om.metadata_props.add()
+            meta.key = "sample_rate"
+            meta.value = str(self.preprocessor.pipeline.load_audio.params.sample_rate)
+            meta = om.metadata_props.add()
+            meta.key = "classes"
+            meta.value = json.dumps(self.classes)
+            meta = om.metadata_props.add()
+            meta.key = "class_outputs_key"
+            meta.value = "classifier"
+            meta = om.metadata_props.add()
+            meta.key = "embedding_outputs_key"
+            meta.value = "embedding"
+
+            # re save model with metadata
+            onnx.save(om, path)
 
         return onnx_program
 
