@@ -161,21 +161,13 @@ class Audio:
         Note: Clips samples to [-1,1] which can result in dBFS different from that
         requested, especially when dBFS is near zero
         """
-        # look-up dictionary for relationship of power spectral density with frequency
-        psd_functions = dict(
-            white=lambda f: 1,
-            blue=lambda f: np.sqrt(f),
-            violet=lambda f: f,
-            brownian=lambda f: 1 / np.where(f == 0, float("inf"), f),
-            brown=lambda f: 1 / np.where(f == 0, float("inf"), f),
-            pink=lambda f: 1 / np.where(f == 0, float("inf"), np.sqrt(f)),
-        )
         n_samples = int(duration * sample_rate)
-        assert color in psd_functions, f"Invalid color {color}"
-        psd = psd_functions[color]
+        assert color in _noise_psd_functions, f"Invalid color {color}"
 
-        white = np.fft.rfft(np.random.randn(n_samples))
-        target_psd = psd(np.fft.rfftfreq(n_samples))
+        # get target power spectral density for desired color
+        psd = _noise_psd_functions[color]
+        freqs = np.fft.rfftfreq(n_samples, d=1 / sample_rate)
+        target_psd = psd(freqs)
         # Normalize S for rms of desired dBFS
         target_psd = (
             target_psd
@@ -184,9 +176,12 @@ class Audio:
             / np.sqrt(2)
         )
 
+        # generate white noise in frequency domain then shape it with target psd
+        white = np.fft.rfft(np.random.randn(n_samples))
         shaped = white * target_psd
 
-        samples = np.fft.irfft(shaped)
+        # convert back to time domain
+        samples = np.fft.irfft(shaped, n=n_samples)
 
         return cls(np.clip(samples, -1, 1), sample_rate)
 

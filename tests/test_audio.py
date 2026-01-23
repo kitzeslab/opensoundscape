@@ -921,6 +921,11 @@ def test_noise_classmethod():
         assert len(a.samples) == 200
 
 
+def test_noise_short_duration():
+    a = Audio.noise(0.01, 44100, color="white")
+    assert len(a.samples) == 441
+
+
 def test_concat(veryshort_wav_audio):
     a = audio.concat([veryshort_wav_audio, veryshort_wav_audio])
     assert a.duration == 2 * veryshort_wav_audio.duration
