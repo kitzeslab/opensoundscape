@@ -1193,3 +1193,50 @@ def test_audio_apply():
     assert len(ts) == 5
     assert len(windowed_rms) == 5
     assert math.isclose(windowed_rms[0], 0.0, abs_tol=1e-6)
+
+
+def test_pad(veryshort_wav_audio):
+    a = veryshort_wav_audio.pad(0.03, 0.05)
+    assert len(a.samples) == len(veryshort_wav_audio.samples) + int(
+        np.round((0.03 + 0.05) * veryshort_wav_audio.sample_rate)
+    )
+    # check that padding is silent
+    assert math.isclose(0.0, np.max(a.samples[:10]), abs_tol=1e-7)
+    assert math.isclose(0.0, np.max(a.samples[-10:]), abs_tol=1e-7)
+    # check that original audio is in the right place
+    offset_samples = int(np.round(0.03 * veryshort_wav_audio.sample_rate))
+    assert np.allclose(
+        a.samples[offset_samples : offset_samples + len(veryshort_wav_audio.samples)],
+        veryshort_wav_audio.samples,
+        atol=1e-7,
+    )
+    # try with noise padding
+    a2 = veryshort_wav_audio.pad(0.03, 0.05, fill="white")
+    assert not math.isclose(0.0, np.max(a2.samples[:20]), abs_tol=1e-7)
+    assert not math.isclose(0.0, np.max(a2.samples[-20:]), abs_tol=1e-7)
+    assert len(a2.samples) == len(veryshort_wav_audio.samples) + int(
+        np.round((0.03 + 0.05) * veryshort_wav_audio.sample_rate)
+    )
+
+
+def test_pad_both_sides(veryshort_wav_audio):
+    a = veryshort_wav_audio.pad(0.05)
+    assert len(a.samples) == len(veryshort_wav_audio.samples) + int(
+        2 * int(0.05 * veryshort_wav_audio.sample_rate)
+    )
+
+
+def test_pad_to(veryshort_wav_audio):
+    a = veryshort_wav_audio.pad_to(0.2)
+    assert math.isclose(a.duration, 0.2, abs_tol=1e-5)
+    # check that padding is silent
+    assert math.isclose(0.0, np.max(a.samples[-10:]), abs_tol=1e-7)
+    # check that original audio is in the right place (centered)
+    offset_samples = int(
+        (0.2 - veryshort_wav_audio.duration) / 2 * veryshort_wav_audio.sample_rate
+    )
+    assert np.allclose(
+        a.samples[offset_samples : offset_samples + len(veryshort_wav_audio.samples)],
+        veryshort_wav_audio.samples,
+        atol=1e-7,
+    )
