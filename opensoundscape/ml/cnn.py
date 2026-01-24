@@ -1344,8 +1344,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         metrics = {}
         if targets is not None:
             # move tensors to device; avoid error float64 not supported on mps
-            targets = torch.tensor(targets, dtype=torch.float32).to(self.device)
-            scores = torch.tensor(scores, dtype=torch.float32).to(self.device)
+            targets = torch.as_tensor(targets, dtype=torch.float32).to(self.device)
+            scores = torch.as_tensor(scores, dtype=torch.float32).to(self.device)
 
             # check for invalid label values outside range of [0,1]
             assert (
