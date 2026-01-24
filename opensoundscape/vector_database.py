@@ -149,19 +149,46 @@ def _insert_embeddings(
         db.insert_window(
             recording_id=recording_id,
             embedding=batch_embeddings[j],
-            offsets=np.array([start_time, end_time]),
+            offsets=[start_time, end_time],
         )
 
 
-def _handle_existing_windows(db, clips, embedding_exists_mode, audio_root=None):
-    """remove samples from clips dataframe that already have embeddings in the db"""
+def _handle_existing_windows(
+    db,
+    clips,
+    embedding_exists_mode,
+    deployment_id=None,
+    deployment_name=None,
+    project=None,
+):
+    """remove samples from clips dataframe that already have embeddings in the db
+
+    optionally pass project and deployment_id/deployment_name to only match existing windows for
+    that deployment/project
+
+    Args:
+        db: a hoplite database object
+        clips: pd.DataFrame with MultiIndex (filename, start_time, end_time)
+        embedding_exists_mode: str, behavior when an embedding already exists for a given
+            window. Options are:
+                "skip": skip inserting the embedding (default)
+                "error": raise an error
+                "add": add a new embedding entry to the db with the same source info
+        deployment_id: optional int, deployment id to constrain existing window matching
+            - if both deployment_id and deployment_name are provided, deployment_id takes precedence
+        deployment_name: optional str, deployment name to constrain existing window matching
+        project: optional str, project name to constrain existing window matching
+
+    Effects:
+        may modify clips dataframe in place to remove samples that already have embeddings in the db
+
+    Returns: None
+    """
     if len(clips) == 0:
         # all samples already have embeddings, nothing to do
         print("Zero samples passed to _handle_existing_windows")
-        return db, {}
+        return
 
-    # TODO: consider wither we should also match on deployment_id and/or project_id
-    # as well as (filename, start_time, end_time)
     from ml_collections import config_dict
 
     if embedding_exists_mode in ["skip", "error"]:
@@ -171,26 +198,49 @@ def _handle_existing_windows(db, clips, embedding_exists_mode, audio_root=None):
             clips.index.get_level_values(0).to_series().astype(str).unique().tolist()
         )
 
-        # get all windows from db for these files
+        # establish filters for windows from matching files, optionally constraining to deployment/project
         recordings_filter = config_dict.create(isin=dict(filename=file_list))
-        window_ids = db.match_window_ids(recordings_filter=recordings_filter)
+        # deployment_id takes precedence over deployment_name
+        if deployment_id is not None:
+            if project is not None:
+                # get deployment ids matching both deployment_id and project
+                deployments_filter = config_dict.create(
+                    eq=dict(id=deployment_id, project=project),
+                )
+            else:
+                deployments_filter = config_dict.create(
+                    eq=dict(id=deployment_id),
+                )
+        elif deployment_name is not None:
+            if project is not None:
+                # get deployment ids matching both deployment_name and project
+                deployments_filter = config_dict.create(
+                    eq=dict(name=deployment_name, project=project),
+                )
+            else:
+                deployments_filter = config_dict.create(
+                    eq=dict(name=deployment_name),
+                )
+        else:
+            deployments_filter = None
+
+        # get window ids from db matching these recordings (and deployment/project if specified)
+        window_ids = db.match_window_ids(
+            recordings_filter=recordings_filter, deployments_filter=deployments_filter
+        )
         windows = db.get_all_windows(
             filter=config_dict.create(isin=dict(id=window_ids))
         )
 
-        # windows = db.get_all_windows(include_embedding=False)
-
         def resolve_path(rec):
-            if audio_root is not None:
-                p = Path(rec.filename).relative_to(audio_root)
-            else:
-                p = rec.filename
+            p = rec.filename
             if isinstance(clips.index.levels[0][0], Path):
                 p = Path(p)
             else:
                 p = str(p)
             return p
 
+        # map of existing recording ids to resolved paths
         id_to_recording = {rec.id: resolve_path(rec) for rec in db.get_all_recordings()}
         # be ware of type mismatch with Path vs str and float vs float32
         existing_index_tuples = {
@@ -215,7 +265,7 @@ def _handle_existing_windows(db, clips, embedding_exists_mode, audio_root=None):
         else:
             print(f"embedding {len(clips)} new windows to database")
     # else: embedding_exists_mode == "add", add more embeddings even if matching
-    # existing windows
+    # existing windows -> no subsetting needed
 
 
 def _collate_search_results(db, results):

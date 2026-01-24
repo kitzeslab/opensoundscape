@@ -2134,6 +2134,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         commit_frequency_batches=100,
         overflow_mode="warn",
         embedding_dim=None,
+        strict_matching=False,
         **dataloader_kwargs,
     ):
         """Run inference on a dataloader, saving 1D outputs of target_layer to a hoplite database
@@ -2143,8 +2144,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             db: a hoplite database object or a path to a hoplite database folder
                 - if a path is provided, the database will be created if it does not exist
                 - when creating a new db, the embedding_dim argument must be provided
-            deployment: name of deployment to associate embeddings with
+            deployment: name of deployment (ie one recorder deployed once) to associate embeddings with
                 - if deployment does not exist in db, it will be created
+                - if you wish to include metadata per deployment (eg lat, lon, point name), first
+                    add the deployment to the db using perch_hoplite.db.interface.HopliteDB.insert_deployment()
             project: optional project name to associate deployment with
             file_to_datetime: optional function or dictionary mapping filenames to datetime objects
                 - used to set recording start times in the database
@@ -2163,10 +2166,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             audio_root: the root directory for relative paths to audio files
             embedding_exists_mode: str, behavior when an embedding already exists for a given
-                (dataset_name, source_id, offset) tuple. Options are:
+                embedding. Options are:
                     "skip": skip inserting the embedding (default)
                     "error": raise an error
                     "add": add a new embedding entry to the db with the same source info
+                Note: the strict_matching argument affects whether existing embeddings are only
+                    matched within a deployment/project or across all deployments/projects.
                 Note that hoplite doesn't currently support removing or replacing existing entries
             commit_frequency_batches: int, commit to db after every N batches[default: 1]
             overflow_mode: 'warn', 'error', or 'ignore' behvior when embedding values exceed
@@ -2175,6 +2180,11 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 - only used when creating a new hoplite db
                 - must match the output dimension of the model's target_layer
                 - if creating new db and embedding_dim is None, guesses based on self.classifier.in_features
+            strict_matching: bool, select strategy for matching existing deployments and embeddings
+                - if True, deployments are only considered matching if both deployment name and project match;
+                    embeddings are only considered matching if project, deployment, source_id, and offset all match
+                - if False [default], deployments from any project are matched by name only;
+                    embeddings are matched across all deployments and projects by source_id and offset only
             **dataloader_kwargs: additional keyword arguments to pass to the dataloader
 
         Returns:
@@ -2182,17 +2192,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         Effects:
             Inserts embeddings into the provided hoplite database
-            Adds deployment (and project) if they do not already exist in the database
+            Adds deployment and recording entries to db as needed
 
         """
-        # TODO: when passing a dataframe as sampels, we should be able to provide
-        # per-row deployment info (eg recorder id, point name, lat, lon, project),
-        # recording info (filename, timestamp)
-        # that gets inserted into the db and associated with the embeddings
-        # alternative api:
-        # embed_to_hoplite_db(samples_df, project_metadata)
-        # where project metadata is essentially info to merge with samples_df,
-        # what do we use as the merging index? need a file:deployment mapping
         try:
             import perch_hoplite
 
@@ -2207,6 +2209,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             _insert_embeddings,
         )
 
+        if project is None:
+            project = ""
+
         # load or create hoplite db if a path is provided (if hoplite db is passed, use it directly)
         if embedding_dim is None:
             try:
@@ -2219,12 +2224,19 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         from ml_collections import config_dict
 
         # create deployment in db if it doesnt exist yet
-        # TODO: should we only match within project?
-        matching = db.get_all_deployments(config_dict.create(eq=dict(name=deployment)))
-        if len(matching) == 0:
-            deployment_id = db.insert_deployment(name=deployment, project=project or "")
+        if strict_matching:
+            project_matching_pattern = config_dict.create(
+                eq=dict(name=deployment, project=project),
+            )
         else:
-            deployment_id = matching[0].id
+            project_matching_pattern = config_dict.create(
+                eq=dict(name=deployment),
+            )
+        matching_deployments = db.get_all_deployments(project_matching_pattern)
+        if len(matching_deployments) == 0:
+            deployment_id = db.insert_deployment(name=deployment, project=project)
+        else:
+            deployment_id = matching_deployments[0].id
 
         # create dataloader, collate using `identity` to return list of AudioSample
         # rather than (samples, labels) tensors
@@ -2235,16 +2247,26 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         )
 
         # avoid duplicating embeddings in the db depending on embedding_exists_mode
-        # TODO: should we care if deployment and project match, or just (file, start, end)?
+        # this function modifies the sample dataframe in place to remove existing samples
         _handle_existing_windows(
-            db,
-            dataloader.dataset.dataset.label_df,
-            embedding_exists_mode,
-            audio_root=audio_root,
+            db=db,
+            clips=dataloader.dataset.dataset.label_df,
+            embedding_exists_mode=embedding_exists_mode,
+            deployment_id=deployment_id if strict_matching else None,
+            project=project if strict_matching else None,
         )
 
-        # check current files in db
-        file_to_id = {rec.filename: rec.id for rec in db.get_all_recordings()}
+        # check current files in db;
+        # if strict_matching, only consider files from this deployment_id
+        # (will create new recording_id for a file if match is not found)
+        recordings = db.get_all_recordings(
+            filter=(
+                config_dict.create(eq=dict(deployment_id=deployment_id))
+                if strict_matching
+                else None
+            )
+        )
+        file_to_id = {rec.filename: rec.id for rec in recordings}
 
         # if file_to_datetime is a function, pre-compute look-up dictionary
         # to avoid recomputing datetime from file string for each embedding (many per file)
