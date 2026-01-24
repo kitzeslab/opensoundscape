@@ -20,13 +20,10 @@ See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
 
-import random
-import warnings
 import numpy as np
-import torchvision
+import torch
 import pandas as pd
 import copy
-from types import MethodType, FunctionType
 
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 from opensoundscape.preprocess.action_functions import (
@@ -305,6 +302,19 @@ class AudioClipLoader(Action):
             sample.data, offset=offset, duration=duration, **dict(self.params, **kwargs)
         )
 
+@register_action_cls
+class AudioToTensor(BaseAction):
+    def __call__(self, sample, **kwargs):
+        """convert sample.data from Audio to Tensor
+
+        Args:
+            sample: AudioSample with .data=Audio object
+            **kwargs: ignored
+
+        Effects:
+            updates sample.data to be a torch.Tensor
+        """
+        sample.data = torch.tensor(sample.data.samples)
 
 @register_action_cls
 class AudioTrim(Action):

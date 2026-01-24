@@ -2088,14 +2088,13 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # disable gradient updates during inference
 
-        for i, samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
-            (batch_data, _) = collate_audio_samples(samples)
+        for i, batch_samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
             batch_outs = self.batch_forward(
-                batch_data,
+                batch_samples,
                 targets=targets,
                 avgpool=avgpool_intermediates,
             )
-            invalid_sample_mask = [s.is_alternative for s in samples]
+            invalid_sample_mask = [s.is_alternative for s in batch_samples]
             # process and store outputs from batch
             for k, v in batch_outs.items():
                 # mask outputs for any invalid samples (samples that failed in preprocessing)
@@ -2282,10 +2281,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         for i, batch_samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
 
-            batch_data, _ = collate_audio_samples(batch_samples)
-
             # forward pass of network, getting only target_layer outputs
-            outs = self.batch_forward(batch_data, targets=[target_layer], avgpool=True)
+            outs = self.batch_forward(batch_samples, targets=[target_layer], avgpool=True)
 
             _insert_embeddings(
                 db=db,
@@ -2789,12 +2786,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # return list of AudioSamples containing .cam attributes
         return generated_samples
 
-    def batch_forward(self, batch_data, targets=(-1,), avgpool=True):
+    def batch_forward(self, batch_samples, targets=(-1,), avgpool=True):
         """
         Forward pass for a batch of data
 
         Args:
-            batch_data: a batch of samples from a dataloader
+            batch_samples: a batch of samples from a dataloader
             targets: list of layers from self.network to extract intermediate outputs from
                 the key -1 in the returned dictionary corresponds to the final output of the model
             avgpool: bool, if True, applies global average pooling to
@@ -2802,6 +2799,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Returns:
             dictionary with key for each target layer. Key -1 corresponds to final model output.
         """
+        batch_data, _ = collate_audio_samples(batch_samples)
         outs = {k: None for k in targets}
 
         # define a function that will be used to save the output of each target layer
