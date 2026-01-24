@@ -152,6 +152,7 @@ class SpectrogramModule(BaseModule):
         self.classes = classes
         self._single_target = single_target
         self.name = "SpectrogramModule"
+        self.class_outputs_key = -1 # key to use for model outputs corresponding to class predictions
 
         self.use_amp = False  # use automatic mixed precision
         self.lightning_mode = False  # True: skip things done automatically by Lightning
@@ -827,7 +828,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             dataloader=dataloader,
             wandb_session=wandb_session,
             progress_bar=progress_bar,
-        )[-1]
+        )[self.class_outputs_key]
 
         ### Apply activation layer ###
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
@@ -1639,7 +1640,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         dataloader,
         wandb_session=None,
         progress_bar=True,
-        targets=(-1,),
+        targets=None,
         avgpool_intermediates=True,
     ):
         """Run inference on a dataloader, generating scores for each sample
@@ -1653,21 +1654,24 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 Note: expects list of AudioSample objects, not (tensors, labels)
             wandb_session: a wandb session to log progress to (e.g. return value of wandb.init())
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
-            targets: list of layers to return outputs from. -1 corresponds to final layer outputs
-                [default: (-1)]returns final layer outputs
+            targets: list of layers to return outputs from. Default [None] will return final outputs
+                with key self.class_outputs_key
             avgpool_intermediates: bool, if True, applies global average pooling to intermediate outputs
                 i.e. averages across all dimensions except first to get a 1D vector per sample
                 [default: True] (note that False may results in large memory usage)
 
         Returns:
-            if intermediate outputs is None, returns
-            `scores`: np.array of scores for each sample
-
-            if intermediate_outputs is not None, returns a tuple:
-            `(scores, intermediate_outputs)` where intermediate_outputs is
-            a list of tensors, the outputs from each layer in intermediate_layers
+            outs: dictionary of outputs for each requested target layer
+                keys are layer indices (int), values are np.arrays
+                with first dimension corresponding to samples
+                output array dtypes depend on the layer output shapes;
+                if avgpool_intermediates=True, outputs are always 2D arrays
+                with shape (n_samples, n_features);
+                if avgpool_intermediates=False, output array shapes and
+                dtypes depend on the layer output shapes.
         """
-        # TODO: should __call__ or some other function be a generator that yields batches of outputs?
+        if targets is None:
+            targets = [self.class_outputs_key]
 
         if not isinstance(dataloader, torch.utils.data.DataLoader):
             warnings.warn(
@@ -1692,6 +1696,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             )
             invalid_sample_mask = [s.is_alternative for s in batch_samples]
             # process and store outputs from batch
+            # TODO: subset to desired target outputs?
             for k, v in batch_outs.items():
                 # mask outputs for any invalid samples (samples that failed in preprocessing)
                 # with np.nan, since the returned values don't correspond to the sample
@@ -2382,19 +2387,23 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # return list of AudioSamples containing .cam attributes
         return generated_samples
 
-    def batch_forward(self, batch_samples, targets=(-1,), avgpool=True):
+    def batch_forward(self, batch_samples, targets=None, avgpool=True):
         """
         Forward pass for a batch of data
 
         Args:
             batch_samples: a batch of samples from a dataloader
-            targets: list of layers from self.network to extract intermediate outputs from
-                the key -1 in the returned dictionary corresponds to the final output of the model
+            targets: list of layers from self.network to extract outputs from
+                The key `self.class_outputs_key` (-1 by default) corresponds to final model output.
+                If None, only returns final model output.
             avgpool: bool, if True, applies global average pooling to
                 intermediate outputs (average across all dimensions except first to get
         Returns:
-            dictionary with key for each target layer. Key -1 corresponds to final model output.
+            dictionary with key for each output request in `targets`
+            Key matching `self.class_outputs_key` corresponds to final model output.
         """
+        if targets is None:
+            targets = [self.class_outputs_key]
         batch_data, _ = collate_audio_samples(batch_samples)
         outs = {k: None for k in targets}
 
@@ -2415,7 +2424,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # initialize forward hooks to save intermediate outputs
         fhooks = []  # keep the handles so we can remove the hooks later
         for idx, l in enumerate(targets):
-            if l == -1:
+            if l == self.class_outputs_key:
                 continue  # final model output is handled separately
             fhooks.append(l.register_forward_hook(forward_hook_to_save_output(l)))
 
@@ -2424,9 +2433,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # forward pass of network: feature extractor + classifier
         with torch.set_grad_enabled(False):
+            # run the forward pass
             model_out = self.network(batch_tensors).detach().cpu().numpy()
-            if -1 in outs:
-                outs[-1] = model_out
+            if self.class_outputs_key in outs: # store final model output if requested
+                outs[self.class_outputs_key] = model_out
 
         # clean up by removing forward hooks
         for fh in fhooks:
@@ -2487,7 +2497,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         """
         dataloader_kwargs.update(
-            dict(audio_root=audio_root, batch_size=batch_size, num_workers=num_workers, audio_root=audio_root)
+            dict(audio_root=audio_root, batch_size=batch_size, num_workers=num_workers)
         )
         if not avgpool:  # cannot create a DataFrame with >2 dimensions
             return_dfs = False
@@ -2507,11 +2517,11 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             out_dim = 1000  # guess embedding size
         _warn_output_size(dataloader, out_dim, output_size_warning)
 
-        # run inference, returns dict with keys for each target (-1 is final model output)
+        # run inference, returns dict with keys for each target
         outs = self(
             dataloader=dataloader,
             progress_bar=progress_bar,
-            targets=[target_layer, -1] if return_preds else [target_layer],
+            targets=[target_layer, self.class_outputs_key] if return_preds else [target_layer],
             avgpool_intermediates=avgpool,
         )
         embeddings = outs[target_layer]
@@ -2523,7 +2533,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             )
 
         if return_preds:
-            preds = outs[-1]
+            preds = outs[self.class_outputs_key]
             if return_dfs:
                 # put predictions in a DataFrame with same index as embeddings
                 preds = pd.DataFrame(

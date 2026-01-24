@@ -7,13 +7,12 @@ import opensoundscape
 from opensoundscape.preprocess.preprocessors import (
     BasePreprocessor,
 )
-from opensoundscape.sample import collate_audio_samples
+from opensoundscape.ml.dataloaders import collate_audio_samples
 from torchmetrics import Accuracy
 
 import opensoundscape
 from opensoundscape.ml.loss import BCEWithLogitsLoss_hot
 from opensoundscape.ml.dataloaders import SafeAudioDataloader
-from opensoundscape.sample import collate_audio_samples
 from opensoundscape.utils import identity
 
 class BaseModule:
@@ -430,3 +429,5 @@ class BaseModule:
         ):
             return True
         return False
+
+    
