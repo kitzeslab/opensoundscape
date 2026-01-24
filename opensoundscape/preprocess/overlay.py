@@ -304,7 +304,7 @@ def overlay(
                 # update labels as union of both files' labels
                 sample.labels.values[:] = np.logical_or(
                     sample.labels.values, overlay_sample.labels.values
-                ).astype(int)
+                ).astype(np.float16)
 
             # overlay was successful, update count:
             overlays_performed += 1

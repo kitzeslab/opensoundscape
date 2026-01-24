@@ -2,7 +2,10 @@ import pytest
 import numpy as np
 import pandas as pd
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
-from opensoundscape.ml.dataloaders import SafeAudioDataloader
+from opensoundscape.ml.dataloaders import (
+    SafeAudioDataloader,
+    collate_audio_samples_to_dict,
+)
 
 
 @pytest.fixture()
@@ -77,3 +80,15 @@ def test_init_multiindex(dataset_df, pre):
 def test_catch_index_not_set(bad_dataset_df_multiindex, pre):
     with pytest.raises(AssertionError):
         SafeAudioDataloader(bad_dataset_df_multiindex, pre)
+
+
+def test_collate_samples():
+    """collate should return tensors of joined data and joined labels"""
+    from opensoundscape import sample
+    import torch
+
+    l = pd.Series(name=("path", 2, 5), index=["a"], data=[0])
+    s = sample.AudioSample(torch.Tensor([[1, 2, 1], [0, 2, 3]]), labels=l)
+    collated = collate_audio_samples_to_dict([s, s, s, s])
+    assert list(collated["samples"].shape) == [4, 2, 3]
+    assert list(collated["labels"].shape) == [4, 1]

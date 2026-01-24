@@ -161,21 +161,13 @@ class Audio:
         Note: Clips samples to [-1,1] which can result in dBFS different from that
         requested, especially when dBFS is near zero
         """
-        # look-up dictionary for relationship of power spectral density with frequency
-        psd_functions = dict(
-            white=lambda f: 1,
-            blue=lambda f: np.sqrt(f),
-            violet=lambda f: f,
-            brownian=lambda f: 1 / np.where(f == 0, float("inf"), f),
-            brown=lambda f: 1 / np.where(f == 0, float("inf"), f),
-            pink=lambda f: 1 / np.where(f == 0, float("inf"), np.sqrt(f)),
-        )
         n_samples = int(duration * sample_rate)
-        assert color in psd_functions, f"Invalid color {color}"
-        psd = psd_functions[color]
+        assert color in _noise_psd_functions, f"Invalid color {color}"
 
-        white = np.fft.rfft(np.random.randn(n_samples))
-        target_psd = psd(np.fft.rfftfreq(n_samples))
+        # get target power spectral density for desired color
+        psd = _noise_psd_functions[color]
+        freqs = np.fft.rfftfreq(n_samples, d=1 / sample_rate)
+        target_psd = psd(freqs)
         # Normalize S for rms of desired dBFS
         target_psd = (
             target_psd
@@ -184,9 +176,12 @@ class Audio:
             / np.sqrt(2)
         )
 
+        # generate white noise in frequency domain then shape it with target psd
+        white = np.fft.rfft(np.random.randn(n_samples))
         shaped = white * target_psd
 
-        samples = np.fft.irfft(shaped)
+        # convert back to time domain
+        samples = np.fft.irfft(shaped, n=n_samples)
 
         return cls(np.clip(samples, -1, 1), sample_rate)
 
@@ -653,6 +648,115 @@ class Audio:
         """
         assert duration >= 0, f"`duration` to extend by must be >=0, got {duration}"
         return self.extend_to(self.duration + duration)
+
+    def pad(self, pre_duration, post_duration=None, fill=None):
+        """Pad audio file to desired duration by adding silence or Noise to the beginning and end
+
+        If `post_duration` is None, it is set equal to `pre_duration`.
+
+        Otherwise, silence/noise is added to the beginning and end of the Audio object to achieve the desired
+        `duration`. If an odd number of samples is needed, the extra sample is added to the end.
+
+        Args:
+            pre_duration: the duration in seconds to pad at the beginning of the audio object
+            post_duration: the duration in seconds to pad at the end of the audio object
+                - if None, set equal to pre_duration [default: None]
+            fill: noise color to use for padding. If None, uses silence.
+                Options are the same as Audio.noise():
+                - 'white': uniform psd (equal energy per linear frequency band)
+                - 'pink': psd = 1/sqrt(f) (equal energy per octave)
+                - 'brownian': psd = 1/f (aka brown noise)
+                - 'brown': synonym for brownian
+                - 'violet': psd = f
+                - 'blue': psd = sqrt(f)
+                [default: None]
+        Returns:
+            a new Audio object of the desired duration
+        """
+        assert (
+            pre_duration >= 0
+        ), f"`pre_duration` to pad by must be >=0, got {pre_duration}"
+        if post_duration is None:
+            post_duration = pre_duration
+        else:
+            assert (
+                post_duration >= 0
+            ), f"`post_duration` to pad by must be >=0, got {post_duration}"
+        n_pre_samples = round(pre_duration * self.sample_rate)
+        n_post_samples = round(post_duration * self.sample_rate)
+
+        if fill is None:
+            pre_samples = np.zeros(n_pre_samples)
+            post_samples = np.zeros(n_post_samples)
+        else:
+            pre_audio = Audio.noise(
+                duration=pre_duration, sample_rate=self.sample_rate, color=fill
+            )
+            post_audio = Audio.noise(
+                duration=post_duration, sample_rate=self.sample_rate, color=fill
+            )
+            pre_samples = pre_audio.samples
+            post_samples = post_audio.samples
+
+        new_samples = np.concatenate([pre_samples, self.samples, post_samples])
+
+        # update metadata to reflect new duration
+        if self.metadata is None:
+            metadata = None
+        else:
+            metadata = self.metadata.copy()
+            if "recording_start_time" in metadata:
+                # timedelta doesn't like np types, fix issue #928
+                seconds = pre_duration
+                seconds = cast_np_to_native(seconds)
+                metadata["recording_start_time"] -= datetime.timedelta(seconds=seconds)
+
+            if "duration" in metadata:
+                metadata["duration"] = len(new_samples) / self.sample_rate
+
+        return self._spawn(
+            samples=new_samples,
+            metadata=metadata,
+        )
+
+    def pad_to(self, duration, fill=None):
+        """Pad audio file to desired duration by adding silence or Noise to the beginning and end
+
+        If `duration` is less than or equal to the Audio's self.duration, the Audio remains unchanged.
+
+        Otherwise, silence/noise is added to the beginning and end of the Audio object to achieve the desired
+        `duration`. If an odd number of samples is needed, the extra sample is added to the end.
+
+        Args:
+            duration: the minimum final duration in seconds of the audio object
+            fill: noise color to use for padding. If None, uses silence.
+                Options are the same as Audio.noise():
+                - 'white': uniform psd (equal energy per linear frequency band)
+                - 'pink': psd = 1/sqrt(f) (equal energy per octave)
+                - 'brownian': psd = 1/f (aka brown noise)
+                - 'brown': synonym for brownian
+                - 'violet': psd = f
+                - 'blue': psd = sqrt(f)
+                [default: None]
+        Returns:
+            a new Audio object of the desired duration
+        """
+        assert duration >= 0, f"`duration` to pad to must be >=0, got {duration}"
+
+        if duration <= self.duration:
+            return self
+
+        # be explicit about sample counts with padding to avoid sample-level rounding issues
+        total_n_samples = round(duration * self.sample_rate)
+        n_samples_to_add = total_n_samples - len(self.samples)
+        pre_n_samples = n_samples_to_add // 2
+        post_n_samples = n_samples_to_add - pre_n_samples
+        pre_duration = pre_n_samples / self.sample_rate
+        post_duration = post_n_samples / self.sample_rate
+
+        return self.pad(
+            pre_duration=pre_duration, post_duration=post_duration, fill=fill
+        )
 
     def bandpass(self, low_f, high_f, order):
         """Bandpass audio signal with a butterworth filter
@@ -2086,3 +2190,14 @@ class MultiChannelAudio(Audio):
         if clip_range is not None:
             new_samples = np.clip(new_samples, clip_range[0], clip_range[1])
         return self._spawn(samples=new_samples)
+
+
+_noise_psd_functions = dict(
+    white=lambda f: 1,
+    blue=lambda f: np.sqrt(f),
+    violet=lambda f: f,
+    brownian=lambda f: 1 / np.where(f == 0, float("inf"), f),
+    brown=lambda f: 1 / np.where(f == 0, float("inf"), f),
+    pink=lambda f: 1 / np.where(f == 0, float("inf"), np.sqrt(f)),
+)
+"""look-up dictionary for relationship of power spectral density with frequency"""

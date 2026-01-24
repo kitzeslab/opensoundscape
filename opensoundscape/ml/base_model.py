@@ -14,7 +14,7 @@ import opensoundscape
 from opensoundscape.ml.loss import BCEWithLogitsLoss_hot
 from opensoundscape.ml.dataloaders import SafeAudioDataloader
 from opensoundscape.sample import collate_audio_samples
-
+from opensoundscape.utils import identity
 
 class BaseModule:
     """base class for pytorch and lightning models in opensoundscape
@@ -142,7 +142,7 @@ class BaseModule:
         Effects:
             logs metrics and loss to the current logger
         """
-        batch_tensors, batch_labels = samples
+        batch_tensors, batch_labels = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
         batch_labels = batch_labels.to(self.device)
 
@@ -364,7 +364,7 @@ class BaseModule:
         self,
         samples,
         bypass_augmentations=False,
-        collate_fn=collate_audio_samples,
+        collate_fn=identity,
         raise_errors=False,
         **kwargs,
     ):
@@ -395,7 +395,7 @@ class BaseModule:
         )
 
     def predict_dataloader(
-        self, samples, collate_fn=collate_audio_samples, raise_errors=False, **kwargs
+        self, samples, collate_fn=identity, raise_errors=False, **kwargs
     ):
         """generate dataloader for inference (predict/validate/test)
 
