@@ -392,11 +392,12 @@ def trim_audio(sample, target_duration, extend=True, random_trim=False, tol=1e-1
 
     # update the sample in-place
     sample.data = audio
-    if sample.start_time is None:
-        sample.start_time = start_time
-    else:
-        sample.start_time += start_time
-    sample.duration = target_duration
+    # retain original start_time and duration so that we know what audio was _loaded_ from the file
+    # if sample.start_time is None:
+    #     sample.start_time = start_time
+    # else:
+    #     sample.start_time += start_time
+    # sample.duration = target_duration
 
 
 @register_action_cls
