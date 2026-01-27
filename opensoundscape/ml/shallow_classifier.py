@@ -254,7 +254,7 @@ def fit_on_hoplite_db(
     optimizer=None,
     criterion=None,
     device=torch.device("cpu"),
-    validation_interval=1,
+    validation_interval=100,
     logging_interval=100,
     early_stopping_patience=None,
 ):
@@ -511,8 +511,7 @@ def fit(
             the entire dataset is used as a single batch
             [Default: 128]
 
-        steps: number of training steps (epochs); each step, all data is passed forward and
-        backward, and the optimizer updates the weights
+        steps: number of training steps forward/backward passes on one batch
             [Default: 1000]
 
         optimizer: torch.optim optimizer to use; default None uses AdamW
@@ -552,10 +551,18 @@ def fit(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=0
     )
 
+    def make_infinite(loader):
+        while True:
+            for data in loader:
+                yield data
+
+    infinite_data_loader = iter(make_infinite(train_loader))
+
     # if validation data provided, convert to tensors and move to the device
     best_val_loss = float("inf")
     best_model_state = None
     best_step = -1
+
     if validation_features is not None:
         validation_features = torch.tensor(
             validation_features, dtype=torch.float32, device=device
@@ -570,24 +577,25 @@ def fit(
 
     for step in range(steps):
         model.train()
+        batch_features, batch_labels = next(infinite_data_loader)
 
-        # iterate over the training data in batches
-        for batch_features, batch_labels in train_loader:
-            batch_features = batch_features.to(device)
-            batch_labels = batch_labels.to(device)
+        # # iterate over the training data in batches
+        # for batch_features, batch_labels in train_loader:
+        batch_features = batch_features.to(device)
+        batch_labels = batch_labels.to(device)
 
-            # zero the gradients
-            optimizer.zero_grad()
+        # zero the gradients
+        optimizer.zero_grad()
 
-            # forward pass
-            outputs = model(batch_features)
+        # forward pass
+        outputs = model(batch_features)
 
-            # compute loss
-            loss = criterion(outputs, batch_labels)
+        # compute loss
+        loss = criterion(outputs, batch_labels)
 
-            # backward pass and optimization
-            loss.backward()
-            optimizer.step()
+        # backward pass and optimization
+        loss.backward()
+        optimizer.step()
 
         # Validation (optional)
         if validation_features is not None and (step + 1) % validation_interval == 0:
@@ -635,7 +643,7 @@ def fit(
             # log the loss and metrics
             if (step + 1) % logging_interval == 0:
                 print(
-                    f"Epoch {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}"
+                    f"Step {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}"
                 )
                 print(f"\tval AU ROC: {auroc:0.3f}")
                 print(f"\tval MAP: {map:0.3f}")
