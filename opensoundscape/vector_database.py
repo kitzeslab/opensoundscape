@@ -8,6 +8,7 @@ from datetime import datetime
 import numpy as np
 from pathlib import Path
 import warnings
+import pandas as pd
 
 
 def load_or_create_hoplite_usearch_db(db, embedding_dim=None, cfg=None):
@@ -120,6 +121,8 @@ def _insert_embeddings(
         np.dtype(db_dtype)
     )
 
+    failed_to_insert = []
+
     # insert each embedding in the batch into the database, one-by-one
     for j, audiosample in enumerate(batch_samples):
         file = audiosample.source
@@ -145,12 +148,21 @@ def _insert_embeddings(
             file_to_id[file] = recording_id
         start_time = audiosample.start_time
         end_time = start_time + audiosample.duration
-
-        db.insert_window(
-            recording_id=recording_id,
-            embedding=batch_embeddings[j],
-            offsets=[start_time, end_time],
-        )
+        try:
+            db.insert_window(
+                recording_id=recording_id,
+                embedding=batch_embeddings[j],
+                offsets=[start_time, end_time],
+            )
+        except RuntimeError as e:
+            # duplicate key error, window already exists
+            if 'Duplicate key' in str(e):
+                failed_to_insert.append(
+                    (file, start_time, end_time, "duplicate window")
+                )
+            else:
+                raise e
+    return failed_to_insert
 
 
 def _handle_existing_windows(
@@ -160,6 +172,7 @@ def _handle_existing_windows(
     deployment_id=None,
     deployment_name=None,
     project=None,
+    rounding_precision=3,
 ):
     """remove samples from clips dataframe that already have embeddings in the db
 
@@ -197,6 +210,7 @@ def _handle_existing_windows(
         file_list = (
             clips.index.get_level_values(0).to_series().astype(str).unique().tolist()
         )
+        file_list = [str(Path(f)) for f in file_list]
 
         # establish filters for windows from matching files, optionally constraining to deployment/project
         recordings_filter = config_dict.create(isin=dict(filename=file_list))
@@ -242,21 +256,48 @@ def _handle_existing_windows(
 
         # map of existing recording ids to resolved paths
         id_to_recording = {rec.id: resolve_path(rec) for rec in db.get_all_recordings()}
-        # be ware of type mismatch with Path vs str and float vs float32
+        # be ware of type mismatch with Path vs str and float vs float32 or np.float64
         existing_index_tuples = {
-            (id_to_recording[w.recording_id], float(w.offsets[0]), float(w.offsets[1]))
+            (
+                id_to_recording[w.recording_id],
+                w.offsets[0],
+                w.offsets[1],
+            )
             for w in windows
         }
-        # dataloader.dataset.dataset.label_df
-        overlapping_idxs = clips.index.intersection(existing_index_tuples)
 
-        if embedding_exists_mode == "error" and len(overlapping_idxs) > 0:
+        # MultiIndex into an Index of tuples
+        flat_clips = clips.index.to_flat_index()
+        flat_existing = pd.Index(existing_index_tuples)
+
+        # Normalize the tuples (Vectorized rounding of temporal values)
+        def normalize_flat(idx):
+            return pd.Index(
+                [
+                    (
+                        # ignore non-relevant Path differences like // vs /
+                        str(Path(t[0])),
+                        round(float(t[1]), rounding_precision),
+                        round(float(t[2]), rounding_precision),
+                    )
+                    for t in idx
+                ]
+            )
+
+        norm_clips = normalize_flat(flat_clips)
+        norm_existing = normalize_flat(flat_existing)
+
+        # filter df to clips without existing embeddings
+        diff_idx = norm_clips.difference(norm_existing)
+
+        if embedding_exists_mode == "error" and len(diff_idx) > 0:
             raise ValueError(
                 'Some embeddings exist in db and embedding_exists_mode="error"'
             )
 
         # subset the clip dataframe inplace to exclude overlapping_idxs
-        clips.drop(overlapping_idxs, inplace=True)
+        mask = norm_clips.isin(diff_idx)
+        clips.drop(clips.index[~mask], inplace=True)
 
         if len(clips) == 0:
             # all samples already have embeddings, nothing to do

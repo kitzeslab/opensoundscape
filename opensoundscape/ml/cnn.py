@@ -2279,12 +2279,13 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # use default target layer if none provided
         target_layer = self._check_or_get_default_embedding_layer(target_layer)
 
+        failed_to_insert = []
         for i, batch_samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
 
             # forward pass of network, getting only target_layer outputs
             outs = self.batch_forward(batch_samples, targets=[target_layer], avgpool=True)
 
-            _insert_embeddings(
+            batch_insertion_failures = _insert_embeddings(
                 db=db,
                 batch_samples=batch_samples,
                 batch_embeddings=outs[target_layer],
@@ -2294,6 +2295,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 audio_root=audio_root,
                 deployment_id=deployment_id,
             )
+
+            failed_to_insert.extend(batch_insertion_failures)
 
             # commit once per commit_frequency_batches batches
             # committing is relatively slow, but we don't want to lose progress if interrupted
@@ -2314,7 +2317,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         db.commit()
 
         # return database object and info about any failed samples
-        return (db, {"failed_samples": dataloader.dataset.report()})
+        insertion_failures = pd.DataFrame(failed_to_insert,columns=['file','start_time','end_time','reason'])
+        return (db, {"preprocessing_failures": dataloader.dataset.report(), "insertion_failures": insertion_failures})
 
     def similarity_search_hoplite_db(
         self,
