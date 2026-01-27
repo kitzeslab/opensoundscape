@@ -174,7 +174,7 @@ def annotate(
             for btn_label in annotation_buttons:
                 # Initialize column if it doesn't exist yet
                 if btn_label not in clip_df.columns:
-                    clip_df[btn_label] = None
+                    clip_df[btn_label] = np.nan
 
                 # Reflect any existing annotation state
                 existing = clip_df.at[row_idx, btn_label]
@@ -197,7 +197,7 @@ def annotate(
                             df.at[ridx, col] = True
                             btn.button_style = "success"
                         else:
-                            df.at[ridx, col] = None
+                            df.at[ridx, col] = np.nan
                             btn.button_style = ""
 
                     return _on_toggle
@@ -443,40 +443,39 @@ def explore_features(
     )
 
     fw = go.FigureWidget(fig)
-    # fw.selected_row_ids = np.array([], dtype=int)
 
-    def on_select(trace, points, selector):
+    inspect_btn = widgets.Button(
+        description="Inspect selected",
+        button_style="info",
+        icon="search",
+    )
+
+    def on_inspect_click(b):
         row_ids = []
         for tr in fw.data:
             if tr.selectedpoints is None:
                 continue
-
-            # selectedpoints are trace-local indices
             tr_points = np.asarray(tr.selectedpoints, dtype=int)
-
-            # map to row ids via customdata
             tr_row_ids = tr.customdata[tr_points, 0]
             row_ids.extend(tr_row_ids)
 
         row_ids = np.unique(row_ids).astype(int)
-        if len(row_ids) == 0:
-            return
-        selected = df.iloc[row_ids]
 
         with inspect_out:
             inspect_out.clear_output(wait=True)
+            if len(row_ids) == 0:
+                print("No points selected")
+                return
+            selected = df.iloc[row_ids]
             print(f"{len(selected)} points selected")
             inspect(selected, **inspect_kwargs)
 
-    # Attach to one trace, don't want to see a bunch trying to plot over each other
-    fw.data[0].on_selection(on_select)
-    # for tr in fw.data:
-    #     tr.on_selection(on_select)
+    inspect_btn.on_click(on_inspect_click)
 
     with fig_out:
         display(fw)
 
-    display(fig_out, inspect_out)
+    display(fig_out, inspect_btn, inspect_out)
 
     return fw
 
