@@ -4,11 +4,250 @@ import io
 import base64
 import numpy as np
 import matplotlib.pyplot as plt
-from IPython.display import HTML, display
 from scipy.io import wavfile
-import plotly.graph_objects as go
-import ipywidgets as widgets
-import plotly.express as px
+
+# Optional dependencies — only needed at function call time, not on module import
+try:
+    from IPython.display import HTML, display
+except ImportError:
+    HTML = None
+    display = None
+
+try:
+    import ipywidgets as widgets
+except ImportError:
+    widgets = None
+
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+except ImportError:
+    go = None
+    px = None
+
+
+def _require(*names):
+    """Check that optional dependencies are available; raise a helpful error if not."""
+    missing = []
+    for name in names:
+        if name == "ipywidgets" and widgets is None:
+            missing.append("ipywidgets")
+        elif name == "plotly" and go is None:
+            missing.append("plotly")
+        elif name == "IPython" and display is None:
+            missing.append("IPython")
+    if missing:
+        raise ImportError(
+            f"This function requires packages that are not installed: "
+            f"{', '.join(missing)}. "
+            f"Install them with: pip install {' '.join(missing)}"
+        )
+
+def annotate(
+    clip_df,
+    indices=None,
+    annotation_buttons=None,
+    dur=None,
+    N=20,
+    bandpass_range=None,
+    dB_range=[-50, 0],
+    cmap="Greys",
+    cell_width=250,
+    cell_height=125,
+    apply_noise_reduction=False,
+    normalize_audio=True,
+    spec_kwargs=None,
+):
+    """Display an interactive grid of spectrograms with annotation toggle buttons.
+
+    Each clip is shown as a spectrogram with click-to-play audio. If
+    ``annotation_buttons`` is provided, toggle buttons appear below each clip.
+    Activating a button sets the value to ``True``; deactivating it sets the
+    value to ``None``.  Annotations are written in-place to ``annotations_df``
+    if provided, otherwise to ``clip_df``.
+
+    Optionally pass indices to subset the dataframe to rows to select from
+
+
+    Args:
+        clip_df (pd.DataFrame): DataFrame with columns 'file', 'start_time',
+            'end_time'.  Used to load and display audio clips.
+        indices (list, optional): indices of clip_df to subset to before
+            selecting clips for display
+        annotation_buttons (list[str], optional): Labels for annotation toggle
+            buttons displayed below each clip.
+        dur (float, optional): Duration of each audio clip in seconds.  If
+            None, uses ``end_time - start_time`` for each row.
+        N (int): Maximum number of clips to display (randomly sampled).
+        bandpass_range (tuple, optional): ``(min_freq, max_freq)`` for
+            bandpass filtering the spectrogram.
+        dB_range (list): ``[min_dB, max_dB]`` for clipping spectrogram values.
+        cmap (str): Matplotlib colormap name.
+        cell_width (int): Minimum width of each grid cell in pixels.
+        cell_height (int): Height of each spectrogram image in pixels.
+        apply_noise_reduction (bool): if True uses noisereduce on audio clips with default params
+        normalize_audio (bool): if True, normalizes audio clips to peak=1.0
+        spec_kwargs (dict or None): keyword arguments to Spectrogram.from_audio()
+    Returns:
+        ipywidgets.GridBox: The displayed widget container.
+    """
+    _require("ipywidgets", "IPython")
+    if spec_kwargs is None:
+        spec_kwargs = {}
+    # Determine which dataframe receives annotation writes
+    if indices is None:
+        indices = clip_df.index
+    if len(indices)>N:
+        indices = np.random.choice(indices, size=N, replace=False)
+    view = clip_df.loc[indices]
+
+    cell_widgets = []
+
+    for _, row in view.iterrows():
+        row_idx = row.name
+
+        # --- time window ---
+        if dur is None:
+            start = row.start_time
+            dur_i = row.end_time - row.start_time
+        else:
+            center_t = (row.start_time + row.end_time) / 2
+            start = max(0, center_t - dur / 2)
+            dur_i = dur
+
+        # --- load audio ---
+        a = Audio.from_file(
+            row.file,
+            offset=start,
+            duration=dur_i,
+            out_of_bounds_mode="ignore",
+        )
+
+        if apply_noise_reduction:
+            a = a.reduce_noise()
+
+        if normalize_audio:
+            a = a.normalize()
+
+        s = Spectrogram.from_audio(a,**spec_kwargs)
+        if bandpass_range is not None:
+            s = s.bandpass(*bandpass_range)
+
+        spec = np.clip(
+            s.spectrogram,
+            a_min=dB_range[0],
+            a_max=dB_range[1],
+        )
+
+        # --- render spectrogram to PNG ---
+        fig, ax = plt.subplots(figsize=(2, 2), dpi=100)
+        ax.imshow(spec, origin="lower", aspect="auto", cmap=cmap)
+        ax.axis("off")
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
+        plt.close(fig)
+        img_b64 = base64.b64encode(buf.getvalue()).decode()
+
+        # --- audio to WAV bytes ---
+        wav_buf = io.BytesIO()
+        samples = a.samples
+        samples = samples / max(1e-9, np.max(np.abs(samples)))
+        samples_int16 = (samples * 32767).astype(np.int16)
+        wavfile.write(wav_buf, a.sample_rate, samples_int16)
+        audio_b64 = base64.b64encode(wav_buf.getvalue()).decode()
+
+        # --- HTML widget with spectrogram image and click-to-play audio ---
+        cell_html = widgets.HTML(
+            value=(
+                f'<img src="data:image/png;base64,{img_b64}" '
+                f'style="width:100%;height:{cell_height}px;object-fit:fill;'
+                f'display:block;cursor:pointer;" '
+                f'onclick="this.nextElementSibling.play()"/>'
+                f'<audio src="data:audio/wav;base64,{audio_b64}"></audio>'
+            )
+        )
+
+        # --- annotation toggle buttons (ipywidgets) ---
+        btn_widgets = []
+        if annotation_buttons:
+            for btn_label in annotation_buttons:
+                # Initialize column if it doesn't exist yet
+                if btn_label not in clip_df.columns:
+                    clip_df[btn_label] = None
+
+                # Reflect any existing annotation state
+                existing = clip_df.at[row_idx, btn_label]
+                initial_value = bool(existing) if existing is not None else False
+
+                toggle = widgets.ToggleButton(
+                    value=initial_value,
+                    description=btn_label,
+                    button_style="success" if initial_value else "",
+                    layout=widgets.Layout(
+                        width="auto", height="24px", padding="0px 2px"
+                    ),
+                    style={"font_size": "11px"},
+                )
+
+                # Closure to capture current row_idx and btn_label
+                def _make_observer(df, ridx, col, btn):
+                    def _on_toggle(change):
+                        if change["new"]:
+                            df.at[ridx, col] = True
+                            btn.button_style = "success"
+                        else:
+                            df.at[ridx, col] = None
+                            btn.button_style = ""
+
+                    return _on_toggle
+
+                toggle.observe(
+                    _make_observer(clip_df, row_idx, btn_label, toggle),
+                    names="value",
+                )
+                btn_widgets.append(toggle)
+
+        # --- assemble cell ---
+        if btn_widgets:
+            btn_box = widgets.HBox(
+                btn_widgets,
+                layout=widgets.Layout(
+                    justify_content="center",
+                    padding="4px",
+                ),
+            )
+            cell = widgets.VBox(
+                [cell_html, btn_box],
+                layout=widgets.Layout(
+                    border="1px solid #ddd",
+                    overflow="hidden",
+                    width=f"{cell_width}px",
+                ),
+            )
+        else:
+            cell = widgets.VBox(
+                [cell_html],
+                layout=widgets.Layout(
+                    border="1px solid #ddd",
+                    overflow="hidden",
+                    width=f"{cell_width}px",
+                ),
+            )
+
+        cell_widgets.append(cell)
+
+    # --- grid layout ---
+    grid = widgets.GridBox(
+        cell_widgets,
+        layout=widgets.Layout(
+            grid_template_columns=f"repeat(auto-fill, minmax({cell_width}px, 1fr))",
+            grid_gap="0px",
+        ),
+    )
+
+    display(grid)
+    return grid
 
 
 def inspect(
@@ -42,6 +281,7 @@ def inspect(
     Returns:
         HTML object with the interactive grid.
     """
+    _require("IPython")
 
     rows = rows.sample(min(N, len(rows)))
 
@@ -180,6 +420,7 @@ def explore_features(
     hover_name_col=None,
     **inspect_kwargs,
 ):
+    _require("ipywidgets", "plotly", "IPython")
 
     fig_out = widgets.Output()
     inspect_out = widgets.Output()
@@ -205,14 +446,8 @@ def explore_features(
     # fw.selected_row_ids = np.array([], dtype=int)
 
     def on_select(trace, points, selector):
-        # Only handle box selections
-        if not hasattr(selector, "xrange"):
-            return
-
         row_ids = []
         for tr in fw.data:
-            # skip if trace is not visible
-
             if tr.selectedpoints is None:
                 continue
 
@@ -246,113 +481,68 @@ def explore_features(
     return fw
 
 
-def make_label_buttons(fw, df, label_col="label"):
-    btn0 = widgets.Button(
-        description="Label selected = 0",
-        button_style="danger",
-        icon="times",
-    )
-
-    btn1 = widgets.Button(
-        description="Label selected = 1",
-        button_style="success",
-        icon="check",
-    )
-
-    out = widgets.Output()
-
-    def apply_label(label):
-        with out:
-            out.clear_output(wait=True)
-
-            idx = get_selected_row_ids(fw)
-
-            if len(idx) == 0:
-                print("No points selected")
-                return
-
-            df.loc[idx, label_col] = label
-            print(f"Labeled {len(idx)} points as {label}")
-
-    btn0.on_click(lambda b: apply_label(0))
-    btn1.on_click(lambda b: apply_label(1))
-
-    display(widgets.HBox([btn0, btn1]), out)
-
-
 def explore_histogram(
     df,
     value_col,
     label_col=None,
-    positive_value=1,
-    negative_value=0,
     bins=30,
     **inspect_kwargs,
 ):
     """Interactive histogram for exploring feature distributions.
 
+    Displays one overlaid histogram trace per unique value in ``label_col``
+    (or a single trace if ``label_col`` is None).  Each label gets a toggle
+    button to show/hide its histogram trace and to include/exclude it from
+    the "Inspect random selection" sample.
+
     Args:
-        df (pd.DataFrame): DataFrame with columns:
-            - value_col: numeric values to plot histogram
-            - label_col (optional): binary labels for splitting histogram
-            - file, start_time, end_time (for default inspect fn)
-        value_col (str): Column name for numeric values.
-        label_col (str, optional): Column name for categorical labels. If None, all data
-            is treated as one category.
-        positive_value: Value in label_col representing positive class.
-        negative_value: Value in label_col representing negative class.
+        df (pd.DataFrame): DataFrame with columns including ``value_col``
+            and (optionally) ``label_col``, plus 'file', 'start_time',
+            'end_time' for the inspect callback.
+        value_col (str): Column name for numeric values to histogram.
+        label_col (str, optional): Column name for categorical labels.
+            If None, all data is shown as a single histogram.
         bins (int): Number of histogram bins.
-        **inspect_kwargs,: Additional keyword arguments passed to the inspect function.
-            including 'duration', 'N', 'bandpass_range', 'dB_range',
-            'cmap', 'normalize_audio', 'apply_noise_reduction', 'cell_width',
-            'cell_height', 'display_inline'.
+        **inspect_kwargs: Additional keyword arguments passed to
+            :func:`inspect`.
 
     Returns:
-        container (ipywidgets.VBox): Container widget with histogram and controls.
-        fw (plotly.graph_objects.FigureWidget): Figure widget for the histogram.
-
-    Usage:
-    ```
-    container, fw = explore_histogram(
-        df,
-        value_col='feature1',
-        label_col='label',
-        positive_value=1,
-        negative_value=0,
-        bins=50,
-    )
-    display(container)
-    ```
+        container (ipywidgets.VBox): Container widget with histogram and
+            controls.
+        fw (plotly.graph_objects.FigureWidget): The Plotly figure widget.
     """
+    _require("ipywidgets", "plotly")
 
-    fig_out = widgets.Output()
-    ctrl_out = widgets.Output()
-
-    # split data
-    if label_col is None:
-        df_pos = df
-        df_neg = df.iloc[0:0]
+    # --- Determine unique labels and build one histogram trace per label ---
+    if label_col is not None:
+        unique_labels = list(df[label_col].unique())
     else:
-        df_pos = df[df[label_col] == positive_value]
-        df_neg = df[df[label_col] == negative_value]
+        unique_labels = []
+
+    # Use plotly's default color sequence for distinct label colors
+    default_colors = px.colors.qualitative.Plotly
 
     fw = go.FigureWidget()
 
-    fw.add_histogram(
-        x=df_pos[value_col],
-        nbinsx=bins,
-        name="Positive",
-        opacity=0.6,
-        marker_color="green",
-    )
-
-    fw.add_histogram(
-        x=df_neg[value_col],
-        nbinsx=bins,
-        name="Negative",
-        opacity=0.6,
-        marker_color="red",
-    )
+    if unique_labels:
+        for i, label in enumerate(unique_labels):
+            color = default_colors[i % len(default_colors)]
+            subset = df[df[label_col] == label]
+            fw.add_histogram(
+                x=subset[value_col],
+                nbinsx=bins,
+                name=str(label),
+                opacity=0.6,
+                marker_color=color,
+            )
+    else:
+        # No label column — single histogram for all data
+        fw.add_histogram(
+            x=df[value_col],
+            nbinsx=bins,
+            name="all",
+            opacity=0.6,
+        )
 
     fw.update_layout(
         barmode="overlay",
@@ -361,24 +551,23 @@ def explore_histogram(
         height=450,
     )
 
-    # --- Controls ---
-    show_pos = widgets.ToggleButton(
-        description="Positive",
-        value=True,
-        button_style="success",
-    )
-
-    show_neg = widgets.ToggleButton(
-        description="Negative",
-        value=True,
-        button_style="danger",
-    )
-
+    # --- Controls: one toggle per label + sample button ---
     sample_btn = widgets.Button(
         description="Inspect random selection",
         button_style="info",
         icon="search",
     )
+
+    # Map label -> (toggle_button, color); button color matches histogram trace
+    toggle_buttons = {}
+    for i, label in enumerate(unique_labels):
+        color = default_colors[i % len(default_colors)]
+        btn = widgets.ToggleButton(
+            description=str(label),
+            value=True,
+        )
+        btn.style.button_color = color
+        toggle_buttons[label] = (btn, color)
 
     status = widgets.Output()
 
@@ -392,25 +581,32 @@ def explore_histogram(
     def get_selected_rows():
         r = get_visible_range()
         if r is None:
-            return df
+            mask = np.ones(len(df), dtype=bool)
+        else:
+            lo, hi = r
+            mask = (df[value_col] >= lo) & (df[value_col] <= hi)
 
-        lo, hi = r
-        mask = (df[value_col] >= lo) & (df[value_col] <= hi)
-
-        if show_pos.value and not show_neg.value:
-            mask &= df[label_col] == positive_value
-        elif show_neg.value and not show_pos.value:
-            mask &= df[label_col] == negative_value
+        # Exclude labels whose toggle is off
+        for label, (btn, _color) in toggle_buttons.items():
+            if not btn.value:
+                mask &= df[label_col] != label
 
         return df[mask]
 
     # --- Callbacks ---
-    def update_visibility(*args):
-        fw.data[0].visible = show_pos.value
-        fw.data[1].visible = show_neg.value
+    def _make_visibility_callback(trace_idx, btn, color):
+        """Create a callback that syncs a toggle button to its trace and color."""
+        def _update(change):
+            fw.data[trace_idx].visible = btn.value
+            btn.style.button_color = color if btn.value else "#cccccc"
+        return _update
 
-    show_pos.observe(update_visibility, names="value")
-    show_neg.observe(update_visibility, names="value")
+    for i, label in enumerate(unique_labels):
+        btn, color = toggle_buttons[label]
+        btn.observe(
+            _make_visibility_callback(i, btn, color),
+            names="value",
+        )
 
     def on_sample_click(b):
         with status:
@@ -425,15 +621,11 @@ def explore_histogram(
     sample_btn.on_click(on_sample_click)
 
     # --- Display ---
-    container = widgets.VBox([fig_out, ctrl_out])
-
-    with fig_out:
-        display(fw)
-
-    with ctrl_out:
-        display(
-            widgets.HBox([show_pos, show_neg, sample_btn]),
-            status,
-        )
+    all_buttons = [btn for btn, _color in toggle_buttons.values()] + [sample_btn]
+    container = widgets.VBox([
+        fw,
+        widgets.HBox(all_buttons),
+        status,
+    ])
 
     return container, fw
