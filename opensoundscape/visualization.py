@@ -174,18 +174,18 @@ def annotate(
             for btn_label in annotation_buttons:
                 # Initialize column if it doesn't exist yet
                 if btn_label not in clip_df.columns:
-                    clip_df[btn_label] = np.nan
+                    clip_df[btn_label] = None
 
                 # Reflect any existing annotation state
                 existing = clip_df.at[row_idx, btn_label]
-                initial_value = bool(existing) if existing is not None else False
+                initial_value = bool(existing)
 
                 toggle = widgets.ToggleButton(
                     value=initial_value,
                     description=btn_label,
                     button_style="success" if initial_value else "",
                     layout=widgets.Layout(
-                        width="auto", height="24px", padding="0px 2px"
+                        flex="1 1 0%", height="24px", padding="0px 2px"
                     ),
                     style={"font_size": "11px"},
                 )
@@ -197,7 +197,7 @@ def annotate(
                             df.at[ridx, col] = True
                             btn.button_style = "success"
                         else:
-                            df.at[ridx, col] = np.nan
+                            df.at[ridx, col] = None
                             btn.button_style = ""
 
                     return _on_toggle
