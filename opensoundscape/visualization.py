@@ -43,6 +43,7 @@ def _require(*names):
             f"Install them with: pip install {' '.join(missing)}"
         )
 
+
 def annotate(
     clip_df,
     indices=None,
@@ -97,7 +98,7 @@ def annotate(
     # Determine which dataframe receives annotation writes
     if indices is None:
         indices = clip_df.index
-    if len(indices)>N:
+    if len(indices) > N:
         indices = np.random.choice(indices, size=N, replace=False)
     view = clip_df.loc[indices]
 
@@ -129,7 +130,7 @@ def annotate(
         if normalize_audio:
             a = a.normalize()
 
-        s = Spectrogram.from_audio(a,**spec_kwargs)
+        s = Spectrogram.from_audio(a, **spec_kwargs)
         if bandpass_range is not None:
             s = s.bandpass(*bandpass_range)
 
@@ -318,7 +319,11 @@ def inspect(
         spec = np.clip(spec, a_min=dB_range[0], a_max=dB_range[1])
 
         # --- render spectrogram to PNG ---
-        fig, ax = plt.subplots(figsize=(2.2, 2.2))
+        dpi = 100
+        fig_w = cell_width / dpi
+        fig_h = cell_height / dpi
+
+        fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=dpi)
         ax.imshow(
             spec,
             origin="lower",
@@ -595,9 +600,11 @@ def explore_histogram(
     # --- Callbacks ---
     def _make_visibility_callback(trace_idx, btn, color):
         """Create a callback that syncs a toggle button to its trace and color."""
+
         def _update(change):
             fw.data[trace_idx].visible = btn.value
             btn.style.button_color = color if btn.value else "#cccccc"
+
         return _update
 
     for i, label in enumerate(unique_labels):
@@ -621,10 +628,14 @@ def explore_histogram(
 
     # --- Display ---
     all_buttons = [btn for btn, _color in toggle_buttons.values()] + [sample_btn]
-    container = widgets.VBox([
-        fw,
-        widgets.HBox(all_buttons),
-        status,
-    ])
+    container = widgets.VBox(
+        [
+            fw,
+            widgets.HBox(all_buttons),
+            status,
+        ]
+    )
 
-    return container, fw
+    display(container)
+
+    return container
