@@ -261,8 +261,8 @@ def inspect(
     cmap="Greys",
     normalize_audio=False,
     apply_noise_reduction=False,
-    cell_width=150,
-    cell_height=250,
+    cell_width=250,
+    cell_height=125,
     display_inline=True,
 ):
     """Display an interactive grid of spectrograms with click-to-play audio.
