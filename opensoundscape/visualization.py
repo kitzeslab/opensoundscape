@@ -1,4 +1,5 @@
-from opensoundscape import Audio, Spectrogram
+from opensoundscape.audio import Audio
+from opensoundscape.spectrogram import Spectrogram
 
 import io
 import base64
