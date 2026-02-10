@@ -91,6 +91,14 @@ opensoundscape.utils module
    :undoc-members:
    :show-inheritance:
 
+opensoundscape.visualization module
+-----------------------------------
+
+.. automodule:: opensoundscape.visualization
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 
