@@ -524,8 +524,8 @@ def explore_histogram(
     else:
         unique_labels = []
 
-    # Use plotly's default color sequence for distinct label colors
-    default_colors = px.colors.qualitative.Plotly
+    # Use distinct label colors
+    default_colors = px.colors.qualitative.Bold
 
     fw = go.FigureWidget()
 
