@@ -1,4 +1,4 @@
-"""MSRP (Maximum Source Range Power) localization algorithm
+"""MSRP (Modified Steered Response Power) localization algorithm
 
 This module contains Python translations of the MSRP localization functions
 originally implemented in Matlab by Tim Huang, then in R by Richard Hedley (locaR package)
