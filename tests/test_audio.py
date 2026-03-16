@@ -7,6 +7,7 @@ import math
 import numpy.testing as npt
 import pytz
 import datetime
+import pandas as pd
 
 from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
 from opensoundscape import audio
@@ -1185,6 +1186,18 @@ def test_multichannelaudio_concat(multichannel_audio):
 def test_multichannel_from_audio_list(veryshort_audio):
     a = audio.MultiChannelAudio.from_audio_list([veryshort_audio, veryshort_audio])
     assert a.n_channels == 2
+
+
+def test_audio_apply():
+    audio = Audio.silence(duration=5, sample_rate=10)
+    ts, windowed_rms = audio.apply(
+        function=lambda x: x.rms,
+        clip_duration=1,
+        clip_step=1,
+    )
+    assert len(ts) == 5
+    assert len(windowed_rms) == 5
+    assert math.isclose(windowed_rms[0], 0.0, abs_tol=1e-6)
 
 
 def test_pad(veryshort_wav_audio):

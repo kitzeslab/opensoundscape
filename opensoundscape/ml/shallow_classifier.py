@@ -564,10 +564,10 @@ def fit(
     best_step = -1
 
     if validation_features is not None:
-        validation_features = torch.tensor(
+        validation_features = torch.as_tensor(
             validation_features, dtype=torch.float32, device=device
         )
-        validation_labels = torch.tensor(
+        validation_labels = torch.as_tensor(
             validation_labels, dtype=torch.float32, device=device
         )
         validation_dataset = EmbeddingDataset(validation_features, validation_labels)
