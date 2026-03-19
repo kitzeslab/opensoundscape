@@ -485,7 +485,9 @@ def fit_classifier_on_embeddings(
             if None, assumes train_df and validation_df already have absolute audio paths
 
     Returns:
-        x_train, y_train, x_val, y_val: the embedded training and validation samples and their labels, as torch.tensor
+        x_train, y_train, x_val, y_val, metrics:
+        the embedded training and validation samples and their labels, as torch.tensor, plus a
+        dictionary of validation metrics for the best model found during training
     """
     if n_augmentation_variants > 0:
         print(
@@ -493,7 +495,7 @@ def fit_classifier_on_embeddings(
         )
         x_train, y_train = augmented_embed(
             embedding_model,
-            train_df,
+            train_df[[]],
             n_augmentation_variants=n_augmentation_variants,
             batch_size=embedding_batch_size,
             num_workers=embedding_num_workers,
@@ -505,7 +507,7 @@ def fit_classifier_on_embeddings(
         print(f"Embedding the training samples without augmentation")
         x_train = torch.tensor(
             embedding_model.embed(
-                train_df,
+                train_df[[]],
                 return_dfs=False,
                 batch_size=embedding_batch_size,
                 num_workers=embedding_num_workers,
@@ -522,7 +524,7 @@ def fit_classifier_on_embeddings(
         print("Embedding the validation samples")
         x_val = torch.tensor(
             embedding_model.embed(
-                validation_df,
+                validation_df[[]],
                 return_dfs=False,
                 batch_size=embedding_batch_size,
                 num_workers=embedding_num_workers,
