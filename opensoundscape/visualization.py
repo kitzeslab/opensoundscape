@@ -6,6 +6,7 @@ import base64
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import wavfile
+import pandas as pd
 
 # Optional dependencies — only needed at function call time, not on module import
 try:
@@ -253,7 +254,7 @@ def annotate(
 
 
 def inspect(
-    rows,
+    clip_df,
     dur=None,
     N=20,
     bandpass_range=None,
@@ -268,8 +269,10 @@ def inspect(
     """Display an interactive grid of spectrograms with click-to-play audio.
 
     Args:
-        rows (pd.DataFrame): DataFrame with columns 'file', 'start_time', (optional 'end_time')
+        clip_df (pd.DataFrame): DataFrame with columns (or multi-index) 'file', 'start_time', (optional 'end_time')
         dur (float, optional): Duration of audio clips in seconds. If None, uses end_time - start_time.
+            Note: if dur is specified but end_time is not present, will center the clip on start_time.
+            If dur is None, requires end_time column to determine clip duration.
         N (int): Number of samples to display (randomly selected if more are available).
         bandpass_range (tuple, optional): Frequency range (min_freq, max_freq) for bandpass filtering.
         dB_range (list): [min_dB, max_dB] for spectrogram clipping.
@@ -285,16 +288,28 @@ def inspect(
     """
     _require("IPython")
 
-    rows = rows.sample(min(N, len(rows)))
+    clip_df = clip_df.sample(min(N, len(clip_df))).copy()
+
+    # if multi-index df, reset index to get 'file', 'start_time', etc. as columns
+    if isinstance(clip_df.index, pd.MultiIndex):
+        clip_df = clip_df.reset_index()
 
     cells = []
 
-    for _, row in rows.iterrows():
+    for _, row in clip_df.iterrows():
         if dur is None:
+            # require end_time column
+            assert (
+                "end_time" in row
+            ), "If dur is None, rows must have an 'end_time' column"
             start = row.start_time
             dur = row.end_time - row.start_time
         else:
-            center_t = (row.start_time + row.end_time) / 2
+            # if end time not present, just start from the start time
+            if "end_time" in row:
+                center_t = (row.start_time + row.end_time) / 2
+            else:
+                start = row.start_time
             start = max(0, center_t - dur / 2)
 
         a = Audio.from_file(
