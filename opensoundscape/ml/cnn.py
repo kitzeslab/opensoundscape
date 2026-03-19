@@ -652,11 +652,57 @@ class SpectrogramModule(BaseModule):
         self.compute_per_class_metrics = True
         """if True, compute and log per-class metrics during training/validation"""
 
+    def change_classifier(self, new_classifier, classes=None):
+        """Replaces the classifier layer
+
+        replaces the network's final linear classifier layer with a new classifier
+
+        Args:
+            new_classifier: the new classifier to replace the existing one
+                typically, torch.nn.Linear or opensoundscape.ml.shallow_classifier.MLPClassifier object
+            classes: optional list of class names to set for the new classifier; if None, will attempt to copy from new_classifier.classes attribute
+        """
+        if classes is None:
+            try:
+                classes = new_classifier.classes
+            except AttributeError:
+                raise ValueError(
+                    "classes argument must be provided if new_classifier does not have a .classes attribute"
+                )
+
+        # get the number of input features to the classifier layer
+        # for torch.nn.Linear and MLPClassifier, this is the in_features attribute
+        # check that the new classifier has the same number of input features as the existing classifier layer, if possible
+        try:
+            in_features = self.classifier.in_features
+            assert (
+                new_classifier.in_features == in_features
+            ), f"new_classifier has {new_classifier.in_features} input features, but expected {in_features} to match existing classifier layer."
+        except AttributeError:
+            warnings.warn(
+                "Couldn't access .in_features of current classifier layer to check correct input dimension"
+            )
+
+        # replace the classifier layer with a new layer
+        clf_layer_name = self.network.classifier_layer
+        cnn_architectures.set_layer_from_name(
+            self.network, clf_layer_name, new_classifier
+        )
+
+        # update class list
+        self.classes = classes
+
+        # re-initialize metrics, using the new number of classes
+        # otherwise we'll get errors when computing metrics
+        # (plus we should discard any old metrics after changing classes)
+        self._init_torch_metrics()
+
     def change_classes(self, new_classes, hidden_layers=None):
         """change the classes that the model predicts
 
-        replaces the network's final linear classifier layer with a new layer
-        with random weights and the correct number of output features
+        replaces the network's final linear classifier layer with a new layer (or MLP, if
+        hidden_layers is not None) initialized with random weights and the correct number of output
+        features
 
         Supports torch.nn.Linear and opensoundscape.ml.shallow_classifier.MLPClassifier as the
         classifier layer to update. Will raise an error if self.network.classifier_layer is a
@@ -687,10 +733,11 @@ class SpectrogramModule(BaseModule):
 
         # create a new classifier layer with the correct number of output features
         if hidden_layers is None:
-            new_layer = torch.nn.Linear(in_features, len(new_classes))
+            new_classifier = torch.nn.Linear(in_features, len(new_classes))
+            new_classifier.classes = new_classes  # add classes attribute
         elif isinstance(hidden_layers, (list, tuple)):
             # create an MLPClassifier with the specified hidden layers
-            new_layer = shallow_classifier.MLPClassifier(
+            new_classifier = shallow_classifier.MLPClassifier(
                 input_size=in_features,
                 output_size=len(new_classes),
                 hidden_layer_sizes=hidden_layers,
@@ -702,22 +749,16 @@ class SpectrogramModule(BaseModule):
                 f"Got {hidden_layers} instead."
             )
 
-        # replace the classifier layer with a new layer
-        clf_layer_name = self.network.classifier_layer
-        cnn_architectures.set_layer_from_name(self.network, clf_layer_name, new_layer)
-
-        # update class list
-        self.classes = new_classes
-
-        # re-initialize metrics, using the new number of classes
-        # otherwise we'll get errors when computing metrics
-        # (plus we should discard any old metrics after changing classes)
-        self._init_torch_metrics()
+        self.change_classifier(new_classifier, classes=new_classes)
 
     @property
     def classifier(self):
         """return the classifier layer of the network, based on .network.classifier_layer string"""
         return self.network.get_submodule(self.network.classifier_layer)
+
+    @classifier.setter
+    def classifier(self, new_classifier):
+        self.change_classifier(new_classifier)
 
     @property
     def single_target(self):
@@ -870,7 +911,7 @@ def _warn_output_size(dataloader, size, output_size_warning):
 
 
 @register_model_cls
-class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
+class SpectrogramClassifier(SpectrogramModule):
     """defines pure pytorch train, predict, and eval methods for a spectrogram classifier"""
 
     name = "SpectrogramClassifier"

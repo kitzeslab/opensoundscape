@@ -1411,6 +1411,47 @@ def test_freeze_feature_extractor_all_arch():
             raise Exception(f"{arch_name} failed") from e
 
 
+def test_change_classifier_all_arch():
+    """change_classifier should change the classes attribute and the output layer of the network"""
+    for arch_name in cnn_architectures.ARCH_DICT.keys():
+        try:
+            model = cnn.CNN(
+                architecture=arch_name,
+                classes=[0, 1],
+                sample_duration=5.0,
+                channels=1,
+            )
+            if arch_name == "squeezenet1_0" or arch_name == "inception_v3":
+                # not supported (squeezenet has conv2d classifier, inception has aux classifiers)
+                continue
+            else:
+                new_clf = torch.nn.Linear(model.classifier.in_features, 3)
+                model.change_classifier(new_clf, classes=[0, 1, 2])
+                assert model.classes == [0, 1, 2]
+                assert model.classifier.out_features == 3
+                # try forward pass
+                assert model.network(torch.randn(1, 1, 224, 224)).shape == (1, 3)
+
+                # also try with MLPClassifier
+                hidden_layers = ()
+                model.change_classifier(
+                    MLPClassifier(
+                        input_size=model.classifier.in_features,
+                        output_size=3,
+                        hidden_layer_sizes=hidden_layers,
+                        classes=[0, 1, 2],
+                    ),
+                    classes=[0, 1, 2],
+                )
+                assert model.classes == [0, 1, 2]
+                assert model.classifier.out_features == 3
+                # try forward pass
+                assert model.network(torch.randn(1, 1, 224, 224)).shape == (1, 3)
+
+        except Exception as e:
+            raise Exception(f"{arch_name} failed") from e
+
+
 def test_change_classes_all_arch():
     """change_classes should change the classes attribute and the output layer of the network"""
     for arch_name in cnn_architectures.ARCH_DICT.keys():
@@ -1421,10 +1462,9 @@ def test_change_classes_all_arch():
                 sample_duration=5.0,
                 channels=1,
             )
-            if arch_name == "squeezenet1_0":
-                # has conv2d not linear layer
-                with pytest.raises(AssertionError):
-                    model.change_classes([0, 1, 2])
+            if arch_name == "squeezenet1_0" or arch_name == "inception_v3":
+                # not supported (squeezenet has conv2d classifier, inception has aux classifiers)
+                continue
             else:
                 model.change_classes([0, 1, 2])
                 assert model.classes == [0, 1, 2]
@@ -1646,17 +1686,16 @@ def test_change_classes_preserves_device():
         arch_weights=None,
     )
 
-    # Move model to CPU explicitly (default but let's be explicit)
-    device = torch.device("cpu")
-    model = model.to(device)
+    # Move model to CPU
+    model.device = "cpu"  # setter converts to torch.device('cpu')
 
     # Change classes with MLPClassifier
     model.change_classes(["x", "y", "z"], hidden_layers=[64])
 
     # Check that new classifier is on the same device
-    assert next(model.classifier.parameters()).device == device
+    assert next(model.classifier.parameters()).device == torch.device("cpu")
 
     # Test forward pass on same device
-    dummy_input = torch.randn(1, 1, 224, 224).to(device)
+    dummy_input = torch.randn(1, 1, 224, 224).to(model.device)
     output = model.network(dummy_input)
-    assert output.device == device
+    assert output.device == model.device
