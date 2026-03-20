@@ -118,6 +118,9 @@ autodoc_mock_imports = [
     "torchmetrics",
     "lightning",
     "cv2",
+    "tensorflow",
+    "ipywidgets",
+    "plotly",
 ]
 
 master_doc = "index"

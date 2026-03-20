@@ -405,6 +405,72 @@ def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords):
     ), f"Incorrect result for cc_filters: {[k for k,v in success.items() if not v]}"
 
 
+def test_spatial_event_receiver_removal_and_cc_threshold(LOCA_2021_aru_coords):
+    """Regression test for receiver removal at two stages.
+
+    First, a very short receiver file (tests/audio/veryshort.wav) is dropped
+    during _estimate_delays because its audio segment is shorter than the
+    requested time window. Then, additional receivers are removed by the
+    cross-correlation threshold inside _localize_after_cross_correlation.
+
+    Previously, the first removal converted receiver_files back to a Python
+    list, causing boolean indexing with the cc_threshold mask to fail. This
+    test ensures that receiver_files (and related arrays) remain numpy arrays
+    after the first removal so that the second-stage masking succeeds.
+
+    Confirms fix of issue #1207
+    """
+
+    max_delay = 0.04
+    receiver_start_time_offsets = [0.2] * (len(LOCA_2021_aru_coords) - 1) + [
+        0.1
+    ]  # match test_SpatialEvent_estimate_delays
+    duration = 0.3
+    bandpass_range = (7000, 10000)
+
+    event = localization.SpatialEvent(
+        receiver_files=LOCA_2021_aru_coords.index,
+        receiver_locations=LOCA_2021_aru_coords.values,
+        max_delay=max_delay,
+        receiver_start_time_offsets=receiver_start_time_offsets,
+        duration=duration,
+        class_name="zeep",
+        bandpass_range=bandpass_range,
+        cc_filter="phat",
+    )
+
+    # Step 1: estimate delays, which should drop the very short receiver
+    event._estimate_delays()
+
+    assert "tests/audio/veryshort.wav" not in event.receiver_files
+
+    # Step 2: choose a cc_threshold that removes at least one receiver but
+    # still leaves enough to localize (min_n_receivers default is 3).
+    sorted_cc = np.sort(event.cc_maxs)
+    assert len(sorted_cc) >= 4
+    cc_threshold = 0.5 * (sorted_cc[1] + sorted_cc[2])
+    event.cc_threshold = cc_threshold
+
+    # This call previously crashed when receiver_files had been converted
+    # back to a list and was indexed with a boolean mask.
+    position_estimate = event._localize_after_cross_correlation(
+        localization_algorithm="soundfinder"
+    )
+
+    # Ensure that some receivers were filtered by the cc_threshold and that
+    # all PositionEstimate arrays are consistent and remain numpy arrays.
+    assert len(position_estimate.receiver_files) < len(event.receiver_files)
+    assert (
+        len(position_estimate.receiver_files)
+        == len(position_estimate.receiver_locations)
+        == len(position_estimate.tdoas)
+        == len(position_estimate.cc_maxs)
+        == len(position_estimate.receiver_start_time_offsets)
+    )
+    assert isinstance(position_estimate.receiver_files, np.ndarray)
+    assert isinstance(position_estimate.receiver_start_time_offsets, np.ndarray)
+
+
 def test_SpatialEvent_estimate_delays_auto_timestamps(LOCA_2021_aru_coords):
     # test localization of SpatialEvent when it attempts to find
     # individual file start timestamps from the audio files themselves and start_timestamp

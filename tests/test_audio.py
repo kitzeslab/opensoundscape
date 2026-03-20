@@ -7,6 +7,7 @@ import math
 import numpy.testing as npt
 import pytz
 import datetime
+import pandas as pd
 
 from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
 from opensoundscape import audio
@@ -920,6 +921,11 @@ def test_noise_classmethod():
         assert len(a.samples) == 200
 
 
+def test_noise_short_duration():
+    a = Audio.noise(0.01, 44100, color="white")
+    assert len(a.samples) == 441
+
+
 def test_concat(veryshort_wav_audio):
     a = audio.concat([veryshort_wav_audio, veryshort_wav_audio])
     assert a.duration == 2 * veryshort_wav_audio.duration
@@ -1180,3 +1186,62 @@ def test_multichannelaudio_concat(multichannel_audio):
 def test_multichannel_from_audio_list(veryshort_audio):
     a = audio.MultiChannelAudio.from_audio_list([veryshort_audio, veryshort_audio])
     assert a.n_channels == 2
+
+
+def test_audio_apply():
+    audio = Audio.silence(duration=5, sample_rate=10)
+    ts, windowed_rms = audio.apply(
+        function=lambda x: x.rms,
+        clip_duration=1,
+        clip_step=1,
+    )
+    assert len(ts) == 5
+    assert len(windowed_rms) == 5
+    assert math.isclose(windowed_rms[0], 0.0, abs_tol=1e-6)
+
+
+def test_pad(veryshort_wav_audio):
+    a = veryshort_wav_audio.pad(0.03, 0.05)
+    assert len(a.samples) == len(veryshort_wav_audio.samples) + int(
+        np.round((0.03 + 0.05) * veryshort_wav_audio.sample_rate)
+    )
+    # check that padding is silent
+    assert math.isclose(0.0, np.max(a.samples[:10]), abs_tol=1e-7)
+    assert math.isclose(0.0, np.max(a.samples[-10:]), abs_tol=1e-7)
+    # check that original audio is in the right place
+    offset_samples = int(np.round(0.03 * veryshort_wav_audio.sample_rate))
+    assert np.allclose(
+        a.samples[offset_samples : offset_samples + len(veryshort_wav_audio.samples)],
+        veryshort_wav_audio.samples,
+        atol=1e-7,
+    )
+    # try with noise padding
+    a2 = veryshort_wav_audio.pad(0.03, 0.05, fill="white")
+    assert not math.isclose(0.0, np.max(a2.samples[:20]), abs_tol=1e-7)
+    assert not math.isclose(0.0, np.max(a2.samples[-20:]), abs_tol=1e-7)
+    assert len(a2.samples) == len(veryshort_wav_audio.samples) + int(
+        np.round((0.03 + 0.05) * veryshort_wav_audio.sample_rate)
+    )
+
+
+def test_pad_both_sides(veryshort_wav_audio):
+    a = veryshort_wav_audio.pad(0.05)
+    assert len(a.samples) == len(veryshort_wav_audio.samples) + int(
+        2 * int(0.05 * veryshort_wav_audio.sample_rate)
+    )
+
+
+def test_pad_to(veryshort_wav_audio):
+    a = veryshort_wav_audio.pad_to(0.2)
+    assert math.isclose(a.duration, 0.2, abs_tol=1e-5)
+    # check that padding is silent
+    assert math.isclose(0.0, np.max(a.samples[-10:]), abs_tol=1e-7)
+    # check that original audio is in the right place (centered)
+    offset_samples = int(
+        (0.2 - veryshort_wav_audio.duration) / 2 * veryshort_wav_audio.sample_rate
+    )
+    assert np.allclose(
+        a.samples[offset_samples : offset_samples + len(veryshort_wav_audio.samples)],
+        veryshort_wav_audio.samples,
+        atol=1e-7,
+    )
