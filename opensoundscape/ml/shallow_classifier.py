@@ -505,33 +505,39 @@ def fit_classifier_on_embeddings(
 
     else:
         print(f"Embedding the training samples without augmentation")
-        x_train = torch.tensor(
-            embedding_model.embed(
-                train_df[[]],
-                return_dfs=False,
-                batch_size=embedding_batch_size,
-                num_workers=embedding_num_workers,
-                progress_bar=True,
-                audio_root=audio_root,
-            )
-        ).to(device)
-        y_train = torch.tensor(train_df.values).to(device).float()
+        x_train = embedding_model.embed(
+            train_df[[]],
+            return_dfs=False,
+            batch_size=embedding_batch_size,
+            num_workers=embedding_num_workers,
+            progress_bar=True,
+            audio_root=audio_root,
+        )
+        y_train = train_df.values
+
+    # cast to float tensor and move to device
+    # MPS framework doesn't support float64, so force float32 (.float() is an alias for float32)
+    x_train = torch.as_tensor(x_train, dtype=torch.float32, device=device)
+    y_train = torch.as_tensor(y_train, dtype=torch.float32, device=device)
 
     if validation_df is None:
         x_val = None
         y_val = None
     else:
         print("Embedding the validation samples")
-        x_val = torch.tensor(
-            embedding_model.embed(
-                validation_df[[]],
-                return_dfs=False,
-                batch_size=embedding_batch_size,
-                num_workers=embedding_num_workers,
-                audio_root=audio_root,
-            )
-        ).to(device)
-        y_val = torch.tensor(validation_df.values).to(device).float()
+        x_val = embedding_model.embed(
+            validation_df[[]],
+            return_dfs=False,
+            batch_size=embedding_batch_size,
+            num_workers=embedding_num_workers,
+            audio_root=audio_root,
+        )
+        y_val = validation_df.values
+
+        # cast to float and move to device
+        # note that MPS framework doesn't support float64, use float32 instead
+        x_val = torch.as_tensor(x_val, dtype=torch.float32, device=device)
+        y_val = torch.as_tensor(y_val, dtype=torch.float32, device=device)
 
     print("Fitting the classifier")
     metrics = fit(
