@@ -92,6 +92,7 @@ crowsetta = ">=5.0.2"
 tensorflow = ["tensorflow", "tensorflow-hub"]
 viz = ["ipywidgets", "plotly"]
 onnx = ["onnx", "onnx-runtime", "onnxscript"]
+all = ["ipywidgets", "plotly", "tensorflow", "tensorflow-hub", "onnx", "onnxruntime", "onnxscript"]
 
 [tool.black]
 line-length = 88

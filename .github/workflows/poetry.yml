@@ -30,7 +30,8 @@ jobs:
       - name: Install poetry
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
-        run: /home/runner/.local/bin/poetry install
+      # include extras
+        run: /home/runner/.local/bin/poetry install --extras all
       - name: Workaround for missing pytorch dependencies during poetry install
         run: /home/runner/.local/bin/poetry run pip install torch
       - name: Poetry run pytest
@@ -59,7 +60,7 @@ jobs:
   #     - name: Install poetry
   #       run: curl -sSL https://install.python-poetry.org | python
   #     - name: Poetry install
-  #       run: /Users/runner/.local/bin/poetry install
+  #       run: /Users/runner/.local/bin/poetry install --extras all
   #     - name: Workaround for missing pytorch dependencies during poetry install
   #       run: /Users/runner/.local/bin/poetry run pip install torch
   #     - name: Poetry run pytest
@@ -98,7 +99,7 @@ jobs:
 #       - name: Install poetry
 #         run: curl -sSL https://install.python-poetry.org | python3
 #       - name: Poetry install
-#         run: /root/.local/bin/poetry install
+#         run: /root/.local/bin/poetry install --extras all
 #       - name: Poetry run black check
 #         run: /root/.local/bin/poetry run black . --check --diff
 #       - name: Poetry run pytest
