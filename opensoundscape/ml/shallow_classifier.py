@@ -4,6 +4,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 import opensoundscape
 from opensoundscape.ml.utils import _version_mismatch_warn
 from torch.utils.data import DataLoader, Dataset
+import pandas as pd
 
 
 class MLPClassifier(torch.nn.Module):
@@ -83,7 +84,7 @@ class MLPClassifier(torch.nn.Module):
         early_stopping_patience=None,
     ):
         # note that docstring is copied from fit()
-        fit(
+        return fit(
             model=self,
             train_features=train_features,
             train_labels=train_labels,
@@ -215,6 +216,18 @@ def fit(
     # move the model to the device
     model.to(device)
 
+    # if dataframes, extract values
+    if isinstance(train_features, pd.DataFrame):
+        train_features = train_features.values
+    if isinstance(train_labels, pd.DataFrame):
+        train_labels = train_labels.values
+    if validation_features is not None and isinstance(
+        validation_features, pd.DataFrame
+    ):
+        validation_features = validation_features.values
+    if validation_labels is not None and isinstance(validation_labels, pd.DataFrame):
+        validation_labels = validation_labels.values
+
     # convert x and y to tensors and move to the device
     train_features = torch.as_tensor(train_features, dtype=torch.float32, device=device)
     train_labels = torch.as_tensor(train_labels, dtype=torch.float32, device=device)
@@ -307,10 +320,8 @@ def fit(
             # log the loss and metrics
             if (step + 1) % logging_interval == 0:
                 print(
-                    f"Epoch {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}"
+                    f"Epoch {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}, val AU ROC: {auroc:0.3f}, val MAP: {map:0.3f}"
                 )
-                print(f"\tval AU ROC: {auroc:0.3f}")
-                print(f"\tval MAP: {map:0.3f}")
 
             # Check early stopping condition based on steps since last improvement
             if early_stopping_patience is not None and best_step >= 0:
