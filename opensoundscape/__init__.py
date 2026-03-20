@@ -14,6 +14,7 @@ from . import preprocess
 from . import logging
 from . import localization
 from . import sample_data
+from . import visualization
 
 # expose some modules at the top level
 from .ml import cnn, cnn_architectures, shallow_classifier

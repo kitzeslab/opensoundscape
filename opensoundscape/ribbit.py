@@ -84,7 +84,7 @@ def ribbit(
     clip_overlap=None,
     clip_overlap_fraction=None,
     clip_step=None,
-    final_clip="extend",
+    final_clip="remainder",
     noise_bands=None,
     spec_clip_range=(-100, -20),
     plot=False,
@@ -115,7 +115,8 @@ def ribbit(
                 clip_duration)
             - "full": Increase overlap with previous clip to yield a clip with
                 clip_duration length
-            Note that the "extend" option is not supported for RIBBIT.
+            - "extend": Extend the final clip with zeros (silence) to yield a clip with
+                clip_duration length
 
         noise_bands: list of frequency ranges to subtract from the signal_band
             For instance: [ [min1,max1] , [min2,max2] ]
@@ -178,12 +179,6 @@ def ribbit(
         - calculate power spectral density of the amplitude time series
         - score the file based on the max value of power spectral density in the pulse rate range
     """
-    if final_clip == "extend":
-        raise ValueError(
-            "final_clip='extend' is not supported for RIBBIT. "
-            "consider using 'remainder'."
-        )
-
     # clip extreme values in the spectrogram to lie within spec_clip_range
     min_val, max_val = spec_clip_range
     spectrogram = spectrogram.limit_range(min_val, max_val)
@@ -211,6 +206,11 @@ def ribbit(
     for i, row in clip_df.iterrows():
         # extract the amplitude signal for this clip
         window = amplitude[(time >= row["start_time"]) & (time < row["end_time"])]
+
+        # extend with silence if less than expected duration
+        expected_length = int(clip_duration * sample_rate)
+        if len(window) < expected_length:
+            window = np.pad(window, (0, expected_length - len(window)), mode="constant")
 
         if plot:
             print(f"window: {row['start_time']} to {row['end_time']} sec")

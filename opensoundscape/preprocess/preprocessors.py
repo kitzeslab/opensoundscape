@@ -668,7 +668,9 @@ class AudioPreprocessor(BasePreprocessor):
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
-                "load_audio": AudioClipLoader(sample_rate=sample_rate),
+                "load_audio": AudioClipLoader(
+                    out_of_bounds_mode="ignore", sample_rate=sample_rate
+                ),
                 # trim samples to correct length
                 # if extend_short_clips=True, extend short clips with silence
                 "trim_audio": AudioTrim(
