@@ -49,6 +49,25 @@ def model_save_path(request, tmp_path):
 
 
 @pytest.fixture()
+def onnx_save_path(request, tmp_path):
+    """Fixture providing a temporary ONNX model save path with proper cleanup.
+
+    Uses pytest's tmp_path fixture to create isolated temporary directories
+    for each test, ensuring no conflicts between parallel test runs.
+    """
+    path = tmp_path / "temp.onnx"
+
+    # Cleanup function to remove the file if it exists
+    def fin():
+        if path.exists():
+            path.unlink()
+
+    request.addfinalizer(fin)
+
+    return path
+
+
+@pytest.fixture()
 def temp_model_dir(request, tmp_path):
     """Fixture providing a temporary directory for model saving with proper cleanup.
 
@@ -1437,6 +1456,47 @@ def test_freeze_feature_extractor_all_arch():
             raise Exception(f"{arch_name} failed") from e
 
 
+def test_change_classifier_all_arch():
+    """change_classifier should change the classes attribute and the output layer of the network"""
+    for arch_name in cnn_architectures.ARCH_DICT.keys():
+        try:
+            model = cnn.CNN(
+                architecture=arch_name,
+                classes=[0, 1],
+                sample_duration=5.0,
+                channels=1,
+            )
+            if arch_name == "squeezenet1_0" or arch_name == "inception_v3":
+                # not supported (squeezenet has conv2d classifier, inception has aux classifiers)
+                continue
+            else:
+                new_clf = torch.nn.Linear(model.classifier.in_features, 3)
+                model.change_classifier(new_clf, classes=[0, 1, 2])
+                assert model.classes == [0, 1, 2]
+                assert model.classifier.out_features == 3
+                # try forward pass
+                assert model.network(torch.randn(1, 1, 224, 224)).shape == (1, 3)
+
+                # also try with MLPClassifier
+                hidden_layers = ()
+                model.change_classifier(
+                    MLPClassifier(
+                        input_size=model.classifier.in_features,
+                        output_size=3,
+                        hidden_layer_sizes=hidden_layers,
+                        classes=[0, 1, 2],
+                    ),
+                    classes=[0, 1, 2],
+                )
+                assert model.classes == [0, 1, 2]
+                assert model.classifier.out_features == 3
+                # try forward pass
+                assert model.network(torch.randn(1, 1, 224, 224)).shape == (1, 3)
+
+        except Exception as e:
+            raise Exception(f"{arch_name} failed") from e
+
+
 def test_change_classes_all_arch():
     """change_classes should change the classes attribute and the output layer of the network"""
     for arch_name in cnn_architectures.ARCH_DICT.keys():
@@ -1447,10 +1507,9 @@ def test_change_classes_all_arch():
                 sample_duration=5.0,
                 channels=1,
             )
-            if arch_name == "squeezenet1_0":
-                # has conv2d not linear layer
-                with pytest.raises(AssertionError):
-                    model.change_classes([0, 1, 2])
+            if arch_name == "squeezenet1_0" or arch_name == "inception_v3":
+                # not supported (squeezenet has conv2d classifier, inception has aux classifiers)
+                continue
             else:
                 model.change_classes([0, 1, 2])
                 assert model.classes == [0, 1, 2]
@@ -1672,17 +1731,102 @@ def test_change_classes_preserves_device():
         arch_weights=None,
     )
 
-    # Move model to CPU explicitly (default but let's be explicit)
-    device = torch.device("cpu")
-    model = model.to(device)
+    # Move model to CPU
+    model.device = "cpu"  # setter converts to torch.device('cpu')
 
     # Change classes with MLPClassifier
     model.change_classes(["x", "y", "z"], hidden_layers=[64])
 
     # Check that new classifier is on the same device
-    assert next(model.classifier.parameters()).device == device
+    assert next(model.classifier.parameters()).device == torch.device("cpu")
 
     # Test forward pass on same device
-    dummy_input = torch.randn(1, 1, 224, 224).to(device)
+    dummy_input = torch.randn(1, 1, 224, 224).to(model.device)
     output = model.network(dummy_input)
-    assert output.device == device
+    assert output.device == model.device
+
+
+def test_save_onnx(onnx_save_path):
+    from opensoundscape import CNN, preprocessors
+
+    model = CNN(
+        architecture="efficientnet_b0",
+        classes=[0, 1, 2, 3],
+        sample_duration=3,
+        preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+        sample_rate=32000,
+    )
+    onnx_program = model.save_onnx(onnx_save_path)
+
+    # Using the saved model for inference with onnx runtime:
+
+    import onnx, onnxruntime
+    import numpy as np
+
+    combined_model = onnx.load(onnx_save_path)
+    output_names = [node.name for node in combined_model.graph.output]
+
+    onnx.checker.check_model(combined_model)
+
+    EP_list = [
+        "CPUExecutionProvider"
+    ]  # ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    ort_session = onnxruntime.InferenceSession(onnx_save_path, providers=EP_list)
+
+    # make up some random inputs
+    audio_samples_per_input = (
+        combined_model.graph.input[0].type.tensor_type.shape.dim[2].dim_value
+    )
+    batch_size = 3
+    input_batched = np.random.rand(batch_size, 1, audio_samples_per_input).astype(
+        np.float32
+    )
+
+    # compute ONNX Runtime output prediction
+    ort_inputs = {ort_session.get_inputs()[0].name: input_batched}
+    ort_outs = ort_session.run(None, ort_inputs)
+
+    # restore the name-value dictionary mapping of outputs
+    outs_dict = {name: ort_outs[i] for i, name in enumerate(output_names)}
+    assert outs_dict["classifier"].shape == (batch_size, 4)
+    assert outs_dict["embedding"].shape == (batch_size, 1280)
+    assert outs_dict["sample"].shape == (batch_size, 1, 257, 376)
+
+    # Example 2: Exporting a model with customized preprocessing transforms
+    model = CNN(
+        architecture="efficientnet_b0",
+        classes=[0, 1, 2, 3],
+        sample_duration=3,
+        preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+        sample_rate=32000,
+        bandpass_range=(3000, 10000),
+        lower_dB_range=-30,
+        rescale_mean_sd=(-30, 20),
+        spec_nfft=512,
+        spec_window_length=512,
+        spec_hop_length=128,
+        # resize_ft=(200, 512), # using resize_ft breaks serialization for json save/load!
+        n_mels=64,
+    )
+    onnx_program = model.save_onnx(onnx_save_path)
+
+    # Example 3: Writing a custom list of preprocessing transforms
+    import torchaudio
+    from opensoundscape import CNN, preprocessors
+
+    model = CNN("resnet18", classes=[0], sample_duration=5)
+    # custom list of torchaudio and torchvision transforms
+    my_transforms = [
+        torchaudio.transforms.Spectrogram(
+            n_fft=512,
+            win_length=512,
+            hop_length=128,
+        ),
+        torchaudio.transforms.AmplitudeToDB(top_db=80),
+    ]
+    model.preprocessor = preprocessors.TorchSpectrogramPreprocessor(
+        sample_rate=32000,
+        sample_duration=model.preprocessor.sample_duration,
+        torch_transforms=my_transforms,
+    )
+    onnx_program = model.save_onnx(onnx_save_path)

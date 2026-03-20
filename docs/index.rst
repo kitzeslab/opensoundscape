@@ -108,6 +108,7 @@ Suggested citation:
    tutorials/acoustic_localization
    tutorials/RIBBIT_pulse_rate_demo
    tutorials/ruffed_grouse_detector
+   tutorials/visualization
 
 .. toctree::
    :maxdepth: 2

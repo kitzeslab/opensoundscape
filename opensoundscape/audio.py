@@ -1055,6 +1055,57 @@ class Audio:
 
         return clips, clip_df
 
+    def apply(
+        self,
+        function,
+        clip_duration,
+        clip_overlap=None,
+        clip_overlap_fraction=None,
+        clip_step=None,
+        final_clip="extend",
+        rounding_precision=10,
+        **kwargs,
+    ):
+        """Apply a function to windowed signal, return (times,values)
+
+        Args:
+            function: a function that takes an Audio object as its first argument
+                and returns a value (e.g. scalar, array, etc.)
+            clip_duration: duration (seconds) of each window
+            clip_overlap: overlap (seconds) of each window [default: None]
+            clip_overlap_fraction: fraction of overlap (0 to 1) of each window
+                [default: None]
+            clip_step: step size (seconds) between windows [default: None]
+            final_clip: behavior if final_clip is less than clip_duration seconds long.
+                [default: "extend"]
+                Possible options (any other input will ignore the final clip entirely),
+                    - "remainder": Include the remainder of the Audio (clip will not have
+                      clip_duration length)
+                    - "full": Increase the overlap to yield a clip with clip_duration length
+                    - "extend": Similar to remainder but extend (repeat) the clip to reach
+                      clip_duration length
+                    - None: Discard the remainder
+            rounding_precision: number of decimal places to round clip start and end times
+                - helps avoid floating point issues when generating clip times
+            return_df: if True, returns dataframe with the computed value as 'value' column in a
+                dataframe with clip start_time and end_time columns
+            **kwargs: additional keyword arguments to pass to the function
+        Returns:
+            (window start times, values)
+        """
+        clip_times_df = generate_clip_times_df(
+            full_duration=self.duration,
+            clip_duration=clip_duration,
+            clip_overlap=clip_overlap,
+            clip_overlap_fraction=clip_overlap_fraction,
+            clip_step=clip_step,
+            final_clip=final_clip,
+            rounding_precision=rounding_precision,
+        )
+
+        results = [function(self.trim(s, e), **kwargs) for s, e in clip_times_df.values]
+        return clip_times_df["start_time"].values.tolist(), results
+
     def split_and_save(
         self,
         destination,
@@ -1167,22 +1218,22 @@ def load_channels_as_audio(
         metadata_dict = None
 
     ## Load samples ##
-    warnings.filterwarnings("ignore")
-    samples, sr = librosa.load(
-        path,
-        sr=sample_rate,
-        res_type=resample_type,
-        mono=False,
-        offset=offset,
-        duration=duration,
-        dtype=None,
-    )
-    # temporary workaround for soundfile issue #349
-    # which causes empty sample array if loading float32 from mp3:
-    # pass dtype=None, then change it afterwards
-    samples = samples.astype(dtype)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        samples, sr = librosa.load(
+            path,
+            sr=sample_rate,
+            res_type=resample_type,
+            mono=False,
+            offset=offset,
+            duration=duration,
+            dtype=None,
+        )
+        # temporary workaround for soundfile issue #349
+        # which causes empty sample array if loading float32 from mp3:
+        # pass dtype=None, then change it afterwards
+        samples = samples.astype(dtype)
 
-    warnings.resetwarnings()
     if len(np.shape(samples)) == 1:
         samples = [samples]
 
@@ -1819,21 +1870,22 @@ def _audio_from_file_handler(
         offset = 0
 
     ## Load samples ##
-    warnings.filterwarnings("ignore")
-    samples, sr = librosa.load(
-        path,
-        sr=sample_rate,
-        res_type=resample_type,
-        mono=to_mono,
-        offset=offset,
-        duration=duration,
-        dtype=None,
-    )
-    # temporary workaround for soundfile issue #349
-    # which causes empty sample array if loading float32 from mp3:
-    # pass dtype=None, then change it afterwards
-    samples = samples.astype(dtype)
-    warnings.resetwarnings()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        samples, sr = librosa.load(
+            path,
+            sr=sample_rate,
+            res_type=resample_type,
+            mono=to_mono,
+            offset=offset,
+            duration=duration,
+            dtype=None,
+        )
+        # temporary workaround for soundfile issue #349
+        # which causes empty sample array if loading float32 from mp3:
+        # pass dtype=None, then change it afterwards
+        samples = samples.astype(dtype)
 
     # out of bounds warning/exception user if no samples or too short
     if len(samples) == 0:
