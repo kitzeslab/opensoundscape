@@ -1,0 +1,77 @@
+name: Tutorial Notebooks
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run_notebooks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.13"
+      - name: Update package list for apt-get
+        run: sudo apt-get update
+      - name: Install libsndfile1
+        run: sudo apt-get install libsndfile1
+      - name: Install ffmpeg v4
+        run: sudo snap install ffmpeg
+      - name: Install poetry
+        run: curl -sSL https://install.python-poetry.org | python
+      - name: Poetry install
+        run: /home/runner/.local/bin/poetry install
+      - name: Workaround for missing pytorch dependencies during poetry install
+        run: /home/runner/.local/bin/poetry run pip install torch
+      - name: Install nbconvert
+        run: /home/runner/.local/bin/poetry run pip install nbconvert jupyter
+
+      - name: Run all tutorial notebooks
+        id: run_notebooks
+        run: |
+          failed=()
+          passed=()
+
+          for notebook in docs/tutorials/*.ipynb; do
+            echo "::group::Running $notebook"
+            if /home/runner/.local/bin/poetry run jupyter nbconvert \
+                --to notebook \
+                --execute \
+                --ExecutePreprocessor.timeout=1800 \
+                --output /tmp/$(basename "$notebook") \
+                "$notebook"; then
+              passed+=("$notebook")
+              echo "PASSED: $notebook"
+            else
+              failed+=("$notebook")
+              echo "FAILED: $notebook"
+            fi
+            echo "::endgroup::"
+          done
+
+          echo ""
+          echo "===== NOTEBOOK EXECUTION SUMMARY ====="
+          echo ""
+          echo "Passed (${#passed[@]}):"
+          for nb in "${passed[@]}"; do
+            echo "  ✓ $nb"
+          done
+
+          echo ""
+          echo "Failed (${#failed[@]}):"
+          for nb in "${failed[@]}"; do
+            echo "  ✗ $nb"
+          done
+
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo ""
+            echo "::error::${#failed[@]} notebook(s) failed: ${failed[*]}"
+            exit 1
+          else
+            echo ""
+            echo "All notebooks passed."
+          fi

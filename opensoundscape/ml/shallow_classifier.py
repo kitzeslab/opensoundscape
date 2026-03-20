@@ -5,6 +5,7 @@ import opensoundscape
 from opensoundscape.ml.utils import _version_mismatch_warn
 from torch.utils.data import DataLoader, Dataset
 from opensoundscape.ml.loss import BCELossWeakNegatives
+import pandas as pd
 
 
 class MLPClassifier(torch.nn.Module):
@@ -542,6 +543,18 @@ def fit(
     # move the model to the device
     model.to(device)
 
+    # if dataframes, extract values
+    if isinstance(train_features, pd.DataFrame):
+        train_features = train_features.values
+    if isinstance(train_labels, pd.DataFrame):
+        train_labels = train_labels.values
+    if validation_features is not None and isinstance(
+        validation_features, pd.DataFrame
+    ):
+        validation_features = validation_features.values
+    if validation_labels is not None and isinstance(validation_labels, pd.DataFrame):
+        validation_labels = validation_labels.values
+
     # convert x and y to tensors and move to the device
     train_features = torch.as_tensor(train_features, dtype=torch.float32, device=device)
     train_labels = torch.as_tensor(train_labels, dtype=torch.float32, device=device)
@@ -643,10 +656,8 @@ def fit(
             # log the loss and metrics
             if (step + 1) % logging_interval == 0:
                 print(
-                    f"Step {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}"
+                    f"Step {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}, val AU ROC: {auroc:0.3f}, val MAP: {map:0.3f}"
                 )
-                print(f"\tval AU ROC: {auroc:0.3f}")
-                print(f"\tval MAP: {map:0.3f}")
 
             # Check early stopping condition based on steps since last improvement
             if early_stopping_patience is not None and best_step >= 0:
@@ -821,7 +832,9 @@ def fit_classifier_on_embeddings(
             if None, assumes train_df and validation_df already have absolute audio paths
 
     Returns:
-        x_train, y_train, x_val, y_val: the embedded training and validation samples and their labels, as torch.tensor
+        x_train, y_train, x_val, y_val, metrics:
+        the embedded training and validation samples and their labels, as torch.tensor, plus a
+        dictionary of validation metrics for the best model found during training
     """
     if n_augmentation_variants > 0:
         print(
@@ -829,7 +842,7 @@ def fit_classifier_on_embeddings(
         )
         x_train, y_train = augmented_embed(
             embedding_model,
-            train_df,
+            train_df[[]],
             n_augmentation_variants=n_augmentation_variants,
             batch_size=embedding_batch_size,
             num_workers=embedding_num_workers,
@@ -839,33 +852,39 @@ def fit_classifier_on_embeddings(
 
     else:
         print(f"Embedding the training samples without augmentation")
-        x_train = torch.tensor(
-            embedding_model.embed(
-                train_df,
-                return_dfs=False,
-                batch_size=embedding_batch_size,
-                num_workers=embedding_num_workers,
-                progress_bar=True,
-                audio_root=audio_root,
-            )
-        ).to(device)
-        y_train = torch.tensor(train_df.values).to(device).float()
+        x_train = embedding_model.embed(
+            train_df[[]],
+            return_dfs=False,
+            batch_size=embedding_batch_size,
+            num_workers=embedding_num_workers,
+            progress_bar=True,
+            audio_root=audio_root,
+        )
+        y_train = train_df.values
+
+    # cast to float tensor and move to device
+    # MPS framework doesn't support float64, so force float32 (.float() is an alias for float32)
+    x_train = torch.as_tensor(x_train, dtype=torch.float32, device=device)
+    y_train = torch.as_tensor(y_train, dtype=torch.float32, device=device)
 
     if validation_df is None:
         x_val = None
         y_val = None
     else:
         print("Embedding the validation samples")
-        x_val = torch.tensor(
-            embedding_model.embed(
-                validation_df,
-                return_dfs=False,
-                batch_size=embedding_batch_size,
-                num_workers=embedding_num_workers,
-                audio_root=audio_root,
-            )
-        ).to(device)
-        y_val = torch.tensor(validation_df.values).to(device).float()
+        x_val = embedding_model.embed(
+            validation_df[[]],
+            return_dfs=False,
+            batch_size=embedding_batch_size,
+            num_workers=embedding_num_workers,
+            audio_root=audio_root,
+        )
+        y_val = validation_df.values
+
+        # cast to float and move to device
+        # note that MPS framework doesn't support float64, use float32 instead
+        x_val = torch.as_tensor(x_val, dtype=torch.float32, device=device)
+        y_val = torch.as_tensor(y_val, dtype=torch.float32, device=device)
 
     print("Fitting the classifier")
     metrics = fit(
