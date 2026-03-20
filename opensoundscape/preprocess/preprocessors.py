@@ -679,7 +679,7 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
                 ignored if torch_transforms is provided
             n_mels: if not None, use MelScale transform to convert to mel spectrogram
                 with n_mels frequency bins
-                [default: None]
+                [default: None produces linear-frequency spectrogram]
                 ignored if torch_transforms is provided
 
         Returns:

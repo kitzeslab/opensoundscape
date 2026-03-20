@@ -2804,7 +2804,7 @@ class SpectrogramClassifier(SpectrogramModule):
             spec_window_length=512,
             spec_hop_length=128,
             # resize_ft=(200, 512), # using resize_ft breaks serialization for json save/load!
-            mel_scale=True,
+            n_mels=64,
         )
         onnx_program = model.save_onnx("./opso_efficientnet_melspec.onnx")
         ```
