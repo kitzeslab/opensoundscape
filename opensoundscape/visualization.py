@@ -308,9 +308,12 @@ def inspect(
             # if end time not present, just start from the start time
             if "end_time" in row:
                 center_t = (row.start_time + row.end_time) / 2
+                start = center_t - dur / 2
+
             else:
                 start = row.start_time
-            start = max(0, center_t - dur / 2)
+            # clamp negative values to 0
+            start = max(0, start)
 
         a = Audio.from_file(
             row.file,
