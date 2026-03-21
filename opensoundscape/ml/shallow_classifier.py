@@ -1028,6 +1028,8 @@ def find_matching_windows(
         window.datetime = recording.datetime
 
     # now filter by time if time_range is provided
+    import datetime
+
     if time_range is not None:
         start_t, end_t = time_range
         for w in windows:
@@ -1035,13 +1037,12 @@ def find_matching_windows(
                 w.time = w.datetime.time()
             else:
                 w.time = None
-        if time_range[0] is not None:
-            import datetime
+        if start_t is not None:
 
             if isinstance(start_t, str):
                 start_t = datetime.datetime.strptime(start_t, "%H:%M:%S").time()
             windows = [w for w in windows if w.time is not None and w.time >= start_t]
-        if time_range[1] is not None:
+        if end_t is not None:
             if isinstance(end_t, str):
                 end_t = datetime.datetime.strptime(end_t, "%H:%M:%S").time()
             windows = [w for w in windows if w.time is not None and w.time <= end_t]
@@ -1124,26 +1125,6 @@ def select_from_hoplite(
         windows_filter=windows_filter,
         annotations_filter=annotations_filter,
     )
-
-    # now filter by time if time_range is provided
-    if time_range is not None:
-        for w in matching_windows:
-            if hasattr(w, "datetime") and w.datetime is not None:
-                w.time = w.datetime.time()
-            else:
-                w.time = None
-        if time_range[0] is not None:
-            matching_windows = [
-                w
-                for w in matching_windows
-                if w.time is not None and w.time >= time_range[0]
-            ]
-        if time_range[1] is not None:
-            matching_windows = [
-                w
-                for w in matching_windows
-                if w.time is not None and w.time <= time_range[1]
-            ]
 
     # apply classifier in batches to matching windows
     all_scores = []
