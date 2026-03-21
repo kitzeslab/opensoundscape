@@ -9,6 +9,8 @@ import numpy as np
 from pathlib import Path
 import warnings
 import pandas as pd
+from ml_collections import ConfigDict, config_dict
+from collections import defaultdict
 
 
 def load_or_create_hoplite_usearch_db(db, embedding_dim=None, cfg=None):
@@ -104,7 +106,7 @@ def _insert_embeddings(
         inserts the embeddings into the hoplite database
         adds new recordings to the database as needed
     """
-    # insert the embeddings one-by-one to the hoplite db
+    # check database types and float range
     db_dtype = db.get_embedding_dtype()
     max_float = np.finfo(np.dtype(db_dtype)).max
 
@@ -149,6 +151,8 @@ def _insert_embeddings(
         start_time = audiosample.start_time
         end_time = start_time + audiosample.duration
         try:
+            # TODO: use insert_windows_batch
+            # TODO: use hoplite's new options for 'raise', 'overwrite', 'ignore', 'add' duplicate keys
             db.insert_window(
                 recording_id=recording_id,
                 embedding=batch_embeddings[j],
@@ -156,13 +160,160 @@ def _insert_embeddings(
             )
         except RuntimeError as e:
             # duplicate key error, window already exists
-            if 'Duplicate key' in str(e):
+            if "Duplicate key" in str(e):
                 failed_to_insert.append(
                     (file, start_time, end_time, "duplicate window")
                 )
             else:
                 raise e
     return failed_to_insert
+
+
+def normalize_index_to_tuples(idx, rounding_precision=6):
+    """normalize an index of (filename, start_time, end_time) tuples to account for potential float precision issues and Path vs str differences"""
+    if isinstance(idx, (list, np.ndarray)):
+        idx = pd.Index(idx)
+    if isinstance(idx, pd.MultiIndex):
+        idx = idx.to_flat_index()
+    return [
+        (
+            # ignore non-relevant Path differences like // vs /
+            str(Path(t[0])),
+            # round numeric start/end times
+            round(float(t[1]), rounding_precision),
+            round(float(t[2]), rounding_precision),
+        )
+        for t in idx
+    ]
+
+
+def normalize_windows_to_tuples(windows, rounding_precision=6):
+    """helper function to convert list of hoplite windows to list of (filename, start_time, end_time) tuples"""
+    return [
+        (
+            str(Path(w.filename)),
+            round(float(w.offsets[0]), 6),
+            round(float(w.offsets[1]), 6),
+        )
+        for w in windows
+    ]
+
+
+def get_existing_windows(
+    db, files, deployment_id=None, deployment_name=None, project=None
+):
+    """retrieve db windows for list of files, filtering by deployment/project"""
+    # normalize paths, this will remove artifacts like double slashes that could cause mismatches with db entries
+    file_list = [str(Path(f)) for f in files]
+
+    # establish filters for windows from matching files, optionally constraining to deployment/project
+    recordings_filter = config_dict.create(isin=dict(filename=file_list))
+    # deployment_id takes precedence over deployment_name
+    if deployment_id is not None:
+        if project is not None:
+            # get deployment ids matching both deployment_id and project
+            deployments_filter = config_dict.create(
+                eq=dict(id=deployment_id, project=project),
+            )
+        else:
+            deployments_filter = config_dict.create(
+                eq=dict(id=deployment_id),
+            )
+    elif deployment_name is not None:
+        if project is not None:
+            # get deployment ids matching both deployment_name and project
+            deployments_filter = config_dict.create(
+                eq=dict(name=deployment_name, project=project),
+            )
+        else:
+            deployments_filter = config_dict.create(
+                eq=dict(name=deployment_name),
+            )
+    else:
+        deployments_filter = None
+
+    # map of existing recording ids to resolved paths
+    id_to_recording = {rec.id: str(rec.filename) for rec in db.get_all_recordings()}
+
+    # get window ids from db matching these recordings (and deployment/project if specified)
+    window_ids = db.match_window_ids(
+        recordings_filter=recordings_filter, deployments_filter=deployments_filter
+    )
+    # returned windows not guaranteed to be in the same order as the window_ids!
+    windows = db.get_all_windows(filter=config_dict.create(isin=dict(id=window_ids)))
+
+    # add filename to each window based on recording_id
+    for w in windows:
+        w.filename = id_to_recording[w.recording_id]
+
+    return windows
+
+
+def build_index(B):
+    index = defaultdict(list)
+    for i, t in enumerate(B):
+        index[t].append(i)
+    return index
+
+
+def find_matches(A, B):
+    index = build_index(B)
+    return [tuple(index.get(a, ())) for a in A]
+
+
+def _find_matching_window_ids(
+    db,
+    clips,
+    deployment_id=None,
+    deployment_name=None,
+    project=None,
+    rounding_precision=6,
+):
+    """find window ids in the db matching each of the given clips (defined by their filename, start_time, and end_time), optionally constrained to a deployment/project
+
+    Args:
+        db: a hoplite database object
+        clips: pd.DataFrame with MultiIndex (filename, start_time, end_time)
+        deployment_id: optional int, deployment id to constrain matching
+            - if both deployment_id and deployment_name are provided, deployment_id takes precedence
+        deployment_name: optional str, deployment name to constrain matching
+        project: optional str, project name to constrain matching
+        rounding_precision: int, number of decimal places to round start_time and end_time to when matching, to account for potential float precision issues
+    Returns:
+        list of window_id tuples for each row in clips; eg [(), (0,), (3,1)]
+    """
+    from ml_collections import config_dict
+
+    if len(clips) == 0:
+        print("Zero samples passed to _find_matching_window_ids")
+        return []
+
+    # first make list of files in input clips dataframe
+    file_list = clips.index.get_level_values(0).unique()
+
+    windows = get_existing_windows(
+        db,
+        file_list,
+        deployment_id=deployment_id,
+        deployment_name=deployment_name,
+        project=project,
+    )
+
+    # normalize index tuples to account for potential float precision issues and Path vs str differences
+    clip_df_tuples = normalize_index_to_tuples(
+        clips.index, rounding_precision=rounding_precision
+    )
+    db_window_tuples = normalize_windows_to_tuples(
+        windows, rounding_precision=rounding_precision
+    )
+
+    # find matching window ids for each clip in the input dataframe efficiently
+    match_positions = find_matches(clip_df_tuples, db_window_tuples)
+    window_ids = [w.id for w in windows]
+    matching_window_ids = [
+        tuple(window_ids[pos] for pos in positions) for positions in match_positions
+    ]
+    return matching_window_ids
 
 
 def _handle_existing_windows(
@@ -172,7 +323,7 @@ def _handle_existing_windows(
     deployment_id=None,
     deployment_name=None,
     project=None,
-    rounding_precision=3,
+    rounding_precision=6,
 ):
     """remove samples from clips dataframe that already have embeddings in the db
 
@@ -202,109 +353,40 @@ def _handle_existing_windows(
         print("Zero samples passed to _handle_existing_windows")
         return
 
-    from ml_collections import config_dict
-
     if embedding_exists_mode in ["skip", "error"]:
-
-        # first make list of files in input clips dataframe
-        file_list = (
-            clips.index.get_level_values(0).to_series().astype(str).unique().tolist()
-        )
-        file_list = [str(Path(f)) for f in file_list]
-
-        # establish filters for windows from matching files, optionally constraining to deployment/project
-        recordings_filter = config_dict.create(isin=dict(filename=file_list))
-        # deployment_id takes precedence over deployment_name
-        if deployment_id is not None:
-            if project is not None:
-                # get deployment ids matching both deployment_id and project
-                deployments_filter = config_dict.create(
-                    eq=dict(id=deployment_id, project=project),
-                )
-            else:
-                deployments_filter = config_dict.create(
-                    eq=dict(id=deployment_id),
-                )
-        elif deployment_name is not None:
-            if project is not None:
-                # get deployment ids matching both deployment_name and project
-                deployments_filter = config_dict.create(
-                    eq=dict(name=deployment_name, project=project),
-                )
-            else:
-                deployments_filter = config_dict.create(
-                    eq=dict(name=deployment_name),
-                )
-        else:
-            deployments_filter = None
-
-        # get window ids from db matching these recordings (and deployment/project if specified)
-        window_ids = db.match_window_ids(
-            recordings_filter=recordings_filter, deployments_filter=deployments_filter
-        )
-        windows = db.get_all_windows(
-            filter=config_dict.create(isin=dict(id=window_ids))
+        # look up all windows in the db that are from the files in the input clips dataframe
+        # optionally filtering to deployment/project
+        file_list = clips.index.get_level_values(0).unique()
+        windows = get_existing_windows(
+            db,
+            file_list,
+            deployment_id=deployment_id,
+            deployment_name=deployment_name,
+            project=project,
         )
 
-        def resolve_path(rec):
-            p = rec.filename
-            if isinstance(clips.index.levels[0][0], Path):
-                p = Path(p)
-            else:
-                p = str(p)
-            return p
-
-        # map of existing recording ids to resolved paths
-        id_to_recording = {rec.id: resolve_path(rec) for rec in db.get_all_recordings()}
-        # be ware of type mismatch with Path vs str and float vs float32 or np.float64
-        existing_index_tuples = {
-            (
-                id_to_recording[w.recording_id],
-                w.offsets[0],
-                w.offsets[1],
+        # normalize index tuples to account for potential float precision issues and Path vs str differences
+        clip_df_norm = pd.Index(
+            normalize_index_to_tuples(
+                clips.index, rounding_precision=rounding_precision
             )
-            for w in windows
-        }
-
-        # MultiIndex into an Index of tuples
-        flat_clips = clips.index.to_flat_index()
-        flat_existing = pd.Index(existing_index_tuples)
-
-        # Normalize the tuples (Vectorized rounding of temporal values)
-        def normalize_flat(idx):
-            return pd.Index(
-                [
-                    (
-                        # ignore non-relevant Path differences like // vs /
-                        str(Path(t[0])),
-                        round(float(t[1]), rounding_precision),
-                        round(float(t[2]), rounding_precision),
-                    )
-                    for t in idx
-                ]
-            )
-
-        norm_clips = normalize_flat(flat_clips)
-        norm_existing = normalize_flat(flat_existing)
+        )
+        db_windows_norm = pd.Index(
+            normalize_windows_to_tuples(windows, rounding_precision=rounding_precision)
+        )
 
         # filter df to clips without existing embeddings
-        diff_idx = norm_clips.difference(norm_existing)
+        diff_idx = clip_df_norm.difference(db_windows_norm)
 
         if embedding_exists_mode == "error" and len(diff_idx) > 0:
             raise ValueError(
                 'Some embeddings exist in db and embedding_exists_mode="error"'
             )
 
-        # subset the clip dataframe inplace to exclude overlapping_idxs
-        mask = norm_clips.isin(diff_idx)
+        # subset the clip dataframe in place to exclude overlapping_idxs
+        mask = clip_df_norm.isin(diff_idx)
         clips.drop(clips.index[~mask], inplace=True)
 
-        if len(clips) == 0:
-            # all samples already have embeddings, nothing to do
-            print("all samples already have embeddings in the database")
-            return db, {}
-        else:
-            print(f"embedding {len(clips)} new windows to database")
     # else: embedding_exists_mode == "add", add more embeddings even if matching
     # existing windows -> no subsetting needed
 
@@ -356,3 +438,63 @@ def remove_duplicate_windows(db):
         f"Removed {len(duplicate_window_ids)} duplicate windows from database. Now contains "
         f"{db.count_embeddings()} embeddings."
     )
+
+
+def _check_or_set_model_id(db, model_id):
+    """Check that the model ID in the db matches the expected model ID, or set it if not present
+
+    This is a safety check to prevent accidentally using a database with a model that doesn't match
+    the one specified by `model_id`. If the db does not have a model ID in its metadata, this function
+    will set the model ID to the provided `model_id`. If the db already has a model ID, this function
+    will check that it matches the provided `model_id` and raise an error if it does not.
+
+    Args:
+        db: Hoplite database object
+        model_id: string identifier for the model (e.g. "HawkEars_v1.0.2")
+    """
+    metadata = db.get_metadata(None)
+    if "model" in metadata and "model_id" in metadata["model"]:
+        if metadata["model"].get("model_id") != model_id:
+            raise ValueError(
+                f"Model ID mismatch: database has model ID {metadata['model'].get('model_id')}, but expected {model_id}. "
+                f"Please use a database with the correct model ID or update the database's model ID to match."
+            )
+    else:
+        # update the configdict in the "model" metadata field if it exists, otherwise create it
+        if "model" in metadata:
+            model_metadata = ConfigDict(metadata["model"])
+            model_metadata.model_id = model_id
+            db.insert_metadata("model", model_metadata)
+        else:
+            db.insert_metadata("model", ConfigDict({"model_id": model_id}))
+
+
+def _check_or_set_sample_duration(db, sample_duration):
+    """Check that the sample duration in the db matches the expected sample duration, or set it if not present
+
+    This is a safety check to prevent accidentally using a database with a sample duration that doesn't match
+    the one specified by `sample_duration`. If the db does not have a sample duration in its metadata, this function
+    will set the sample duration to the provided `sample_duration`. If the db already has a sample duration, this function
+    will check that it matches the provided `sample_duration` and raise an error if it does not.
+
+    Args:
+        db: Hoplite database object
+        sample_duration: float, expected sample duration in seconds (e.g. 5.0)
+    """
+    metadata = db.get_metadata(None)
+    if "model" in metadata and "sample_duration" in metadata["model"]:
+        if metadata["model"].get("sample_duration") != sample_duration:
+            raise ValueError(
+                f"Sample duration mismatch: database has sample duration {metadata['model'].get('sample_duration')}, but expected {sample_duration}. "
+                f"Please use a database with the correct sample duration or update the database's sample duration to match."
+            )
+    else:
+        # update the configdict in the "model" metadata field if it exists, otherwise create it
+        if "model" in metadata:
+            model_metadata = ConfigDict(metadata["model"])
+            model_metadata.sample_duration = sample_duration
+            db.insert_metadata("model", model_metadata)
+        else:
+            db.insert_metadata(
+                "model", ConfigDict({"sample_duration": sample_duration})
+            )

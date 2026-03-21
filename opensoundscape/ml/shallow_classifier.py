@@ -1,4 +1,5 @@
 from tqdm.autonotebook import tqdm
+import numpy as np
 import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
 import opensoundscape
@@ -6,6 +7,8 @@ from opensoundscape.ml.utils import _version_mismatch_warn
 from torch.utils.data import DataLoader, Dataset
 from opensoundscape.ml.loss import BCELossWeakNegatives
 import pandas as pd
+from opensoundscape.vector_database import _find_matching_window_ids
+from opensoundscape.ml.datasets import HopliteDataset, EmbeddingDataset
 
 
 class MLPClassifier(torch.nn.Module):
@@ -171,83 +174,36 @@ class MLPClassifier(torch.nn.Module):
         # all other keys are used as args to __init__
         return cls(**model_dict)
 
+    @classmethod
+    def from_torch_linear(cls, linear_layer, classes=None):
+        """initialize an MLPClassifier from a torch.nn.Linear layer
 
-class EmbeddingDataset(Dataset):
-    """simple dataset wrapper for embedding features and labels
-
-    Args:
-        features: tensor or np.array of input features
-            first dimension should be samples
-        labels: tensor or np.array of target labels
-            first dimension should be samples
-    """
-
-    def __init__(self, features, labels):
-        self.features = features
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.features)
-
-    def __getitem__(self, idx):
-        return self.features[idx], self.labels[idx]
-
-
-import numpy as np
-
-
-class HopliteDataset(Dataset):
-    """Dataset that retrieves embeddings from a HopliteDB for given files and start times"""
-
-    def __init__(self, db, label_df, dataset_name):
-        """Initialize the HopliteDataset
-
-        #TODO: to go fast, do we need to do batched retrieval?
+        Initializes 1-layer MLP, copying weights from linear_layer
 
         Args:
-            db: HopliteDB instance to retrieve embeddings from
-            label_df: DataFrame with multi-index (file, start_time, end_time) for samples and labels
-            dataset_name: name of the dataset in the HopliteDB to retrieve embeddings from
+            linear_layer: a torch.nn.Linear layer whose weight and bias will be used to initialize the classifier layer
+            of the MLPClassifier; should have shape (output_size, input_size) for weight and (output_size,) for bias
+            classes (optional): list of class names, if provided should have len=output_size
+                default: None
         """
-        self.db = db
-        self.label_df = label_df
-        self.dataset_name = dataset_name
-        self.selection_mode = "first"  # first or random for matching embeddings
-
-    @property
-    def label_df(self):
-        return self._label_df
-
-    @label_df.setter
-    def label_df(self, new_df):
-        self._label_df = new_df
-        self.files = new_df.index.get_level_values("file").astype(str).to_numpy()
-        self.start_times = (
-            new_df.index.get_level_values("start_time").to_numpy().astype(np.float16)
+        if not isinstance(linear_layer, torch.nn.Linear):
+            raise ValueError(f"linear_layer must be an instance of torch.nn.Linear")
+        input_size = linear_layer.in_features
+        output_size = linear_layer.out_features
+        model = cls(
+            input_size=input_size,
+            output_size=output_size,
+            classes=classes,
         )
-
-    def __len__(self):
-        return len(self.label_df)
-
-    def __getitem__(self, idx):
-        ids = self.db.get_embeddings_by_source(
-            self.dataset_name,
-            source_id=self.files[idx],
-            offsets=np.array([self.start_times[idx]], np.float16),
-        )
-        if self.selection_mode == "first":
-            id = ids[0]
-        elif self.selection_mode == "random":
-            id = np.random.choice(ids)
-        emb = self.db.get_embedding(id)
-
-        return emb, self.label_df.iloc[idx].values
+        # copy weights and bias from the linear layer to the classifier layer of the MLPClassifier
+        model.classifier.weight.data.copy_(linear_layer.weight.data)
+        model.classifier.bias.data.copy_(linear_layer.bias.data)
+        return model
 
 
 def fit_on_hoplite_db(
     model,
     hoplite_db,
-    dataset_name,
     train_df,
     validation_df=None,
     batch_size=128,
@@ -258,6 +214,7 @@ def fit_on_hoplite_db(
     validation_interval=100,
     logging_interval=100,
     early_stopping_patience=None,
+    **kwargs,
 ):
     """train a PyTorch model on Hoplite Embedding DB and labels with batching and early stopping
 
@@ -301,6 +258,8 @@ def fit_on_hoplite_db(
         early_stopping_patience: if provided and validation data is available, training will stop
         early if validation loss doesn't improve for this many steps (not validation evaluations)
         [Default: None, which means no early stopping]
+
+        **kwargs: additional keyword arguments passed to HopliteDataset; see HopliteDataset.__init__()
     """
     # if no optimizer or criterion provided, use default AdamW and BCEWithLogitsLoss
     if optimizer is None:
@@ -311,7 +270,7 @@ def fit_on_hoplite_db(
     # move the model to the device
     model.to(device)
 
-    train_dataset = HopliteDataset(hoplite_db, train_df, dataset_name)
+    train_dataset = HopliteDataset(hoplite_db, train_df, **kwargs)
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=0
     )
@@ -321,7 +280,7 @@ def fit_on_hoplite_db(
     best_model_state = None
     best_step = -1
     if validation_df is not None:
-        validation_dataset = HopliteDataset(hoplite_db, validation_df, dataset_name)
+        validation_dataset = HopliteDataset(hoplite_db, validation_df, **kwargs)
         validation_loader = DataLoader(
             validation_dataset, batch_size=batch_size, shuffle=False, num_workers=0
         )
@@ -905,3 +864,49 @@ def fit_classifier_on_embeddings(
     # returning the embeddings and labels is useful
     # for re-training without re-embedding
     return x_train, y_train, x_val, y_val, metrics
+
+
+import opensoundscape as opso
+from opensoundscape.ml.datasets import HopliteDataset
+
+
+def predict_on_hoplite(db, samples, model, batch_size=1024, return_df=True, **kwargs):
+    """Apply model to embeddings from database for each clip in samples
+
+    Args:
+        db: hoplite database containing embeddings
+        samples: dataframe with columns "file", "start_time", "end_time" specifying clips to apply the model to
+        model: MLPClassifier object or other model object to call on the embeddings
+        batch_size: batch size to use when loading embeddings from the database (default: None, which means load all at once)
+        **kwargs: additional keyword arguments to pass to HopliteDataset
+    """
+    # generate clip dataframe from samples
+    sample_duration = db.get_metadata("model").get("sample_duration")
+    dataset = HopliteDataset(
+        db=db, samples=samples, clip_duration=sample_duration, **kwargs
+    )
+    dataloader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,  # collate_fn=opso.utils.identity
+    )
+    preds = []
+    device = next(model.parameters()).device
+    for batch_emb, batch_labels in tqdm(dataloader):
+        with torch.no_grad():
+            batch_preds = model(
+                torch.as_tensor(batch_emb, dtype=torch.float32, device=device)
+            )
+            preds.append(batch_preds.cpu().numpy())
+    preds = np.concatenate(preds)
+
+    if return_df:
+        classes = model.classes if hasattr(model, "classes") else range(preds.shape[1])
+        preds = pd.DataFrame(preds, columns=classes)
+        preds.index = dataset.label_df.index
+    return preds
+
+
+# TODO: alternative prediction workflow:
+# subset db based on get_all_windows(filters), then apply model to any/all embeddings
+# TODO #2 provide top-k or detection-counting in-loop as an alternative to returning all preds
+# TODO #3 stratification by datetimes and deployments for top-k or counting-based prediction summaries

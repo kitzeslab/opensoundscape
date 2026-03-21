@@ -54,6 +54,10 @@ from opensoundscape.ml.loss import (
     CrossEntropyLoss_hot,
     ResampleLoss,
 )
+from opensoundscape.vector_database import (
+    _check_or_set_model_id,
+    _check_or_set_sample_duration,
+)
 
 
 import warnings
@@ -2260,6 +2264,9 @@ class SpectrogramClassifier(SpectrogramModule):
                 pass  # keep None value
         db = load_or_create_hoplite_usearch_db(db, embedding_dim=embedding_dim)
 
+        # check / insert metadata for model ID
+        _check_or_set_model_id(db, self.name)
+
         # add deployment if provided and not yet in db
         from ml_collections import config_dict
 
@@ -2296,6 +2303,20 @@ class SpectrogramClassifier(SpectrogramModule):
             project=project if strict_matching else None,
         )
 
+        if len(dataloader.dataset) == 0:
+            # all samples already have embeddings, nothing to do
+            print("all samples already have embeddings in the database")
+            return db, {
+                "preprocessing_failures": dataloader.dataset.report(),
+                "insertion_failures": pd.DataFrame(
+                    columns=["file", "start_time", "end_time", "reason"]
+                ),
+            }
+        else:
+            print(
+                f"embedding {len(dataloader.dataset.dataset.label_df)} new windows to database"
+            )
+
         # check current files in db;
         # if strict_matching, only consider files from this deployment_id
         # (will create new recording_id for a file if match is not found)
@@ -2322,9 +2343,11 @@ class SpectrogramClassifier(SpectrogramModule):
 
         failed_to_insert = []
         for i, batch_samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
-
+            
             # forward pass of network, getting only target_layer outputs
-            outs = self.batch_forward(batch_samples, targets=[target_layer], avgpool=True)
+            outs = self.batch_forward(
+                batch_samples, targets=[target_layer], avgpool=True
+            )
 
             batch_insertion_failures = _insert_embeddings(
                 db=db,
@@ -2358,8 +2381,16 @@ class SpectrogramClassifier(SpectrogramModule):
         db.commit()
 
         # return database object and info about any failed samples
-        insertion_failures = pd.DataFrame(failed_to_insert,columns=['file','start_time','end_time','reason'])
-        return (db, {"preprocessing_failures": dataloader.dataset.report(), "insertion_failures": insertion_failures})
+        insertion_failures = pd.DataFrame(
+            failed_to_insert, columns=["file", "start_time", "end_time", "reason"]
+        )
+        return (
+            db,
+            {
+                "preprocessing_failures": dataloader.dataset.report(),
+                "insertion_failures": insertion_failures,
+            },
+        )
 
     def similarity_search_hoplite_db(
         self,
