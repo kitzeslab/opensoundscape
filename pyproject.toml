@@ -44,7 +44,7 @@ pillow = ">=9.4.0"
 jupyter-server = ">=2.11.2"
 joblib = ">=1.2.0"
 grad-cam = ">=1.5.0"
-aru-metadata-parser = ">=0.1.0"
+aru-metadata-parser = ">=1.0.0"
 tqdm = ">=4.66.1"
 gitpython = ">=3.1.41"
 werkzeug=">=3.0.1"
@@ -58,6 +58,8 @@ ipywidgets = {version = ">=8.1.0", optional = true}
 plotly = {version = ">=5.0.0", optional = true}
 tensorflow = {version = ">=2.13.0", optional = true}
 tensorflow-hub = {version = ">=0.14.0", optional = true}
+# perch-hoplite from github main branch for latest version; includes ml_collections dependency
+perch-hoplite = {git = "https://github.com/google-research/perch-hoplite.git", rev = "accf3740c9defbfc8f2715f50970aede1ce4d9c9", optional = true}
 
 # security alert updates
 aiohttp=">=3.12.14"
@@ -88,6 +90,7 @@ crowsetta = ">=5.0.2"
 [tool.poetry.extras]
 tensorflow = ["tensorflow", "tensorflow-hub"]
 viz = ["ipywidgets", "plotly"]
+hoplite = ["perch-hoplite"]
 
 [tool.black]
 line-length = 88

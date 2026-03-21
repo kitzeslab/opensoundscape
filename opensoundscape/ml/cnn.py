@@ -37,7 +37,7 @@ from opensoundscape.ml import shallow_classifier
 from opensoundscape.ml.cam import CAM
 import pytorch_grad_cam
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-
+from opensoundscape.vector_database import _require_hoplite
 
 from torchmetrics.classification import (
     MultilabelAveragePrecision,
@@ -2239,14 +2239,8 @@ class SpectrogramClassifier(SpectrogramModule):
             Adds deployment and recording entries to db as needed
 
         """
-        try:
-            import perch_hoplite
-
-        except ImportError as e:
-            raise ImportError(
-                "hoplite is not installed. Please install hoplite to use this feature."
-            ) from e
-        from perch_hoplite.db import interface as hoplite_interface
+        _require_hoplite()
+        from ml_collections import config_dict
         from opensoundscape.vector_database import (
             load_or_create_hoplite_usearch_db,
             _handle_existing_windows,
@@ -2268,8 +2262,6 @@ class SpectrogramClassifier(SpectrogramModule):
         _check_or_set_model_id(db, self.name)
 
         # add deployment if provided and not yet in db
-        from ml_collections import config_dict
-
         # create deployment in db if it doesnt exist yet
         if strict_matching:
             project_matching_pattern = config_dict.create(
@@ -2327,12 +2319,25 @@ class SpectrogramClassifier(SpectrogramModule):
                 else None
             )
         )
+
         file_to_id = {rec.filename: rec.id for rec in recordings}
 
         # if file_to_datetime is a function, pre-compute look-up dictionary
         # to avoid recomputing datetime from file string for each embedding (many per file)
         if callable(file_to_datetime):
-            file_to_datetime = {f: file_to_datetime(f) for f in file_to_id.keys()}
+            # print("creating cached function for audio-> dateteme")
+            import functools
+
+            @functools.lru_cache(maxsize=None)
+            def cached_file_to_datetime(file):
+                if audio_root is not None:
+                    # use the relative path for the source name stored in the db
+                    file = str(Path(file).relative_to(audio_root))
+                return file_to_datetime(file)
+
+            file_mapper = cached_file_to_datetime
+        else:
+            file_mapper = file_to_datetime
 
         # move network to device
         self.network.to(self.device)
@@ -2343,7 +2348,7 @@ class SpectrogramClassifier(SpectrogramModule):
 
         failed_to_insert = []
         for i, batch_samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
-            
+
             # forward pass of network, getting only target_layer outputs
             outs = self.batch_forward(
                 batch_samples, targets=[target_layer], avgpool=True
@@ -2355,7 +2360,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 batch_embeddings=outs[target_layer],
                 overflow_mode=overflow_mode,
                 file_to_id=file_to_id,
-                file_to_datetime=file_to_datetime,
+                file_to_datetime=file_mapper,
                 audio_root=audio_root,
                 deployment_id=deployment_id,
             )

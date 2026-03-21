@@ -9,7 +9,6 @@ import numpy as np
 from pathlib import Path
 import warnings
 import pandas as pd
-from ml_collections import ConfigDict, config_dict
 from collections import defaultdict
 
 
@@ -41,17 +40,12 @@ def load_or_create_hoplite_usearch_db(db, embedding_dim=None, cfg=None):
         a hoplite database object
     """
     # TODO: support in-memory backends in addition to sqlite
-    try:
-        import perch_hoplite
-        from perch_hoplite.db.sqlite_usearch_impl import (
-            SQLiteUSearchDB,
-            get_default_usearch_config,
-        )
-    except ImportError as e:
-        raise ImportError(
-            "hoplite package is required to use hoplite databases. "
-            "Please install with `pip install perch-hoplite`"
-        ) from e
+    _require_hoplite()
+    import perch_hoplite
+    from perch_hoplite.db.sqlite_usearch_impl import (
+        SQLiteUSearchDB,
+        get_default_usearch_config,
+    )
 
     if isinstance(db, (str, Path)):
         db_path = Path(db)
@@ -203,6 +197,9 @@ def get_existing_windows(
     db, files, deployment_id=None, deployment_name=None, project=None
 ):
     """retrieve db windows for list of files, filtering by deployment/project"""
+    _require_hoplite()
+    from ml_collections import config_dict
+
     # normalize paths, this will remove artifacts like double slashes that could cause mismatches with db entries
     file_list = [str(Path(f)) for f in files]
 
@@ -282,8 +279,6 @@ def _find_matching_window_ids(
     Returns:
         list of window_id tuples for each row in clips; eg [(), (0,), (3,1)]
     """
-    from ml_collections import config_dict
-
     if len(clips) == 0:
         print("Zero samples passed to _find_matching_window_ids")
         return []
@@ -452,6 +447,8 @@ def _check_or_set_model_id(db, model_id):
         db: Hoplite database object
         model_id: string identifier for the model (e.g. "HawkEars_v1.0.2")
     """
+    from ml_collections import ConfigDict
+
     metadata = db.get_metadata(None)
     if "model" in metadata and "model_id" in metadata["model"]:
         if metadata["model"].get("model_id") != model_id:
@@ -481,6 +478,8 @@ def _check_or_set_sample_duration(db, sample_duration):
         db: Hoplite database object
         sample_duration: float, expected sample duration in seconds (e.g. 5.0)
     """
+    from ml_collections import ConfigDict
+
     metadata = db.get_metadata(None)
     if "model" in metadata and "sample_duration" in metadata["model"]:
         if metadata["model"].get("sample_duration") != sample_duration:
@@ -498,3 +497,14 @@ def _check_or_set_sample_duration(db, sample_duration):
             db.insert_metadata(
                 "model", ConfigDict({"sample_duration": sample_duration})
             )
+
+
+def _require_hoplite():
+    try:
+        import perch_hoplite
+        from ml_collections import config_dict
+    except ImportError as e:
+        raise ImportError(
+            "hoplite package is required to use hoplite databases. "
+            "Please install with `pip install opensoundscape[hoplite]` to use this functionality."
+        ) from e
