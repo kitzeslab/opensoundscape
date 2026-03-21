@@ -647,6 +647,7 @@ def change_conv2d_channels(
             weights = torch.stack(new_channels, dim=1)  # stack on channel dim, dim 1
         # reapply the average weights of the original architecture's conv1
         new_conv2d.weight = torch.nn.Parameter(weights)
+        new_conv2d.bias = conv2d.bias  # copy bias from original conv2d
 
     return new_conv2d
 
