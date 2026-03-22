@@ -398,7 +398,7 @@ class BaseModule:
         """currently only used for lightning
 
         not used by SpectrogramClassifier"""
-        batch_tensors, batch_labels = samples
+        batch_tensors, batch_labels = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
         batch_labels = batch_labels.to(self.device)
 
@@ -2607,7 +2607,8 @@ class SpectrogramClassifier(SpectrogramModule):
 
         # iterate batches
         start_time = time()
-        for i, (batch_tensors, _) in enumerate(tqdm(dataloader)):
+        for i, samples_batch in enumerate(tqdm(dataloader)):
+            batch_tensors, _ = collate_audio_samples(samples_batch)
             preprocess_times.append(time() - start_time)
             batch_tensors = batch_tensors.to(self.device)
             batch_tensors.requires_grad = True
@@ -3145,7 +3146,7 @@ class InceptionV3(SpectrogramClassifier):
         Returns:
             loss: loss value for the batch
         """
-        batch_tensors, batch_labels = samples
+        batch_tensors, batch_labels = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
         batch_labels = batch_labels.to(self.device)
 
