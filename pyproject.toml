@@ -40,14 +40,14 @@ pywavelets = ">=1.2.0"
 Deprecated = "^1.2.13"
 soundfile = ">=0.13.1"
 wandb = ">=0.17.0"
-pillow = ">=9.4.0"
+pillow = ">=12.1.1"
 jupyter-server = ">=2.11.2"
 joblib = ">=1.2.0"
 grad-cam = ">=1.5.0"
 aru-metadata-parser = ">=0.1.0"
 tqdm = ">=4.66.1"
 gitpython = ">=3.1.41"
-werkzeug=">=3.0.1"
+werkzeug=">=3.1.5"
 noisereduce=">=3.0.2"
 lightning=">=2.2.5"
 scipy=">=1.15"
@@ -58,18 +58,22 @@ ipywidgets = {version = ">=8.1.0", optional = true}
 plotly = {version = ">=5.0.0", optional = true}
 tensorflow = {version = ">=2.13.0", optional = true}
 tensorflow-hub = {version = ">=0.14.0", optional = true}
+keras = {version = ">=3.12.0", optional = true}
 
 # security alert updates
-aiohttp=">=3.12.14"
+aiohttp=">=3.13.3"
 tornado=">=6.5.1"
 setuptools=">=78.1.1"
-urllib3=">=2.5.0"
-protobuf = ">=5.29.5"
+urllib3=">=2.6.3"
+protobuf = ">=5.29.6"
 certifi = ">=2024.7.4"
 requests=">=2.32.4"
 h11=">=0.16.0"
 Jinja2 = ">=3.1.6"
 sentry-sdk = ">=2.8.0"
+nbconvert = ">=7.17.0"
+filelock = ">=3.20.3"
+fonttools = ">=4.61.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -83,10 +87,12 @@ m2r = ">=0.2"
 docutils = ">=0.20"
 sphinx-copybutton = ">=0.5.2"
 crowsetta = ">=5.0.2"
+wheel = ">=0.46.2"
+virtualenv = ">=20.36.1"
 
 
 [tool.poetry.extras]
-tensorflow = ["tensorflow", "tensorflow-hub"]
+tensorflow = ["tensorflow", "tensorflow-hub", "keras"]
 viz = ["ipywidgets", "plotly"]
 
 [tool.black]
