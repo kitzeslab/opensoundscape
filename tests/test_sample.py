@@ -31,5 +31,3 @@ def test_audio_sample_end_time():
     series = pd.Series(name=("path", 2, 5), index=["a", "b"], data=[0, 1])
     s = sample.AudioSample("path", start_time=3, duration=2)
     assert math.isclose(s.end_time, 5, abs_tol=1e-8)
-
-

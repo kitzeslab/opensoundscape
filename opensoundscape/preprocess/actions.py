@@ -302,6 +302,7 @@ class AudioClipLoader(Action):
             sample.data, offset=offset, duration=duration, **dict(self.params, **kwargs)
         )
 
+
 @register_action_cls
 class AudioToTensor(BaseAction):
     def __call__(self, sample, **kwargs):
@@ -315,6 +316,7 @@ class AudioToTensor(BaseAction):
             updates sample.data to be a torch.Tensor
         """
         sample.data = torch.tensor(sample.data.samples)
+
 
 @register_action_cls
 class AudioTrim(Action):
