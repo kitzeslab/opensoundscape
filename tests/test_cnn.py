@@ -79,6 +79,11 @@ def train_df():
 
 
 @pytest.fixture()
+def silence10s_path():
+    return "tests/audio/silence_10s.mp3"
+
+
+@pytest.fixture()
 def train_df_clips(train_df):
     clip_df = make_clip_df(train_df.index.values, clip_duration=1.0)
     clip_df[0] = np.random.choice([0, 1], size=len(clip_df))
@@ -120,7 +125,11 @@ def onemin_wav_df():
 
 def test_init_with_str():
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
 
 
@@ -128,7 +137,11 @@ def test_save_load(model_save_path):
     classes = [0, 1]
     arch = resnet18(2, weights=None, num_channels=1)
     m = cnn.SpectrogramClassifier(
-        architecture=arch, classes=classes, sample_duration=3, arch_weights=None
+        architecture=arch,
+        classes=classes,
+        sample_duration=3,
+        sample_rate=22050,
+        arch_weights=None,
     )
     m.save(model_save_path)
     m2 = cnn.SpectrogramClassifier.load(model_save_path)
@@ -154,7 +167,11 @@ def test_save_load_pickel(train_df, model_save_path, temp_model_dir):
     """when saving with pickle, can resume training and have the same optimizer state"""
     classes = [0, 1]
     m = cnn.SpectrogramClassifier(
-        architecture="resnet18", classes=classes, sample_duration=3, arch_weights=None
+        architecture="resnet18",
+        classes=classes,
+        sample_duration=3,
+        sample_rate=22050,
+        arch_weights=None,
     )
     m.train(
         train_df,
@@ -180,6 +197,7 @@ def test_train_single_target(train_df, temp_model_dir):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         single_target=True,
         arch_weights=None,
     )
@@ -197,7 +215,11 @@ def test_train_single_target(train_df, temp_model_dir):
 
 def test_train_multi_target(train_df, temp_model_dir):
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     model.train(
         train_df,
@@ -219,7 +241,11 @@ def test_train_on_clip_df(train_df_clips, temp_model_dir):
     file and get its labels from the dataframe
     """
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=1.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=1.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     model.train(
         train_df_clips,
@@ -241,7 +267,11 @@ def test_train_with_audio_root(train_df_relative, temp_model_dir):
     file and get its labels from the dataframe
     """
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=1.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=1.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     model.train(
         train_df_relative,
@@ -258,7 +288,11 @@ def test_train_with_audio_root(train_df_relative, temp_model_dir):
 
 def test_classifier_custom_lr(train_df, temp_model_dir):
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     model.optimizer_params["kwargs"]["lr"] = 0.001
     model.optimizer_params["classifier_lr"] = 0.02
@@ -281,7 +315,11 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df, temp_model_dir):
     from opensoundscape.utils import set_seed
 
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     set_seed(0)
     model.train(
@@ -351,7 +389,11 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df, temp_model_dir):
 
 def test_train_amp_cpu(train_df, temp_model_dir):
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     # first test with cpu
     model.device = "cpu"
@@ -371,7 +413,11 @@ def test_train_amp_cpu(train_df, temp_model_dir):
 
 def test_train_amp_cuda(train_df, temp_model_dir):
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     # if cuda is available, test with cuda
     if torch.cuda.is_available():
@@ -394,7 +440,11 @@ def test_train_amp_cuda(train_df, temp_model_dir):
 
 def test_train_amp_mps(train_df, temp_model_dir):
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     if torch.mps.is_available():
         assert model.device.type == "mps"
@@ -416,7 +466,11 @@ def test_train_amp_mps(train_df, temp_model_dir):
 
 def test_train_resample_loss(train_df, temp_model_dir):
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     cnn.use_resample_loss(model, train_df=train_df)
     model.train(
@@ -436,6 +490,7 @@ def test_train_one_class(train_df, temp_model_dir):
         architecture="resnet18",
         classes=[0],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     model.train(
@@ -452,7 +507,11 @@ def test_train_one_class(train_df, temp_model_dir):
 
 def test_single_target_setter():
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     assert model.single_target is False
     assert model._single_target == False
@@ -483,7 +542,11 @@ def test_single_target_setter():
 
 def test_single_target_prediction(train_df_clips):
     model = cnn.CNN(
-        architecture="resnet18", classes=[0, 1], sample_duration=1.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=1.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     model.single_target = True
     scores = model.predict(train_df_clips)
@@ -496,6 +559,7 @@ def test_predict_on_list_of_files(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     scores = model.predict(test_df.index.values)
@@ -507,6 +571,7 @@ def test_predict_with_audio_root():
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     scores = model.predict(["silence_10s.mp3"], audio_root="tests/audio/")
@@ -518,6 +583,7 @@ def test_predict_and_embed_on_df_with_file_index(train_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     scores = model.predict(train_df)
@@ -531,6 +597,7 @@ def test_predict_on_empty_list():
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     scores = model.predict([])
@@ -557,6 +624,7 @@ def test_predict_all_arch_4ch(test_df):
                     architecture=arch,
                     classes=[0, 1],
                     sample_duration=5.0,
+                    sample_rate=22050,
                     channels=4,
                 )
             scores = model.predict(test_df.index.values)
@@ -576,7 +644,11 @@ def test_predict_all_arch_1ch(test_df):
                 continue
             else:
                 model = cnn.CNN(
-                    architecture=arch, classes=[0, 1], sample_duration=5.0, channels=1
+                    architecture=arch,
+                    classes=[0, 1],
+                    sample_duration=5.0,
+                    sample_rate=22050,
+                    channels=1,
                 )
             scores = model.predict(test_df.index.values)
             assert len(scores) == 2
@@ -589,6 +661,7 @@ def test_predict_on_clip_df(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=1.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     clip_df = make_clip_df(test_df.index.values[0:1], clip_duration=1.0)
@@ -601,6 +674,7 @@ def test_prediction_overlap(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     model.single_target = True
@@ -614,6 +688,7 @@ def test_predict_on_one_file(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=10,
+        sample_rate=22050,
         arch_weights=None,
     )
     p = test_df.index.values[0]
@@ -628,6 +703,7 @@ def test_multi_target_prediction(train_df, test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     scores = model.predict(test_df)
@@ -640,6 +716,7 @@ def test_predict_missing_file_is_invalid_sample(missing_file_df, test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
 
@@ -696,9 +773,10 @@ def test_predict_wrong_input_error(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
-    pre = SpectrogramPreprocessor(2.0)
+    pre = SpectrogramPreprocessor(2.0, sample_rate=22050)
     with pytest.raises(AssertionError):
         model.predict(pre)
     with pytest.raises(AssertionError):
@@ -711,6 +789,7 @@ def test_profile(train_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     profile = model.profile(
@@ -724,7 +803,7 @@ def test_profile(train_df):
 
 
 def test_train_predict_inception(train_df, temp_model_dir):
-    model = cnn.InceptionV3([0, 1], 5.0, weights=None)
+    model = cnn.InceptionV3([0, 1], 5.0, weights=None, sample_rate=22050)
     model.train(
         train_df,
         train_df,
@@ -745,7 +824,9 @@ def test_train_predict_architecture(train_df):
     """
     for num_channels in (1, 3):
         arch = alexnet(2, weights=None, num_channels=num_channels)
-        model = cnn.CNN(architecture=arch, classes=[0, 1], sample_duration=2)
+        model = cnn.CNN(
+            architecture=arch, classes=[0, 1], sample_duration=2, sample_rate=22050
+        )
         model.predict(train_df, num_workers=0)
         assert model.preprocessor.channels == num_channels
 
@@ -754,7 +835,9 @@ def test_train_bad_index(train_df, temp_model_dir):
     """
     AssertionError catches case where index is not one of the allowed formats
     """
-    model = cnn.CNN("resnet18", [0, 1], sample_duration=2, arch_weights=None)
+    model = cnn.CNN(
+        "resnet18", [0, 1], sample_duration=2, sample_rate=22050, arch_weights=None
+    )
     # reset the index so that train_df index is integers (not an allowed format)
     train_df = make_clip_df(train_df.index.values, clip_duration=2).reset_index()
     train_df[0] = np.random.choice([0, 1], size=10)
@@ -776,6 +859,7 @@ def test_predict_without_splitting(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     scores = model.predict(test_df, split_files_into_clips=False)
@@ -787,6 +871,7 @@ def test_predict_splitting_short_file(short_file_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     with warnings.catch_warnings(record=True) as w:
@@ -806,6 +891,7 @@ def test_train_early_stopping(train_df, temp_model_dir):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     model.early_stopping_config.update(
@@ -831,6 +917,7 @@ def test_train_revert_to_best_epoch(train_df, temp_model_dir):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     model.train(
@@ -851,15 +938,16 @@ def test_save_and_load_model(model_save_path):
         architecture="alexnet",
         classes=classes,
         sample_duration=1.0,
+        sample_rate=22050,
         arch_weights=None,
     ).save(model_save_path)
     m = cnn.load_model(model_save_path)
     assert m.classes == classes
     assert type(m) == cnn.CNN
 
-    cnn.InceptionV3(classes=classes, sample_duration=1.0, weights=None).save(
-        model_save_path
-    )
+    cnn.InceptionV3(
+        classes=classes, sample_duration=1.0, sample_rate=22050, weights=None
+    ).save(model_save_path)
     m = cnn.load_model(model_save_path)
     assert m.classes == classes
     assert type(m) == cnn.InceptionV3
@@ -881,7 +969,9 @@ def test_save_and_load_model_custom_arch(model_save_path):
     arch = my_alexnet_generator(2, 1)
     arch.constructor_name = "my_alexnet_generator"
     assert arch.constructor_name in cnn_architectures.ARCH_DICT
-    m = cnn.CNN(architecture=arch, classes=classes, sample_duration=1.0)
+    m = cnn.CNN(
+        architecture=arch, classes=classes, sample_duration=1.0, sample_rate=22050
+    )
     m.save(model_save_path)
     m2 = cnn.load_model(model_save_path)
     assert type(m2.network) == type(arch)
@@ -891,7 +981,7 @@ def test_save_and_load_model_custom_arch(model_save_path):
 
 
 def test_init_positional_args():
-    cnn.CNN("resnet18", [0, 1], 0)
+    cnn.CNN("resnet18", [0, 1], 0, 22050)
 
 
 def test_save_load_and_train_model_resample_loss(
@@ -900,7 +990,9 @@ def test_save_load_and_train_model_resample_loss(
     arch = alexnet(2, weights=None)
     classes = [0, 1]
 
-    m = cnn.CNN(architecture=arch, classes=classes, sample_duration=1.0)
+    m = cnn.CNN(
+        architecture=arch, classes=classes, sample_duration=1.0, sample_rate=22050
+    )
     cnn.use_resample_loss(m, train_df)
     m.save(model_save_path, pickle=True)
     m2 = cnn.load_model(model_save_path)
@@ -926,6 +1018,7 @@ def test_prediction_warns_different_classes(train_df):
         architecture="resnet18",
         classes=["a", "b"],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     with warnings.catch_warnings(record=True) as w:
@@ -953,6 +1046,7 @@ def test_train_raises_wrong_class_list(train_df):
         architecture="resnet18",
         classes=["different"],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     with pytest.raises(AssertionError):
@@ -961,7 +1055,13 @@ def test_train_raises_wrong_class_list(train_df):
 
 
 def test_train_raises_labels_outside_range(train_df):
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None)
+    model = cnn.CNN(
+        "resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
+    )
     train_df.iat[0, 0] = 2
     with pytest.raises(AssertionError):
         # raises AssertionError bc values outside [0,1] not allowed
@@ -973,6 +1073,7 @@ def test_prediction_returns_consistent_values(train_df):
         architecture="resnet18",
         classes=["a", "b"],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     a = model.predict(train_df)
@@ -986,10 +1087,11 @@ def test_save_and_load_weights(model_save_path):
         architecture="resnet18",
         classes=["a", "b"],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     model.save_weights(model_save_path)
-    model1 = cnn.CNN(arch, classes=["a", "b"], sample_duration=5.0)
+    model1 = cnn.CNN(arch, classes=["a", "b"], sample_duration=5.0, sample_rate=22050)
     model1.load_weights(model_save_path)
     assert np.array_equal(
         model.network.state_dict()["conv1.weight"].numpy(),
@@ -1002,6 +1104,7 @@ def test_eval(train_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=2,
+        sample_rate=22050,
         arch_weights=None,
     )
     scores = model.predict(train_df, split_files_into_clips=False)
@@ -1013,6 +1116,7 @@ def test_eval_raises_bad_labels(train_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=2,
+        sample_rate=22050,
         arch_weights=None,
     )
     scores = model.predict(train_df, split_files_into_clips=False)
@@ -1027,6 +1131,7 @@ def test_train_no_validation(train_df, temp_model_dir):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=2,
+        sample_rate=22050,
         arch_weights=None,
     )
     model.train(train_df, save_path=temp_model_dir)
@@ -1038,7 +1143,13 @@ def test_train_raise_errors(short_file_df, missing_file_df):
         [short_file_df, missing_file_df]
     )  # use 2 files. 1 file wrong is manually caught and userwarning raised
     files_df["class"] = [0, 1]  # add labels for training
-    model = cnn.CNN("resnet18", classes=["class"], sample_duration=2, arch_weights=None)
+    model = cnn.CNN(
+        "resnet18",
+        classes=["class"],
+        sample_duration=2,
+        sample_rate=22050,
+        arch_weights=None,
+    )
     with pytest.raises(PreprocessingError):
         model.train(files_df, raise_errors=True)
 
@@ -1051,6 +1162,7 @@ def test_predict_raise_errors(short_file_df, onemin_wav_df):
         architecture="resnet18",
         classes=["class"],
         sample_duration=30,
+        sample_rate=22050,
         arch_weights=None,
     )
     model.preprocessor.pipeline.bandpass.bypass = False  # ensure bandpass happens
@@ -1066,6 +1178,7 @@ def test_generate_cams(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     samples = model.generate_cams(test_df)
@@ -1086,6 +1199,7 @@ def test_generate_samples(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     samples = model.generate_samples(test_df)
@@ -1097,20 +1211,38 @@ def test_generate_samples(test_df):
 
 def test_generate_cams_batch_size(test_df):
     """smoke test for batch size > 1"""
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None)
+    model = cnn.CNN(
+        "resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
+    )
     _ = model.generate_cams(test_df, batch_size=2)
 
 
 def test_generate_cams_num_workers(test_df):
     """smoke test for num workers > 1"""
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None)
+    model = cnn.CNN(
+        "resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
+    )
     _ = model.generate_cams(test_df, num_workers=2)
 
 
 def test_generate_cams_scorecam_devices(test_df):
     """In pytorch_grad_cam <1.5.0 scorecam had device mismatch"""
 
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None)
+    model = cnn.CNN(
+        "resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
+    )
     import pytorch_grad_cam
 
     _ = model.generate_cams(
@@ -1119,7 +1251,7 @@ def test_generate_cams_scorecam_devices(test_df):
     )
 
     # very slow on cpu - but can uncomment to check
-    # model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0)
+    # model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, sample_rate=22050)
     # model.device = "cpu"
     # import pytorch_grad_cam
 
@@ -1132,7 +1264,13 @@ def test_generate_cams_scorecam_devices(test_df):
 def test_generate_cams_methods(test_df):
     """test each supported method both by passing class and string name"""
 
-    model = cnn.CNN("resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None)
+    model = cnn.CNN(
+        "resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
+    )
     import pytorch_grad_cam
 
     methods_dict = {
@@ -1164,7 +1302,11 @@ def test_generate_cam_all_architectures(test_df):
                 num_classes=2, num_channels=1, weights=None
             )
             model = cnn.CNN(
-                architecture=arch, classes=[0, 1], sample_duration=5.0, channels=1
+                architecture=arch,
+                classes=[0, 1],
+                sample_duration=5.0,
+                sample_rate=22050,
+                channels=1,
             )
             _ = model.generate_cams(test_df.head(1))
         except Exception as e:
@@ -1177,6 +1319,7 @@ def test_generate_cams_target_layers(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     _ = model.generate_cams(
@@ -1192,6 +1335,7 @@ def test_train_with_posixpath(train_df, temp_model_dir):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
 
@@ -1220,6 +1364,7 @@ def test_predict_posixpath_missing_files(missing_file_df, test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
 
@@ -1255,6 +1400,7 @@ def test_predict_overlap_fraction_deprecated(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
+        sample_rate=22050,
         arch_weights=None,
     )
     with pytest.warns(DeprecationWarning):
@@ -1276,6 +1422,7 @@ def test_embed(test_df):
                 single_target=False,
                 architecture=arch,
                 sample_duration=5,
+                sample_rate=22050,
                 arch_weights=None,
             )
             embeddings = m.embed(samples=test_df, avgpool=True, progress_bar=False)
@@ -1293,6 +1440,7 @@ def test_embed_no_avgpool(test_df):
         single_target=False,
         architecture="resnet18",
         sample_duration=5,
+        sample_rate=22050,
         arch_weights=None,
     )
     embeddings = m.embed(
@@ -1311,6 +1459,7 @@ def test_embed_return_array(test_df):
         single_target=False,
         architecture="resnet18",
         sample_duration=5,
+        sample_rate=22050,
         arch_weights=None,
     )
     embeddings = m.embed(
@@ -1329,6 +1478,7 @@ def test_embed_one_sample(train_df):
         single_target=False,
         architecture="resnet18",
         sample_duration=10,
+        sample_rate=22050,
         arch_weights=None,
     )
     embeddings = m.embed(samples=train_df.head(1), avgpool=True, progress_bar=False)
@@ -1338,7 +1488,11 @@ def test_embed_one_sample(train_df):
 def test_call_with_targets(test_df):
     """test that passing intermediate_layers to SpectrogramClassifier.__call__ returns tensors of expected shape"""
     model = cnn.SpectrogramClassifier(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     dl = model.predict_dataloader(test_df)
     outs = model(dl, targets=[model.network.layer1, model.network.layer4])
@@ -1351,7 +1505,11 @@ def test_call_with_targets(test_df):
 
 def test_freeze_layers_except_and_unfreeze():
     model = cnn.SpectrogramClassifier(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
     )
     model.freeze_layers_except()
     for param in model.network.parameters():
@@ -1392,6 +1550,7 @@ def test_freeze_feature_extractor_all_arch():
                 architecture=arch,
                 classes=[0, 1],
                 sample_duration=5.0,
+                sample_rate=22050,
                 channels=1,
             )
             model.freeze_feature_extractor()
@@ -1414,6 +1573,7 @@ def test_change_classes_all_arch():
                 architecture=arch_name,
                 classes=[0, 1],
                 sample_duration=5.0,
+                sample_rate=22050,
                 channels=1,
             )
             if arch_name == "squeezenet1_0":
@@ -1435,6 +1595,7 @@ def test_change_classes_mlp_classifier():
         architecture="resnet18",
         classes=["class_a", "class_b"],
         sample_duration=5.0,
+        sample_rate=22050,
         channels=1,
         arch_weights=None,
     )
@@ -1471,6 +1632,7 @@ def test_change_classes_mlp_multiple_hidden_layers():
         architecture="resnet18",
         classes=["a", "b"],
         sample_duration=5.0,
+        sample_rate=22050,
         channels=1,
         arch_weights=None,
     )
@@ -1502,6 +1664,7 @@ def test_change_classes_mlp_no_hidden_layers():
         architecture="resnet18",
         classes=["x", "y"],
         sample_duration=5.0,
+        sample_rate=22050,
         channels=1,
         arch_weights=None,
     )
@@ -1533,6 +1696,7 @@ def test_change_classes_back_to_linear():
         architecture="resnet18",
         classes=["a", "b"],
         sample_duration=5.0,
+        sample_rate=22050,
         channels=1,
         arch_weights=None,
     )
@@ -1564,6 +1728,7 @@ def test_change_classes_mlp_from_existing_mlp():
         architecture="resnet18",
         classes=["a", "b"],
         sample_duration=5.0,
+        sample_rate=22050,
         channels=1,
         arch_weights=None,
     )
@@ -1598,6 +1763,7 @@ def test_change_classes_invalid_hidden_layers():
         architecture="resnet18",
         classes=["a", "b"],
         sample_duration=5.0,
+        sample_rate=22050,
         channels=1,
         arch_weights=None,
     )
@@ -1616,6 +1782,7 @@ def test_change_classes_single_hidden_layer_list():
         architecture="resnet18",
         classes=["a", "b"],
         sample_duration=5.0,
+        sample_rate=22050,
         channels=1,
         arch_weights=None,
     )
@@ -1637,6 +1804,7 @@ def test_change_classes_preserves_device():
         architecture="resnet18",
         classes=["a", "b"],
         sample_duration=5.0,
+        sample_rate=22050,
         channels=1,
         arch_weights=None,
     )

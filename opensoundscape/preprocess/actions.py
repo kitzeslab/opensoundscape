@@ -7,14 +7,14 @@ They take a single sample of a specific type and return the transformed
 or augmented sample, which may or may not be the same type as the original.
 
 See the action_functions.py module for functions that can be used to create actions using the Action class.
-Pass the Action class any function to the action_fn argument, and pass additional arguments to 
-set parameters of the Action's .params dictionary. 
+Pass the Action class any function to the action_fn argument, and pass additional arguments to
+set parameters of the Action's .params dictionary.
 
 Note on converting to/from dictionary/json/yaml:
-This will break if you use non-built-in preprocessing operations. 
-However, will work if you provide any custom functions/classes and 
-decorate them with @register_action_cls or @register_action_fn. 
-See the docstring of `action_from_dict()` for examples. 
+This will break if you use non-built-in preprocessing operations.
+However, will work if you provide any custom functions/classes and
+decorate them with @register_action_cls or @register_action_fn.
+See the docstring of `action_from_dict()` for examples.
 
 See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
@@ -108,7 +108,7 @@ def action_from_dict(dict):
 class BaseAction:
     """Parent class for all Actions (used in Preprocessor pipelines)
 
-    New actions should subclass this class.
+    New actions should subclass this class (or Action for pre-wired functionality).
     """
 
     def __init__(self, is_augmentation=False):
@@ -295,14 +295,19 @@ class AudioClipLoader(Action):
         if "fn" in kwargs:
             kwargs.pop("fn")
         super().__init__(fn=Audio.from_file, **kwargs)
-        # two params are provided by sample.start_time and sample.duration
-        self.params = self.params.drop(["offset", "duration"])
+        # these params are provided by sample.start_time and sample.duration
+        self.params = self.params.drop(["offset", "duration", "sample_rate"])
 
     def __call__(self, sample, **kwargs):
         offset = 0 if sample.start_time is None else sample.start_time
         duration = sample.duration
+        sr = sample.sample_rate
         sample.data = self.action_fn(
-            sample.data, offset=offset, duration=duration, **dict(self.params, **kwargs)
+            sample.data,
+            offset=offset,
+            duration=duration,
+            sample_rate=sr,
+            **dict(self.params, **kwargs),
         )
 
 

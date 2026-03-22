@@ -79,9 +79,10 @@ class BasePreprocessor:
         sample_duration: length of audio samples to generate (seconds)
     """
 
-    def __init__(self, sample_duration=None):
+    def __init__(self, sample_duration=None, sample_rate=None):
         self.pipeline = pd.Series({}, dtype=object)
         self.sample_duration = sample_duration
+        self.sample_rate = sample_rate
 
     def __repr__(self):
         return f"Preprocessor with pipeline:\n{self.pipeline}"
@@ -284,6 +285,7 @@ class BasePreprocessor:
         # add attributes to the sample that might be needed by actions in the pipeline
         sample.preprocessor = self
         sample.target_duration = self.sample_duration
+        sample.sample_rate = self.sample_rate
 
         return sample
 
@@ -505,7 +507,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
         channels=1,
         bandpass_range=None,
     ):
-        super().__init__(sample_duration=sample_duration)
+        super().__init__(sample_duration=sample_duration, sample_rate=sample_rate)
 
         self.height = height
         self.width = width
@@ -519,9 +521,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
-                "load_audio": AudioClipLoader(
-                    out_of_bounds_mode="ignore", sample_rate=sample_rate
-                ),
+                "load_audio": AudioClipLoader(out_of_bounds_mode="ignore"),
                 # if we are augmenting and get more audio than target duration, take a random trim from it
                 "random_trim_audio": AudioTrim(
                     target_duration=sample_duration,
@@ -543,12 +543,9 @@ class SpectrogramPreprocessor(BasePreprocessor):
                     Overlay(
                         break_on_key="overlay",
                         is_augmentation=True,
-                        overlay_samples=(
-                            pd.DataFrame()
-                            if overlay_samples is None
-                            else overlay_samples
-                        ),
+                        overlay_samples=overlay_samples,
                         update_labels=True,
+                        sample_duration=sample_duration,
                     )
                 ),
                 # adaptive random noise: add random noise with level based on original signal level
@@ -593,7 +590,8 @@ class SpectrogramPreprocessor(BasePreprocessor):
         """add attributes to the sample specifying desired shape of output sample"""
         sample = super()._generate_sample(sample)
 
-        # add attributes specifying desired shape of output sample
+        # add attributes specifying desired shape, tag onto sample object
+        # so that they can be accessed by actions in the pipeline (eg LoadAudio, SpectrogramToTensor)
         sample.height = self.height
         sample.width = self.width
         sample.channels = self.channels
@@ -654,12 +652,12 @@ class AudioPreprocessor(BasePreprocessor):
     """
 
     def __init__(self, sample_duration, sample_rate, extend_short_clips=True):
-        super().__init__(sample_duration=sample_duration)
+        super().__init__(sample_duration=sample_duration, sample_rate=sample_rate)
         self.pipeline = pd.Series(
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
-                "load_audio": AudioClipLoader(sample_rate=sample_rate),
+                "load_audio": AudioClipLoader(out_of_bounds_mode="ignore"),
                 # trim samples to correct length
                 # if extend_short_clips=True, extend short clips with silence
                 "trim_audio": AudioTrim(
@@ -749,7 +747,7 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
     def __init__(
         self,
         sample_duration,
-        overlay_df=None,
+        overlay_samples=None,
         height=None,
         width=None,
         channels=1,
@@ -765,8 +763,8 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
 
         Args:
             sample_duration: length in seconds of audio samples generated
-            overlay_df: if not None, will include an overlay action drawing
-                samples from this df
+            overlay_samples: if not None, will include an overlay action
+                samples can be a dataframe of file/start/end times or a set of audio files
             height: height of output sample (frequency axis)
                 - default None will use the original height of the spectrogram
             width: width of output sample (time axis)
@@ -778,7 +776,7 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
         noisereduce_kwargs = noisereduce_kwargs or {}
         super().__init__(
             sample_duration=sample_duration,
-            overlay_df=overlay_df,
+            overlay_samples=overlay_samples,
             height=height,
             width=width,
             channels=channels,

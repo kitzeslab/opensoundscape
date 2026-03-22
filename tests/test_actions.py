@@ -81,11 +81,12 @@ def sample_df():
 def test_audio_clip_loader_file(sample):
     action = actions.AudioClipLoader()
     action.__call__(sample)
-    assert sample.data.sample_rate == 44100
+    assert isinstance(sample.data, Audio)
 
 
 def test_audio_clip_loader_resample(sample):
-    action = actions.AudioClipLoader(sample_rate=32000)
+    action = actions.AudioClipLoader()
+    sample.sample_rate = 32000
     action.__call__(sample)
     assert sample.data.sample_rate == 32000
 
@@ -290,13 +291,18 @@ def test_action_to_from_dict():
 
 
 def test_overlay_to_from_dict(sample_df):
-    action = Overlay(overlay_samples=sample_df, update_labels=True)
+    action = Overlay(
+        overlay_samples=sample_df,
+        update_labels=True,
+        break_on_key="overlay",
+        sample_duration=1.0,
+    )
     d = action.to_dict()
 
     action2 = Overlay.from_dict(d)  # raises warning about not having overlay_df
     # new action will have empty overlay_df and will be bypassed
     assert action2.bypass == True
-    assert action2.overlay_df.empty
+    assert action2.overlay_df is None
 
 
 def test_pcen(sample_audio):
@@ -444,7 +450,7 @@ def test_adaptive_random_noise_with_action_wrapper(sample_audio):
     action = actions.Action(
         action_functions.adaptive_random_noise,
         snr_range=(-15, -5),
-        signal_dB=0,
+        input_gain=0,
         color="pink",
     )
     original_samples = sample_audio.data.samples.copy()

@@ -15,7 +15,7 @@ def dataset_df():
 
 @pytest.fixture()
 def pre():
-    return SpectrogramPreprocessor(sample_duration=2.0)
+    return SpectrogramPreprocessor(sample_duration=2.0, sample_rate=22050)
 
 
 def test_wandb_table_files(dataset_df, pre):

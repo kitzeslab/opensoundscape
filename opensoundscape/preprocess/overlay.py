@@ -7,8 +7,8 @@ import torch
 
 from opensoundscape.audio import Audio
 from opensoundscape.preprocess.actions import (
+    BaseAction,
     register_action_cls,
-    Action,
 )
 from opensoundscape.sample import AudioSample
 from opensoundscape.preprocess.utils import PreprocessingError
@@ -17,7 +17,7 @@ from opensoundscape.ml.datasets import _ingest_samples_argument
 
 
 @register_action_cls
-class Overlay(Action):
+class Overlay(BaseAction):
     """Action Class for augmentation that overlays samples on eachother
 
     Overlay is a flavor of "mixup" augmentation, where two samples are
@@ -42,41 +42,61 @@ class Overlay(Action):
 
     """
 
-    def __init__(self, overlay_samples, break_on_key, is_augmentation=True, **kwargs):
+    def __init__(
+        self,
+        overlay_samples,
+        break_on_key,
+        is_augmentation=True,
+        sample_duration=None,
+        **kwargs,
+    ):
         if "fn" in kwargs:
             kwargs.pop("fn")
-        super(Overlay, self).__init__(
-            fn=overlay,
-            break_on_key=break_on_key,
-            is_augmentation=is_augmentation,
-            **kwargs,
+        super().__init__(is_augmentation=is_augmentation)
+        self.params = pd.Series(
+            {
+                "update_labels": kwargs.get("update_labels", True),
+                "break_on_key": break_on_key,
+                "overlay_class": kwargs.get("overlay_class", None),
+                "overlay_prob": kwargs.get("overlay_prob", 1),
+                "max_overlay_num": kwargs.get("max_overlay_num", 1),
+                "overlay_weight": kwargs.get("overlay_weight", 0.5),
+                "criterion_fn": kwargs.get("criterion_fn", always_true),
+                "sample_duration": sample_duration,  # only used during init and save
+            }
         )
 
-        overlay_df = _ingest_samples_argument(overlay_samples)
-        overlay_df = overlay_df[~overlay_df.index.duplicated()]  # remove duplicates
-
-        # warn the user if using "different" as overlay_class
-        # and "different" is one of the model classes
-        # TODO: reserved, don't use as class names: ['file','start_time','end_time','different']
-        if (
-            "different" in overlay_df.columns
-            and "overlay_class" in kwargs
-            and kwargs["overlay_class"] == "different"
-        ):
-            warnings.warn(
-                "class name `different` was in columns, but using "
-                "kwarg overlay_class='different' has specific behavior and will "
-                "not specifically choose files from the `different` class. "
-                "Consider renaming the `different` class. "
+        # allow None for overlay_samples, and bypass this action if None or empty
+        if overlay_samples is None or len(overlay_samples) == 0:
+            self.bypass = True
+            self.overlay_df = None
+        else:
+            overlay_df, _ = _ingest_samples_argument(
+                overlay_samples, sample_duration=sample_duration
             )
+            overlay_df = overlay_df[~overlay_df.index.duplicated()]  # remove duplicates
 
-        # save overlay_df as an attribute
-        # do not save overlay_samples in self.params Series
-        self.overlay_df = overlay_df
-        self.params.drop("overlay_samples", inplace=True)
+            # warn the user if using "different" as overlay_class
+            # and "different" is one of the model classes
+            # TODO: reserved, don't use as class names: ['file','start_time','end_time','different']
+            if (
+                "different" in overlay_df.columns
+                and "overlay_class" in kwargs
+                and kwargs["overlay_class"] == "different"
+            ):
+                warnings.warn(
+                    "class name `different` was in columns, but using "
+                    "kwarg overlay_class='different' has specific behavior and will "
+                    "not specifically choose files from the `different` class. "
+                    "Consider renaming the `different` class. "
+                )
+
+            # save overlay_df as an attribute
+            # (do not save overlay_samples in self.params Series)
+            self.overlay_df = overlay_df
 
     def __call__(self, sample, **kwargs):
-        self.action_fn(
+        sample.data = overlay(
             sample,
             overlay_df=self.overlay_df,
             **dict(self.params, **kwargs),
@@ -96,9 +116,9 @@ class Overlay(Action):
         # two attributes of the Overlay class are not json-friendly and not saved with to_dict;
         # we instead initialize with an empty overlay_df and set criterion_fn to always_true
         # we also initialize the Overlay action with bypass=True so that it is inactive by default
-        dict["params"]["overlay_samples"] = ()
+        dict["params"]["overlay_samples"] = None
         dict["params"]["criterion_fn"] = always_true
-        instance = super().from_dict(dict)
+        instance = cls(**dict["params"])
         instance.bypass = True
         warnings.warn(
             "Overlay class's .overlay_df will be None after loading from dict and `.criterion_fn` will be always_true(). "

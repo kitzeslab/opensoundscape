@@ -31,12 +31,18 @@ def short_sample():
 
 @pytest.fixture()
 def preprocessor():
-    return SpectrogramPreprocessor(sample_duration=2.0)
+    return SpectrogramPreprocessor(sample_duration=2.0, sample_rate=22050)
 
 
 @pytest.fixture()
 def preprocessor_3x50x50():
-    return SpectrogramPreprocessor(sample_duration=2.0, height=50, width=50, channels=3)
+    return SpectrogramPreprocessor(
+        sample_duration=2.0,
+        sample_rate=22050,
+        height=50,
+        width=50,
+        channels=3,
+    )
 
 
 @pytest.fixture()
@@ -79,7 +85,11 @@ def train_df_clips(train_df):
 
 @pytest.fixture()
 def preprocessor_with_overlay(train_df_clips):
-    return SpectrogramPreprocessor(sample_duration=2.0, overlay_df=train_df_clips)
+    return SpectrogramPreprocessor(
+        sample_duration=2.0,
+        sample_rate=22050,
+        overlay_samples=train_df_clips,
+    )
 
 
 @pytest.fixture()
@@ -238,10 +248,12 @@ def test_noisereduceaudiopreprocessor(sample):
 
 def test_noisereducespectrogrampreprocessor(short_sample):
     p1 = preprocessors.NoiseReduceSpectrogramPreprocessor(
-        sample_duration=1, noisereduce_kwargs=dict(prop_decrease=1)
+        sample_duration=1,
+        noisereduce_kwargs=dict(prop_decrease=1),
     )
     p2 = preprocessors.NoiseReduceSpectrogramPreprocessor(
-        sample_duration=1, noisereduce_kwargs=dict(prop_decrease=0.5)
+        sample_duration=1,
+        noisereduce_kwargs=dict(prop_decrease=0.5),
     )
     s1 = p1.forward(short_sample, bypass_augmentations=True).data
     s2 = p2.forward(short_sample, bypass_augmentations=True).data
@@ -250,7 +262,7 @@ def test_noisereducespectrogrampreprocessor(short_sample):
 
 def test_pcenpreprocessor(sample):
 
-    p1 = preprocessors.PCENPreprocessor(sample_duration=1)
+    p1 = preprocessors.PCENPreprocessor(sample_duration=1, sample_rate=22050)
     s1 = p1.forward(sample, bypass_augmentations=True).data
     assert isinstance(s1, torch.Tensor)
 

@@ -55,12 +55,16 @@ def overlay_df_all_positive():
 
 @pytest.fixture()
 def pre():
-    return SpectrogramPreprocessor(sample_duration=2.0)
+    return SpectrogramPreprocessor(sample_duration=2.0, sample_rate=22050)
 
 
 @pytest.fixture()
 def overlay_pre(overlay_df):
-    return SpectrogramPreprocessor(sample_duration=2.0, overlay_df=overlay_df)
+    return SpectrogramPreprocessor(
+        sample_duration=2.0,
+        sample_rate=22050,
+        overlay_samples=overlay_df,
+    )
 
 
 @pytest.fixture()
@@ -134,7 +138,11 @@ def test_spec_preprocessor_overlay(dataset_df, overlay_pre):
 
 
 def test_overlay_tries_different_sample(dataset_df, bad_good_df):
-    pre = SpectrogramPreprocessor(sample_duration=2.0, overlay_df=bad_good_df)
+    pre = SpectrogramPreprocessor(
+        sample_duration=2.0,
+        sample_rate=22050,
+        overlay_samples=bad_good_df,
+    )
     dataset = AudioFileDataset(dataset_df, pre)
     # should try to load the bad sample, then load the good one
     dataset[0].data
@@ -149,7 +157,9 @@ def test_overlay_different_class(dataset_df, overlay_pre):
 
 def test_overlay_no_valid_samples(dataset_df, overlay_df_all_positive):
     pre = SpectrogramPreprocessor(
-        sample_duration=2.0, overlay_df=overlay_df_all_positive
+        sample_duration=2.0,
+        sample_rate=22050,
+        overlay_samples=overlay_df_all_positive,
     )
     dataset = AudioFileDataset(dataset_df, pre)
     dataset.preprocessor.pipeline.overlay.set(overlay_class="different")
@@ -198,7 +208,11 @@ def test_overlay_update_labels_duplicated_index(dataset_df, overlay_df):
     """
     # test with update_labels=True
     overlay_df = pd.concat([overlay_df, overlay_df])
-    overlay_pre = SpectrogramPreprocessor(2.0, overlay_df=overlay_df)
+    overlay_pre = SpectrogramPreprocessor(
+        sample_duration=2.0,
+        sample_rate=22050,
+        overlay_samples=overlay_df,
+    )
     dataset = AudioFileDataset(dataset_df, overlay_pre)
     dataset.preprocessor.pipeline.overlay.set(overlay_class="different")
     dataset.preprocessor.pipeline.overlay.set(update_labels=True)

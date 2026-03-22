@@ -1965,13 +1965,18 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             # dictionary can be loaded with torch.load() to inspect individual components
             torch.save(
                 {
+                    # these are used explicitly during .load()
                     "weights": self.network.state_dict(),
                     "class": io.build_name(self),
+                    "opensoundscape_version": opensoundscape.__version__,
+                    # these are kwargs to __init__():
+                    "architecture": arch_name,
                     "classes": self.classes,
                     "sample_duration": self.preprocessor.sample_duration,
-                    "architecture": arch_name,
+                    "sample_rate": self.preprocessor.sample_rate,
+                    "single_target": self.single_target,
                     "preprocessor_dict": self.preprocessor.to_dict(),
-                    "opensoundscape_version": opensoundscape.__version__,
+                    "preprocessor_cls": io.build_name(self.preprocessor.__class__),
                     # doesn't support resuming training across with optimizer/scheduler states
                     # because there are many other parameters that would need to be saved
                     # instead, use pickle=True for resuming training

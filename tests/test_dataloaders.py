@@ -61,7 +61,7 @@ def bad_dataset_df():
 
 @pytest.fixture()
 def pre():
-    return SpectrogramPreprocessor(sample_duration=1)
+    return SpectrogramPreprocessor(sample_duration=1, sample_rate=22050)
 
 
 def test_helpful_error_if_index_is_integer(bad_dataset_df, pre):

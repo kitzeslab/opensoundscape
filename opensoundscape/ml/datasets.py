@@ -77,7 +77,11 @@ class AudioFileDataset(torch.utils.data.Dataset):
         assert isinstance(audio_root, (str, Path, type(None))), msg
 
         # ingest various formats for samples
-        samples, invalid_samples = _ingest_samples_argument(samples, audio_root)
+        samples, invalid_samples = _ingest_samples_argument(
+            samples=samples,
+            audio_root=audio_root,
+            sample_duration=preprocessor.sample_duration,
+        )
         _check_first_path(samples)
         _check_label_types(samples)
         if len(samples) == 0:
@@ -203,7 +207,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
         return new_ds
 
 
-def _ingest_samples_argument(samples, audio_root=None, preprocessor=None, **kwargs):
+def _ingest_samples_argument(samples, audio_root=None, sample_duration=None, **kwargs):
     """create clip df with MultiIndex (file,start_time,end_time)
 
     Args:
@@ -239,9 +243,13 @@ def _ingest_samples_argument(samples, audio_root=None, preprocessor=None, **kwar
         # create clip df
         # self.label_df will have multi-index (file,start_time,end_time)
         # can contain rows with start/end time np.nan for failed samples
+        if sample_duration is None:
+            raise ValueError(
+                "If samples is list of files, sample_duration must be provided to create clips."
+            )
         samples, invalid_samples = make_clip_df(
             files=samples,
-            clip_duration=preprocessor.sample_duration,
+            clip_duration=sample_duration,
             return_invalid_samples=True,
             audio_root=audio_root,
             **kwargs,
@@ -257,6 +265,10 @@ def _ingest_samples_argument(samples, audio_root=None, preprocessor=None, **kwar
             samples = samples.set_index(keys)
         else:
             # one row per file, "file" is either a column or the index
+            if sample_duration is None:
+                raise ValueError(
+                    "If samples has one row per file, sample_duration must be provided to create clips."
+                )
 
             if not "file" in samples.columns:
                 # 3. File as index of df -> move to "file" column for [4]
@@ -268,18 +280,18 @@ def _ingest_samples_argument(samples, audio_root=None, preprocessor=None, **kwar
             # First, make a clip df
             clip_df, invalid_samples = make_clip_df(
                 files=samples["file"],
-                clip_duration=preprocessor.sample_duration,
+                clip_duration=sample_duration,
                 return_invalid_samples=True,
                 audio_root=audio_root,
                 **kwargs,
-            ).reset_index()
+            )
             # Second, copy labels from original sample df to each row of the clip_df
             # corresponding to the same file
-            clip_df = clip_df.merge(
-                samples,
-                on="file",
-                how="left",
-            ).set_index(keys)
+            clip_df = (
+                clip_df.reset_index()
+                .merge(samples, on="file", how="left")
+                .set_index(keys)
+            )
     else:
         raise ValueError(f"Unsupported type for samples: {type(samples)}")
 
@@ -295,9 +307,7 @@ def _check_first_path(samples, audio_root=None):
         assert isinstance(
             first_path, (str, Path)
         ), f"Expected str or Path, got {type(first_path)}"
-        assert Path(
-            first_path
-        ).exists(), f"First file {samples.index[0]} was not found."
+        assert Path(first_path).exists(), f"First file {first_path} was not found."
 
 
 def _check_label_types(samples):
