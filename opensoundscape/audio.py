@@ -424,9 +424,19 @@ class Audio:
         """
         start_sample = self._get_sample_index(start_time)
         if end_time is None:
-            end_sample = len(self.samples)
+            end_sample = self.samples.shape[-1]
         elif end_time < 0:
-            end_sample = len(self.samples) + self._get_sample_index(end_time)
+            end_sample = self.samples.shape[-1] + self._get_sample_index(end_time)
+            if end_sample < 0:
+                msg = (
+                    f"Requested end_time {end_time} is before the start of the "
+                    "audio; treating as out-of-bounds."
+                )
+                if out_of_bounds_mode == "raise":
+                    raise AudioOutOfBoundsError(msg)
+                elif out_of_bounds_mode == "warn":
+                    warnings.warn(msg)
+                end_sample = 0
         else:
             end_sample = self._get_sample_index(end_time)
         return self.trim_samples(
@@ -1204,6 +1214,11 @@ class Audio:
             )
         if isinstance(other, Audio):
             return concat([self, other])
+
+        if not isinstance(other, (int, float)):
+            raise TypeError(
+                "Can only add gain (int/float) or concatenate audio objects"
+            )
         else:
             return self.apply_gain(other)
 
@@ -1213,7 +1228,8 @@ class Audio:
         Args:
             other: numeric value (dB)
         """
-        assert isinstance(other, (int, float)), "Can only subtract gain (int/float)"
+        if not isinstance(other, (int, float)):
+            raise TypeError("Can only subtract gain (int/float)")
         return self.apply_gain(-other)
 
     def __mul__(self, other):
@@ -1281,6 +1297,12 @@ class Audio:
             if key.step is None:  # return trimmed clip
                 return trimmed
             else:
+                # validate step before using it as segment length
+                if key.step == 0:
+                    raise ValueError("Audio slicing step cannot be zero")
+                if key.step < 0:
+                    raise ValueError("Audio slicing step cannot be negative")
+
                 # return Audio segments of length step from start to stop
                 # discard dataframe of clip times
                 return trimmed.split(key.step)[0]
