@@ -8,7 +8,10 @@ from opensoundscape.ml.shallow_classifier import predict_on_hoplite
 from opensoundscape.ml.shallow_classifier import MLPClassifier
 from opensoundscape.ml.shallow_classifier import fit_on_hoplite_db
 from opensoundscape.ml.loss import BCELossWeakNegatives
-from opensoundscape.vector_database import load_or_create_hoplite_usearch_db
+from opensoundscape.vector_database import (
+    _find_matching_window_ids,
+    load_or_create_hoplite_usearch_db,
+)
 
 default_datetime_parser = ARUFileTimestampParser()
 
@@ -71,7 +74,7 @@ class SongSpace:
                 )
         if isinstance(database, (str, Path)):
             database = load_or_create_hoplite_usearch_db(
-                "./songspace_agile_db/",
+                database,
                 embedding_dim=feature_extractor.classifier.in_features,
             )
         self.feature_extractor = feature_extractor
@@ -102,11 +105,8 @@ class SongSpace:
         del self.datasets[name]
 
     def get_dataset(self, name):
-        """return labels_df (without window_id), window_id list for dataset name"""
-        dataset = self.datasets[name]
-        window_ids = dataset["label_df"]["window_id"]
-        labels = dataset["label_df"].drop(columns=["window_id"])
-        return labels, window_ids
+        """return labels_df for dataset name"""
+        return self.datasets[name]["label_df"]
 
     def ingest_audio(
         self,
@@ -155,7 +155,6 @@ class SongSpace:
                 Default: uses a flexible parser from aru_metadata_parser.parse handling most formats
             **kwargs: additional keyword arguments to pass to the feature extractor's embed() method
 
-        # TODO: allow selecting deployment based on folder name or metadata
         """
 
         from opensoundscape.ml.datasets import _ingest_samples_argument
@@ -205,34 +204,30 @@ class SongSpace:
                 # strict_matching=False,
                 # **dataloader_kwargs,
             )
-            # update samples_df 'window_id' column from values returned by db insertion
-            # (may have dropped/skipped some samples, so window_id does not match index of samples_df)
-            # note that this gets heavy if samples_df and embedded_samples are very large
-            embedded_samples = sample_info["embedded_samples"]
-            embedded_samples["window_id"] = sample_info["window_id"]
-            all_embedded.append(embedded_samples)
-        new_df = pd.concat(all_embedded)
-
-        # add dataset to self.datasets if not existing
-        if dataset_name not in self.datasets:
-            self.datasets[dataset_name] = dict(
-                label_df=new_df, allow_training=allow_training
-            )
-        else:  # add embedded samples to existing dataset, following embedding_exists_mode behavior
+        if dataset_name in self.datasets:
+            # add embedded samples to existing dataset, following embedding_exists_mode behavior
             ds = self.datasets[dataset_name]
-            # get df including 'window_id' column
             existing_df = ds["label_df"]
             # combine with existing dataset; behavior depends on embedding_exists_mode
             if embedding_exists_mode == "skip":
                 # we skipped existing labels, so only update entries for new samples and keep existing labels for overlapping samples
-                ds["label_df"] = existing_df.combine_first(new_df)
+                # (keep in mind that the embeddings could be in the database but not in our label_df if we re-loaded the db and re-initialized this class)
+                ds["label_df"] = existing_df.combine_first(samples_df)
             elif embedding_exists_mode == "add" or embedding_exists_mode == "error":
                 # concatenate the new samples with the existing ones, allowing duplicates
-                ds["label_df"] = pd.concat([existing_df, new_df], ignore_index=False)
+                ds["label_df"] = pd.concat(
+                    [existing_df, samples_df], ignore_index=False
+                )
             else:
                 raise ValueError(
                     f"Invalid embedding_exists_mode: {embedding_exists_mode}. Must be one of 'skip', 'error', or 'add'."
                 )
+        else:  # new dataset
+            self.datasets[dataset_name] = {
+                "label_df": samples_df,
+                "allow_training": allow_training,
+                "audio_root": audio_root,
+            }
 
     def fit_classifier(
         self,
@@ -285,48 +280,37 @@ class SongSpace:
         """
         # prepare training data by concatenating the label_dfs for the specified datasets
         train_dfs = []
-        train_window_ids = []
         if classes is None:
             # create class list as union of all classes in the specified datasets
             classes = set()
             for dataset_name in train_datasets:
-                label_df, window_ids = self.get_dataset(dataset_name)
+                label_df = self.get_dataset(dataset_name)
                 classes = classes.union(set(label_df.columns))
             if validation_dataset is not None:
-                val_label_df, val_window_ids = self.get_dataset(validation_dataset)
+                val_label_df = self.get_dataset(validation_dataset)
                 classes = classes.union(set(val_label_df.columns))
             classes = sorted(list(classes))  # avoids non-deterministic class order
 
         # aggregate training label dataframes, filling in missing columns with NaN
         for dataset_name in train_datasets:
-            label_df, window_ids = self.get_dataset(dataset_name)
+            label_df = self.get_dataset(dataset_name)
             # add missing columns for any classes not in this dataset, filling with NaN
             missing_classes = set(classes) - set(label_df.columns)
             for c in missing_classes:
                 label_df[c] = np.nan
             # subset and re-order columns to match classes
             train_dfs.append(label_df[classes])
-            train_window_ids.extend(window_ids)
         # add weak negatives to training
         if weak_negatives_proportion > 0:
             n_positives = sum(len(df) for df in train_dfs)
             n_weak_negatives = int(n_positives * weak_negatives_proportion)
-            weak_negative_result = self._get_unlabeled_samples(
+            weak_negatives = self._get_unlabeled_samples(
                 n_weak_negatives, classes=classes
             )
-            if weak_negative_result is not None:
-                weak_negatives_df, wn_ids = weak_negative_result
-                # add columns for classes with NaN values
-                for c in classes:
-                    if c not in weak_negatives_df.columns:
-                        weak_negatives_df[c] = np.nan
-                print(
-                    f"adding {len(weak_negatives_df)} weak negatives to the training data"
-                )
-                train_dfs.append(weak_negatives_df[classes])
-                train_window_ids.extend(wn_ids)
+            if weak_negatives is not None:
+                train_dfs.append(weak_negatives[classes])
         train_df = pd.concat(train_dfs)
-        validation_df, val_window_ids = (
+        validation_df = (
             self.get_dataset(validation_dataset) if validation_dataset else (None, [])
         )
         print(
@@ -381,19 +365,14 @@ class SongSpace:
         if dataset_name not in self.datasets:
             raise ValueError(f"No dataset with name {dataset_name} found in SongSpace")
         classifier = self.classifiers[classifier_name]
-        label_df, window_ids = self.get_dataset(dataset_name)
-        window_ids = [
-            w if isinstance(w, (list, tuple, np.ndarray)) else [w]
-            for w in window_ids.values
-        ]
+        label_df = self.get_dataset(dataset_name)
         preds = predict_on_hoplite(
             db=self.database,
-            samples=label_df,  # only used for building output df, since we pass window_ids
+            samples=label_df,
             classifier=classifier,
             clip_duration=self.sample_duration,
             batch_size=batch_size,
             return_df=return_df,
-            window_ids=window_ids,
         )
         return preds
 
@@ -439,7 +418,11 @@ class SongSpace:
 
     def get_dataset_embeddings(self, dataset_name):
         """Utility to get the embeddings and labels for a given dataset as numpy arrays"""
-        _, window_ids = self.get_dataset(dataset_name)
+        label_df = self.get_dataset(dataset_name)
+        # TODO allow random for return_val?
+        window_ids = _find_matching_window_ids(
+            self.database, label_df, project=dataset_name, return_val="first"
+        )
         embeddings = self.database.get_embeddings_batch(window_ids)
         return embeddings
 
@@ -484,8 +467,7 @@ class SongSpace:
             unlabeled_df = pd.concat(unlabeled_dfs)
         # sample up to n_samples from the unlabeled dataframe
         unlabeled_df = unlabeled_df.sample(n=min(n_samples, len(unlabeled_df)))
-        window_ids = unlabeled_df["window_id"].values
-        return unlabeled_df.drop(columns=["window_id"]), window_ids
+        return unlabeled_df
 
 
 def _require_bmz():
