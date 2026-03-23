@@ -268,6 +268,7 @@ def _find_matching_window_ids(
     deployment_name=None,
     project=None,
     rounding_precision=6,
+    return_val="all",  # all or first
 ):
     """find window ids in the db matching each of the given clips (defined by their filename, start_time, and end_time), optionally constrained to a deployment/project
 
@@ -281,6 +282,7 @@ def _find_matching_window_ids(
         rounding_precision: int, number of decimal places to round start_time and end_time to when matching, to account for potential float precision issues
     Returns:
         list of window_id tuples for each row in clips; eg [(), (0,), (3,1)]
+        or list of integer if return_val == "first"
     """
     if len(clips) == 0:
         print("Zero samples passed to _find_matching_window_ids")
@@ -308,10 +310,15 @@ def _find_matching_window_ids(
     # find matching window ids for each clip in the input dataframe efficiently
     match_positions = find_matches(clip_df_tuples, db_window_tuples)
     window_ids = [w.id for w in windows]
-    matching_window_ids = [
+    if return_val == "first":
+        # return just the first matching window id for each clip, or None if no matches
+        matching_window_ids = [
+            index[0] if len(index) > 0 else None for index in match_positions
+        ]
+        return matching_window_ids
+    return [
         tuple(window_ids[pos] for pos in positions) for positions in match_positions
     ]
-    return matching_window_ids
 
 
 def _handle_existing_windows(
