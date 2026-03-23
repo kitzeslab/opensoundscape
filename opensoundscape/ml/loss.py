@@ -41,17 +41,17 @@ class BCELossWeakNegatives(nn.BCEWithLogitsLoss):
         x = x.float()  # avoid complaints about long dtype
 
         # Create a weight tensor based on the target
-        weight = torch.ones_like(target)
-        weight[torch.isnan(target)] = self.weak_negative_weight
-
+        mask = torch.isnan(target)
         # Replace NaNs in target with zeros for loss computation
-        target = torch.where(torch.isnan(target), torch.zeros_like(target), target)
+        target_clean = torch.where(mask, 0.0, target)
+        weight = torch.where(mask, self.weak_negative_weight, 1.0)
 
-        raw_bce_loss_per_item = super().forward(x, target)
-        weighted_loss = raw_bce_loss_per_item * weight
+        raw_bce_loss_per_item = super().forward(x, target_clean)
+        weighted_loss = (raw_bce_loss_per_item * weight).sum()
+        norm = weight.sum().clamp(min=1e-8)  # avoid division by zero
 
         # normalize loss by the effective number of labels (sum of weights)
-        return weighted_loss.sum() / weight.sum()
+        return weighted_loss / norm
 
 
 class CrossEntropyLoss_hot(nn.CrossEntropyLoss):

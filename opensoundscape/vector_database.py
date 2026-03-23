@@ -118,6 +118,7 @@ def _insert_embeddings(
     )
 
     failed_to_insert = []
+    window_ids = []  # track and return window_id in database for each item
 
     # insert each embedding in the batch into the database, one-by-one
     for j, audiosample in enumerate(batch_samples):
@@ -147,20 +148,22 @@ def _insert_embeddings(
         try:
             # TODO: use insert_windows_batch
             # TODO: use hoplite's new options for 'raise', 'overwrite', 'ignore', 'add' duplicate keys
-            db.insert_window(
+            window_id = db.insert_window(
                 recording_id=recording_id,
                 embedding=batch_embeddings[j],
                 offsets=[start_time, end_time],
             )
+            window_ids.append(window_id)
         except RuntimeError as e:
-            # duplicate key error, window already exists
+            window_ids.append(None)  # placeholder for failed insert
             if "Duplicate key" in str(e):
+                # duplicate key error, window already exists
                 failed_to_insert.append(
                     (file, start_time, end_time, "duplicate window")
                 )
             else:
                 raise e
-    return failed_to_insert
+    return window_ids, failed_to_insert
 
 
 def normalize_index_to_tuples(idx, rounding_precision=6):
@@ -384,6 +387,7 @@ def _handle_existing_windows(
 
     # else: embedding_exists_mode == "add", add more embeddings even if matching
     # existing windows -> no subsetting needed
+    # TODO: we probably want to know the window id of existing embeddings
 
 
 def _collate_search_results(db, results):

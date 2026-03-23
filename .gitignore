@@ -26,3 +26,5 @@ docs/tutorials/rasi_hawkears_train_val/
 docs/tutorials/*.csv
 docs/tutorials/agileDB/
 docs/tutorials/*.pt
+opensoundscape/ml/datasets.py
+docs/tutorials/songspace_agile_db

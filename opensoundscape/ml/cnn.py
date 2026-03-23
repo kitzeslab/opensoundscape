@@ -2183,6 +2183,9 @@ class SpectrogramClassifier(SpectrogramModule):
     ):
         """Run inference on a dataloader, saving 1D outputs of target_layer to a hoplite database
 
+        Note that all samples are associated with a single deployment (e.g. one audio recorder on one season)
+        Call this method separately for each deployment to associate samples with different deployments in the database
+
         Args:
             samples: (same as CNN.predict())
             db: a hoplite database object or a path to a hoplite database folder
@@ -2210,7 +2213,7 @@ class SpectrogramClassifier(SpectrogramModule):
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             audio_root: the root directory for relative paths to audio files
             embedding_exists_mode: str, behavior when an embedding already exists for a given
-                embedding. Options are:
+                embedding. Options are: #TODO implement replace
                     "skip": skip inserting the embedding (default)
                     "error": raise an error
                     "add": add a new embedding entry to the db with the same source info
@@ -2232,7 +2235,7 @@ class SpectrogramClassifier(SpectrogramModule):
             **dataloader_kwargs: additional keyword arguments to pass to the dataloader
 
         Returns:
-            (embedding_db, dict with info about failed samples)
+            (embedding_db, dict with info about inserted window_id's and failed samples)
 
         Effects:
             Inserts embeddings into the provided hoplite database
@@ -2303,6 +2306,8 @@ class SpectrogramClassifier(SpectrogramModule):
                 "insertion_failures": pd.DataFrame(
                     columns=["file", "start_time", "end_time", "reason"]
                 ),
+                "window_id": [],
+                "embedded_samples": dataloader.dataset.dataset.label_df,
             }
         else:
             print(
@@ -2347,6 +2352,7 @@ class SpectrogramClassifier(SpectrogramModule):
         target_layer = self._check_or_get_default_embedding_layer(target_layer)
 
         failed_to_insert = []
+        window_ids = []  # track and return window_id in database for each item
         for i, batch_samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
 
             # forward pass of network, getting only target_layer outputs
@@ -2354,7 +2360,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 batch_samples, targets=[target_layer], avgpool=True
             )
 
-            batch_insertion_failures = _insert_embeddings(
+            batch_window_ids, batch_insertion_failures = _insert_embeddings(
                 db=db,
                 batch_samples=batch_samples,
                 batch_embeddings=outs[target_layer],
@@ -2366,12 +2372,12 @@ class SpectrogramClassifier(SpectrogramModule):
             )
 
             failed_to_insert.extend(batch_insertion_failures)
+            window_ids.extend(batch_window_ids)
 
             # commit once per commit_frequency_batches batches
             # committing is relatively slow, but we don't want to lose progress if interrupted
             if (i + 1) % commit_frequency_batches == 0:
                 db.commit()
-
             if wandb_session is not None:
                 wandb_session.log(
                     {
@@ -2392,6 +2398,8 @@ class SpectrogramClassifier(SpectrogramModule):
         return (
             db,
             {
+                "embedded_samples": dataloader.dataset.dataset.label_df,
+                "window_id": window_ids,
                 "preprocessing_failures": dataloader.dataset.report(),
                 "insertion_failures": insertion_failures,
             },
