@@ -26,3 +26,4 @@ docs/tutorials/rasi_hawkears_train_val/
 docs/tutorials/*.csv
 docs/tutorials/agileDB/
 docs/tutorials/*.pt
+docs/tutorials/ssdb/

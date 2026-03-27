@@ -1349,6 +1349,84 @@ def test_call_with_targets(test_df):
     assert np.shape(outs[model.network.layer4]) == (2, 512, 7, 7)
 
 
+def test_batch_forward_returns_requested_targets():
+    """Verify batch_forward() returns outputs for all requested layer targets.
+
+    The batch_forward() method accepts a list of target layers and returns a dictionary
+    with outputs from each target. This test verifies that intermediate layer outputs
+    have correct shapes and that the special key -1 represents the final model output.
+    Includes testing with and without average pooling applied to intermediate outputs.
+    """
+    model = cnn.SpectrogramClassifier(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
+    model.device = "cpu"
+
+    labels = pd.Series([1, 0], index=[0, 1], name=("tests/audio/silence_10s.mp3", 0, 5))
+    sample1 = AudioSample(
+        source="tests/audio/silence_10s.mp3",
+        start_time=0,
+        duration=5,
+        labels=labels,
+    )
+    sample2 = AudioSample(
+        source="tests/audio/silence_10s.mp3",
+        start_time=5,
+        duration=5,
+        labels=labels,
+    )
+    sample1.data = torch.randn(1, 224, 224)
+    sample2.data = torch.randn(1, 224, 224)
+    sample1.is_alternative = False
+    sample2.is_alternative = False
+
+    outs = model.batch_forward(
+        [sample1, sample2], targets=[-1, model.network.layer4], avgpool=False
+    )
+    assert set(outs.keys()) == {-1, model.network.layer4}
+    assert np.shape(outs[-1]) == (2, 2)
+    assert np.shape(outs[model.network.layer4]) == (2, 512, 7, 7)
+
+
+def test_call_masks_invalid_alternative_samples():
+    """Verify __call__() masks outputs to NaN for invalid/alternative samples.
+
+    When the preprocessing pipeline fails on a sample, it returns a placeholder
+    (alternative) sample. The model's __call__ method should detect these invalid
+    samples (via is_alternative attribute) and mask their outputs to NaN, preventing
+    them from being used in downstream processing or metrics calculations.
+    """
+    model = cnn.SpectrogramClassifier(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
+    model.device = "cpu"
+
+    labels = pd.Series([1, 0], index=[0, 1], name=("tests/audio/silence_10s.mp3", 0, 5))
+    sample1 = AudioSample(
+        source="tests/audio/silence_10s.mp3",
+        start_time=0,
+        duration=5,
+        labels=labels,
+    )
+    sample2 = AudioSample(
+        source="tests/audio/silence_10s.mp3",
+        start_time=5,
+        duration=5,
+        labels=labels,
+    )
+    sample1.data = torch.randn(1, 224, 224)
+    sample2.data = torch.randn(1, 224, 224)
+    sample1.is_alternative = False
+    sample2.is_alternative = True
+
+    dataloader = torch.utils.data.DataLoader(
+        [sample1, sample2], batch_size=2, collate_fn=identity
+    )
+    outs = model(dataloader, targets=[-1], progress_bar=False)
+    assert np.isfinite(outs[-1][0]).all()
+    assert np.isnan(outs[-1][1]).all()
+
+
 def test_freeze_layers_except_and_unfreeze():
     model = cnn.SpectrogramClassifier(
         architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None

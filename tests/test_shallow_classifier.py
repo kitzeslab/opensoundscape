@@ -174,6 +174,45 @@ class TestMLPClassifier:
             output = mlp(x)
             assert output.shape == (1, output_size)
 
+    def test_from_torch_linear_copies_weights_and_bias(self):
+        """Verify MLPClassifier.from_torch_linear() correctly initializes a 1-layer classifier.
+
+        This class method creates an MLPClassifier from an existing torch.nn.Linear layer,
+        copying its weight and bias parameters. This is useful for transfer learning or
+        converting pre-trained linear layers into OpenSoundscape classifiers.
+        """
+        linear = torch.nn.Linear(4, 3)
+        with torch.no_grad():
+            linear.weight.copy_(
+                torch.tensor(
+                    [
+                        [1.0, 2.0, 3.0, 4.0],
+                        [0.1, 0.2, 0.3, 0.4],
+                        [-1.0, -2.0, -3.0, -4.0],
+                    ]
+                )
+            )
+            linear.bias.copy_(torch.tensor([0.5, -0.5, 1.5]))
+
+        classes = ["a", "b", "c"]
+        mlp = opso.MLPClassifier.from_torch_linear(linear, classes=classes)
+
+        assert mlp.in_features == 4
+        assert mlp.out_features == 3
+        assert mlp.hidden_layer_sizes == ()
+        assert mlp.classes == classes
+        assert torch.allclose(mlp.classifier.weight, linear.weight)
+        assert torch.allclose(mlp.classifier.bias, linear.bias)
+
+    def test_from_torch_linear_rejects_non_linear_input(self):
+        """Verify MLPClassifier.from_torch_linear() rejects non-Linear layer inputs.
+
+        The method should only accept torch.nn.Linear layers. Attempting to use other
+        layer types (e.g., Conv1d) should raise a ValueError.
+        """
+        with pytest.raises(ValueError):
+            opso.MLPClassifier.from_torch_linear(torch.nn.Conv1d(1, 1, kernel_size=1))
+
 
 class TestQuickFit:
     """Test suite for fit function"""
@@ -256,6 +295,23 @@ class TestQuickFit:
 
         output = mlp(train_features)
         assert output.shape == (8, 2)
+
+    def test_fit_default_criterion_handles_nan_targets(self):
+        """Verify fit() with default criterion can handle NaN labels (weak negatives).
+
+        The updated fit() function uses BCELossWeakNegatives as the default criterion,
+        which treats NaN labels as weak negatives rather than failing. This allows
+        training on partially labeled datasets where some labels are missing/ambiguous.
+        """
+        mlp = opso.MLPClassifier(6, 2)
+        train_features = torch.randn(12, 6)
+        train_labels = torch.randint(0, 2, (12, 2)).float()
+        train_labels[0, 1] = float("nan")
+
+        shallow_classifier.fit(mlp, train_features, train_labels, steps=3, batch_size=4)
+
+        output = mlp(train_features)
+        assert output.shape == (12, 2)
 
 
 class TestBatchedTraining:

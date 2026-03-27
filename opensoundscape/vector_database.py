@@ -373,13 +373,14 @@ def _handle_existing_windows(
         # filter df to clips without existing embeddings
         diff_idx = clip_df_norm.difference(db_windows_norm)
 
-        if embedding_exists_mode == "error" and len(diff_idx) > 0:
+        # subset the clip dataframe in place to exclude overlapping_idxs
+        mask = clip_df_norm.isin(diff_idx)
+
+        if embedding_exists_mode == "error" and not mask.all():
             raise ValueError(
                 'Some embeddings exist in db and embedding_exists_mode="error"'
             )
 
-        # subset the clip dataframe in place to exclude overlapping_idxs
-        mask = clip_df_norm.isin(diff_idx)
         clips.drop(clips.index[~mask], inplace=True)
 
     # else: embedding_exists_mode == "add", add more embeddings even if matching
