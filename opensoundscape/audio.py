@@ -126,11 +126,14 @@ class Audio:
 
     @classmethod
     def silence(cls, duration, sample_rate):
-        """ "Create audio object with zero-valued samples
+        """Create audio object with zero-valued samples
 
         Args:
             duration: length in seconds
             sample_rate: samples per second
+
+        Returns:
+            Audio object containing silence of the specified duration
 
         Note: rounds down to integer number of samples
         """
@@ -138,11 +141,11 @@ class Audio:
 
     @classmethod
     def noise(cls, duration, sample_rate, color="white", dBFS=-10):
-        """ "Create audio object with noise of a desired 'color'
+        """Create audio object with noise of a desired 'color'
 
         set np.random.seed() for reproducible results
 
-        Based on an implementatino by @Bob in StackOverflow question 67085963
+        Based on an implementation by @Bob in StackOverflow question 67085963
 
         Args:
             duration: length in seconds
@@ -154,7 +157,8 @@ class Audio:
                 - brown: synonym for brownian
                 - violet: psd = f
                 - blue: psd = sqrt(f)
-            [default: 'white']
+                [default: 'white']
+            dBFS: target peak level in decibels Full Scale [default: -10]
 
         Returns: Audio object
 
@@ -201,7 +205,7 @@ class Audio:
         """Load audio from files
 
         Deal with the various possible input types to load an audio file
-        Also attempts to load metadata using tinytag.
+        Also attempts to load metadata using aru_metadata_parser.
 
         Audio objects only support mono (one-channel) at this time. Files
         with multiple channels are mixed down to a single channel. To load
@@ -219,7 +223,7 @@ class Audio:
             path (str, Path): path to an audio file
             sample_rate (int, None): resample audio with value and resample_type,
                 if None use source sample_rate (default: None)
-            resample_type: method used to resample_type (default: "soxr_hq")
+            resample_type: method used to resample audio (default: "soxr_hq")
             dtype: data type of samples returned [Default: np.float32]
             load_metadata (bool): if True, attempts to load metadata from the audio
                 file. If an exception occurs, self.metadata will be `None`.
@@ -238,7 +242,7 @@ class Audio:
                 - will only work if loading metadata results in localized datetime
                     object for 'recording_start_time' key
                 - will raise AudioOutOfBoundsError if requested time period
-                is not full contained within the audio file
+                is not fully contained within the audio file
                 Example of creating localized timestamp:
                 ```
                 {import pytz; from datetime import datetime;
@@ -453,7 +457,7 @@ class Audio:
 
         Args:
             start_sample: sample index for start of extracted clip, inclusive
-            end_sample: sample index for end of extracted clip, exlusive
+            end_sample: sample index for end of extracted clip, exclusive
             out_of_bounds_mode: behavior if requested time period is not fully contained
                 within the audio file. Options:
                 - 'ignore': return any available audio with no warning/error [default]
@@ -526,11 +530,11 @@ class Audio:
             end_timestamp: localized datetime.datetime object for end of extracted clip
                 e.g. datetime(2020,4,4,10,25,20,tzinfo=pytz.UTC)
             duration: duration in seconds of the extracted clip
-                - specify exactly one of duration or end_datetime
+                - specify exactly one of duration or end_timestamp
             out_of_bounds_mode: behavior if requested time period is not fully contained
                 within the audio file. Options:
-                - 'ignore': return any available audio with no warning/error [default]
-                - 'warn': generate a warning
+                - 'warn': generate a warning [default]
+                - 'ignore': return any available audio with no warning/error
                 - 'raise': raise an AudioOutOfBoundsError
 
         Returns:
@@ -583,7 +587,7 @@ class Audio:
                 the final length in seconds of the looped file
                 (cannot be used with n)[default: None]
             n:
-                the number of occurences of the original audio sample
+                the number of occurrences of the original audio sample
                 (cannot be used with length) [default: None]
                 For example, n=1 returns the original sample, and
                 n=2 returns two concatenated copies of the original sample
@@ -658,7 +662,7 @@ class Audio:
         """Extend audio file by adding `duration` seconds of silence to the end
 
         Args:
-            duration: the final duration in seconds of the audio object
+            duration: the number of seconds of silence to add to the end of the audio object
 
         Returns:
             a new Audio object with silence added to the end
@@ -778,13 +782,15 @@ class Audio:
     def bandpass(self, low_f, high_f, order):
         """Bandpass audio signal with a butterworth filter
 
-        Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
+        Uses a phase-preserving algorithm (scipy.signal's butter and sosfiltfilt)
 
         Args:
-            low_f: low frequency cutoff (-3 dB)  in Hz of bandpass filter
-            high_f: high frequency cutoff (-3 dB)  in Hz of bandpass filter
+            low_f: low frequency cutoff (-3 dB) in Hz of bandpass filter
+            high_f: high frequency cutoff (-3 dB) in Hz of bandpass filter
             order: butterworth filter order (integer) ~= steepness of cutoff
 
+        Returns:
+            a new Audio object with the bandpass filter applied
         """
 
         if low_f <= 0:
@@ -801,13 +807,16 @@ class Audio:
     def lowpass(self, cutoff_f, order):
         """Low-pass audio signal with a butterworth filter
 
-        Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
+        Uses a phase-preserving algorithm (scipy.signal's butter and sosfiltfilt)
 
-        Removes high frequencies above cuttof_f and preserves low frequencies
+        Removes high frequencies above cutoff_f and preserves low frequencies
 
         Args:
-            cutoff_f: cutoff frequency (-3 dB)  in Hz of lowpass filter
+            cutoff_f: cutoff frequency (-3 dB) in Hz of lowpass filter
             order: butterworth filter order (integer) ~= steepness of cutoff
+
+        Returns:
+            a new Audio object with the lowpass filter applied
         """
 
         if cutoff_f <= 0:
@@ -825,13 +834,16 @@ class Audio:
     def highpass(self, cutoff_f, order):
         """High-pass audio signal with a butterworth filter
 
-        Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
+        Uses a phase-preserving algorithm (scipy.signal's butter and sosfiltfilt)
 
         Removes low frequencies below cutoff_f and preserves high frequencies
 
         Args:
-            cutoff_f: cutoff frequency (-3 dB)  in Hz of high-pass filter
+            cutoff_f: cutoff frequency (-3 dB) in Hz of high-pass filter
             order: butterworth filter order (integer) ~= steepness of cutoff
+
+        Returns:
+            a new Audio object with the highpass filter applied
         """
 
         if cutoff_f <= 0:
@@ -848,9 +860,6 @@ class Audio:
 
     def spectrum(self):
         """Create frequency spectrum from an Audio object using fft
-
-        Args:
-            self
 
         Returns:
             fft, frequencies
@@ -879,13 +888,13 @@ class Audio:
         Linearly scales waveform values so that the max absolute value matches
         the specified value (default: 1.0)
 
-        args:
+        Args:
             peak_level: maximum absolute value of resulting waveform
             peak_dBFS: maximum resulting absolute value in decibels Full Scale
                 - for example, -3 dBFS equals a peak level of 0.71
                 - Note: do not specify both peak_level and peak_dBFS
 
-        returns:
+        Returns:
             Audio object with normalized samples
 
         Note: if all samples are zero, returns the original object (avoids
@@ -993,7 +1002,7 @@ class Audio:
         `audio.save("output.ogg", format="OGG", subtype="OPUS")`
 
         Specify bitrate:
-        soundfinder >= v0.13.1  supports variable bitrate and compression level for mp3 / OPUS formats:
+        soundfile >= v0.13.1  supports variable bitrate and compression level for mp3 / OPUS formats:
         `audio.save("output.mp3", bitrate_mode="VARIABLE", compression_level=0.8)`
 
         # change sample rate before saving:
@@ -1007,7 +1016,7 @@ class Audio:
             )
         except ValueError as exc:
             raise NotImplementedError(
-                "Failed to save file with soundfinder. "
+                "Failed to save file with soundfile. "
                 "This may be because the underlying package `libsndfile` must be "
                 "version >=1.1.0 to write mp3 files. \n"
                 "Note that as of Dec 2022, libsndfile 1.1.0 is not available on Ubuntu."
@@ -1029,18 +1038,18 @@ class Audio:
                 )
 
     def split(self, clip_duration, **kwargs):
-        """Split Audio into even-lengthed clips
+        """Split Audio into even-length clips
 
         The Audio object is split into clips of a specified duration and overlap
 
         Args:
             clip_duration (float):  The duration in seconds of the clips
-            **kwargs (such as clip_overlap_fraction, final_clip) are passed to
-                opensoundscape.utils.generate_clip_times_df()
+            **kwargs: additional keyword arguments (such as clip_overlap_fraction, final_clip)
+                passed to opensoundscape.utils.generate_clip_times_df()
                 - extends last Audio object if user passes final_clip == "extend"
         Returns:
             - audio_clips: list of audio objects
-            - dataframe w/columns for start_time and end_time of each clip
+            - dataframe with columns for start_time and end_time of each clip
         """
 
         duration = self.duration
@@ -1093,7 +1102,7 @@ class Audio:
             clip_overlap_fraction: fraction of overlap (0 to 1) of each window
                 [default: None]
             clip_step: step size (seconds) between windows [default: None]
-            final_clip: behavior if final_clip is less than clip_duration seconds long.
+            final_clip: behavior if final clip is less than clip_duration seconds long.
                 [default: "extend"]
                 Possible options (any other input will ignore the final clip entirely),
                     - "remainder": Include the remainder of the Audio (clip will not have
@@ -1104,8 +1113,6 @@ class Audio:
                     - None: Discard the remainder
             rounding_precision: number of decimal places to round clip start and end times
                 - helps avoid floating point issues when generating clip times
-            return_df: if True, returns dataframe with the computed value as 'value' column in a
-                dataframe with clip start_time and end_time columns
             **kwargs: additional keyword arguments to pass to the function
         Returns:
             (window start times, values)
@@ -1139,9 +1146,8 @@ class Audio:
             prefix: A name to prepend to the written clips
             clip_duration: The duration of each clip in seconds
             clip_overlap: The overlap of each clip in seconds [default: 0]
-            final_clip (str): Behavior if final_clip is less than clip_duration seconds long.
-            [default: None]
-                By default, ignores final clip entirely.
+            final_clip (str): Behavior if final clip is less than clip_duration seconds long.
+                [default: "extend"]
                 Possible options (any other input will ignore the final clip entirely),
                     - "remainder": Include the remainder of the Audio (clip will not have
                       clip_duration length)
@@ -1175,13 +1181,13 @@ class Audio:
         return df
 
     def _get_sample_index(self, time):
-        """Given a time, convert it to the corresponding sample
+        """Given a time in seconds, return the corresponding sample index
 
         Args:
-            time: The time to multiply with the sample_rate
+            time: time in seconds to convert to a sample index
 
         Returns:
-            sample: The rounded sample
+            sample: the integer sample index corresponding to the given time
 
         Note: always rounds down (casts to int)
         """
@@ -1324,10 +1330,18 @@ def load_channels_as_audio(
     Provides a way to access individual channels, since Audio.from_file
     mixes down to mono by default
 
-    args:
-        see Audio.from_file()
+    Args:
+        path (str, Path): path to an audio file
+        sample_rate (int, None): resample audio to this rate; if None, uses
+            the file's native sample rate [default: None]
+        resample_type: resampling algorithm to use [default: "soxr_hq"]
+        dtype: data type of samples returned [default: np.float32]
+        offset: load audio starting at this time in seconds [default: 0]
+        duration: load audio of this duration in seconds; if None, loads
+            to the end of the file [default: None]
+        metadata (bool): if True, loads metadata from the file [default: True]
 
-    returns:
+    Returns:
         list of Audio objects (one per channel)
 
     Note: metadata is copied to each Audio object, but will contain an
@@ -1568,10 +1582,10 @@ def estimate_delay(
 ):
     """
     Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal. The audio objects must be time-synchronized.
-    For example, if audio is delayed by 1 second compared to reference_audio, then estimate_delay(audio, reference_audio, max_delay) will return 1.0.
+    For example, if primary_audio is delayed by 1 second compared to reference_audio, then estimate_delay(primary_audio, reference_audio, max_delay) will return 1.0.
 
     NOTE: Only the central portion of the signal (between start + max_delay and end - max_delay) is used for cross-correlation. This is to avoid edge effects.
-    This means estimate_delay(primary_audio, reference_audio, max_delay) is not necessarily == estimate_delay(reference_audio, primary_audio, max_delay
+    This means estimate_delay(primary_audio, reference_audio, max_delay) is not necessarily == estimate_delay(reference_audio, primary_audio, max_delay)
 
     Args:
         primary_audio: audio object containing the signal of interest
@@ -1589,12 +1603,12 @@ def estimate_delay(
         return_cc_max: if True, returns cross correlation max value as second argument
             (see `opensoundscape.signal_processing.tdoa`)
     Returns:
-        estimated time delay (seconds) from reference_audio to audio
+        estimated time delay (seconds) from reference_audio to primary_audio
 
         if return_cc_max is True, also returns a second value, the max of the cross correlation
         of the two signals
 
-    Note: resamples reference_audio if its sample rate does not match audio
+    Note: resamples reference_audio if its sample rate does not match primary_audio
     """
     # sample rates must match
     sr = primary_audio.sample_rate
@@ -1614,7 +1628,7 @@ def estimate_delay(
 
 
 def parse_opso_metadata(comment_string):
-    """parse metadata saved by opensoundcsape as json in comment field
+    """parse metadata saved by opensoundscape as json in comment field
 
     Parses a json string which opensoundscape saves to the comment metadata field
     of WAV files to preserve metadata. The string begins with `opso_metadata`
@@ -1665,7 +1679,7 @@ def generate_opso_metadata_str(metadata_dictionary, version="v0.1"):
     of the metadata format, for instance 'v0.1'.
 
     See also: `parse_opso_metadata` which parses the string created by this
-    fundtion
+    function
 
     Args:
         metadata_dictionary: dictionary of audio metadata. Should conform
@@ -1725,7 +1739,7 @@ def parse_metadata(path):
                 metadata = parse_opso_metadata(metadata["comment"])
             except Exception as exec:
                 warnings.warn(
-                    "The file seems to contain opensoundcape metadata in the "
+                    "The file seems to contain opensoundscape metadata in the "
                     f"comment field, but parse_opso_metadata raised {exec}"
                 )
         # otherwise, if this is an AudioMoth file, try to parse out additional
@@ -1758,7 +1772,7 @@ def write_metadata(metadata, metadata_format, path, suppress_warnings=False):
     Args:
         metadata: dictionary of metadata
         metadata_format: one of 'opso','opso_metadata_v0.1','soundfile'
-            (see Audio.wave documentation)
+            (see Audio.save documentation)
         path: file path to save metadata in with soundfile
         suppress_warnings: if True, does not warn user when writing to unsupported format
     """
@@ -1808,8 +1822,7 @@ def lowpass_filter(signal, cutoff_f, sample_rate, order=9):
 
     Args:
         signal: discrete time signal (audio samples, list of float)
-        low_f: -3db point (?) for highpass filter (Hz)
-        high_f: -3db point (?) for highpass filter (Hz)
+        cutoff_f: -3 dB cutoff point for lowpass filter (Hz)
         sample_rate: samples per second (Hz)
         order: higher values -> steeper dropoff [default: 9]
 
@@ -1847,8 +1860,8 @@ def bandpass_filter(signal, low_f, high_f, sample_rate, order=9):
 
     Args:
         signal: discrete time signal (audio samples, list of float)
-        low_f: -3db point for highpass filter (Hz)
-        high_f: -3db point for highpass filter (Hz)
+        low_f: -3 dB lower cutoff point for bandpass filter (Hz)
+        high_f: -3 dB upper cutoff point for bandpass filter (Hz)
         sample_rate: samples per second (Hz)
         order: higher values -> steeper dropoff [default: 9]
 
@@ -1869,7 +1882,8 @@ def clipping_detector(samples, threshold=0.6):
 
     Args:
         samples: a time series of float values
-        threshold=0.6: minimum value of sample to count as clipping
+        threshold: minimum absolute value of a sample to count as clipping
+            [default: 0.6]
 
     Returns:
         number of samples exceeding threshold
@@ -1892,7 +1906,7 @@ def _audio_from_file_handler(
     """Load audio from files
 
     Deal with the various possible input types to load an audio file
-    Also attempts to load metadata using tinytag.
+    Also attempts to load metadata using aru_metadata_parser.
 
     Audio objects only support mono (one-channel) at this time. Files
     with multiple channels are mixed down to a single channel. To load
@@ -1907,10 +1921,11 @@ def _audio_from_file_handler(
     requires ffmpeg for mp3 support.
 
     Args:
+        cls: the class to instantiate (Audio or a subclass)
         path (str, Path): path to an audio file
         sample_rate (int, None): resample audio with value and resample_type,
             if None use source sample_rate (default: None)
-        resample_type: method used to resample_type (default: "soxr_hq")
+        resample_type: method used to resample audio (default: "soxr_hq")
         dtype: data type of samples returned [Default: np.float32]
         load_metadata (bool): if True, attempts to load metadata from the audio
             file. If an exception occurs, self.metadata will be `None`.
@@ -1929,7 +1944,7 @@ def _audio_from_file_handler(
             - will only work if loading metadata results in localized datetime
                 object for 'recording_start_time' key
             - will raise AudioOutOfBoundsError if requested time period
-            is not full contained within the audio file
+            is not fully contained within the audio file
             Example of creating localized timestamp:
             ```
             import pytz; from datetime import datetime;
@@ -1964,7 +1979,7 @@ def _audio_from_file_handler(
 
     ## Determine start time / offset ##
     if start_timestamp is not None:
-        # user should have provied a localized timestamp as the start_timestamp
+        # user should have provided a localized timestamp as the start_timestamp
         assert (
             offset is None
         ), "You must not specify both `start_timestamp` and `offset`"
@@ -2092,11 +2107,16 @@ class MultiChannelAudio(Audio):
 
     @classmethod
     def silence(cls, duration, sample_rate, channels):
-        """ "Create audio object with zero-valued samples
+        """Create MultiChannelAudio object with zero-valued samples
 
         Args:
             duration: length in seconds
             sample_rate: samples per second
+            channels: number of channels
+
+        Returns:
+            MultiChannelAudio object containing silence of the specified duration
+            and number of channels
 
         Note: rounds down to integer number of samples
         """
@@ -2104,6 +2124,22 @@ class MultiChannelAudio(Audio):
 
     @classmethod
     def noise(cls, duration, sample_rate, color="white", dBFS=-10, channels=2):
+        """Create MultiChannelAudio object with noise of a desired 'color'
+
+        Creates independent noise channels using Audio.noise() for each channel.
+        Set np.random.seed() for reproducible results.
+
+        Args:
+            duration: length in seconds
+            sample_rate: samples per second
+            color: shape of the power spectral density; same options as Audio.noise()
+                [default: 'white']
+            dBFS: target peak level in decibels Full Scale [default: -10]
+            channels: number of channels [default: 2]
+
+        Returns:
+            MultiChannelAudio object containing noise of the specified duration
+        """
         channels = [
             Audio.noise(
                 duration=duration, sample_rate=sample_rate, color=color, dBFS=dBFS
@@ -2125,14 +2161,12 @@ class MultiChannelAudio(Audio):
         start_timestamp=None,
         out_of_bounds_mode="ignore",
     ):
-        """Load audio from files
+        """Load multi-channel audio from a file
 
-        Deal with the various possible input types to load an audio file
-        Also attempts to load metadata using tinytag.
-
-        Audio objects only support mono (one-channel) at this time. Files
-        with multiple channels are mixed down to a single channel. To load
-        multiple channels as separate Audio objects, use `load_channels_as_audio()`
+        Deal with the various possible input types to load an audio file.
+        Also attempts to load metadata using aru_metadata_parser.
+        Unlike Audio.from_file(), this method retains all channels rather than
+        mixing down to mono.
 
         Optionally, load only a piece of a file using `offset` and `duration`.
         This will efficiently read sections of a .wav file regardless of where
@@ -2146,7 +2180,7 @@ class MultiChannelAudio(Audio):
             path (str, Path): path to an audio file
             sample_rate (int, None): resample audio with value and resample_type,
                 if None use source sample_rate (default: None)
-            resample_type: method used to resample_type (default: "soxr_hq")
+            resample_type: method used to resample audio (default: "soxr_hq")
             dtype: data type of samples returned [Default: np.float32]
             load_metadata (bool): if True, attempts to load metadata from the audio
                 file. If an exception occurs, self.metadata will be `None`.
@@ -2165,7 +2199,7 @@ class MultiChannelAudio(Audio):
                 - will only work if loading metadata results in localized datetime
                     object for 'recording_start_time' key
                 - will raise AudioOutOfBoundsError if requested time period
-                is not full contained within the audio file
+                is not fully contained within the audio file
                 Example of creating localized timestamp:
                 ```
                 import pytz; from datetime import datetime;
@@ -2174,12 +2208,12 @@ class MultiChannelAudio(Audio):
                 timestamp = local_timezone.localize(local_timestamp)
                 ```
             out_of_bounds_mode:
-                - 'warn': generate a warning [default]
+                - 'ignore': return any available audio with no warning/error [default]
+                - 'warn': generate a warning
                 - 'raise': raise an AudioOutOfBoundsError
-                - 'ignore': return any available audio with no warning/error
 
         Returns:
-            Audio object with attributes: samples, sample_rate, resample_type,
+            MultiChannelAudio object with attributes: samples, sample_rate, resample_type,
             metadata (dict or None)
 
         Note: default sample_rate=None means use file's sample rate, does not
@@ -2235,6 +2269,7 @@ class MultiChannelAudio(Audio):
 
     @property
     def n_channels(self):
+        """Return the number of channels in this MultiChannelAudio object"""
         return self.samples.shape[0]
 
     def extend_to(self, duration):
@@ -2249,7 +2284,7 @@ class MultiChannelAudio(Audio):
             duration: the minimum final duration in seconds of the audio object
 
         Returns:
-            a new Audio object of the desired duration
+            a new MultiChannelAudio object of the desired duration
         """
         minimum_n_samples = round(duration * self.sample_rate)
         current_n_samples = self.samples.shape[1]
@@ -2278,12 +2313,10 @@ class MultiChannelAudio(Audio):
             )
 
     def spectrum(self):
-        """Create frequency spectrum from an Audio object using fft
+        """Create frequency spectrum from a MultiChannelAudio object using fft
 
-        first averages over all of the channels to create a mono signal
-
-        Args:
-            self
+        First averages over all of the channels to create a mono signal,
+        then computes the frequency spectrum.
 
         Returns:
             fft, frequencies
@@ -2307,9 +2340,8 @@ class MultiChannelAudio(Audio):
             prefix: A name to prepend to the written clips
             clip_duration: The duration of each clip in seconds
             clip_overlap: The overlap of each clip in seconds [default: 0]
-            final_clip (str): Behavior if final_clip is less than clip_duration seconds long.
-            [default: None]
-                By default, ignores final clip entirely.
+            final_clip (str): Behavior if final clip is less than clip_duration seconds long.
+                [default: "extend"]
                 Possible options (any other input will ignore the final clip entirely),
                     - "remainder": Include the remainder of the Audio (clip will not have
                       clip_duration length)
@@ -2327,9 +2359,15 @@ class MultiChannelAudio(Audio):
 
     @property
     def duration(self):
+        """Calculate the MultiChannelAudio duration in seconds"""
         return self.samples.shape[1] / self.sample_rate
 
     def to_mono(self):
+        """Average all channels to produce a mono Audio object
+
+        Returns:
+            Audio object containing the mean of all channels
+        """
         return Audio(
             samples=self.samples.mean(axis=0),
             sample_rate=self.sample_rate,
@@ -2338,6 +2376,11 @@ class MultiChannelAudio(Audio):
         )
 
     def to_channels(self):
+        """Split MultiChannelAudio into a list of mono Audio objects, one per channel
+
+        Returns:
+            list of Audio objects, one per channel
+        """
         return [Audio(samples=s, sample_rate=self.sample_rate) for s in self.samples]
 
     def apply_channel_gain(self, dB, clip_range=(-1, 1)):
@@ -2354,7 +2397,7 @@ class MultiChannelAudio(Audio):
                 without clipping. [Default: [-1,1]]
 
         Returns:
-            Audio object with gain applied to samples
+            MultiChannelAudio object with gain applied to each channel
         """
         assert len(dB) == self.n_channels, (
             f"dB must be a list of length {self.n_channels}, "
