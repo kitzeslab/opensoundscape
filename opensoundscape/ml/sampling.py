@@ -7,12 +7,17 @@ import torch.utils.data
 
 
 class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
-    """Samples elements randomly from a given list of indices for imbalanced dataset
+    """Samples elements randomly from a given list of indices for an imbalanced dataset
+
+    Gives equal probability of selecting any class, regardless of class frequency.
+    Only supports single-target (one label per sample) datasets.
+
     Args:
-        indices (list, optional): a list of indices
-        num_samples (int, optional): number of samples to draw
-        callback_get_label func: a callback-like function which takes two arguments:
-            dataset and index
+        dataset: a pytorch Dataset with a `.df` attribute (DataFrame of labels)
+        indices: optional list of indices to consider; if None, all indices are used
+        num_samples: number of samples to draw; if None, draws len(indices) samples
+        callback_get_label: optional callable taking (dataset, index) that returns a label;
+            if None, uses argmax of dataset.df.iloc[index].values
 
     Based on Imbalanced Dataset Sampling by davinnovation
     (https://github.com/ufoym/imbalanced-dataset-sampler)

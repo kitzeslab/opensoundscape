@@ -13,17 +13,19 @@ from opensoundscape.ml.sampling import ClassAwareSampler
 
 
 def cas_dataloader(dataset, batch_size, num_workers):
-    """
-    Return a dataloader that uses the class aware sampler
+    """Return a dataloader that uses the class-aware sampler
 
-    Class aware sampler tries to balance the examples per class in each batch.
+    Class-aware sampler tries to balance the examples per class in each batch.
     It selects just a few classes to be present in each batch, then samples
     those classes for even representation in the batch.
 
     Args:
-        dataset: a pytorch dataset type object
+        dataset: a pytorch Dataset type object (must have single-target labels)
         batch_size: see DataLoader
         num_workers: see DataLoader
+
+    Returns:
+        torch.utils.data.DataLoader with ClassAwareSampler, or None if dataset is empty
     """
 
     if len(dataset) == 0:

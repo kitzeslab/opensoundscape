@@ -22,9 +22,8 @@ def normalize_q(x, q=99):
 class CAM:
     """Object to hold and view Class Activation Maps, including guided backprop
 
-    Stores activation maps as .activation_maps, and guided backprop as .gbp_cams
-
-    each is a Series indexed by class
+    Stores activation maps as .activation_maps, and guided backprop maps as .gbp_maps.
+    Each is a pd.Series indexed by class name.
     """
 
     def __init__(self, base_image, activation_maps=None, gbp_maps=None):
@@ -217,13 +216,10 @@ class CAM:
             save_path: path to save image to [default: None does not save file]
             flipud: if True, flips the image vertically before plotting [default: False]
         Returns:
-            (fig, ax) of matplotlib figure, or np.array if return_numpy=True
+            (fig, ax) matplotlib figure and axes
 
         Note: if base_image does not have 3 channels, channels are averaged then copied
         across 3 RGB channels to create a greyscale image
-
-        Note 2: If return_numpy is true, fig and ax are never created, it simply creates
-            a numpy array representing the image with the CAMs overlaid and returns it
         """
         # Default is to show all classes contained in the cam:
         if class_subset is None:

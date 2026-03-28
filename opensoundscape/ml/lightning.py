@@ -16,6 +16,14 @@ from opensoundscape.ml.cnn import SpectrogramModule
 
 
 class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
+    """Lightning version of SpectrogramModule for use with PyTorch Lightning training workflow
+
+    Subclasses both SpectrogramModule and L.LightningModule (pytorch-lightning).
+    Use fit_with_trainer() to train and predict_with_trainer() for inference.
+    Most attributes are the same as SpectrogramClassifier.
+
+    See opensoundscape.org tutorials for example use.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -124,10 +132,10 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         checkpoint_path=None,
         **kwargs,
     ):
-        """train the model on samples from train_dataset
+        """train the model on samples from train_dataset using PyTorch Lightning
 
         If customized loss functions, networks, optimizers, or schedulers
-        are desired, modify the respective attributes before calling .train().
+        are desired, modify the respective attributes before calling .fit_with_trainer().
 
         Args:
             train_df:
@@ -136,6 +144,9 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             validation_df:
                 a dataframe of files and labels for evaluating the model
                 [default: None means no validation is performed]
+            epochs:
+                number of epochs to train for
+                (1 epoch constitutes 1 view of each training sample)
             batch_size:
                 number of training files simultaneously passed through
                 forward pass, loss function, and backpropagation
@@ -145,20 +156,10 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             save_path:
                 location to save intermediate and best model objects
                 [default=".", ie current location of script]
-            save_interval:
-                interval in epochs to save model object with weights [default:1]
-                Note: the best model is always saved to best.model
-                in addition to other saved epochs.
-            log_interval:
-                interval in batches to print training loss/metrics
-            validation_interval:
-                interval in epochs to test the model on the validation set
-                Note that model will only update it's best score and save best.model
-                file on epochs that it performs validation.
             invalid_samples_log:
                 file path: log all samples that failed in preprocessing
                 (file written when training completes)
-                - if None,  does not write a file
+                - if None, does not write a file
             raise_errors:
                 if True, raise errors when preprocessing fails
                 if False, just log the errors to unsafe_samples_log
@@ -171,11 +172,13 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
                 ```
                 import wandb
                 wandb.login(key=api_key) #find your api_key at https://wandb.ai/settings
-                session = wandb.init(enitity='mygroup',project='project1',name='first_run')
+                session = wandb.init(entity='mygroup',project='project1',name='first_run')
                 ...
                 model.fit_with_trainer(...,wandb_session=session)
                 session.finish()
                 ```
+            checkpoint_path: optional path to a Lightning checkpoint file to resume
+                training from. If None [default], training starts from scratch.
             **kwargs: any arguments to pytorch_lightning.Trainer(), such as
                 accelerator, precision, logger, accumulate_grad_batches, etc.
                 Note: the `max_epochs` kwarg is overridden by the `epochs` argument
@@ -383,10 +386,6 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             raise_errors:
                 if True, raise errors when preprocessing fails
                 if False, just log the errors to unsafe_samples_log
-            wandb_session: a wandb session to log to
-                - pass the value returned by wandb.init() to progress log to a
-                Weights and Biases run
-                - if None, does not log to wandb
             return_invalid_samples: bool, if True, returns second argument, a set
                 containing file paths of samples that caused errors during preprocessing
                 [default: False]
@@ -397,7 +396,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
 
         Returns:
             df of post-activation_layer scores
-            - if return_invalid_samples is True, returns (df,invalid_samples)
+            - if return_invalid_samples is True, returns (df, invalid_samples)
             where invalid_samples is a set of file paths that failed to preprocess
 
         Effects:

@@ -117,7 +117,16 @@ class SafeDataset:
         self._invalid_indices = []
 
     def report(self, log=None):
-        """write invalid samples to log file, give warning, & return invalid samples"""
+        """Warn about invalid samples and optionally write them to a log file
+
+        Args:
+            log: optional file path to save the list of invalid sample paths as CSV
+                [default: None does not write a file]
+
+        Returns:
+            DataFrame (with no columns) whose index contains the paths of samples
+            that raised errors during preprocessing
+        """
         invalid_samples = self.dataset.label_df.iloc[self._invalid_indices][[]]
         if len(invalid_samples) > 0:
             msg = (
