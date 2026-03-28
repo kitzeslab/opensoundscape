@@ -463,7 +463,7 @@ def inception_v3(
 ):
     """Wrapper for Inception v3 architecture
 
-    Input: 229x229
+    Input: 299x299
 
     WARNING: expects (299,299) sized images and has auxiliary output. See
     InceptionV3 class in `opensoundscape.ml.cnn` for use.
@@ -530,7 +530,7 @@ def efficientnet_b0(
             specify channels in input sample, eg [channels h,w] sample shape
 
     Note: in v0.10.2, changed from using NVIDIA/DeepLearningExamples:torchhub repo
-        implementatiuon to native pytorch implementation
+        implementation to native pytorch implementation
 
     """
     return generic_make_arch(
@@ -567,7 +567,7 @@ def efficientnet_b4(
             specify channels in input sample, eg [channels h,w] sample shape
 
     Note: in v0.10.2, changed from using NVIDIA/DeepLearningExamples:torchhub repo
-        implementatiuon to native pytorch implementation
+        implementation to native pytorch implementation
 
     """
     return generic_make_arch(
@@ -602,16 +602,11 @@ def change_conv2d_channels(
     new channels
 
     Args:
-        num_classes:
-            number of output nodes for the final layer
-        freeze_feature_extractor:
-            if False (default), entire network will have gradients and can train
-            if True, feature block is frozen and only final layer is trained
-        num_channels:
-            specify channels in input sample, eg [channels h,w] sample shape
-        reuse_weights: if True (default), averages (if num_channels<original)
-        or cycles through (if num_channels>original) original channel weights
-            and adds them to the new Conv2D
+        conv2d: the torch.nn.Conv2d layer to modify
+        num_channels: desired number of input channels for the new layer [default: 3]
+        reuse_weights: if True (default), maps weights from the original layer to the
+            new layer: averages across channels if num_channels < original, or cycles
+            through original channels if num_channels > original
     """
     # change input shape num_channels
     if num_channels == conv2d.in_channels:
@@ -659,8 +654,11 @@ def change_fc_output_size(
     """Modify the number of output nodes of a fully connected layer
 
     Args:
-        fc: the fully connected layer of the model that should be modified
-        num_classes: number of output nodes for the new fc
+        fc: the fully connected (torch.nn.Linear) layer to modify
+        num_classes: number of output nodes for the new layer
+
+    Returns:
+        a new torch.nn.Linear layer with the same in_features but num_classes outputs
     """
     assert num_classes > 0, "num_classes must be > 0"
     num_ftrs = fc.in_features
