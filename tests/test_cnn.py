@@ -1,5 +1,6 @@
 import pandas as pd
 from pathlib import Path
+import types
 
 import numpy as np
 import pandas as pd
@@ -1772,3 +1773,174 @@ def test_change_classes_preserves_device():
     dummy_input = torch.randn(1, 1, 224, 224).to(model.device)
     output = model.network(dummy_input)
     assert output.device == model.device
+
+
+def test_embed_to_hoplite_db_inserts_embeddings_and_commits(monkeypatch):
+    """Verify embed_to_hoplite_db() inserts batch embeddings and commits progress to DB."""
+
+    class FakeDataset(torch.utils.data.Dataset):
+        def __init__(self, label_df):
+            self.dataset = types.SimpleNamespace(label_df=label_df)
+            self._samples = [
+                types.SimpleNamespace(
+                    source="tests/audio/silence_10s.mp3", start_time=0.0, duration=1.0
+                ),
+                types.SimpleNamespace(
+                    source="tests/audio/silence_10s.mp3", start_time=1.0, duration=1.0
+                ),
+            ]
+
+        def __len__(self):
+            return len(self._samples)
+
+        def __getitem__(self, idx):
+            return self._samples[idx]
+
+        def report(self, log=None):
+            return pd.DataFrame(columns=["file", "start_time", "end_time", "error"])
+
+    class FakeDB:
+        def __init__(self):
+            self.commits = 0
+            self._deployments = []
+
+        def get_all_deployments(self, filter=None):
+            return self._deployments
+
+        def insert_deployment(self, name, project=""):
+            self._deployments.append(
+                types.SimpleNamespace(id=42, name=name, project=project)
+            )
+            return 42
+
+        def get_all_recordings(self, filter=None):
+            return []
+
+        def commit(self):
+            self.commits += 1
+
+    inserted_batches = []
+
+    def fake_insert_embeddings(
+        db,
+        batch_samples,
+        batch_embeddings,
+        overflow_mode,
+        file_to_id,
+        file_to_datetime=None,
+        audio_root=None,
+        deployment_id=None,
+    ):
+        inserted_batches.append(
+            (len(batch_samples), batch_embeddings.shape[0], deployment_id)
+        )
+        return []
+
+    def fake_load_or_create(db, embedding_dim=None, cfg=None):
+        return db
+
+    def fake_handle_existing_windows(
+        db,
+        clips,
+        embedding_exists_mode,
+        deployment_id=None,
+        deployment_name=None,
+        project=None,
+        rounding_precision=6,
+    ):
+        return None
+
+    monkeypatch.setattr(cnn, "_require_hoplite", lambda: None)
+    monkeypatch.setattr(cnn, "_check_or_set_model_id", lambda db, model_id: None)
+
+    import opensoundscape.vector_database as vector_db
+
+    monkeypatch.setattr(
+        vector_db, "load_or_create_hoplite_usearch_db", fake_load_or_create
+    )
+    monkeypatch.setattr(
+        vector_db, "_handle_existing_windows", fake_handle_existing_windows
+    )
+    monkeypatch.setattr(vector_db, "_insert_embeddings", fake_insert_embeddings)
+
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=1.0,
+        arch_weights=None,
+    )
+    label_df = pd.DataFrame(
+        {0: [1, 0], 1: [0, 1]},
+        index=pd.MultiIndex.from_tuples(
+            [
+                ("tests/audio/silence_10s.mp3", 0.0, 1.0),
+                ("tests/audio/silence_10s.mp3", 1.0, 2.0),
+            ],
+            names=["file", "start_time", "end_time"],
+        ),
+    )
+
+    model.predict_dataloader = lambda *args, **kwargs: torch.utils.data.DataLoader(
+        FakeDataset(label_df), batch_size=1, collate_fn=identity
+    )
+    model._check_or_get_default_embedding_layer = lambda target_layer=None: "fake_layer"
+    model.batch_forward = lambda batch_samples, targets, avgpool=True: {
+        "fake_layer": np.ones((len(batch_samples), 2), dtype=np.float32)
+    }
+
+    db = FakeDB()
+    out_db, info = model.embed_to_hoplite_db(
+        samples=label_df,
+        db=db,
+        deployment="dep-1",
+        batch_size=1,
+        commit_frequency_batches=1,
+        progress_bar=False,
+    )
+
+    assert out_db is db
+    assert len(inserted_batches) == 2
+    assert all(item[0] == 1 for item in inserted_batches)
+    assert db.commits >= 2
+    assert "insertion_failures" in info
+
+
+def test_similarity_search_hoplite_db_returns_compiled_results(monkeypatch):
+    """Verify similarity_search_hoplite_db() embeds queries and wraps vector-db search results."""
+    monkeypatch.setattr(cnn, "_require_hoplite", lambda: None)
+
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=1.0,
+        arch_weights=None,
+    )
+
+    emb_df = pd.DataFrame(
+        [[0.1, 0.2], [0.3, 0.4]],
+        index=pd.MultiIndex.from_tuples(
+            [("q1.wav", 0.0, 1.0), ("q2.wav", 1.0, 2.0)],
+            names=["file", "start_time", "end_time"],
+        ),
+    )
+    model.embed = lambda query_samples, audio_root=None, **kwargs: emb_df
+
+    import opensoundscape.vector_database as vector_db
+
+    monkeypatch.setattr(
+        vector_db,
+        "similarity_search_hoplite_db",
+        lambda **kwargs: [{"file": "m.wav", "window_id": 9, "sort_score": 0.9}],
+    )
+
+    results = model.similarity_search_hoplite_db(
+        query_samples=["q1.wav", "q2.wav"],
+        db=object(),
+        num_results=1,
+        audio_root="/audio",
+    )
+
+    assert len(results) == 2
+    assert results[0]["query"]["file"] == "q1.wav"
+    assert results[0]["query"]["audio_root"] == "/audio"
+    assert results[0]["results"][0]["window_id"] == 9

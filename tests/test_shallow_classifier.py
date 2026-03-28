@@ -2,6 +2,10 @@ import pytest
 import torch
 import tempfile
 import os
+import types
+
+import numpy as np
+import pandas as pd
 from opensoundscape.ml import shallow_classifier
 import opensoundscape as opso
 
@@ -857,3 +861,422 @@ class TestEdgeCases:
         x = torch.rand(3, 10)
         output = mlp(x)
         assert output.shape == (3, 1)
+
+
+class TestHopliteHelpers:
+    """Tests for shallow classifier helper functions that integrate with Hoplite DB."""
+
+    def test_augmented_embed_repeats_labels_and_calls_embed_with_augmentations(self):
+        """Verify augmented_embed() calls embed with augmentation and stacks labels per variant."""
+
+        class FakeEmbeddingModel:
+            def __init__(self):
+                self.calls = []
+
+            def embed(self, sample_df, **kwargs):
+                self.calls.append(kwargs)
+                n = len(sample_df)
+                return np.ones((n, 3), dtype=np.float32)
+
+        model = FakeEmbeddingModel()
+        sample_df = pd.DataFrame(
+            {"a": [1, 0], "b": [0, 1]},
+            index=pd.MultiIndex.from_tuples(
+                [("f.wav", 0.0, 1.0), ("f.wav", 1.0, 2.0)],
+                names=["file", "start_time", "end_time"],
+            ),
+        )
+
+        x_train, y_train = shallow_classifier.augmented_embed(
+            model,
+            sample_df,
+            n_augmentation_variants=3,
+            batch_size=2,
+            num_workers=0,
+            audio_root="/audio",
+        )
+
+        assert x_train.shape == (6, 3)
+        assert y_train.shape == (6, 2)
+        assert len(model.calls) == 3
+        assert all(call["bypass_augmentations"] is False for call in model.calls)
+        assert all(call["audio_root"] == "/audio" for call in model.calls)
+
+    def test_fit_classifier_on_embeddings_without_augmentation(self, monkeypatch):
+        """Verify fit_classifier_on_embeddings() embeds train/val once and forwards tensors to fit()."""
+
+        class FakeEmbeddingModel:
+            def __init__(self):
+                self.calls = []
+
+            def embed(self, sample_df, **kwargs):
+                self.calls.append((sample_df.copy(), kwargs))
+                return np.arange(len(sample_df) * 4, dtype=np.float32).reshape(
+                    len(sample_df), 4
+                )
+
+        captured = {}
+
+        def fake_fit(**kwargs):
+            captured.update(kwargs)
+            return {"loss": 0.1}
+
+        monkeypatch.setattr(shallow_classifier, "fit", fake_fit)
+
+        embedder = FakeEmbeddingModel()
+        classifier = opso.MLPClassifier(4, 2)
+        train_df = pd.DataFrame(
+            {"c1": [1, 0], "c2": [0, 1]},
+            index=pd.MultiIndex.from_tuples(
+                [("a.wav", 0.0, 1.0), ("a.wav", 1.0, 2.0)],
+                names=["file", "start_time", "end_time"],
+            ),
+        )
+        val_df = train_df.copy()
+
+        x_train, y_train, x_val, y_val, metrics = (
+            shallow_classifier.fit_classifier_on_embeddings(
+                embedding_model=embedder,
+                classifier_model=classifier,
+                train_df=train_df,
+                validation_df=val_df,
+                n_augmentation_variants=0,
+                steps=2,
+                validation_interval=1,
+            )
+        )
+
+        assert len(embedder.calls) == 2
+        assert x_train.shape == (2, 4)
+        assert y_train.shape == (2, 2)
+        assert x_val.shape == (2, 4)
+        assert y_val.shape == (2, 2)
+        assert metrics == {"loss": 0.1}
+        assert captured["train_features"].shape == (2, 4)
+        assert captured["validation_labels"].shape == (2, 2)
+
+    def test_fit_classifier_on_embeddings_with_augmentation(self, monkeypatch):
+        """Verify fit_classifier_on_embeddings() uses augmented_embed() when variants are requested."""
+
+        class FakeEmbeddingModel:
+            def embed(self, *args, **kwargs):
+                return np.ones((2, 4), dtype=np.float32)
+
+        augmented_called = {}
+        fit_called = {}
+
+        def fake_augmented_embed(*args, **kwargs):
+            augmented_called["kwargs"] = kwargs
+            return torch.ones((4, 4)), torch.ones((4, 2))
+
+        def fake_fit(**kwargs):
+            fit_called.update(kwargs)
+            return {"map": 0.5}
+
+        monkeypatch.setattr(shallow_classifier, "augmented_embed", fake_augmented_embed)
+        monkeypatch.setattr(shallow_classifier, "fit", fake_fit)
+
+        train_df = pd.DataFrame(
+            {"c1": [1, 0], "c2": [0, 1]},
+            index=pd.MultiIndex.from_tuples(
+                [("a.wav", 0.0, 1.0), ("a.wav", 1.0, 2.0)],
+                names=["file", "start_time", "end_time"],
+            ),
+        )
+
+        _, _, x_val, y_val, metrics = shallow_classifier.fit_classifier_on_embeddings(
+            embedding_model=FakeEmbeddingModel(),
+            classifier_model=opso.MLPClassifier(4, 2),
+            train_df=train_df,
+            validation_df=train_df,
+            n_augmentation_variants=2,
+        )
+
+        assert augmented_called["kwargs"]["n_augmentation_variants"] == 2
+        assert fit_called["train_features"].shape == (4, 4)
+        assert x_val.shape == (2, 4)
+        assert y_val.shape == (2, 2)
+        assert metrics == {"map": 0.5}
+
+    def test_predict_on_hoplite_returns_dataframe_with_classifier_classes(
+        self, monkeypatch
+    ):
+        """Verify predict_on_hoplite() returns predictions indexed like sample windows."""
+
+        class FakeHopliteDataset(torch.utils.data.Dataset):
+            def __init__(self, db, samples, clip_duration, **kwargs):
+                self.label_df = samples
+                self._embs = torch.tensor([[1.0, 0.0], [0.0, 1.0]], dtype=torch.float32)
+                self._labels = torch.zeros((2, 1), dtype=torch.float32)
+
+            def __len__(self):
+                return len(self._embs)
+
+            def __getitem__(self, idx):
+                return self._embs[idx], self._labels[idx]
+
+        class FakeDB:
+            def get_metadata(self, key):
+                return {"sample_duration": 1.0}
+
+        class FakeClassifier(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = torch.nn.Linear(2, 2, bias=False)
+                with torch.no_grad():
+                    self.linear.weight.copy_(torch.tensor([[1.0, 0.0], [0.0, 1.0]]))
+                self.classes = ["class_a", "class_b"]
+
+            def forward(self, x):
+                return self.linear(x)
+
+        monkeypatch.setattr(shallow_classifier, "_require_hoplite", lambda: None)
+        monkeypatch.setattr(shallow_classifier, "HopliteDataset", FakeHopliteDataset)
+
+        samples = pd.DataFrame(
+            index=pd.MultiIndex.from_tuples(
+                [("f.wav", 0.0, 1.0), ("f.wav", 1.0, 2.0)],
+                names=["file", "start_time", "end_time"],
+            )
+        )
+
+        preds = shallow_classifier.predict_on_hoplite(
+            db=FakeDB(),
+            samples=samples,
+            classifier=FakeClassifier(),
+            batch_size=1,
+            return_df=True,
+        )
+
+        assert list(preds.columns) == ["class_a", "class_b"]
+        assert list(preds.index) == list(samples.index)
+
+    def test_select_from_hoplite_top_k_and_thresholding(self, monkeypatch):
+        """Verify select_from_hoplite() applies score thresholding and top-k selection per class."""
+
+        class Window:
+            def __init__(self, window_id, filename, start, end):
+                self.id = window_id
+                self.filename = filename
+                self.offsets = [start, end]
+
+        class FakeDB:
+            def __init__(self):
+                self.embedding_batches = {
+                    (1, 2, 3): np.array(
+                        [
+                            [0.9, 0.1],
+                            [0.2, 0.8],
+                            [0.7, 0.3],
+                        ],
+                        dtype=np.float32,
+                    )
+                }
+
+            def get_embeddings_batch(self, window_ids):
+                return self.embedding_batches[tuple(window_ids)]
+
+        class FakeClassifier(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.param = torch.nn.Parameter(torch.zeros(1))
+                self.classes = ["bird", "frog"]
+
+            def forward(self, x):
+                return x
+
+        windows = [
+            Window(1, "a.wav", 0.0, 1.0),
+            Window(2, "a.wav", 1.0, 2.0),
+            Window(3, "a.wav", 2.0, 3.0),
+        ]
+        for w in windows:
+            w.datetime = None
+            w.deployment = "dep"
+            w.project = "proj"
+
+        monkeypatch.setattr(shallow_classifier, "_require_hoplite", lambda: None)
+        monkeypatch.setattr(
+            shallow_classifier, "find_matching_windows", lambda **kwargs: windows
+        )
+
+        out = shallow_classifier.select_from_hoplite(
+            db=FakeDB(),
+            classifier=FakeClassifier(),
+            classes=["bird"],
+            k=2,
+            strategy="top_k",
+            min_score=0.5,
+            return_windows=False,
+        )
+
+        assert set(out["class"]) == {"bird"}
+        assert len(out) == 2
+        assert out["start_time"].min() >= 0.0
+
+    def test_fit_on_hoplite_runs_and_returns_validation_metrics(self, monkeypatch):
+        """Verify fit_on_hoplite() trains with HopliteDataset-backed batches and returns metrics."""
+
+        class FakeHopliteDataset(torch.utils.data.Dataset):
+            def __init__(self, db, label_df, **kwargs):
+                self.label_df = label_df
+                self._features = torch.tensor(db["features"], dtype=torch.float32)
+                self._labels = torch.tensor(label_df.values, dtype=torch.float32)
+
+            def __len__(self):
+                return len(self._features)
+
+            def __getitem__(self, idx):
+                return self._features[idx], self._labels[idx]
+
+        monkeypatch.setattr(shallow_classifier, "_require_hoplite", lambda: None)
+        monkeypatch.setattr(shallow_classifier, "HopliteDataset", FakeHopliteDataset)
+
+        train_df = pd.DataFrame(
+            {"c1": [1, 0], "c2": [0, 1]},
+            index=pd.MultiIndex.from_tuples(
+                [("f.wav", 0.0, 1.0), ("f.wav", 1.0, 2.0)],
+                names=["file", "start_time", "end_time"],
+            ),
+        )
+        db = {"features": [[0.1, 0.2], [0.3, 0.4]]}
+        model = opso.MLPClassifier(2, 2, hidden_layer_sizes=())
+
+        metrics = shallow_classifier.fit_on_hoplite(
+            model=model,
+            hoplite_db=db,
+            train_df=train_df,
+            validation_df=train_df,
+            steps=2,
+            batch_size=2,
+            validation_interval=1,
+            logging_interval=100,
+        )
+
+        assert metrics is not None
+        assert "loss" in metrics
+        assert "per_class_auroc" in metrics
+
+    def test_count_dets_hoplite_counts_scores_in_specified_bins(self, monkeypatch):
+        """Verify count_dets_hoplite() aggregates per-class counts across explicit score bins."""
+
+        class Window:
+            def __init__(self, window_id):
+                self.id = window_id
+
+        class FakeDB:
+            def get_embeddings_batch(self, window_ids):
+                return {
+                    (1, 2, 3): np.array(
+                        [
+                            [0.1, 0.9],
+                            [0.7, 0.2],
+                            [0.6, 0.8],
+                        ],
+                        dtype=np.float32,
+                    )
+                }[tuple(window_ids)]
+
+        class FakeClassifier(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.param = torch.nn.Parameter(torch.zeros(1))
+                self.classes = ["bird", "frog"]
+                self.out_features = 2
+
+            def forward(self, x):
+                # Return embeddings directly as logits/scores for deterministic testing.
+                return x
+
+        monkeypatch.setattr(shallow_classifier, "_require_hoplite", lambda: None)
+        monkeypatch.setattr(
+            shallow_classifier,
+            "find_matching_windows",
+            lambda **kwargs: [Window(1), Window(2), Window(3)],
+        )
+
+        bins = [(0.0, 0.5), (0.5, 1.0)]
+        counts = shallow_classifier.count_dets_hoplite(
+            db=FakeDB(),
+            classifier=FakeClassifier(),
+            classes=None,
+            score_bins=bins,
+            batch_size=3,
+        )
+
+        assert counts["bird"][(0.0, 0.5)] == 1
+        assert counts["bird"][(0.5, 1.0)] == 2
+        assert counts["frog"][(0.0, 0.5)] == 1
+        assert counts["frog"][(0.5, 1.0)] == 2
+
+    def test_count_dets_hoplite_uses_min_max_when_bins_missing(self, monkeypatch):
+        """Verify count_dets_hoplite() builds a single default bin from min_score/max_score."""
+
+        class Window:
+            def __init__(self, window_id):
+                self.id = window_id
+
+        class FakeDB:
+            def get_embeddings_batch(self, window_ids):
+                return {
+                    (1, 2, 3): np.array(
+                        [
+                            [0.1, 0.9],
+                            [0.7, 0.2],
+                            [0.6, 0.8],
+                        ],
+                        dtype=np.float32,
+                    )
+                }[tuple(window_ids)]
+
+        class FakeClassifier(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.param = torch.nn.Parameter(torch.zeros(1))
+                self.classes = ["bird", "frog"]
+                self.out_features = 2
+
+            def forward(self, x):
+                return x
+
+        monkeypatch.setattr(shallow_classifier, "_require_hoplite", lambda: None)
+        monkeypatch.setattr(
+            shallow_classifier,
+            "find_matching_windows",
+            lambda **kwargs: [Window(1), Window(2), Window(3)],
+        )
+
+        counts = shallow_classifier.count_dets_hoplite(
+            db=FakeDB(),
+            classifier=FakeClassifier(),
+            classes=None,
+            min_score=0.5,
+            max_score=0.8,
+            score_bins=None,
+            batch_size=3,
+        )
+
+        assert counts["bird"][(0.5, 0.8)] == 2
+        assert counts["frog"][(0.5, 0.8)] == 0
+
+    def test_count_dets_hoplite_rejects_invalid_class_names(self, monkeypatch):
+        """Verify count_dets_hoplite() raises ValueError for class names not in classifier.classes."""
+
+        class FakeClassifier(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.param = torch.nn.Parameter(torch.zeros(1))
+                self.classes = ["bird", "frog"]
+                self.out_features = 2
+
+            def forward(self, x):
+                return x
+
+        monkeypatch.setattr(shallow_classifier, "_require_hoplite", lambda: None)
+
+        with pytest.raises(ValueError, match="Invalid class names"):
+            shallow_classifier.count_dets_hoplite(
+                db=object(),
+                classifier=FakeClassifier(),
+                classes=["owl"],
+            )

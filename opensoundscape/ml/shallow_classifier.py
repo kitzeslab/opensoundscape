@@ -1103,38 +1103,48 @@ def count_dets_hoplite(
     recordings_filter=None,
     windows_filter=None,
     annotations_filter=None,
-    random_state=None,
-    return_windows=False,
     progress_bar=False,
 ):
-    """Extract top-scoring or random clips from the database based on classifier predictions and filters
+    """Count detections in score bins/ranges based on classifier predictions and filters
+
+    Compared to select_from_hoplite, this function does not return the selected clips but just
+    counts the number of clips in each score bin/range for each class. This can be quick and
+    memory efficient for counting detections in large datasets if you don't need clip info.
 
     Args:
-        db: hoplite database containing embeddings
-        classifier: MLPClassifier object or other classifier object to call on the torch.tensor embeddings
-        classes: list of class names to select clips for; if None, selects clips for every class in classifier
-        min_score: minimum score to filter clips by existing score in the database; if None, does not threshold by min score
-        max_score: maximum score to filter clips by existing score in the database; if None, does not restrict by max score
-        score_bins: if provided, a list of tuples (low, high) score ranges to count detections in
+        db: hoplite database containing embeddings classifier: MLPClassifier object or other
+        classifier object to call on the torch.tensor embeddings classes: list of class names to
+        select clips for; if None, selects clips for every class in classifier min_score: minimum
+        score to filter clips by existing score in the database; if None, does not threshold by min
+        score max_score: maximum score to filter clips by existing score in the database; if None,
+        does not restrict by max score score_bins: if provided, a list of tuples (low, high) score
+        ranges to count detections in
             - if None, reports all scores above min_score and below max_score in a single bin
             - if provided, min_score and max_score are ignored and bins are determined by score_bins
-        batch_size: n samples simultaneously processed when applying classifier to embeddings; default 1024
-        date_range: tuple of (start_date, end_date) to filter clips by date;
-            Formats: datetime.datetime, datetime.date, or string in "YYYY-MM-DD" format; if None, does not filter by date
-            Can pass (date,None) or (None,date) to filter by only start or end date, respectively
-        time_range: tuple of (start_time, end_time) to filter clips by time of day; if None, does not filter by time of day
-            Formats: datetime.datetime, datetime.time or string in "HH:MM:SS" format
-            Note: filters by time of day of the _recording_ start time (rather than audio clip start time)
-            Assumes time zone match between time_range values and recording timestamps in the database
+        batch_size: n samples simultaneously processed when applying classifier to embeddings;
+        default 1024 date_range: tuple of (start_date, end_date) to filter clips by date;
+            Formats: datetime.datetime, datetime.date, or string in "YYYY-MM-DD" format; if None,
+            does not filter by date Can pass (date,None) or (None,date) to filter by only start or
+            end date, respectively
+        time_range: tuple of (start_time, end_time) to filter clips by time of day; if None, does
+        not filter by time of day
+            Formats: datetime.datetime, datetime.time or string in "HH:MM:SS" format Note: filters
+            by time of day of the _recording_ start time (rather than audio clip start time) Assumes
+            time zone match between time_range values and recording timestamps in the database
         deployments: list of deployment names to filter by; if None, does not filter by deployment
         projects: list of project names to filter by; if None, does not filter by project
         recordings: list of recording names to filter by; if None, does not filter by recording
-        deployments_filter: custom filter dict for deployments; if provided, overrides deployments argument
-        recordings_filter: custom filter dict for recordings; if provided, overrides recordings argument
-        windows_filter: custom filter dict for windows; if provided, overrides date_range, time_range arguments
-        annotations_filter: custom filter dict for annotations in hoplite DB
+        deployments_filter: custom filter dict for deployments; if provided, overrides deployments
+        argument recordings_filter: custom filter dict for recordings; if provided, overrides
+        recordings argument windows_filter: custom filter dict for windows; if provided, overrides
+        date_range, time_range arguments annotations_filter: custom filter dict for annotations in
+        hoplite DB
+
+    Returns:
+        counts: dict of dicts with counts[class][bin_range] = count of clips for class in score bin;
+        if score_bins is None, bin_range is (min_score, max_score)
+        (if min_score and/or max_score are also None, uses -inf &/or +inf)
     """
-    np.random.seed(random_state)
 
     _require_hoplite()
 
