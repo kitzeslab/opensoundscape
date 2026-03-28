@@ -104,13 +104,16 @@ def test_action_trim(sample_audio):
 
 
 def test_action_random_trim(sample_audio):
+    sample_audio.start_time = 0
     sample2 = copy.deepcopy(sample_audio)
     action = actions.AudioTrim(target_duration=0.001, random_trim=True)
     action.__call__(sample_audio)
     action.__call__(sample2)
     assert math.isclose(sample_audio.data.duration, 0.001, abs_tol=1e-4)
+    # assert not math.isclose(sample_audio.start_time, sample2.start_time, abs_tol=1e-9)
+    # now retains original start/end times from the sample (treats as immutable)
+    assert sample2.start_time == 0
     # random trim should result in 2 different samples
-    assert not math.isclose(sample_audio.start_time, sample2.start_time, abs_tol=1e-9)
     assert not np.array_equal(sample_audio.data.samples, sample2.data.samples)
 
 
