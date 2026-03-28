@@ -439,15 +439,15 @@ class TorchTransforms(BaseAction):
 
     @property
     def transforms(self):
-        return self._transforms_composed
+        return self._sequential_transforms
 
     @transforms.setter
     def transforms(self, value):
-        """convert list of transforms to torchvision.transforms.Compose object"""
-        if isinstance(value, torchvision.transforms.Compose):
-            self._transforms_composed = value
+        """convert list of transforms to nn.Sequential object"""
+        if isinstance(value, torch.nn.Sequential):
+            self._sequential_transforms = value
         else:
-            self._transforms_composed = torchvision.transforms.Compose(value)
+            self._sequential_transforms = torch.nn.Sequential(*value)
 
     def __call__(self, sample):
         sample.data = self.transforms(sample.data)
