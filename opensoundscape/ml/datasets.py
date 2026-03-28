@@ -47,6 +47,8 @@ class AudioFileDataset(torch.utils.data.Dataset):
         preprocessor:
             an object of BasePreprocessor or its children which defines
             the operations to perform on input samples
+        bypass_augmentations:
+            if True, skip Actions with .is_augmentation=True [default: False]
         audio_root:
             optionally pass a root directory (pathlib.Path or str) to prepend to each file path
             - if None (default), samples must contain full paths to files
@@ -140,10 +142,12 @@ class AudioFileDataset(torch.utils.data.Dataset):
         e.g. where df['labels'] = [['a','b'], [], ['a','c']]
 
         Args:
-            categorical_labels: DataFrame with index (file) or (file, start_time, end_time) and 'label'
-                column containing lists of labels or integers corresponding to class names
+            categorical_labels: DataFrame with index (file) or (file, start_time, end_time) and
+                a 'label' column containing lists of class-name labels
             preprocessor: Preprocessor object
+            class_list: list of class names defining the columns of the resulting label DataFrame
             bypass_augmentations: if True, skip augmentations with .is_augmentation=True
+                [default: False]
 
         Returns:
             AudioFileDataset object
@@ -234,19 +238,25 @@ class AudioFileDataset(torch.utils.data.Dataset):
 
 
 class AudioSplittingDataset(AudioFileDataset):
-    """class to load clips of longer files rather than one sample per file
+    """Dataset that automatically splits longer audio files into fixed-length clips
 
-    Internally creates even-lengthed clips split from long audio files.
+    Internally creates evenly-spaced clips split from long audio files.
 
-    If file labels are provided, applies copied labels to all clips from a file
+    If file labels are provided, copies those labels to all clips generated from the file.
 
     NOTE: If you've already created a dataframe with clip start and end times,
-    you can use AudioFileDataset. This class is only necessary if you wish to
+    use AudioFileDataset instead. This class is only necessary if you wish to
     automatically split longer files into clips (providing only the file paths).
 
     Args:
-        samples and preprocessor are passed to AudioFileDataset.__init__
-        **kwargs are passed to opensoundscape.utils.make_clip_df
+        samples: file paths or DataFrame with file paths as index
+            (same format as AudioFileDataset)
+        preprocessor: Preprocessor object defining preprocessing operations;
+            clip duration is taken from preprocessor.sample_duration
+        bypass_augmentations: if True, skip augmentation Actions [default: False]
+        audio_root: optionally pass a root directory to prepend to each file path [default: None]
+        **kwargs: passed to opensoundscape.utils.make_clip_df (e.g. clip_overlap,
+            clip_overlap_fraction, final_clip)
     """
 
     def __init__(
