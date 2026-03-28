@@ -81,7 +81,7 @@ def reduce_loss(loss, reduction):
         loss (Tensor): Elementwise loss tensor.
         reduction (str): Options are "none", "mean" and "sum".
 
-    Return:
+    Returns:
         Tensor: Reduced loss tensor.
     """
     reduction_enum = F._Reduction.get_enum(reduction)
@@ -101,7 +101,7 @@ def weight_reduce_loss(loss, weight=None, reduction="mean", avg_factor=None):
         loss (Tensor): Element-wise loss.
         weight (Tensor): Element-wise weights.
         reduction (str): Same as built-in losses of PyTorch.
-        avg_factor (float): Avarage factor when computing the mean of losses.
+        avg_factor (float): Average factor when computing the mean of losses.
 
     Returns:
         Tensor: Processed loss values.
@@ -145,6 +145,24 @@ def binary_cross_entropy(pred, label, weight=None, reduction="mean", avg_factor=
 
 
 class ResampleLoss(nn.Module):
+    """Resampling-based loss for imbalanced multi-label classification
+
+    Implements a focal loss variant with logit regularization and rebalancing weights
+    based on class frequency, as described in "Long-tail Learning via Logit Adjustment"
+    and related works. May perform better than BCE loss for multi-target problems where
+    some classes are much rarer than others.
+
+    Args:
+        class_freq: 1D tensor of per-class sample counts (number of positive samples
+            per class in the training set)
+        reduction: loss reduction method, one of "none", "mean", "sum" [default: "mean"]
+        loss_weight: scalar multiplier applied to the final loss [default: 1.0]
+
+    See Also:
+        `opensoundscape.ml.cnn.use_resample_loss` for a convenience wrapper that
+        computes class_freq from a training DataFrame.
+    """
+
     def __init__(self, class_freq, reduction="mean", loss_weight=1.0):
         super().__init__()
         device = class_freq.device
