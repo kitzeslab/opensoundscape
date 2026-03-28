@@ -67,8 +67,10 @@ MODEL_CLS_DICT = dict()
 
 
 def list_model_classes():
-    """return list of available action function keyword strings
-    (can be used to initialize Action class)
+    """return list of registered model class name strings
+
+    Returns:
+        list of model class name strings registered in MODEL_CLS_DICT
     """
     return list(MODEL_CLS_DICT.keys())
 
@@ -116,7 +118,7 @@ class BaseModule:
         self.preprocessor = BasePreprocessor()
         """an instance of BasePreprocessor or subclass that preprocesses audio samples into tensors
 
-        The preprocessor contains .pipline, and ordered set of Actions to run
+        The preprocessor contains .pipeline, an ordered set of Actions to run
 
         preprocessor will have attributes .sample_duration (seconds)
         and .height, .width, .channels for output shape (input shape to self.network)
@@ -206,7 +208,12 @@ class BaseModule:
     def training_step(self, samples, batch_idx):
         """a standard Lightning method used within the training loop, acting on each batch
 
-        returns loss
+        Args:
+            samples: a batch of AudioSample objects from the DataLoader
+            batch_idx: index of the current batch
+
+        Returns:
+            loss value for the batch
 
         Effects:
             logs metrics and loss to the current logger
@@ -282,7 +289,7 @@ class BaseModule:
         Lightning uses this function at the start of training. Weirdly it needs to
         return {"optimizer": optimizer, "scheduler": scheduler}.
 
-        Initializes the optimizer and  learning rate scheduler using the parameters
+        Initializes the optimizer and learning rate scheduler using the parameters
         self.optimizer_params and self.scheduler_params, which are dictionaries with a key
         "class" and a key "kwargs" (containing a dictionary of keyword arguments to initialize
         the class with). We initialize the class with the kwargs and the appropriate
@@ -296,7 +303,7 @@ class BaseModule:
         - self.optimizer_params: dictionary with "class" key such as torch.optim.Adam,
             and "kwargs", dict of keyword args for class's init
         - self.scheduler_params: dictionary with "class" key such as
-            torch.optim.lr_scheduler.StepLR, and and "kwargs", dict of keyword args for class's init
+            torch.optim.lr_scheduler.StepLR, and "kwargs", dict of keyword args for class's init
         - self.lr_scheduler_step: int, number of times lr_scheduler.step() has been called
             - can set to -1 to restart learning rate schedule
             - can set to another value to start lr scheduler from an arbitrary position
@@ -309,7 +316,7 @@ class BaseModule:
         https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.core.LightningModule.html#lightning.pytorch.core.LightningModule.configure_optimizers
         Args:
             reset_optimizer: if True, initializes the optimizer from scratch even if self.optimizer is not None
-            reset_scheduler: if True, initializes the scheduler from scratch even if self.scheduler is not None
+            restart_scheduler: if True, initializes the scheduler from scratch even if self.scheduler is not None
         Returns:
             dictionary with keys "optimizer" and "scheduler" containing the
             optimizer and learning rate scheduler objects to use during training
@@ -345,7 +352,7 @@ class BaseModule:
             except Exception as e:
                 raise ValueError(
                     "Could not access self.classifier.parameters(). "
-                    "Make sure self.classifier propoerty returns a torch.nn.Module object."
+                    "Make sure self.classifier property returns a torch.nn.Module object."
                 ) from e
 
             # add them to a new group with custom learning rate
@@ -441,11 +448,13 @@ class BaseModule:
 
         train_loader samples batches of images + labels from training set
 
-        Args: see self.train_dataloader_cls docstring for arguments
-            **kwargs: any arguments to pass to the DataLoader __init__
-            Note: some arguments are fixed and should not be passed in kwargs:
-            - shuffle=True: shuffle samples for training
-            - bypass_augmentations=False: apply augmentations to training samples
+        Args:
+            samples: files and labels for training. See SafeAudioDataloader for details.
+            bypass_augmentations: if True, skips augmentation Actions [default: False]
+            collate_fn: function for collating batch samples [default: identity]
+            raise_errors: if True, raises errors on preprocessing failures [default: False]
+            **kwargs: any additional arguments to pass to the DataLoader __init__
+                Note: shuffle=True is fixed and should not be passed in kwargs
 
         """
         return self.train_dataloader_cls(
@@ -468,10 +477,12 @@ class BaseModule:
     ):
         """generate dataloader for inference (predict/validate/test)
 
-        Args: see self.inference_dataloader_cls docstring for arguments
-            **kwargs: any arguments to pass to the DataLoader __init__
-            Note: these arguments are fixed and should not be passed in kwargs:
-            - shuffle=False: retain original sample order
+        Args:
+            samples: files to run inference on. See SafeAudioDataloader for details.
+            collate_fn: function for collating batch samples [default: identity]
+            raise_errors: if True, raises errors on preprocessing failures [default: False]
+            **kwargs: any additional arguments to pass to the DataLoader __init__
+                Note: shuffle=False is fixed and should not be passed in kwargs
         """
         # for convenience, convert str/pathlib.Path to list of length 1
         if isinstance(samples, (str, Path)):
@@ -534,13 +545,9 @@ class SpectrogramModule(BaseModule):
             classes: list of class names
             sample_duration: duration of audio samples in seconds
             single_target: if True, predict only class with max score
-            channels: number of channels in input data
-            sample_height: height of input data
-            sample_width: width of input data
             preprocessor_dict: dictionary defining preprocessor and parameters,
                 can be generated with preprocessor.to_dict()
                 if not None, will override other preprocessor arguments
-                (sample_duration, sample_height, sample_width, channels)
             preprocessor_cls:
                 a class object that inherits from BasePreprocessor
                 if preprocessor_dict is None, this class will be instantiated to set self.preprocessor
@@ -840,18 +847,17 @@ class SpectrogramModule(BaseModule):
         Modifies the model in place!
 
         Args:
-            model: the model to freeze the parameters of
             train_layers: layer or list/iterable of the layers whose parameters should not be frozen
                 For example: pass `model.classifier` to train only the classifier
 
         Example 1:
         ```
-        freeze_all_layers_except(model, model.classifier)
+        model.freeze_layers_except(model.classifier)
         ```
 
         Example 2: freeze all but 2 layers
         ```
-        freeze_all_layers_except(model, [model.layer1, model.layer2])
+        model.freeze_layers_except([model.network.layer1, model.network.layer2])
         ```
         """
         # handle single layer or list of layers
@@ -939,13 +945,9 @@ class SpectrogramClassifier(SpectrogramModule):
             classes: list of class names
             sample_duration: duration of audio samples in seconds
             single_target: if True, predict only class with max score
-            channels: number of channels in input data
-            sample_height: height of input data
-            sample_width: width of input data
             preprocessor_dict: dictionary defining preprocessor and parameters,
                 can be generated with preprocessor.to_dict()
                 if not None, will override other preprocessor arguments
-                (sample_duration, sample_height, sample_width, channels)
             preprocessor_cls:
                 a class object that inherits from BasePreprocessor
                 if preprocessor_dict is None, this class will be instantiated to set self.preprocessor
@@ -964,7 +966,9 @@ class SpectrogramClassifier(SpectrogramModule):
             train: fit the machine learning model using training data and evaluate with validation
             data
 
-            save: save the model to a file load: load the model from a file
+            save: save the model to a file
+
+            load: load the model from a file
 
             embed: generate embeddings for a set of audio files
 
@@ -976,14 +980,15 @@ class SpectrogramClassifier(SpectrogramModule):
 
             run_evaluation: generate predictions and evaluate performance on samples with labels
 
-            metrics change_classes: change the classes that the model predicts
+            change_classes: change the classes that the model predicts
 
             freeze_feature_extractor: freeze all layers except the classifier
 
-            freeze_layers_except: freeze all parameters of a model, optionally exluding some layers
+            freeze_layers_except: freeze all parameters of a model, optionally excluding some layers
 
-            train_dataloader: create dataloader for training predict_dataloader: create dataloader
-            for inference (predict/validate/test)
+            train_dataloader: create dataloader for training
+
+            predict_dataloader: create dataloader for inference (predict/validate/test)
 
             save_weights: save just the self.network state dict to a file
 
@@ -992,8 +997,9 @@ class SpectrogramClassifier(SpectrogramModule):
         Editable Attributes & Properties:
             single_target: (bool) if True, predict only class with max score
 
-            device: (torch.device or str) device to use for training and inference preprocessor:
-            object defining preprocessing and augmentation operations, e.g. SpectrogramPreprocessor
+            device: (torch.device or str) device to use for training and inference
+
+            preprocessor: object defining preprocessing and augmentation operations, e.g. SpectrogramPreprocessor
 
             network: pytorch model object, e.g. Resnet18
 
@@ -1003,16 +1009,19 @@ class SpectrogramClassifier(SpectrogramModule):
             optimizer_params: (dict) with "class" and "kwargs" keys for class.__init__(**kwargs)
 
             lr_scheduler_params: (dict) with "class" and "kwargs" for class.__init__(**kwargs)
-            use_amp: (bool) if True, uses automatic mixed precision for training wandb_logging:
-            (dict) settings for logging to Weights and Biases
+
+            use_amp: (bool) if True, uses automatic mixed precision for training
+
+            wandb_logging: (dict) settings for logging to Weights and Biases
 
             score_metric: (str) name of the metric for overall evaluation - one of the keys in
             self.torch_metrics
 
-            log_file: (str) path to save output to a text file logging_level: (int) amt of logging
-            to log file. 0 for nothing, 1,2,3 for increasing logged info
+            log_file: (str) path to save output to a text file
 
-            verbose: (int) amt of logging to stdout. 0 for nothing, 1,2,3 for increasing printed
+            logging_level: (int) amount of logging to log file. 0 for nothing, 1,2,3 for increasing logged info
+
+            verbose: (int) amount of logging to stdout. 0 for nothing, 1,2,3 for increasing printed
             output
 
         Other attributes:
@@ -1183,14 +1192,14 @@ class SpectrogramClassifier(SpectrogramModule):
             (1) wandb logging
             If wandb_session is provided, logs progress and samples to Weights
             and Biases. A random set of samples is preprocessed and logged to
-            a table. Progress over all batches is logged. Afte prediction,
+            a table. Progress over all batches is logged. After prediction,
             top scoring samples are logged.
             Use self.wandb_logging dictionary to change the number of samples
             logged or which classes have top-scoring samples logged.
 
-            (2) unsafe sample logging
-            If unsafe_samples_log is not None, saves a list of all file paths that
-            failed to preprocess in unsafe_samples_log as a text file
+            (2) invalid sample logging
+            If invalid_samples_log is not None, saves a list of all file paths that
+            failed to preprocess in invalid_samples_log as a text file
 
         Note: if loading an audio file raises a PreprocessingError, the scores
             for that sample will be np.nan
@@ -1325,7 +1334,7 @@ class SpectrogramClassifier(SpectrogramModule):
 
         Example:
         ```
-        from opensoundscappe.preprocess.utils import show_tensor_grid
+        from opensoundscape.preprocess.utils import show_tensor_grid
         samples = generate_samples(['/path/file1.wav','/path/file2.wav'])
         tensors = [s.data for s in samples]
         show_tensor_grid(tensors,columns=3)
@@ -1347,7 +1356,7 @@ class SpectrogramClassifier(SpectrogramModule):
         generated_samples = []
         for batch in dataloader:
             generated_samples.extend(batch)
-        # get & log list of any sampls that failed to preprocess
+        # get & log list of any samples that failed to preprocess
         invalid_samples = dataloader.dataset.report(log=invalid_samples_log)
 
         if return_invalid_samples:
@@ -1360,9 +1369,8 @@ class SpectrogramClassifier(SpectrogramModule):
 
         Or, compute metrics on accumulated values in the TorchMetrics if targets is None
 
-        By default, the overall model score is "map" (mean average precision)
-        for multi-target models (self.single_target=False) and "f1" (average
-        of f1 score across classes) for single-target models).
+        By default, the overall model score is "auroc" (area under the ROC curve)
+        for both multi-target (self.single_target=False) and single-target models.
 
         update self.torch_metrics to include the desired metrics
 
@@ -1397,7 +1405,7 @@ class SpectrogramClassifier(SpectrogramModule):
             scores = scores[~torch.isnan(scores).any(dim=1), :]
 
             if len(scores) < 1:
-                warnings.warn("Recieved empty list of predictions (or all nan)")
+                warnings.warn("Received empty list of predictions (or all nan)")
                 return np.nan, np.nan
 
             # map is failing with memory limit on MPS, use CPU instead
@@ -1518,6 +1526,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 - pass the value returned by wandb.init() to progress log to a
                 Weights and Biases run
                 - if None, does not log to wandb
+            progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
 
         Returns:
             dictionary of evaluation metrics calculated with self.torch_metrics
@@ -1650,7 +1659,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 interval in batches to print training loss/metrics
             validation_interval:
                 interval in epochs to test the model on the validation set
-                Note that model will only update it's best score and save best.model
+                Note that model will only update its best score and save best.model
                 file on epochs that it performs validation.
             reset_optimizer:
                 if True, resets the optimizer rather than retaining state_dict
@@ -1673,7 +1682,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 ```
                 import wandb
                 wandb.login(key=api_key) #find your api_key at https://wandb.ai/settings
-                session = wandb.init(enitity='mygroup',project='project1',name='first_run')
+                session = wandb.init(entity='mygroup',project='project1',name='first_run')
                 ...
                 model.train(...,wandb_session=session)
                 session.finish()
@@ -1729,7 +1738,7 @@ class SpectrogramClassifier(SpectrogramModule):
                     epochs=epochs,
                     batch_size=batch_size,
                     num_workers=num_workers,
-                    lr_sheculer_params=self.lr_scheduler_params,
+                    lr_scheduler_params=self.lr_scheduler_params,
                     optimizer_params=self.optimizer_params,
                     model_save_path=Path(save_path).resolve(),
                 )
@@ -1868,7 +1877,7 @@ class SpectrogramClassifier(SpectrogramModule):
                     self.save(save_path, pickle=True)
                 except Exception as e:
                     self._log(
-                        "Saving pickled model failed. This may be beacuse the model is not picklable "
+                        "Saving pickled model failed. This may be because the model is not picklable "
                         "e.g. if it contains a lambda function, generator, or other non-picklable object."
                     )
 
@@ -1947,7 +1956,6 @@ class SpectrogramClassifier(SpectrogramModule):
         """save model with weights using torch.save()
 
         load from saved file with cnn.load_model(path)
-
 
         Args:
             path: file path for saved model object
@@ -2043,7 +2051,7 @@ class SpectrogramClassifier(SpectrogramModule):
         Returns:
             new CNN instance
 
-        Note: Note that if you used pickle=True when saving, the model object might not load properly
+        Note: if you used pickle=True when saving, the model object might not load properly
         across different versions of OpenSoundscape.
         """
         loaded_content = torch.load(path, weights_only=not unpickle)
@@ -2086,7 +2094,8 @@ class SpectrogramClassifier(SpectrogramModule):
 
         Args:
             path: file path with saved weights
-            strict: (bool) see torch.load()
+            strict: (bool) if True, requires exact match between the keys in the
+                state dict and the model's parameters; see torch.nn.Module.load_state_dict()
         """
         self.network.load_state_dict(torch.load(path), strict=strict)
 
@@ -2110,13 +2119,15 @@ class SpectrogramClassifier(SpectrogramModule):
             wandb_session: a wandb session to log progress to (e.g. return value of wandb.init())
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             targets: list of layers to return outputs from. -1 corresponds to final layer outputs
-                [default: (-1)]returns final layer outputs
+                [default: (-1)] returns final layer outputs
             avgpool_intermediates: bool, if True, applies global average pooling to intermediate outputs
                 i.e. averages across all dimensions except first to get a 1D vector per sample
                 [default: True] (note that False may results in large memory usage)
 
         Returns:
-            outs: dictionary with keys:
+            outs: dictionary with one key per entry in `targets`. Key -1 corresponds to the final
+            model output (shape: n_samples x n_classes). Other keys are layer objects whose values
+            are the corresponding intermediate outputs (shape depends on avgpool_intermediates).
         """
         if not isinstance(dataloader, torch.utils.data.DataLoader):
             warnings.warn(
@@ -2487,12 +2498,12 @@ class SpectrogramClassifier(SpectrogramModule):
                 raise AttributeError(
                     "Please specify target_layer. Models trained with older versions of Opensoundscape, "
                     "or custom architectures, do not have default `.network.embedding_layer`. "
-                    "e.g. For a ResNET model, try target_layers=[self.model.layer4]"
+                    "e.g. For a ResNET model, try target_layers=[self.network.layer4]"
                 ) from exc
-        else:  # check that target_layers are modules of self.model
+        else:  # check that target_layers are modules of self.network
             assert (
                 target_layer in self.network.modules()
-            ), f"target_layers must be in self.model.modules(), but {target_layer} is not."
+            ), f"target_layers must be in self.network.modules(), but {target_layer} is not."
         return target_layer
 
     def profile(
@@ -2616,7 +2627,7 @@ class SpectrogramClassifier(SpectrogramModule):
         **kwargs,
     ):
         """
-        Generate a activation and/or backprop heatmaps for each sample
+        Generate activation and/or backprop heatmaps for each sample
 
         Args:
             samples: (same as CNN.predict())
@@ -2841,7 +2852,8 @@ class SpectrogramClassifier(SpectrogramModule):
             targets: list of layers from self.network to extract intermediate outputs from
                 the key -1 in the returned dictionary corresponds to the final output of the model
             avgpool: bool, if True, applies global average pooling to
-                intermediate outputs (average across all dimensions except first to get
+                intermediate outputs (averages across all dimensions except the first
+                to get a 1D vector per sample)
         Returns:
             dictionary with key for each target layer. Key -1 corresponds to final model output.
         """
@@ -2916,8 +2928,8 @@ class SpectrogramClassifier(SpectrogramModule):
                 end_time)
             batch_size: batch size to use for dataloader [default: 1]
             num_workers: number of parallel CPU workers to use for dataloader [default: 0]
-            target_layer: layer from self.model._modules to
-                extract outputs from - if None, attempts to use self.model.embedding_layer as
+            target_layer: layer from self.network._modules to
+                extract outputs from - if None, attempts to use self.network.embedding_layer as
                 default
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             return_preds: bool, if True, returns two outputs (embeddings, logits)
@@ -2925,7 +2937,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 i.e. averages across all dimensions except first to get a 1D vector per sample
             return_dfs: bool, if True, returns embeddings as pd.DataFrame with multi-index like
                 .predict(). if False, returns np.array of embeddings [default: True]. If
-                avg_pool=False, overrides to return np.array since we can't have a df with >2
+                avgpool=False, overrides to return np.array since we can't have a df with >2
                 dimensions
             audio_root: optionally pass a root directory (pathlib.Path or str)
                 - `audio_root` is prepended to each file path
@@ -3053,7 +3065,7 @@ class InceptionV3(SpectrogramClassifier):
     ):
         """Model object for InceptionV3 architecture subclassing CNN
 
-        See opensoundscape.org for exaple use.
+        See opensoundscape.org for example use.
 
         Args:
             classes:
@@ -3061,7 +3073,7 @@ class InceptionV3(SpectrogramClassifier):
             sample_duration: duration in seconds of one audio sample
             single_target: if True, predict exactly one class per sample
                 [default:False]
-            freeze-feature_extractor:
+            freeze_feature_extractor:
                 if True, feature weights don't have
                 gradient, and only final classification layer is trained
             weights:
@@ -3104,7 +3116,7 @@ class InceptionV3(SpectrogramClassifier):
         """Training step for pytorch lightning
 
         Args:
-            batch: a batch of data from the DataLoader
+            samples: a batch of AudioSample objects from the DataLoader
             batch_idx: index of the batch
 
         Returns:
@@ -3239,7 +3251,7 @@ def load_model(path, device=None, unpickle=True):
 
 def _gpu_if_available():
     """
-    Return a torch.device, chosing cuda:0 or mps if available
+    Return a torch.device, choosing cuda:0 or mps if available
 
     Returns the first available GPU device (torch.device('cuda:0')) if cuda is available,
     otherwise returns torch.device('mps') if MPS is available,
