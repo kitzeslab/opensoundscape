@@ -8,6 +8,7 @@ import torch
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint
 
+from opensoundscape.ml.dataloaders import collate_audio_samples
 from opensoundscape.ml.utils import apply_activation_layer, check_labels
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.logging import wandb_table
@@ -38,7 +39,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
 
         typically returns logits (raw, untransformed model outputs)
         """
-        batch_tensors, _ = samples
+        batch_tensors, _ = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
         return self.network(batch_tensors)
 

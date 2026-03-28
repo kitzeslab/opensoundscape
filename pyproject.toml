@@ -44,8 +44,8 @@ pillow = ">=12.1.1"
 jupyter-server = ">=2.11.2"
 joblib = ">=1.2.0"
 grad-cam = ">=1.5.0"
-aru-metadata-parser = ">=0.1.0"
-tqdm = ">=4.66.1"
+aru-metadata-parser = ">=1.0.0"
+tqdm = ">=4.67.3"
 gitpython = ">=3.1.41"
 werkzeug=">=3.1.5"
 noisereduce=">=3.0.2"
@@ -54,11 +54,12 @@ scipy=">=1.15"
 llvmlite=">=0.44.0"
 
 # optional dependencies (install with `pip install opensoundscape[viz]` etc.)
-ipywidgets = {version = ">=8.1.0", optional = true}
-plotly = {version = ">=5.0.0", optional = true}
+ipywidgets = {version = ">=8.1.8", optional = true}
+plotly = {version = ">=6.6.0", optional = true}
 tensorflow = {version = ">=2.13.0", optional = true}
 tensorflow-hub = {version = ">=0.14.0", optional = true}
 keras = {version = ">=3.12.0", optional = true}
+perch-hoplite = {version = ">=1.0.1", optional = true}
 
 # security alert updates
 aiohttp=">=3.13.3"
@@ -67,7 +68,7 @@ setuptools=">=78.1.1"
 urllib3=">=2.6.3"
 protobuf = ">=5.29.6"
 certifi = ">=2024.7.4"
-requests=">=2.32.4"
+requests=">=2.33.0"
 h11=">=0.16.0"
 Jinja2 = ">=3.1.6"
 sentry-sdk = ">=2.8.0"
@@ -89,11 +90,12 @@ sphinx-copybutton = ">=0.5.2"
 crowsetta = ">=5.0.2"
 wheel = ">=0.46.2"
 virtualenv = ">=20.36.1"
-
+perch-hoplite = ">=1.0.1"
 
 [tool.poetry.extras]
 tensorflow = ["tensorflow", "tensorflow-hub", "keras"]
 viz = ["ipywidgets", "plotly"]
+hoplite = ["perch-hoplite"]
 
 [tool.black]
 line-length = 88

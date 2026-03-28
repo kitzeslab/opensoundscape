@@ -2123,7 +2123,7 @@ class MultiChannelAudio(Audio):
         offset=None,
         duration=None,
         start_timestamp=None,
-        out_of_bounds_mode="warn",
+        out_of_bounds_mode="ignore",
     ):
         """Load audio from files
 
