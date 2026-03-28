@@ -3168,7 +3168,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 """
             ) from e
 
-        n_audio_samples_per_input = (
+        n_audio_samples_per_input = int(
             self.preprocessor.sample_rate * self.preprocessor.sample_duration
         )
         onnx_program = opensoundscape.ml.export.to_onnx_program(
