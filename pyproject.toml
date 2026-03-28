@@ -95,7 +95,8 @@ wheel = ">=0.46.2"
 virtualenv = ">=20.36.1"
 onnx = ">=1.19.1"
 onnxruntime = ">=1.23.2"
-onnxscript = ">=0.5.4"perch-hoplite = ">=1.0.1"
+onnxscript = ">=0.5.4"
+perch-hoplite = ">=1.0.1"
 
 [tool.poetry.extras]
 tensorflow = ["tensorflow", "tensorflow-hub", "keras"]
