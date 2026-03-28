@@ -402,9 +402,18 @@ class BaseModule:
         return {"optimizer": optimizer, "scheduler": scheduler}
 
     def validation_step(self, samples, batch_idx, dataloader_idx=0):
-        """currently only used for lightning
+        """Run a validation step on one batch (used by Lightning training loop)
 
-        not used by SpectrogramClassifier"""
+        Not used by SpectrogramClassifier's pure-PyTorch training loop.
+
+        Args:
+            samples: a batch of AudioSample objects from the DataLoader
+            batch_idx: index of the current batch
+            dataloader_idx: index of the dataloader (for multiple validation sets) [default: 0]
+
+        Returns:
+            loss value for the batch
+        """
         batch_tensors, batch_labels = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
         batch_labels = batch_labels.to(self.device)
@@ -500,12 +509,23 @@ class BaseModule:
 
 
 class ChannelDimCheckError(Exception):
+    """Raised when the number of input channels cannot be determined from a model's first layer"""
+
     pass
 
 
 def get_channel_dim(model):
+    """Get the number of input channels expected by a model's first convolutional layer
 
-    # Get the first layer
+    Args:
+        model: a torch.nn.Module object
+
+    Returns:
+        int: number of input channels of the first layer
+
+    Raises:
+        ChannelDimCheckError: if the first layer does not have an `in_channels` attribute
+    """
     first_layer = list(model.children())[0]
 
     # If the first layer is a Sequential container, get its first module
@@ -1322,15 +1342,20 @@ class SpectrogramClassifier(SpectrogramModule):
                 - a dataframe with multi-index (file, start_time, end_time), OR
                 - a list (or np.ndarray) of audio file paths
                 - a single file path as str or pathlib.Path
-            see .predict() documentation for other args
+            invalid_samples_log: if not None, samples that failed to preprocess
+                will be listed in this text file [default: None]
+            return_invalid_samples: if True, returns a second value: the set of
+                file paths that failed to preprocess [default: False]
+            audio_root: optionally pass a root directory (pathlib.Path or str)
+                prepended to each file path. If None, samples must contain full paths.
             **dataloader_kwargs: any arguments to inference_dataloader_cls.__init__
                 except samples (uses `samples`) and collate_fn (uses `identity`)
                 (Note: default class is SafeAudioDataloader)
 
         Returns:
             a list of AudioSample objects
-            - if return_invalid_samples is True, returns second value: list of paths to
-            samples that failed to preprocess
+            - if return_invalid_samples is True, returns (samples, invalid_samples)
+            where invalid_samples is a set of file paths that failed to preprocess
 
         Example:
         ```
@@ -1439,16 +1464,17 @@ class SpectrogramClassifier(SpectrogramModule):
         return metrics
 
     def per_class_metrics(self, targets, scores):
-        """compute per-class metrics: au_roc, avg precision
+        """compute per-class metrics: au_roc and avg_precision
 
-        can override this method to customize per-class metrics
+        Can override this method to customize per-class metrics.
 
         Args:
             targets: 2d array of 0/1 for each sample and each class
-            scores: 2d array of continuous valued score for each sample and class
+            scores: 2d array of continuous-valued scores for each sample and class
+
         Returns:
-            dictionary of per-class metrics
-                {class_name: {metric_name: value}}
+            dictionary of per-class metrics of the form
+            ``{class_name: {"au_roc": value, "avg_precision": value}}``
         """
         import sklearn.metrics as M
 
@@ -1695,6 +1721,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 model weights into self.network [default: False]
                 Best model is determined by validation set's self.score_metric score
             **dataloader_kwargs: additional arguments passed to train_dataloader()
+
         Effects:
             If wandb_session is provided, logs progress and samples to Weights
             and Biases. A random set of training and validation samples
@@ -2942,7 +2969,10 @@ class SpectrogramClassifier(SpectrogramModule):
             audio_root: optionally pass a root directory (pathlib.Path or str)
                 - `audio_root` is prepended to each file path
                 - if None (default), samples must contain full paths to files
-            dataloader_kwargs are passed to self.predict_dataloader()
+            output_size_warning: int, if >0, raises a warning if the number of
+                output values exceeds this number. Set to None or 0 to disable.
+                [default: 1e9]
+            **dataloader_kwargs: passed to self.predict_dataloader()
 
         Returns: (embeddings, preds) if return_preds=True or embeddings if return_preds=False
             types are pd.DataFrame if return_dfs=True, or np.array if return_dfs=False
@@ -3113,14 +3143,17 @@ class InceptionV3(SpectrogramClassifier):
         self.name = "InceptionV3"
 
     def training_step(self, samples, batch_idx):
-        """Training step for pytorch lightning
+        """Training step for InceptionV3 (handles auxiliary outputs)
+
+        Overrides the parent training_step to handle InceptionV3's auxiliary logits,
+        weighting the auxiliary loss at 0.4x the primary loss.
 
         Args:
             samples: a batch of AudioSample objects from the DataLoader
             batch_idx: index of the batch
 
         Returns:
-            loss: loss value for the batch
+            loss: combined loss value for the batch (primary + 0.4 * auxiliary)
         """
         batch_tensors, batch_labels = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
@@ -3197,9 +3230,10 @@ def load_model(path, device=None, unpickle=True):
         device: which device to load into, eg 'cuda:1'
             [default: None] will choose first gpu if available, otherwise cpu
         unpickle: if True, passes `weights_only=False` to torch.load(). This is necessary if the
-        model was saved with`pickle=True`, which saves the entire model object.
+            model was saved with `pickle=True`, which saves the entire model object.
             If `unpickle=False`, this function will work if the model was saved with pickle=False,
             but will raise an error if the model was saved with pickle=True. [default: True]
+
     Returns:
         a model object with loaded weights
     """
@@ -3250,12 +3284,14 @@ def load_model(path, device=None, unpickle=True):
 
 
 def _gpu_if_available():
-    """
-    Return a torch.device, choosing cuda:0 or mps if available
+    """Return a torch.device, preferring GPU over CPU
 
-    Returns the first available GPU device (torch.device('cuda:0')) if cuda is available,
-    otherwise returns torch.device('mps') if MPS is available,
-    otherwise returns the CPU device.
+    Returns the first available GPU device (torch.device('cuda:0')) if CUDA is available,
+    otherwise returns torch.device('mps') if MPS (Apple Silicon) is available,
+    otherwise returns torch.device('cpu').
+
+    Returns:
+        torch.device object for the best available compute device
     """
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
