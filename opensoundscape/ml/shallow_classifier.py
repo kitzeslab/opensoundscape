@@ -103,8 +103,6 @@ class MLPClassifier(torch.nn.Module):
         Note: this is a convenience wrapper around opensoundscape.ml.shallow_classifier.fit()
 
         Args:
-            model: a torch.nn.Module object to train
-
             train_features: input features for training, often embeddings; should be a valid input to
             model(); generally shape (n_samples,n_features)
 
@@ -157,7 +155,14 @@ class MLPClassifier(torch.nn.Module):
         )
 
     def save(self, path):
-        torch.save(
+        """Save the model to a file using torch.save()
+
+        Saves architecture parameters and weights in a dictionary.
+        Load with MLPClassifier.load(path).
+
+        Args:
+            path: file path to save to
+        """
             {
                 "input_size": self.in_features,
                 "output_size": self.out_features,
@@ -234,8 +239,6 @@ def fit_on_hoplite(
         (n_samples,n_classes); should be a valid target for criterion()
 
         validation_df: labels for validation; if None, does not perform validation
-
-        validation_labels: labels for validation; if None, does not perform validation
 
         batch_size: batch size for training; if fewer samples than batch_size,
             the entire dataset is used as a single batch
