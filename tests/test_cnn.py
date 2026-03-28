@@ -1,3 +1,4 @@
+import importlib.util
 import pandas as pd
 from pathlib import Path
 
@@ -215,14 +216,12 @@ def test_train_single_target(train_df, temp_model_dir):
 
 
 def test_train_wandb(train_df, temp_model_dir):
-    # with weights and biases
+    # Use disabled mode so this test never depends on network/credentials.
     try:
         import wandb
 
-        session = wandb.init(
-            entity="kitzeslab", project="opensoundscape-test", reinit=True
-        )
-    except:
+        session = wandb.init(mode="disabled", reinit=True)
+    except Exception:
         pytest.skip("Could not init wandb session")
 
     model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
@@ -243,6 +242,15 @@ def test_train_wandb(train_df, temp_model_dir):
 
     if os.path.exists("wandb"):
         shutil.rmtree("wandb")
+
+
+onnx_deps = pytest.mark.skipif(
+    not all(
+        importlib.util.find_spec(pkg) is not None
+        for pkg in ("onnx", "onnxruntime", "onnxscript")
+    ),
+    reason="onnx, onnxruntime, or onnxscript not installed",
+)
 
 
 def test_train_multi_target(train_df, temp_model_dir):
@@ -1751,6 +1759,7 @@ def test_change_classes_preserves_device():
     assert output.device == model.device
 
 
+@onnx_deps
 def test_save_onnx(onnx_save_path):
     from opensoundscape import CNN, preprocessors
 
@@ -1760,6 +1769,7 @@ def test_save_onnx(onnx_save_path):
         sample_duration=3,
         preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
         sample_rate=32000,
+        arch_weights=None,
     )
     onnx_program = model.save_onnx(onnx_save_path)
 
@@ -1819,7 +1829,7 @@ def test_save_onnx(onnx_save_path):
     import torchaudio
     from opensoundscape import CNN, preprocessors
 
-    model = CNN("resnet18", classes=[0], sample_duration=5)
+    model = CNN("resnet18", classes=[0], sample_duration=5, arch_weights=None)
     # custom list of torchaudio and torchvision transforms
     my_transforms = [
         torchaudio.transforms.Spectrogram(

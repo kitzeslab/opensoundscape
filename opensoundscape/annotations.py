@@ -1166,31 +1166,44 @@ class BoxedAnnotations:
         else:
             # clip_duration is fixed for all files, or is a list of durations for each file
             if isinstance(full_duration, (list, np.ndarray)):
+                # per-file durations: generate clip times separately for each file
                 assert len(full_duration) == len(audio_files), (
                     "`full_duration` should be a float or a list/array "
                     "with same length as `audio_files`, or None. Length did not match audio_files."
                 )
+
+                dfs = []
+                for i, file in enumerate(audio_files):
+                    df = generate_clip_times_df(
+                        full_duration=full_duration[i],
+                        clip_duration=clip_duration,
+                        **kwargs,
+                    )
+                    df["file"] = file
+                    dfs.append(df)
+                clip_df = pd.concat(dfs).reset_index(drop=True)
+                clip_df = clip_df.set_index(["file", "start_time", "end_time"])
             else:
-                # same duration for all files
-                assert isinstance(full_duration, (int, float)), (
-                    "`full_duration` should be a float or a list/array "
-                    f"with same length as `audio_files`, or None. Got type {type(full_duration)}."
-                )
-                full_duration = [full_duration] * len(audio_files)
+                # same duration for all files: use a single template and repeat it for each file
 
-            dfs = []
-            for i, file in enumerate(audio_files):
-
-                df = generate_clip_times_df(
-                    full_duration=full_duration[i],
+                # generate clip times once for the shared duration
+                template_df = generate_clip_times_df(
+                    full_duration=full_duration,
                     clip_duration=clip_duration,
                     **kwargs,
                 )
-                df["file"] = file
-                dfs.append(df)
-            clip_df = pd.concat(dfs).reset_index(drop=True)
-            clip_df = clip_df.set_index(["file", "start_time", "end_time"])
 
+                # repeat the template for each file and assign file labels in a vectorized way
+                clip_df = pd.concat(
+                    [template_df] * len(audio_files),
+                    ignore_index=True,
+                )
+                if len(template_df) > 0:
+                    clip_df["file"] = np.repeat(audio_files, len(template_df))
+                else:
+                    # no clips for the given duration/clip_duration; still add the column
+                    clip_df["file"] = pd.Series(dtype=object)
+                clip_df = clip_df.set_index(["file", "start_time", "end_time"])
         # call labels_on_index with clip_df
         return self.labels_on_index(
             clip_df=clip_df,

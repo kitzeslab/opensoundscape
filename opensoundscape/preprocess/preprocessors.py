@@ -1,7 +1,6 @@
 """Preprocessor classes: tools for preparing and augmenting audio samples"""
 
 from pathlib import Path
-from matplotlib import transforms
 import pandas as pd
 import copy
 import time
@@ -669,8 +668,8 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
             bandpass_range: tuple (min_f, max_f) frequency range to crop spectrogram
                 [default: None, no bandpass]
                 ignored if torch_transforms is provided
-            normalize_mean_std: tuple (mean, std) for rescaling values as (x - mean) / std
-                [default: None, no normalization]
+            rescale_mean_sd: tuple (mean, std) for rescaling values as (x - mean) / std
+            rescale_mean_sd: tuple (mean, std) for rescaling values as (x - mean) / std
                 ignored if torch_transforms is provided
             resize_ft: tuple (frequency dim, time dim) to resize spectrogram [default: None]
                 Note: including this transform will make the preprocessor non-serializable

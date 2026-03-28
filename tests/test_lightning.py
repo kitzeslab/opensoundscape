@@ -82,14 +82,12 @@ def test_lightning_spectrogram_module_train(model, train_df_clips, model_save_di
 def test_lightning_spectrogram_module_train_wandb(
     model, train_df_clips, model_save_dir
 ):
-    # with weights and biases
+    # Use disabled mode so this test is hermetic in CI.
     try:
         import wandb
 
-        session = wandb.init(
-            entity="kitzeslab", project="opensoundscape-test", reinit=True
-        )
-    except:
+        session = wandb.init(mode="disabled", reinit=True)
+    except Exception:
         pytest.skip("Could not init wandb session")
 
     model.fit_with_trainer(

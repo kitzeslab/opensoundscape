@@ -83,7 +83,7 @@ def to_onnx_program(
         sample_rate=32000,
     )
     # a list of torchaudio preprocesesing transforms such as Spectrogram, MelSpectrogram, etc.
-    transforms=model.preprocessor["transforms"].transforms
+    transforms=model.preprocessor["transform"].transforms
 
     # expected number of samples in input audio: 3*32000
     input_length = model.preprocessor.sample_rate * model.preprocessor.sample_duration

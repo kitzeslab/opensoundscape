@@ -99,7 +99,7 @@ onnxscript = ">=0.5.4"
 [tool.poetry.extras]
 tensorflow = ["tensorflow", "tensorflow-hub", "keras"]
 viz = ["ipywidgets", "plotly"]
-onnx = ["onnx", "onnx-runtime", "onnxscript"]
+onnx = ["onnx", "onnxruntime", "onnxscript"]
 all = ["ipywidgets", "plotly", "tensorflow", "tensorflow-hub", "onnx", "onnxruntime", "onnxscript"]
 
 [tool.black]

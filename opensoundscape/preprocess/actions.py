@@ -282,7 +282,7 @@ class AudioToSamplesTensor(BaseAction):
     """extract Audio.samples to a PyTorch tensor and add channel dimensions"""
 
     def __call__(self, sample, **kwargs):
-        sample.data = torch.tensor(sample.data.samples).unsqueeze(0)
+        sample.data = torch.from_numpy(sample.data.samples).unsqueeze(0)
 
 
 @register_action_cls
