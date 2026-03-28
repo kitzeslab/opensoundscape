@@ -313,6 +313,8 @@ def detect_peak_sequence_cwt(
         max_skip: sequence termination criterion 1: max sequential invalid points [default: 3]
         duration_range: sequence criterion 1: length (sec) of sequence [default: (1, 15)]
         points_range: sequence criterion 2: num points in sequence [default: (9, 100)]
+            Note: this function uses a stricter minimum (9) than find_accel_sequences (5),
+            tuned for typical Ruffed Grouse drumming sequences.
         plot: if True, plot peaks and detected sequences with pyplot [default: False]
 
     Returns:
