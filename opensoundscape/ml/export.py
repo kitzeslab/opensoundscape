@@ -6,6 +6,16 @@ import torch
 
 class ONNXModel(torch.nn.Module):
     def __init__(self, sequential_models, outputs=None):
+        """A wrapper torch.nn.Module to combine multiple sequential models for ONNX export
+
+        By default, the outpus of all sequential models are included in the output dict
+        (specify a subset to include using `outputs` argument).
+
+        Args:
+            sequential_models: dict of str: torch.nn.Module, a dictionary of sequential models to apply in order
+            outputs: list of str or None, list of keys in sequential_models to include in output dict
+            - if None, includes outputs of all sequential models!
+        """
         super(ONNXModel, self).__init__()
 
         for name, m in sequential_models.items():
@@ -14,7 +24,7 @@ class ONNXModel(torch.nn.Module):
             except:
                 pass
 
-        self.sequential_models = sequential_models
+        self.sequential_models = torch.nn.ModuleDict(sequential_models)
 
         # determine which of the sequential model outputs to include in output dict
         if outputs is None:
@@ -83,7 +93,7 @@ def to_onnx_program(
         sample_rate=32000,
     )
     # a list of torchaudio preprocesesing transforms such as Spectrogram, MelSpectrogram, etc.
-    transforms=model.preprocessor["transforms"].transforms
+    transforms=model.preprocessor["transform"].transforms
 
     # expected number of samples in input audio: 3*32000
     input_length = model.preprocessor.sample_rate * model.preprocessor.sample_duration
@@ -104,6 +114,10 @@ def to_onnx_program(
         warnings.warn(
             "to_onnx_program may fail since at least one of onnx, onnxruntime, and onnxscript packages are not installed"
         )
+    # move to cpu
+    torch_model = torch_model.cpu()
+    preprocessing_transforms = preprocessing_transforms.cpu()
+
     # attempt to separate embeddings and classifier outputs
     outputs = []
     if include_preprocessor_output:
@@ -153,14 +167,16 @@ def to_onnx_program(
                 "sample": preprocessing_transforms,
                 "embedding": embedding_model,
                 "classifier": classifier,
-            }
+            },
+            outputs=outputs,
         )
     else:
         onnx_model = ONNXModel(
             {
                 "sample": preprocessing_transforms,
                 "classifier": classifier,
-            }
+            },
+            outputs=outputs,
         )
 
     # create a sample input tensor for ONNX export

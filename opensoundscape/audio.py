@@ -407,6 +407,8 @@ class Audio:
         Args:
             start_time: time in seconds for start of extracted clip
             end_time: time in seconds for end of extracted clip
+                - if negative, counts from end of audio
+                - if None, extracts to end of audio
             out_of_bounds_mode: behavior if requested time period is not fully contained
                 within the audio file. Options:
                 - 'ignore': return any available audio with no warning/error [default]
@@ -421,7 +423,22 @@ class Audio:
         and trim_with_timestamps() to trim using localized datetime.datetime objects
         """
         start_sample = self._get_sample_index(start_time)
-        end_sample = self._get_sample_index(end_time)
+        if end_time is None:
+            end_sample = self.samples.shape[-1]
+        elif end_time < 0:
+            end_sample = self.samples.shape[-1] + self._get_sample_index(end_time)
+            if end_sample < 0:
+                msg = (
+                    f"Requested end_time {end_time} is before the start of the "
+                    "audio; treating as out-of-bounds."
+                )
+                if out_of_bounds_mode == "raise":
+                    raise AudioOutOfBoundsError(msg)
+                elif out_of_bounds_mode == "warn":
+                    warnings.warn(msg)
+                end_sample = 0
+        else:
+            end_sample = self._get_sample_index(end_time)
         return self.trim_samples(
             start_sample, end_sample, out_of_bounds_mode=out_of_bounds_mode
         )
@@ -1184,6 +1201,113 @@ class Audio:
     def dBFS(self):
         """calculate the root-mean-square dB value relative to a full-scale sine wave"""
         return 20 * np.log10(self.rms * np.sqrt(2))
+
+    def __add__(self, other):
+        """Adding Audio objects = concatenation; adding int/float = gain adjustment
+
+        Args:
+            other: another Audio object or a numeric value
+        """
+        if not isinstance(other, (Audio, int, float)):
+            raise ValueError(
+                "Can only add Audio objects (concatenation) or add gain (int/float)"
+            )
+        if isinstance(other, Audio):
+            return concat([self, other])
+
+        if not isinstance(other, (int, float)):
+            raise TypeError(
+                "Can only add gain (int/float) or concatenate audio objects"
+            )
+        else:
+            return self.apply_gain(other)
+
+    def __sub__(self, other):
+        """Subtracting Audio objects = gain reduction by `other` dB
+
+        Args:
+            other: numeric value (dB)
+        """
+        if not isinstance(other, (int, float)):
+            raise TypeError("Can only subtract gain (int/float)")
+        return self.apply_gain(-other)
+
+    def __mul__(self, other):
+        """Multiplying Audio object by a numeric value = gain adjustment; Multiply 2 audio signals = mixdown
+
+        Args:
+            other: numeric value (linear scale)
+        """
+        if isinstance(other, (int, float)):
+            return self._spawn(samples=self.samples * other)
+        elif isinstance(other, Audio):
+            return mix([self, other])
+        else:
+            raise ValueError(
+                "Can only multiply Audio by another Audio object (mixdown) "
+                "or by a numeric value (gain adjustment)"
+            )
+
+    def __pow__(self, n, modulus=None):
+        """The ** operator loops an Audio object `N` times"""
+        return self.loop(n=n)
+
+    def change_speed(
+        self, speed_factor, resample=False, resample_type=DEFAULT_RESAMPLE_TYPE
+    ):
+        """Change the speed (and pitch) of the audio by a given factor
+
+        Audio is reversed if speed_factor is negative
+
+        Args:
+            speed_factor: factor by which to change speed
+                - e.g. 2.0 = twice as fast, 0.5 = half as fast
+            resample: if True, resample the audio back to the original sample rate
+                - if False, the sample rate is adjusted to reflect the speed change
+                [default: False]
+            resample_type: type of resampling to use if resample=True
+                - see Audio.resample() for options
+        Returns:
+            Audio object with changed speed
+        """
+        sample_rate_with_current_samples = int(self.sample_rate * abs(speed_factor))
+        new_audio = self._spawn(
+            samples=self.samples if speed_factor > 0 else self.samples[::-1],
+            sample_rate=sample_rate_with_current_samples,
+        )
+        if resample:
+            new_audio = new_audio.resample(
+                sample_rate=self.sample_rate, resample_type=resample_type
+            )
+        return new_audio
+
+    def __getitem__(self, key):
+        """Enables slicing Audio objects, treating slice as time in seconds"""
+        if isinstance(key, slice):
+            # handle negatives and Nones for start time and stop time
+            start_time = 0 if key.start is None else key.start
+            if start_time < 0:
+                start_time = self.duration + key.start
+            stop_time = key.stop
+            if stop_time is not None and stop_time < 0:
+                stop_time = self.duration + key.stop
+            # trim to bounds
+            trimmed = self.trim(start_time, stop_time)
+
+            if key.step is None:  # return trimmed clip
+                return trimmed
+            else:
+                # validate step before using it as segment length
+                if key.step == 0:
+                    raise ValueError("Audio slicing step cannot be zero")
+                if key.step < 0:
+                    raise ValueError("Audio slicing step cannot be negative")
+
+                # return Audio segments of length step from start to stop
+                # discard dataframe of clip times
+                return trimmed.split(key.step)[0]
+        else:
+            raise TypeError("Audio object can only be indexed with slice")
 
 
 def load_channels_as_audio(
@@ -1999,7 +2123,7 @@ class MultiChannelAudio(Audio):
         offset=None,
         duration=None,
         start_timestamp=None,
-        out_of_bounds_mode="warn",
+        out_of_bounds_mode="ignore",
     ):
         """Load audio from files
 

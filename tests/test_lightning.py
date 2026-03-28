@@ -61,7 +61,9 @@ def test_lightning_spectrogram_module_save_load(model, model_save_dir):
     p = f"{model_save_dir}/temp.ptl"
     model.preprocessor.sample_duration = 5
     model.save(p)
-    m2 = lightning.LightningSpectrogramModule.load_from_checkpoint(p)
+    m2 = lightning.LightningSpectrogramModule.load_from_checkpoint(
+        p, weights_only=False
+    )
     assert m2.preprocessor.sample_duration == 5
 
 
@@ -82,14 +84,12 @@ def test_lightning_spectrogram_module_train(model, train_df_clips, model_save_di
 def test_lightning_spectrogram_module_train_wandb(
     model, train_df_clips, model_save_dir
 ):
-    # with weights and biases
+    # Use disabled mode so this test is hermetic in CI.
     try:
         import wandb
 
-        session = wandb.init(
-            entity="kitzeslab", project="opensoundscape-test", reinit=True
-        )
-    except:
+        session = wandb.init(mode="disabled", reinit=True)
+    except Exception:
         pytest.skip("Could not init wandb session")
 
     model.fit_with_trainer(

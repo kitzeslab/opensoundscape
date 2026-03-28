@@ -87,7 +87,7 @@ class TestONNXModel:
         double.weight.data *= 2.0
 
         identity = nn.Identity()
-        model = ONNXModel({"double": double, "identity": identity})
+        model = ONNXModel({"double_value": double, "identity": identity})
         x = torch.ones(1, 4)
         result = model(x)
         # after doubling, identity should return the doubled tensor
@@ -174,7 +174,9 @@ class TestToOnnxProgram:
         )
         assert prog is not None
 
-    def test_warns_when_embedding_cannot_be_separated(self, preprocessing, simple_model):
+    def test_warns_when_embedding_cannot_be_separated(
+        self, preprocessing, simple_model
+    ):
         """When model lacks classifier_layer, a warning is raised and embedding
         output is dropped."""
         with warnings.catch_warnings(record=True) as w:

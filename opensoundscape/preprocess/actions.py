@@ -22,6 +22,7 @@ for details on how to use and create your own actions.
 
 import numpy as np
 import torch
+import torchvision
 import pandas as pd
 import copy
 
@@ -278,7 +279,7 @@ class AudioToSamplesTensor(BaseAction):
     """extract Audio.samples to a PyTorch tensor and add channel dimensions"""
 
     def __call__(self, sample, **kwargs):
-        sample.data = torch.tensor(sample.data.samples).unsqueeze(0)
+        sample.data = torch.from_numpy(sample.data.samples).unsqueeze(0)
 
 
 @register_action_cls
@@ -310,6 +311,7 @@ class AudioClipLoader(Action):
             sample.data, offset=offset, duration=duration, **dict(self.params, **kwargs)
         )
 
+
 @register_action_cls
 class AudioToTensor(BaseAction):
     def __call__(self, sample, **kwargs):
@@ -323,6 +325,7 @@ class AudioToTensor(BaseAction):
             updates sample.data to be a torch.Tensor
         """
         sample.data = torch.tensor(sample.data.samples)
+
 
 @register_action_cls
 class AudioTrim(Action):
@@ -400,11 +403,12 @@ def trim_audio(sample, target_duration, extend=True, random_trim=False, tol=1e-1
 
     # update the sample in-place
     sample.data = audio
-    if sample.start_time is None:
-        sample.start_time = start_time
-    else:
-        sample.start_time += start_time
-    sample.duration = target_duration
+    # retain original start_time and duration so that we know what audio was _loaded_ from the file
+    # if sample.start_time is None:
+    #     sample.start_time = start_time
+    # else:
+    #     sample.start_time += start_time
+    # sample.duration = target_duration
 
 
 @register_action_cls
@@ -448,15 +452,15 @@ class TorchTransforms(BaseAction):
 
     @property
     def transforms(self):
-        return self._transforms_composed
+        return self._sequential_transforms
 
     @transforms.setter
     def transforms(self, value):
-        """convert list of transforms to torchvision.transforms.Compose object"""
-        if isinstance(value, torchvision.transforms.Compose):
-            self._transforms_composed = value
+        """convert list of transforms to nn.Sequential object"""
+        if isinstance(value, torch.nn.Sequential):
+            self._sequential_transforms = value
         else:
-            self._transforms_composed = torchvision.transforms.Compose(value)
+            self._sequential_transforms = torch.nn.Sequential(*value)
 
     def __call__(self, sample):
         sample.data = self.transforms(sample.data)

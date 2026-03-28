@@ -30,6 +30,7 @@ jobs:
       - name: Install poetry
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
+      # include extras
         run: /home/runner/.local/bin/poetry install
       - name: Workaround for missing pytorch dependencies during poetry install
         run: /home/runner/.local/bin/poetry run pip install torch
