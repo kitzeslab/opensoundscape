@@ -1,15 +1,18 @@
-from tqdm.autonotebook import tqdm
+from typing import Literal
+
 import numpy as np
+import pandas as pd
 import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
+from torch.utils.data import DataLoader
+from tqdm.autonotebook import tqdm
+
 import opensoundscape
-from opensoundscape.ml.utils import _version_mismatch_warn
-from torch.utils.data import DataLoader, Dataset
+from opensoundscape.ml.datasets import EmbeddingDataset, HopliteDataset
 from opensoundscape.ml.loss import BCELossWeakNegatives
-import pandas as pd
-from opensoundscape.vector_database import _find_matching_window_ids
-from opensoundscape.ml.datasets import HopliteDataset, EmbeddingDataset
+from opensoundscape.ml.utils import _version_mismatch_warn
 from opensoundscape.vector_database import _require_hoplite
+from opensoundscape.vector_database import find_matching_windows, windows_to_dataframe
 
 
 class MLPClassifier(torch.nn.Module):
@@ -202,7 +205,7 @@ class MLPClassifier(torch.nn.Module):
         return model
 
 
-def fit_on_hoplite_db(
+def fit_on_hoplite(
     model,
     hoplite_db,
     train_df,
@@ -868,18 +871,12 @@ def fit_classifier_on_embeddings(
     return x_train, y_train, x_val, y_val, metrics
 
 
-import opensoundscape as opso
-from opensoundscape.ml.datasets import HopliteDataset
-
-
 def predict_on_hoplite(
     db,
     samples,
     classifier,
     batch_size=1024,
     return_df=True,
-    top_k=None,
-    random_k=None,
     **kwargs,
 ):
     """Apply model to embeddings from database for each clip in samples
@@ -890,12 +887,9 @@ def predict_on_hoplite(
             - can pass None to apply classifier to all clips matching filters
         classifier: MLPClassifier object or other classifier object to call on the torch.tensor embeddings
         batch_size: n samples simultaneously processed when applying classifier to embeddings; default 1024
-        return_df: if True, returns a dataframe with the same index as samples and columns for each class; if False, returns a numpy array of predictions
-            uses classifier.classes if available for column names, otherwise uses integer column names
-        random_k: if not None, returns k random predictions after applying filters
-        top_k: if not None, returns the top k clips for each class
-            - can be combined with random_k to return top_k and random_k predictions for each clip
-
+        return_df: if True, returns a dataframe with the same index as samples and columns for each class;
+            if False, returns a numpy array of predictions
+            uses classifier.classes if available for df column names, otherwise uses integer column names
         **kwargs: additional keyword arguments to pass to HopliteDataset
     """
     _require_hoplite()
@@ -927,132 +921,6 @@ def predict_on_hoplite(
         preds = pd.DataFrame(preds, columns=classes)
         preds.index = dataset.label_df.index
     return preds
-
-
-from typing import Literal
-
-
-def find_matching_windows(
-    db,
-    date_range=None,
-    time_range=None,
-    deployments=None,
-    projects=None,
-    recordings=None,
-    deployments_filter=None,
-    recordings_filter=None,
-    windows_filter=None,
-    annotations_filter=None,
-):
-    """Match database windows based on filters for date, time, deployment, project, recording, and annotations
-
-    Args:
-        db: hoplite database containing embeddings
-        date_range: tuple of (start_date, end_date) to filter clips by date;
-            Formats: datetime.datetime, datetime.date, or string in "YYYY-MM-DD" format; if None, does not filter by date
-            Can pass (date,None) or (None,date) to filter by only start or end date, respectively
-        time_range: tuple of (start_time, end_time) to filter clips by time of day; if None, does not filter by time of day
-            Formats: datetime.datetime, datetime.time or string in "HH:MM:SS" format
-            Note: filters by time of day of the _recording_ start time (rather than audio clip start time)
-            Assumes time zone match between time_range values and recording timestamps in the database
-        deployments: list of deployment names to filter by; if None, does not filter by deployment
-        projects: list of project names to filter by; if None, does not filter by project
-        recordings: list of recording names to filter by; if None, does not filter by recording
-        deployments_filter: custom filter dict for deployments; if provided, overrides deployments argument
-        recordings_filter: custom filter dict for recordings; if provided, overrides recordings argument
-        windows_filter: custom filter dict for windows; if provided, overrides date_range, time_range arguments
-        annotations_filter: custom filter dict for annotations in hoplite DB
-    """
-    _require_hoplite()
-    # find all matching clips
-    from ml_collections import config_dict
-
-    if deployments_filter is None and (deployments is not None or projects is not None):
-        # compose the deployments_filter element by element
-        deployments_filter = config_dict.create()
-        if deployments is not None:
-            if isinstance(deployments, str):
-                deployments_filter.update({"eq": dict(name=deployments)})
-            else:
-                assert hasattr(
-                    deployments, "__iter__"
-                ), "deployments should be a string or an iterable of strings"
-                deployments_filter.update({"isin": dict(name=deployments)})
-        if projects is not None:
-            if isinstance(projects, str):
-                deployments_filter.update({"eq": dict(project=projects)})
-            else:
-                assert hasattr(
-                    projects, "__iter__"
-                ), "projects should be a string or an iterable of strings"
-                deployments_filter.update({"isin": dict(project=projects)})
-
-    if recordings_filter is None:
-        recordings_filter = config_dict.create()
-        if recordings is not None:
-            if isinstance(recordings, str):
-                recordings_filter.update({"eq": dict(filename=recordings)})
-            else:
-                assert hasattr(
-                    recordings, "__iter__"
-                ), "recordings should be a string or an iterable of strings"
-                recordings_filter.update({"isin": dict(filename=recordings)})
-        # parse dates if date_range is provided as strings
-        if date_range is not None:
-            start_date, end_date = date_range
-            if isinstance(start_date, str):
-                start_date = pd.to_datetime(start_date).date()
-            if isinstance(end_date, str):
-                end_date = pd.to_datetime(end_date).date()
-            # create date_range filters
-            # for time range, we will need to do post-filtering after retrieving the windows, since time of day is not a native filter in hoplite
-            if start_date is not None:
-                recordings_filter.update(gte=dict(datetime=start_date))
-            if end_date is not None:
-                recordings_filter.update(lte=dict(datetime=end_date))
-            # print(recordings_filter)
-    # now find all window ids that match the filters
-    window_ids = db.match_window_ids(
-        deployments_filter=deployments_filter,
-        recordings_filter=recordings_filter,
-        windows_filter=windows_filter,
-        annotations_filter=annotations_filter,
-    )
-    # get the relevant info for each window
-    windows = [db.get_window(id) for id in window_ids]
-
-    # add recording info
-    for window in windows:
-        recording = db.get_recording(window.recording_id)
-        window.filename = recording.filename
-        window.datetime = recording.datetime
-
-    # now filter by time if time_range is provided
-    import datetime
-
-    if time_range is not None:
-        start_t, end_t = time_range
-        for w in windows:
-            if hasattr(w, "datetime") and w.datetime is not None:
-                w.time = w.datetime.time()
-            else:
-                w.time = None
-        if start_t is not None:
-
-            if isinstance(start_t, str):
-                start_t = datetime.datetime.strptime(start_t, "%H:%M:%S").time()
-            windows = [w for w in windows if w.time is not None and w.time >= start_t]
-        if end_t is not None:
-            if isinstance(end_t, str):
-                end_t = datetime.datetime.strptime(end_t, "%H:%M:%S").time()
-            windows = [w for w in windows if w.time is not None and w.time <= end_t]
-
-    # add deployment info
-    for window in windows:
-        deployment = db.get_deployment(recording.deployment_id)
-        window.deployment = deployment.name
-        window.project = deployment.project
-    return windows
 
 
 def select_from_hoplite(
@@ -1210,38 +1078,128 @@ def select_from_hoplite(
     if return_windows:
         return results
     # return dataframe:
-    cols = [
-        "file",
-        "start_time",
-        "end_time",
-        "score",
-        "datetime",
-        "deployment",
-        "project",
-    ]
     per_class_results = []
     for class_name, windows in results.items():
-        records = []
-        for w in windows:
-            records.append(
-                [
-                    w.filename,
-                    w.offsets[0],
-                    w.offsets[1],
-                    w.score,
-                    w.datetime,
-                    w.deployment,
-                    w.project,
-                ]
-            )
-        results_df = pd.DataFrame(records, columns=cols)
-        results_df.index = [w.id for w in windows]
-        results_df["class"] = class_name
-        per_class_results.append(results_df)
+        df = windows_to_dataframe(windows)
+        df["class"] = class_name
+        per_class_results.append(df)
     return pd.concat(per_class_results)
 
 
-# TODO: alternative prediction workflow:
-# subset db based on get_all_windows(filters), then apply model to any/all embeddings
-# TODO #2 provide top-k or detection-counting in-loop as an alternative to returning all preds
-# TODO #3 stratification by datetimes and deployments for top-k or counting-based prediction summaries
+def count_dets_hoplite(
+    db,
+    classifier,
+    classes,
+    min_score=None,
+    max_score=None,
+    score_bins=None,
+    batch_size=1024,
+    date_range=None,
+    time_range=None,
+    deployments=None,
+    projects=None,
+    recordings=None,
+    deployments_filter=None,
+    recordings_filter=None,
+    windows_filter=None,
+    annotations_filter=None,
+    random_state=None,
+    return_windows=False,
+    progress_bar=False,
+):
+    """Extract top-scoring or random clips from the database based on classifier predictions and filters
+
+    Args:
+        db: hoplite database containing embeddings
+        classifier: MLPClassifier object or other classifier object to call on the torch.tensor embeddings
+        classes: list of class names to select clips for; if None, selects clips for every class in classifier
+        min_score: minimum score to filter clips by existing score in the database; if None, does not threshold by min score
+        max_score: maximum score to filter clips by existing score in the database; if None, does not restrict by max score
+        score_bins: if provided, a list of tuples (low, high) score ranges to count detections in
+            - if None, reports all scores above min_score and below max_score in a single bin
+            - if provided, min_score and max_score are ignored and bins are determined by score_bins
+        batch_size: n samples simultaneously processed when applying classifier to embeddings; default 1024
+        date_range: tuple of (start_date, end_date) to filter clips by date;
+            Formats: datetime.datetime, datetime.date, or string in "YYYY-MM-DD" format; if None, does not filter by date
+            Can pass (date,None) or (None,date) to filter by only start or end date, respectively
+        time_range: tuple of (start_time, end_time) to filter clips by time of day; if None, does not filter by time of day
+            Formats: datetime.datetime, datetime.time or string in "HH:MM:SS" format
+            Note: filters by time of day of the _recording_ start time (rather than audio clip start time)
+            Assumes time zone match between time_range values and recording timestamps in the database
+        deployments: list of deployment names to filter by; if None, does not filter by deployment
+        projects: list of project names to filter by; if None, does not filter by project
+        recordings: list of recording names to filter by; if None, does not filter by recording
+        deployments_filter: custom filter dict for deployments; if provided, overrides deployments argument
+        recordings_filter: custom filter dict for recordings; if provided, overrides recordings argument
+        windows_filter: custom filter dict for windows; if provided, overrides date_range, time_range arguments
+        annotations_filter: custom filter dict for annotations in hoplite DB
+    """
+    np.random.seed(random_state)
+
+    _require_hoplite()
+
+    if classes is None:
+        classes = (
+            classifier.classes
+            if hasattr(classifier, "classes")
+            else range(classifier.out_features)
+        )
+    else:
+        # check that class names are valid
+        if hasattr(classifier, "classes"):
+            mismatch = set(classes) - set(classifier.classes)
+            if len(mismatch) > 0:
+                raise ValueError(
+                    f"Invalid class names: {mismatch}. Class names must be in classifier.classes: {classifier.classes}"
+                )
+        else:
+            n_classes = classifier.out_features
+            if max(classes) >= n_classes:
+                raise ValueError(
+                    f"Invalid class indices: {set(classes) - set(range(n_classes))}. "
+                    f"Class indices must be between 0 and {n_classes-1}."
+                )
+
+    class_dict = {c: i for i, c in enumerate(classes)}  # map class names to indices
+
+    # find all matching clips
+    matching_windows = find_matching_windows(
+        db=db,
+        date_range=date_range,
+        time_range=time_range,
+        deployments=deployments,
+        projects=projects,
+        recordings=recordings,
+        deployments_filter=deployments_filter,
+        recordings_filter=recordings_filter,
+        windows_filter=windows_filter,
+        annotations_filter=annotations_filter,
+    )
+
+    # apply classifier in batches to matching windows
+    if score_bins is None:
+        min_score = float("-inf") if min_score is None else min_score
+        max_score = float("inf") if max_score is None else max_score
+        score_bins = [(min_score, max_score)]
+    # else: score bins provides edges; min_score and max_score are ignored
+
+    counts = {c: {bin_range: 0 for bin_range in score_bins} for c in classes}
+    device = next(classifier.parameters()).device  # probably just stay on CPU here?
+    for i in tqdm(
+        range(0, len(matching_windows), batch_size), disable=not progress_bar
+    ):
+        batch_windows = matching_windows[i : i + batch_size]
+        batch_window_ids = [w.id for w in batch_windows]
+        batch_embs = db.get_embeddings_batch(batch_window_ids)
+        batch_embs_tensor = torch.as_tensor(
+            batch_embs, dtype=torch.float32, device=device
+        )
+        with torch.no_grad():
+            batch_scores = classifier(batch_embs_tensor).cpu().numpy()
+        # immediately count scores in bins for each class to avoid storing all scores in memory
+        for class_name, clsidx in class_dict.items():
+            cls_scores = batch_scores[:, clsidx]
+            for bin_range in score_bins:
+                bin_mask = (cls_scores >= bin_range[0]) & (cls_scores < bin_range[1])
+                counts[class_name][bin_range] += np.sum(bin_mask)
+    return counts

@@ -2438,64 +2438,28 @@ class SpectrogramClassifier(SpectrogramModule):
                 - "query": dictionary with query metadata
                 - "results": list of dictionaries with metadata for each retrieved sample
         """
-        try:
-            from perch_hoplite.db import brutalism
-            from perch_hoplite.db import score_functions
-            from perch_hoplite.db import search_results
-            from opensoundscape.vector_database import _collate_search_results
-        except ImportError as e:
-            raise ImportError(
-                "hoplite is not installed. Please install hoplite to use this feature."
-            ) from e
-
-        if search_kwargs is None:
-            search_kwargs = {}
-
-        if not exact_search:
-            if search_subset_size is not None:
-                raise NotImplementedError(
-                    "search_subset_size is only implemented for exact_search=True"
-                )
-            if target_score is not None:
-                raise NotImplementedError(
-                    "target_score is only implemented for exact_search=True"
-                )
+        _require_hoplite()
+        from opensoundscape.vector_database import similarity_search_hoplite_db
 
         # generate embeddings for the query samples
         print("embedding query samples")
         embeddings = self.embed(
             query_samples, audio_root=audio_root, **embedding_kwargs
         )
-
         print(
             f"performing similarity search for each of {embeddings.shape[0]} query samples"
         )
         compiled_search_results = []
         for (qfile, qstart_time, qend_time), emb in embeddings.iterrows():
-            query_embedding = emb.values.astype(db.get_embedding_dtype())
-            if exact_search:
-                score_fn = score_functions.get_score_fn(
-                    "dot", target_score=target_score
-                )
-                results, all_scores = brutalism.threaded_brute_search(
-                    db,
-                    query_embedding,
-                    num_results,
-                    score_fn=score_fn,
-                    sample_size=search_subset_size,
-                    **search_kwargs,
-                )
-
-            else:
-                ann_matches = db.ui.search(
-                    query_embedding, count=num_results, **search_kwargs
-                )
-                results = search_results.TopKSearchResults(top_k=num_results)
-                for k, d in zip(ann_matches.keys, ann_matches.distances):
-                    results.update(search_results.SearchResult(k, d))
-
-            # we have a TopKSearchResults object with .search_results containing
-            # a list of num_results SearchResult objects with .window_id and .sort_score
+            search_results = similarity_search_hoplite_db(
+                db=db,
+                query_embedding=emb.values,
+                num_results=num_results,
+                exact_search=exact_search,
+                search_subset_size=search_subset_size,
+                target_score=target_score,
+                search_kwargs=search_kwargs,
+            )
             compiled_search_results.append(
                 {
                     "query": {
@@ -2505,7 +2469,7 @@ class SpectrogramClassifier(SpectrogramModule):
                         # "embedding": query_embedding,
                         "audio_root": audio_root,
                     },
-                    "results": _collate_search_results(db, results),
+                    "results": search_results,
                 }
             )
         return compiled_search_results
