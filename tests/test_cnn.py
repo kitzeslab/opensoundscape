@@ -1,3 +1,4 @@
+import importlib.util
 import pandas as pd
 from pathlib import Path
 import types
@@ -38,6 +39,25 @@ def model_save_path(request, tmp_path):
     for each test, ensuring no conflicts between parallel test runs.
     """
     path = tmp_path / "temp.model"
+
+    # Cleanup function to remove the file if it exists
+    def fin():
+        if path.exists():
+            path.unlink()
+
+    request.addfinalizer(fin)
+
+    return path
+
+
+@pytest.fixture()
+def onnx_save_path(request, tmp_path):
+    """Fixture providing a temporary ONNX model save path with proper cleanup.
+
+    Uses pytest's tmp_path fixture to create isolated temporary directories
+    for each test, ensuring no conflicts between parallel test runs.
+    """
+    path = tmp_path / "temp.onnx"
 
     # Cleanup function to remove the file if it exists
     def fin():
@@ -194,6 +214,44 @@ def test_train_single_target(train_df, temp_model_dir):
         num_workers=0,
     )
     # No need to manually remove directory - fixture handles cleanup
+
+
+def test_train_wandb(train_df, temp_model_dir):
+    # Use disabled mode so this test never depends on network/credentials.
+    try:
+        import wandb
+
+        session = wandb.init(mode="disabled", reinit=True)
+    except Exception:
+        pytest.skip("Could not init wandb session")
+
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model.train(
+        train_df,
+        train_df,
+        save_path=temp_model_dir,
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+        wandb_session=session,
+    )
+    session.finish()
+
+    # clean up wandb files
+    import os
+
+    if os.path.exists("wandb"):
+        shutil.rmtree("wandb")
+
+
+onnx_deps = pytest.mark.skipif(
+    not all(
+        importlib.util.find_spec(pkg) is not None
+        for pkg in ("onnx", "onnxruntime", "onnxscript")
+    ),
+    reason="onnx, onnxruntime, or onnxscript not installed",
+)
 
 
 def test_train_multi_target(train_df, temp_model_dir):
@@ -1944,3 +2002,91 @@ def test_similarity_search_hoplite_db_returns_compiled_results(monkeypatch):
     assert results[0]["query"]["file"] == "q1.wav"
     assert results[0]["query"]["audio_root"] == "/audio"
     assert results[0]["results"][0]["window_id"] == 9
+
+
+@onnx_deps
+def test_save_onnx(onnx_save_path):
+    from opensoundscape import CNN, preprocessors
+
+    model = CNN(
+        architecture="efficientnet_b0",
+        classes=[0, 1, 2, 3],
+        sample_duration=3,
+        preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+        sample_rate=32000,
+        arch_weights=None,
+    )
+    onnx_program = model.save_onnx(onnx_save_path)
+
+    # Using the saved model for inference with onnx runtime:
+
+    import onnx, onnxruntime
+    import numpy as np
+
+    combined_model = onnx.load(onnx_save_path)
+    output_names = [node.name for node in combined_model.graph.output]
+
+    onnx.checker.check_model(combined_model)
+
+    EP_list = [
+        "CPUExecutionProvider"
+    ]  # ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    ort_session = onnxruntime.InferenceSession(onnx_save_path, providers=EP_list)
+
+    # make up some random inputs
+    audio_samples_per_input = (
+        combined_model.graph.input[0].type.tensor_type.shape.dim[2].dim_value
+    )
+    batch_size = 3
+    input_batched = np.random.rand(batch_size, 1, audio_samples_per_input).astype(
+        np.float32
+    )
+
+    # compute ONNX Runtime output prediction
+    ort_inputs = {ort_session.get_inputs()[0].name: input_batched}
+    ort_outs = ort_session.run(None, ort_inputs)
+
+    # restore the name-value dictionary mapping of outputs
+    outs_dict = {name: ort_outs[i] for i, name in enumerate(output_names)}
+    assert outs_dict["classifier"].shape == (batch_size, 4)
+    assert outs_dict["embedding"].shape == (batch_size, 1280)
+    assert outs_dict["sample"].shape == (batch_size, 1, 257, 376)
+
+    # Example 2: Exporting a model with customized preprocessing transforms
+    model = CNN(
+        architecture="efficientnet_b0",
+        classes=[0, 1, 2, 3],
+        sample_duration=3,
+        preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+        sample_rate=32000,
+        bandpass_range=(3000, 10000),
+        lower_dB_range=-30,
+        rescale_mean_sd=(-30, 20),
+        spec_nfft=512,
+        spec_window_length=512,
+        spec_hop_length=128,
+        # resize_ft=(200, 512), # using resize_ft breaks serialization for json save/load!
+        n_mels=64,
+    )
+    onnx_program = model.save_onnx(onnx_save_path)
+
+    # Example 3: Writing a custom list of preprocessing transforms
+    import torchaudio
+    from opensoundscape import CNN, preprocessors
+
+    model = CNN("resnet18", classes=[0], sample_duration=5, arch_weights=None)
+    # custom list of torchaudio and torchvision transforms
+    my_transforms = [
+        torchaudio.transforms.Spectrogram(
+            n_fft=512,
+            win_length=512,
+            hop_length=128,
+        ),
+        torchaudio.transforms.AmplitudeToDB(top_db=80),
+    ]
+    model.preprocessor = preprocessors.TorchSpectrogramPreprocessor(
+        sample_rate=32000,
+        sample_duration=model.preprocessor.sample_duration,
+        torch_transforms=my_transforms,
+    )
+    onnx_program = model.save_onnx(onnx_save_path)

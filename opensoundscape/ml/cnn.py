@@ -781,6 +781,38 @@ class SpectrogramModule(BaseModule):
             self._init_torch_metrics()
             self.loss_fn = CrossEntropyLoss_hot() if st else BCEWithLogitsLoss_hot()
 
+    def _generate_wandb_config(self):
+        # create a dictionary of parameters to save for this run
+        wandb_config = dict(
+            architecture=io.build_name(self.network),
+            sample_duration=self.preprocessor.sample_duration,
+            cuda_device_count=torch.cuda.device_count(),
+            mps_available=torch.backends.mps.is_available(),
+            classes=self.classes,
+            single_target=self.single_target,
+            opensoundscape_version=self.opensoundscape_version,
+        )
+        if "weight_decay" in self.optimizer_params:
+            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
+        else:
+            wandb_config["l2_regularization"] = "n/a"
+
+        if "lr" in self.optimizer_params:
+            wandb_config["learning_rate"] = self.optimizer_params["lr"]
+        else:
+            wandb_config["learning_rate"] = "n/a"
+
+        try:
+            wandb_config["sample_shape"] = [
+                self.preprocessor.height,
+                self.preprocessor.width,
+                self.preprocessor.channels,
+            ]
+        except:
+            wandb_config["sample_shape"] = "n/a"
+
+        return wandb_config
+
     def _init_torch_metrics(self):
         if self.single_target:
             self.torch_metrics = {
@@ -1139,9 +1171,9 @@ class SpectrogramClassifier(SpectrogramModule):
                 Optionally apply an activation layer such as sigmoid or
                 softmax to the raw outputs of the model.
                 options:
-                - None: no activation, return raw scores (ie logit, [-inf:inf])
-                - 'softmax': scores all classes sum to 1
-                - 'sigmoid': all scores in [0,1] but don't sum to 1
+                - None: no activation, return raw logit scores [-inf:inf]
+                - 'softmax': scores all classes sum to 1, scores between 0 and 1
+                - 'sigmoid': each class is independent, scores between 0 and 1
                 - 'softmax_and_logit': applies softmax first then logit
                 [default: None]
             split_files_into_clips:
@@ -1564,38 +1596,6 @@ class SpectrogramClassifier(SpectrogramModule):
 
         # return a single overall score for the epoch
         return self.train_metrics[self.current_epoch]
-
-    def _generate_wandb_config(self):
-        # create a dictionary of parameters to save for this run
-        wandb_config = dict(
-            architecture=io.build_name(self.network),
-            sample_duration=self.preprocessor.sample_duration,
-            cuda_device_count=torch.cuda.device_count(),
-            mps_available=torch.backends.mps.is_available(),
-            classes=self.classes,
-            single_target=self.single_target,
-            opensoundscape_version=self.opensoundscape_version,
-        )
-        if "weight_decay" in self.optimizer_params:
-            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
-        else:
-            wandb_config["l2_regularization"] = "n/a"
-
-        if "lr" in self.optimizer_params:
-            wandb_config["learning_rate"] = self.optimizer_params["lr"]
-        else:
-            wandb_config["learning_rate"] = "n/a"
-
-        try:
-            wandb_config["sample_shape"] = [
-                self.preprocessor.height,
-                self.preprocessor.width,
-                self.preprocessor.channels,
-            ]
-        except:
-            wandb_config["sample_shape"] = "n/a"
-
-        return wandb_config
 
     def train(
         self,
@@ -3000,6 +3000,176 @@ class SpectrogramClassifier(SpectrogramModule):
             device: a torch.device object or str such as 'cuda:0', 'mps', 'cpu'
         """
         self._device = torch.device(device)
+
+    def save_onnx(
+        self,
+        path,
+        activation_layer=None,
+        include_preprocessor_output=True,
+        include_embedding_output=True,
+        include_classifier_output=True,
+        **kwargs,
+    ):
+        """Export the model to ONNX format
+
+        The preprocessor must be a TorchSpectrogramPreprocessor with
+        torch.nn.Modules in preprocessor.pipeline['transform'].transforms
+        (see example below)
+
+        Requires that onnx, onnxruntime, and onnxscript are packages are installed
+
+        Args:
+            path: file path to save the ONNX model
+                if None, returns an in-memory ONNX model object without saving to disk
+            activation_layer: if provided, applies an activation layer to classifier outputs
+                options: 'softmax', 'sigmoid', or None [default: None]
+            include_preprocessor_output: if True, includes the output of the preprocessor
+                in the ONNX model outputs [default: True]
+            include_embedding_output: if True, includes the output of the embedding layer
+                in the ONNX model outputs [default: True]
+            include_classifier_output: if True, includes the output of the classifier
+                in the ONNX model outputs [default: True]
+            **kwargs: additional keyword arguments passed to
+                opensoundscape.ml.export.to_onnx_program()
+        Returns:
+            onnx_program: an in-memory ONNX program object
+
+        Example:
+
+        Exporting an EfficientNet model to ONNX format:
+        ```python
+        from opensoundscape import CNN, preprocessors
+
+        model = CNN(
+            architecture="efficientnet_b0",
+            classes=[0, 1, 2, 3],
+            sample_duration=3,
+            preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+            sample_rate=32000,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet.onnx")
+        ```
+
+        Using the saved model for inference with onnx runtime:
+
+        ```python
+        import onnx, onnxruntime
+        import numpy as np
+
+        combined_model = onnx.load("opso_efficientnet.onnx")
+        output_names = [node.name for node in combined_model.graph.output]
+
+        onnx.checker.check_model(combined_model)
+
+
+        EP_list = ["CPUExecutionProvider"]  # ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        ort_session = onnxruntime.InferenceSession("opso_efficientnet.onnx", providers=EP_list)
+
+        # make up some random inputs
+        audio_samples_per_input = (
+            combined_model.graph.input[0].type.tensor_type.shape.dim[2].dim_value
+        )
+        batch_size = 3
+        input_batched = np.random.rand(batch_size, 1, audio_samples_per_input).astype(
+            np.float32
+        )
+
+        # compute ONNX Runtime output prediction
+        ort_inputs = {ort_session.get_inputs()[0].name: input_batched}
+        ort_outs = ort_session.run(None, ort_inputs)
+
+        # restore the name-value dictionary mapping of outputs
+        outs_dict = {name: ort_outs[i] for i, name in enumerate(output_names)}
+        print(f"shape of outputs for inference on one batch of batch size {batch_size}:")
+        print({k: v.shape for k, v in outs_dict.items()})
+        ```
+
+        Example 2: Exporting a model with customized preprocessing transforms
+
+        ```python
+        from opensoundscape import CNN, preprocessors
+
+        model = CNN(
+            architecture="efficientnet_b0",
+            classes=[0, 1, 2, 3],
+            sample_duration=3,
+            preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+            sample_rate=32000,
+            bandpass_range=(3000, 10000),
+            lower_dB_range=-30,
+            rescale_mean_sd=(-30, 20),
+            spec_nfft=512,
+            spec_window_length=512,
+            spec_hop_length=128,
+            # resize_ft=(200, 512), # using resize_ft breaks serialization for json save/load!
+            n_mels=64,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet_melspec.onnx")
+        ```
+
+        Example 3: Writing a custom list of preprocessing transforms
+
+        ```python
+        import torchaudio
+        from opensoundscape import CNN, preprocessors
+        model = CNN("resnet18", classes=[0], sample_duration=5)
+        # custom list of torchaudio and torchvision transforms
+        my_transforms = [
+            torchaudio.transforms.Spectrogram(
+                n_fft=512,
+                win_length=512,
+                hop_length=128,
+            ),
+            torchaudio.transforms.AmplitudeToDB(top_db=80),
+        ]
+        model.preprocessor = preprocessors.TorchSpectrogramPreprocessor(
+            sample_rate=32000,
+            sample_duration=model.preprocessor.sample_duration,
+            torch_transforms=my_transforms,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet_custom.onnx")
+        ```
+        """
+
+        # give helpful error if preprocessor is not TorchSpectrogramPreprocessor
+        # or if preprocessor.pipeline['transform'].transforms is not accessible
+        assert isinstance(
+            self.preprocessor,
+            opensoundscape.preprocess.preprocessors.TorchSpectrogramPreprocessor,
+        ), """ONNX export only supported for TorchSpectrogramPreprocessor in which
+            preprocessor.pipeline["transform"].transforms contains a list of torch.nn.Modules
+            that preprocess the audio waveform signal into the model input format (eg spectrograms).
+            """
+
+        try:
+            transforms = self.preprocessor.pipeline["transform"].transforms
+        except AttributeError as e:
+            raise AttributeError(
+                """Could not access self.preprocessor.pipeline['transform'].transforms. 
+                ONNX export only supported for TorchSpectrogramPreprocessor in which
+                preprocessor.pipeline['transform'].transforms contains a list of
+                torch.nn.Modules that preprocess the audio waveform signal into the model
+                input format (eg spectrograms).
+                """
+            ) from e
+
+        n_audio_samples_per_input = (
+            self.preprocessor.sample_rate * self.preprocessor.sample_duration
+        )
+        onnx_program = opensoundscape.ml.export.to_onnx_program(
+            preprocessing_transforms=transforms,
+            torch_model=self.network,
+            input_length=n_audio_samples_per_input,
+            activation_layer=activation_layer,
+            include_embedding_output=include_embedding_output,
+            include_classifier_output=include_classifier_output,
+            include_preprocessor_output=include_preprocessor_output,
+            **kwargs,
+        )
+        if path is not None:
+            onnx_program.save(path)
+
+        return onnx_program
 
 
 # alias for convenience
