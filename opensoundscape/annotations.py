@@ -359,6 +359,8 @@ class BoxedAnnotations:
     def from_crowsetta_bbox(cls, bbox, audio_file, annotation_file):
         """create BoxedAnnotations object from a crowsetta.BBox object
 
+        Note: this classmethod is used internally by from_crowsetta().
+
         Args:
             bbox: a crowsetta.BBox object
             audio_file: (str) path of annotated audio file
@@ -366,8 +368,6 @@ class BoxedAnnotations:
 
         Returns:
             BoxedAnnotations object
-
-        this classmethod is used by from_crowsetta()
 
         """
         return cls(
@@ -387,16 +387,14 @@ class BoxedAnnotations:
 
     @classmethod
     def from_crowsetta_seq(cls, seq, audio_file, annotation_file):
-        """create BoxedAnnotations from crowsetta.Sequence object
+        """create BoxedAnnotations from a crowsetta.Sequence object
 
-        Note: low_f and high_f will be None since Sequence does not
-        contain information about frequency
-
-        Note: the `.df` of the returned BoxedAnnotations retains
-        the Sequence's `.onset_samples` and `.offset_samples` information,
-        but only uses the Sequence's `.onsets_s` and `.offsets_s`
-        (which may sometimes be `None`) for the `start_time` and `end_time`
-        columns in `BoxedAnnotations.df`.
+        Note: this classmethod is used internally by from_crowsetta().
+        low_f and high_f will be None since Sequence does not contain frequency information.
+        The `.df` of the returned BoxedAnnotations retains the Sequence's
+        `.onset_samples` and `.offset_samples` information, but only uses
+        `.onsets_s` and `.offsets_s` (which may sometimes be `None`) for
+        the `start_time` and `end_time` columns.
 
         Args:
             seq: a crowsetta.Sequence object
@@ -405,8 +403,6 @@ class BoxedAnnotations:
 
         Returns:
             BoxedAnnotations object
-
-        this classmethod is used by from_crowsetta()
         """
         return cls(
             df=pd.DataFrame(
@@ -496,7 +492,7 @@ class BoxedAnnotations:
 
     @classmethod
     def from_csv(cls, path):
-        """load csv from path and creates BoxedAnnotations object
+        """load CSV from path and create a BoxedAnnotations object
 
         Note: the .annotation_files and .audio_files attributes will be none
 
@@ -525,7 +521,7 @@ class BoxedAnnotations:
         self.df.to_csv(path, index=False)
 
     def to_raven_files(self, save_dir, audio_files=None):
-        """save annotations to a Raven-compatible tab-separated text files
+        """save annotations to Raven-compatible tab-separated text files
 
         Creates one file per unique audio file in 'file' column of self.df
 
@@ -631,18 +627,20 @@ class BoxedAnnotations:
             - if mode=='sequence', Annotations have attribute .seq
                 - list of Sequences, one Sequence for each unique value of `sequence_id`
             ignore_annotation_id: [default: False]
-                if True, creates on Annotation object per unique `audio_file` and `annotation_file` object
+                if True, creates one Annotation object per unique `audio_file` and `annotation_file`
                 ignoring `annotation_id`. Otherwise, creates separate objects for each unique `annotation_id`
                 for each unique combination of `audio_file` and `annotation_file`.
             ignore_sequence_id: [default: False]
-                if True, creates on Sequence object for Annotation.seq ignoring `annotation_id`.
+                if True, creates one Sequence object for Annotation.seq ignoring `sequence_id`.
                 Otherwise, Annotation.seq will be a list of Sequence objects,
                 one for each unique `annotation_id` in the subset of annotations being
                 created for a single Annotation object.
                 Note: Only relevant for mode='sequence'
 
         Returns:
-            list of crowsetta.Annotation objects (one per unique value of `audio_file` in self.df
+            list of crowsetta.Annotation objects (one per unique combination of
+            `audio_file` and `annotation_file` in self.df, further split by
+            `annotation_id` if present)
             - if mode=='bbox', Annotations have attribute .bboxes
             - if mode=='sequence', Annotations have attribute .seq)
         """
@@ -816,7 +814,7 @@ class BoxedAnnotations:
 
         Args:
             low_f: low frequency (Hz) bound
-            high_f: high frequench (Hz) bound
+            high_f: high frequency (Hz) bound
             edge_mode: what to do when boxes overlap with edges of trim region
                 - 'trim': trim boxes to bounds
                 - 'keep': allow boxes to extend beyond bounds
@@ -857,7 +855,7 @@ class BoxedAnnotations:
     def unique_labels(self):
         """get list of all unique labels
 
-        ignores null/Falsy labels by performing .df.dropna()
+        ignores null/NaN labels by dropping rows where 'annotation' is NaN
         """
         return self.df.dropna(subset=["annotation"])["annotation"].unique()
 
@@ -903,7 +901,7 @@ class BoxedAnnotations:
         the minimum time overlap OR minimum % overlap to be included (doesn't
         require both conditions to be met, only one)
 
-        clip_df can be created using `opensoundscap.utils.make_clip_df`
+        clip_df can be created using `opensoundscape.utils.make_clip_df`
 
         See also: `.clip_labels()`, which creates even-lengthed clips
         automatically and can often be used instead of this function.
@@ -911,7 +909,7 @@ class BoxedAnnotations:
         Args:
             clip_df: dataframe with (file, start_time, end_time) MultiIndex
                 specifying the temporal bounds of each clip
-                (clip_df can be created using `opensoundscap.helpers.make_clip_df`)
+                (clip_df can be created using `opensoundscape.utils.make_clip_df`)
             min_label_overlap: minimum duration (seconds) of annotation within the
                 time interval for it to count as a label. Note that any annotation
                 of length less than this value will be discarded.
@@ -921,9 +919,9 @@ class BoxedAnnotations:
             min_label_fraction: [default: None] if >= this fraction of an annotation
                 overlaps with the time window, it counts as a label regardless of
                 its duration. Note that *if either* of the two
-                criterea (overlap and fraction) is met, the label is 1.
+                criteria (overlap and fraction) is met, the label is 1.
                 if None (default), this criterion is not used (i.e., only min_label_overlap
-                is used). A value of 0.5 for ths parameter would ensure that all
+                is used). A value of 0.5 for this parameter would ensure that all
                 annotations result in at least one clip being labeled 1
                 (if there are no gaps between clips).
             class_subset: list of classes for one-hot labels. If None, classes will
@@ -1086,9 +1084,9 @@ class BoxedAnnotations:
             min_label_fraction: [default: None] if >= this fraction of an annotation
                 overlaps with the time window, it counts as a label regardless of
                 its duration. Note that *if either* of the two
-                criterea (overlap and fraction) is met, the label is 1.
+                criteria (overlap and fraction) is met, the label is 1.
                 if None (default), this criterion is not used (i.e., only min_label_overlap
-                is used). A value of 0.5 for ths parameter would ensure that all
+                is used). A value of 0.5 for this parameter would ensure that all
                 annotations result in at least one clip being labeled 1
                 (if there are no gaps between clips).
             full_duration: The amount of time (seconds) to split into clips for each file
@@ -1237,7 +1235,14 @@ class BoxedAnnotations:
 
     @classmethod
     def concat(cls, list_of_boxed_annotations):
-        """concatenate a list of BoxedAnnotations objects into one"""
+        """concatenate a list of BoxedAnnotations objects into one
+
+        Args:
+            list_of_boxed_annotations: list of BoxedAnnotations objects to concatenate
+
+        Returns:
+            new BoxedAnnotations object with combined .df, .audio_files, and .annotation_files
+        """
         dfs = [ba.df for ba in list_of_boxed_annotations]
         audio_files = []
         annotation_files = []
@@ -1273,6 +1278,10 @@ class BoxedAnnotations:
         Args:
             see sklearn.model_selection.train_test_split for arguments
             (test_size, train_size, random_state, shuffle, stratify)
+
+        Returns:
+            tuple (train_annotations, test_annotations) of two BoxedAnnotations objects,
+            split by audio file
         """
         assert (
             self.audio_files is not None
@@ -1322,6 +1331,7 @@ def integer_to_multi_hot(labels, n_classes, sparse=False):
     Args:
         labels: list of lists of integer labels, eg [[0,1,2],[3]]
         n_classes: number of classes
+        sparse: [default: False] if True, returns a scipy.sparse.csr_matrix
     Returns:
         if sparse is False: 2d np.array with False for absent and True for present
         if sparse is True: scipy.sparse.csr_matrix with 0 for absent and 1 for present
@@ -1410,8 +1420,14 @@ def multi_hot_to_integer_labels(labels):
 
 
 def categorical_to_integer_labels(labels, classes):
-    """
-    Convert a list of categorical labels to a list of numeric labels
+    """convert a list of lists of categorical labels to a list of lists of integer class indices
+
+    Args:
+        labels: list of lists of categorical labels, eg [['a','b'],['c']]
+        classes: ordered list of class names; index in this list gives the integer label
+
+    Returns:
+        list of lists of integer class indices, eg [[0,1],[2]]
     """
     # for large lists, dict lookup is 100x faster than list.index()
     classes_dict = {c: i for i, c in enumerate(classes)}
@@ -1419,8 +1435,14 @@ def categorical_to_integer_labels(labels, classes):
 
 
 def integer_to_categorical_labels(labels, classes):
-    """
-    Convert a list of numeric labels to a list of categorical labels
+    """convert a list of lists of integer class indices to a list of lists of categorical labels
+
+    Args:
+        labels: list of lists of integer class indices, eg [[0,1],[2]]
+        classes: ordered list of class names; index in this list gives the class name
+
+    Returns:
+        list of lists of categorical labels, eg [['a','b'],['c']]
     """
     return [[classes[li] for li in l] for l in labels]
 
@@ -1498,11 +1520,13 @@ def find_overlapping_idxs_in_clip_df(
     min_label_fraction=None,
 ):
     """
-    Finds the (file, start_time, end_time) index values for the rows in the clip_df that overlap with the annotation_start and annotation_end
+    Find the (file, start_time, end_time) index values for the rows in clip_df
+    that overlap with the annotation at [annotation_start, annotation_end].
+
     Args:
         file: audio file path/name the annotation corresponds to; clip_df is filtered to this file
-        annotation_start: start time of the annotation
-        annotation_end: end time of the annotation
+        annotation_start: start time (seconds) of the annotation
+        annotation_end: end time (seconds) of the annotation
         clip_df: dataframe with multi-index ['file', 'start_time', 'end_time']
         min_label_overlap: minimum duration (seconds) of annotation within the
                 time interval for it to count as a label. Note that any annotation
@@ -1513,13 +1537,15 @@ def find_overlapping_idxs_in_clip_df(
         min_label_fraction: [default: None] if >= this fraction of an annotation
                 overlaps with the time window, it counts as a label regardless of
                 its duration. Note that *if either* of the two
-                criterea (overlap and fraction) is met, the label is 1.
+                criteria (overlap and fraction) is met, the label is 1.
                 if None (default), this criterion is not used (i.e., only min_label_overlap
                 is used). A value of 0.5 for this parameter would ensure that all
                 annotations result in at least one clip being labeled 1
                 (if there are no gaps between clips).
-         Returns:
-        [(file, start_time, end_time)]) Multi-index values for the rows in the clip_df that overlap with the annotation_start and annotation_end.
+
+    Returns:
+        pandas MultiIndex of (file, start_time, end_time) tuples for the rows in
+        clip_df that overlap with the annotation at [annotation_start, annotation_end].
     """
     # filter to rows corresponding to this file
     clip_df = clip_df.loc[clip_df.index.get_level_values(0) == file]
@@ -1560,41 +1586,49 @@ from itertools import chain
 
 
 class CategoricalLabels:
+    """Store annotations as lists of files, start_times, end_times, and labels.
+
+    Labels are stored as lists of integer class indices, referring to the classes
+    in self.classes (list).
+
+    Provides various methods for initializing from and converting to different formats.
+
+    ClassMethods:
+        from_categorical_labels_df: create CategoricalLabels object from dataframe with columns
+            'file', 'start_time', 'end_time', 'labels' (either integer or class name labels)
+        from_multihot_df: create CategoricalLabels object from a multi-hot dataframe
+
+    Methods:
+        multihot_array: generate multi-hot array of labels
+        multihot_df: generate multi-hot dataframe of 0/1 labels
+        labels_at_index: get list of class names for labels at a specific numeric index
+        multihot_labels_at_index: get multi-hot labels at a specific numeric index
+
+    Properties:
+        multihot_sparse: sparse 2d scipy.sparse.csr_matrix of multi-hot labels
+        multihot_dense: dense 2d array of multi-hot labels
+        multihot_df_sparse: sparse dataframe of multi-hot labels
+        multihot_df_dense: dense dataframe of multi-hot labels
+    """
+
     def __init__(
         self, files, start_times, end_times, labels, classes=None, integer_labels=False
     ):
         """
-        Store annotations as list of files, start_times, end_times, and labels
-
-        labels are stored as lists of integer class indices, referring to the classes
-        in self.classes (list).
-
-        Provides various methods for initializing from and converting to different formats.
-
         Args:
             files (list): list of file paths
-            start_times (list): list of start times (seconds) for each annotation
-            end_times (list): list of end times (seconds) for each annotation
-            labels (list): list of lists of integer class indices for a file and time range
-            classes (list): list of str class names or list of integer class indices
-            integer_labels (bool): if True, labels are integer class indices, otherwise labels are class names
+            start_times (list): list of start times (seconds) for each sample
+            end_times (list): list of end times (seconds) for each sample
+            labels (list): list of lists of class labels for each sample;
+                if integer_labels=False, these are class name strings;
+                if integer_labels=True, these are integer class indices
+            classes (list): ordered list of class name strings; if None, inferred
+                from the unique values in labels [default: None]
+            integer_labels (bool): if True, labels are integer class indices;
+                if False, labels are class name strings [default: False]
 
-        ClassMethods:
-            from_categorical_labels_df: create CategoricalLabels object from dataframe with columns
-                'file', 'start_time', 'end_time', 'labels' (either integer or class name labels)
-            from_multihot_df: create CategoricalLabels object from multi-hot dataframe
-
-        Methods
-            multihot_array: generate multi-hot array of labels
-            multihot_df: generate multi-hot dataframe of 0/1 labels
-            labels_at_index: get list of class names for labels at a specific numeric index
-            multihot_labels_at_index: get multi-hot labels at a specific numeric index
-
-        Properties:
-            multihot_sparse: sparse 2d scipy.sparse.csr_matrix of multi-hot labels
-            multihot_dense: dense 2d array of multi-hot labels
-            multihot_df_sparse: sparse dataframe of multi-hot labels
-            multihot_df_dense: dense dataframe of multi-hot labels
+        Returns:
+            CategoricalLabels object
         """
         # for convenience, if labels is a list of single items, convert to list of lists
         if len(labels) > 0 and all(not isinstance(l, list) for l in labels):
@@ -1621,14 +1655,19 @@ class CategoricalLabels:
 
     @classmethod
     def from_categorical_labels_df(cls, df, classes, integer_labels=False):
-        """
-        df has columns of 'file', 'start_time', 'end_time', 'labels' with labels as list of class names (integer_labels=False)
-        or list of integer class indices (integer_labels=True)
+        """create CategoricalLabels from a DataFrame with 'labels' column
 
         Args:
-            df (pd.DataFrame): dataframe with columns of 'file', 'start_time', 'end_time', 'labels'
-            classes (list): list of str class names or list of integer class indices
-            integer_labels (bool): if True, labels are integer class indices, otherwise labels are class names
+            df (pd.DataFrame): dataframe with columns 'file', 'start_time', 'end_time',
+                and 'labels' where each entry in 'labels' is a list of class names
+                (if integer_labels=False) or a list of integer class indices
+                (if integer_labels=True)
+            classes (list): ordered list of class name strings
+            integer_labels (bool): if True, labels are integer class indices;
+                if False, labels are class name strings [default: False]
+
+        Returns:
+            CategoricalLabels object
         """
         return cls(
             df["file"],
@@ -1646,6 +1685,9 @@ class CategoricalLabels:
         Args:
             df (pd.DataFrame): dataframe with multi-index of 'file','start_time','end_time';
                 columns are class names, values are 0/1 labels
+
+        Returns:
+            CategoricalLabels object
         """
         # multihot df has multi-index of file, start_time, end_time; columns = classes
         labels_int = multi_hot_to_integer_labels(df.values)
@@ -1662,7 +1704,16 @@ class CategoricalLabels:
         )
 
     def multihot_array(self, sparse=True):
-        """generate multi-hot array of labels"""
+        """generate multi-hot array of labels
+
+        Args:
+            sparse: [default: True] if True, returns scipy.sparse.csr_matrix;
+                if False, returns dense numpy matrix
+
+        Returns:
+            2d array (scipy.sparse.csr_matrix if sparse=True, numpy matrix if sparse=False)
+            with shape (n_samples, n_classes); values are 0 (absent) or 1 (present)
+        """
         cat_classes = integer_to_categorical_labels(
             self.df["labels"].values, self.classes
         )
@@ -1694,7 +1745,16 @@ class CategoricalLabels:
         return self.multihot_array(sparse=False)
 
     def multihot_df(self, sparse=True):
-        """generate multi-hot dataframe of 0/1 labels"""
+        """generate multi-hot dataframe of 0/1 labels
+
+        Args:
+            sparse: [default: True] if True, returns a sparse DataFrame backed by
+                scipy.sparse; if False, returns a dense DataFrame
+
+        Returns:
+            DataFrame with multi-index (file, start_time, end_time) and class name
+            columns; values are 0 (absent) or 1 (present)
+        """
         # multi-index from columns ('file','start_time','end_time')
         index = self._get_multiindex()
         if sparse:
@@ -1706,7 +1766,7 @@ class CategoricalLabels:
 
     @property
     def multihot_df_sparse(self):
-        """parse dataframe of multi-hot (0/1) labels across self.df.index and self.classes"""
+        """sparse dataframe of multi-hot (0/1) labels across self.df.index and self.classes"""
         return self.multihot_df(sparse=True)
 
     @property
@@ -1715,11 +1775,25 @@ class CategoricalLabels:
         return self.multihot_df(sparse=False)
 
     def labels_at_index(self, index):
-        """list of class names for labels at a specific numeric index"""
+        """get list of class names for labels at a specific numeric (positional) index
+
+        Args:
+            index: integer positional index into self.df
+
+        Returns:
+            list of class name strings for the labels at that row
+        """
         return [self.classes[i] for i in self.df["labels"].iloc[index]]
 
     def multihot_labels_at_index(self, index):
-        """multi-hot (list of 0/1 for self.classes) labels at a specific numeric index"""
+        """get multi-hot (list of 0/1 for self.classes) labels at a specific numeric (positional) index
+
+        Args:
+            index: integer positional index into self.df
+
+        Returns:
+            1d numpy array of 0/1 values with length len(self.classes)
+        """
         integer_labels = self.df["labels"].iloc[index]
         return integer_to_multi_hot([integer_labels], len(self.classes))[0]
 
