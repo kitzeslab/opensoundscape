@@ -559,7 +559,9 @@ class SpectrogramModule(BaseModule):
         self.classes = classes
         self._single_target = single_target
         self.name = "SpectrogramModule"
-        self.class_outputs_key = -1 # key to use for model outputs corresponding to class predictions
+        self.class_outputs_key = (
+            -1
+        )  # key to use for model outputs corresponding to class predictions
 
         self.use_amp = False  # use automatic mixed precision
         self.lightning_mode = False  # True: skip things done automatically by Lightning
@@ -2884,7 +2886,7 @@ class SpectrogramClassifier(SpectrogramModule):
         with torch.set_grad_enabled(False):
             # run the forward pass
             model_out = self.network(batch_tensors).detach().cpu().numpy()
-            if self.class_outputs_key in outs: # store final model output if requested
+            if self.class_outputs_key in outs:  # store final model output if requested
                 outs[self.class_outputs_key] = model_out
 
         # clean up by removing forward hooks
@@ -2970,7 +2972,11 @@ class SpectrogramClassifier(SpectrogramModule):
         outs = self(
             dataloader=dataloader,
             progress_bar=progress_bar,
-            targets=[target_layer, self.class_outputs_key] if return_preds else [target_layer],
+            targets=(
+                [target_layer, self.class_outputs_key]
+                if return_preds
+                else [target_layer]
+            ),
             avgpool_intermediates=avgpool,
         )
         embeddings = outs[target_layer]

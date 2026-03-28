@@ -58,7 +58,7 @@ class ONNXModel(SpectrogramClassifier):
             ort_session = ort.InferenceSession(
                 str(onnx_model_path), providers=execution_providers
             )
-        
+
         # audio_sample_rate, sample_duration, class_list, class_outputs_key are
         # either extracted from the ONNX model metadata or passed directly
         meta = ort_session.get_modelmeta().custom_metadata_map
@@ -95,8 +95,10 @@ class ONNXModel(SpectrogramClassifier):
                 f"ONNX model metadata is missing required model information: {missing_fields}. "
                 "Please provide these arguments when initializing ONNXModel."
             )
-        
-        super().__init__(architecture='resnet18',classes=classes,sample_duration=sample_duration) # TODO refactor so arch not required
+
+        super().__init__(
+            architecture="resnet18", classes=classes, sample_duration=sample_duration
+        )  # TODO refactor so arch not required
         self.ort_session = ort_session
         self.ort_input = self.ort_session.get_inputs()[0].name
         self.audio_sample_rate = audio_sample_rate
@@ -121,11 +123,11 @@ class ONNXModel(SpectrogramClassifier):
             sample_duration=self.sample_duration,
         )
 
-    def batch_forward(self,batch_samples,targets=(-1),avgpool=False):
+    def batch_forward(self, batch_samples, targets=(-1), avgpool=False):
         """Run inference on a batch of AudioSample
 
         Note: avgpool is currently not implemented for ONNX models, is ignored.
-        
+
         Args:
             batch_samples: list of AudioSample objects
             targets: list of output keys to return from model outputs. If None, returns all outputs.
@@ -136,7 +138,7 @@ class ONNXModel(SpectrogramClassifier):
             - if targets is specified, only those outputs are returned
             - if targets is None, all model outputs are returned
         """
-        
+
         # get audio samples from list of Audio objects, optionally add channel dimension
         if self.add_channel_dim:
             X = np.stack([s.data.samples[np.newaxis, :] for s in batch_samples])
@@ -153,8 +155,8 @@ class ONNXModel(SpectrogramClassifier):
             for i, name in enumerate(self.output_names)
             if name in keys_subset
         }
-    
-    def _check_or_get_default_embedding_layer(self,target_layer):
+
+    def _check_or_get_default_embedding_layer(self, target_layer):
         """Check or get default embedding layer
 
         Args:
@@ -166,9 +168,9 @@ class ONNXModel(SpectrogramClassifier):
         if target_layer is None:
             target_layer = self.embedding_outputs_key
         else:
-            assert target_layer in self.output_names, (
-                f"Requested target_layer {target_layer} not found in model outputs: {self.output_names}"
-            )
+            assert (
+                target_layer in self.output_names
+            ), f"Requested target_layer {target_layer} not found in model outputs: {self.output_names}"
         return target_layer
 
     # def __call__(

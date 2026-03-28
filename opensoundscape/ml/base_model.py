@@ -15,6 +15,7 @@ from opensoundscape.ml.loss import BCEWithLogitsLoss_hot
 from opensoundscape.ml.dataloaders import SafeAudioDataloader
 from opensoundscape.utils import identity
 
+
 class BaseModule:
     """base class for pytorch and lightning models in opensoundscape
 
@@ -429,5 +430,3 @@ class BaseModule:
         ):
             return True
         return False
-
-    
