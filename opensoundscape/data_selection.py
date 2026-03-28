@@ -65,7 +65,7 @@ def resample(
 
     Can enable/disable upsampling (randomly repeating rows) and downsampling (randomly subsetting rows)
 
-    args:
+    Args:
         df: dataframe with one-hot encoded labels: columns are classes, index is sample name/path
         n_samples_per_class: target number of samples per class
         n_samples_without_labels: number of samples with all-0 labels to include in the returned df

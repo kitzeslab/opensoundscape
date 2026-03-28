@@ -90,12 +90,13 @@ def min_max_scale(array, feature_range=(0, 1)):
 def linear_scale(array, in_range=(0, 1), out_range=(0, 255)):
     """Translate from range in_range to out_range
 
-    Inputs:
-        in_range: The starting range [default: (0, 1)]
-        out_range: The output range [default: (0, 255)]
+    Args:
+        array: array to rescale
+        in_range: the input range [default: (0, 1)]
+        out_range: the output range [default: (0, 255)]
 
-    Outputs:
-        new_array: A translated array
+    Returns:
+        array rescaled to out_range
     """
     scale_factor = (out_range[1] - out_range[0]) / (in_range[1] - in_range[0])
     return scale_factor * (array - in_range[0]) + out_range[0]

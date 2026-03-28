@@ -77,7 +77,9 @@ def travel_time(source, receiver, speed_of_sound):
 def localize(receiver_locations, tdoas, algorithm, speed_of_sound):
     """
     Perform TDOA localization on a sound event. If there are not enough receivers to localize the
-    event, return None. Args:
+    event, return None.
+
+    Args:
         receiver_locations: a list of [x,y,z] locations for each receiver
             locations should be in meters, e.g., the UTM coordinate system.
         tdoas: a list of TDOA times (onset times) for each recorder

@@ -37,7 +37,7 @@ class AudioSample(Sample):
     ):
         """initialize AudioSample
         Args:
-            path: location of audio sample
+            source: location of audio sample
             start_time=None: start time of sample in seconds from beginning of file
             duration=None: length in seconds of the sample
             labels=None: pd.Series containing class names and 0/1 labels

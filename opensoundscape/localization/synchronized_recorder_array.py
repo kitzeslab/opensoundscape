@@ -74,12 +74,12 @@ class SynchronizedRecorderArray:
         """
         Args:
             file_coords : pandas.DataFrame
-                DataFrame with index filepath, and columns for x, y, (z) locations of reciever that
+                DataFrame with index filepath, and columns for x, y, (z) locations of receiver that
                 recorded the audio file, in meters.
                 Third coordinate is optional. Localization algorithms are in 2d if columns are (x,y) and
                 3d if columns are (x,y,z). When running .localize_detections() or .create_candidate_events(),
                 Each audio file in `detections` must have a corresponding
-                row in `file_coords` specifiying the location of the reciever that recorded the file.
+                row in `file_coords` specifying the location of the receiver that recorded the file.
             speed_of_sound : float, optional. Speed of sound in meters per second.
                 Default: opensoundscape.localization.localization_algorithms.SPEED_OF_SOUND
         """
@@ -120,9 +120,9 @@ class SynchronizedRecorderArray:
             Simultaneous and spatially clustered detections of a class are selected as targets for
             localization of a single real-world sound event.
 
-            For each detection of a species, the grouping algorithm treats the reciever with the
+            For each detection of a species, the grouping algorithm treats the receiver with the
             detection as a "reference receiver", then selects all detections of the species at the
-            same time and within `max_receiver_dist` of the reference reciever (the "surrounding
+            same time and within `max_receiver_dist` of the reference receiver (the "surrounding
             detections"). This selected group of simulatneous, spatially-clustered detections of a
             class beomes one "candidate event" for subsequent localization.
 
@@ -137,7 +137,7 @@ class SynchronizedRecorderArray:
 
         2. Estimate time delays with cross correlation:
 
-            For each candidate event, the time delay between the reference reciever's detection and
+            For each candidate event, the time delay between the reference receiver's detection and
             the surrounding recorders' detections is estimated through generalized cross
             correlation.
 
@@ -164,7 +164,7 @@ class SynchronizedRecorderArray:
         4. Filter by spatial residual error
 
             The residual errors represent descrepencies between (a) time of arrival of the event at
-            a reciever and (b) distance from reciever to estimated location.
+            a receiver and (b) distance from receiver to estimated location.
 
             Estimated locations are discarded if the root mean squared spatial residual is greater
             than `residual_rms_threshold`
@@ -406,7 +406,7 @@ class SynchronizedRecorderArray:
         # detected event, a set of receivers' audio files, and receiver locations
         # and represents a single sound event that we will try to localize
         #
-        # events will be redundant because each reciever with detection potentially
+        # events will be redundant because each receiver with detection potentially
         # results in its own event containing nearby detections
         candidate_events = []  # list of SpatialEvents to try to localize
 
@@ -489,7 +489,7 @@ class SynchronizedRecorderArray:
                     # if enough receivers, create a SpatialEvent using this set of receivers
                     # +1 to count the reference receiver
                     if len(close_det_files) + 1 >= min_n_receivers:
-                        # SpatialEvent will include reference receiver + close recievers
+                        # SpatialEvent will include reference receiver + close receivers
                         receiver_files = [ref_file] + close_det_files
 
                         # retrieve positions of each receiver
@@ -497,7 +497,7 @@ class SynchronizedRecorderArray:
                             self.file_coords.loc[r] for r in receiver_files
                         ]
 
-                        # subset detections to close recievers, and re-index to only 'file'
+                        # subset detections to close receivers, and re-index to only 'file'
                         close_dets = (
                             dets_at_time_i.reset_index()
                             .set_index("file")

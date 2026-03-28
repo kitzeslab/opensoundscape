@@ -99,7 +99,7 @@ def ribbit(
         signal_band: [min, max] frequency range of the target species, in Hz
         pulse_rate_range: [min,max] pulses per second for the target species
         clip_duration: the length of audio (in seconds) to analyze at one time
-            - each clip is analyzed independently and recieves a ribbit score
+            - each clip is analyzed independently and receives a RIBBIT score
         clip_overlap (float): overlap between consecutive clips (sec)
         clip_overlap_fraction (float): overlap between consecutive clips as a fraction of
             clip_duration

@@ -42,9 +42,9 @@ class SpatialEvent:
             receiver_locations: list of [x,y] or [x,y,z] positions of each receiver in meters
             max_delay: maximum time delay (in seconds) to consider for time-delay-of-arrival estimate. Cannot be longer than 1/2 the duration.
             receiver_start_time_offsets: list of start_time of detection (seconds) for each receiver relative to start of audio file
-                - if all audio files started at the same real-world time, this value will be the same for all recievers
+                - if all audio files started at the same real-world time, this value will be the same for all receivers
                 - for example, 5.0 means the detection window starts 5 seconds after the beginning of the Audio file
-                (the detection window's duration in seconds is given by the `duration` argument and is the same across recievers)
+                (the detection window's duration in seconds is given by the `duration` argument and is the same across receivers)
                 - if `None`, and `start_timestamp` is given, attempts to extract the correct audio time period from each file
                     using the audio file's metadata 'recording_start_time' field (using Audio.from_file with start_timestamp argument)
             start_timestamp: start time of detection as datetime.datetime
@@ -454,7 +454,7 @@ def calculate_tdoa_residuals(
     Calculate the residual distances of the TDOA localization algorithm
 
     The residual represents the discrepancy between (difference in distance
-    of each reciever to estimated location) and (observed tdoa), and has
+    of each receiver to estimated location) and (observed tdoa), and has
     units of meters. Residuals are calculated as follows:
 
         expected = calculated time difference of arrival between reference and
@@ -467,7 +467,7 @@ def calculate_tdoa_residuals(
         residual distance = speed of sound * residual time (in meters)
 
     Args:
-        receiver_location: The list of coordinates (in m) of each receiver,
+        receiver_locations: The list of coordinates (in m) of each receiver,
             as [x,y] for 2d or or [x,y,z] for 3d.
         tdoas: List of time delays of arival for the sound at each receiver,
             relative to the first receiver in the list (tdoas[0] should be 0)

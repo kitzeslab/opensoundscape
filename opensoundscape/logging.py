@@ -21,9 +21,9 @@ def wandb_table(
         dataset: object to generate samples, eg AudioFileDataset or AudioSplittingDataset
         n: number of samples to generate (randomly selected from df)
             - if None, does not subsample or change order
-        bypass_augmentations: if True, augmentations in Preprocessor are skipped
         classes_to_extract: tuple of classes - will create columns containing the scores/labels
         random_state: default None; if integer provided, used for reproducible random sample
+        raise_exceptions: if True, raises exceptions during sample generation [default: False]
         drop_labels: if True, does not include 'label' column in Table
         gradcam_model: if not None, will generate GradCAMs for each sample using gradcam_model.get_cams()
 
