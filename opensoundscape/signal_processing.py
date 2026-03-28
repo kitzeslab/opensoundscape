@@ -20,12 +20,12 @@ def frequency2scale(frequency, wavelet, sample_rate):
         sample_rate: sample rate in Hz (1/seconds)
 
     Returns:
-        scale: (float) scale parameter for pywt.ctw() to extract desired frequency
+        scale: (float) scale parameter for pywt.cwt() to extract desired frequency
 
     Note: this function is not exactly an inverse of pywt.scale2frequency(),
     because that function returns frequency in sample-units (cycles/sample)
     rather than frequency in Hz (cycles/second). In other words,
-    freuquency_hz = pywt.scale2frequency(w,scale)*sr.
+    frequency_hz = pywt.scale2frequency(w, scale) * sr.
     """
     # get center frequency of this wavelet
     center_freq = pywt.central_frequency(wavelet)
@@ -60,6 +60,8 @@ def cwt_peaks(
         peak_separation: minimum time between detected peaks, in seconds
             - if None, no minimum distance
             - see "distance" argument to scipy.signal.find_peaks
+        plot: if True, plots the processed CWT signal and detected peaks
+            with pyplot [default: False]
 
     Returns:
         peak_times: list of times (from beginning of signal) of each peak
@@ -133,23 +135,23 @@ def find_accel_sequences(
     """
     detect accelerating/decelerating sequences in time series
 
-    developed for deteting Ruffed Grouse drumming events in a series of peaks
+    developed for detecting Ruffed Grouse drumming events in a series of peaks
     extracted from cwt signal
 
     The algorithm computes the forward difference of t, y(t). It iterates through
     the [y(t), t] points searching for sequences of points that meet a set of
     conditions. It begins with an empty candidate sequence.
 
-    "Point-to-point criterea": Valid ranges for dt, dy, and d2y are checked for
+    "Point-to-point criteria": Valid ranges for dt, dy, and d2y are checked for
     each subsequent point and are based on previous points in the candidate
     sequence. If they are met, the point is added to the candidate sequence.
 
-    "Continuation criterea": Conditions for max_skip and the upper bound of dt
+    "Continuation criteria": Conditions for max_skip and the upper bound of dt
     are used to determine when a sequence should be terminated.
         - max_skip: max number of sequential invalid points before terminating
         - dt<=dt_range[1]: if dt is long, sequence should be broken
 
-    "Sequence criterea": When a sequence is terminated, it is evaluated on
+    "Sequence criteria": When a sequence is terminated, it is evaluated on
     conditions for duration_range and points_range. If it meets these
     conditions, it is saved as a detected sequence.
         - duration_range: length of sequence in seconds from first to last point
@@ -160,15 +162,15 @@ def find_accel_sequences(
 
     Args:
         t: (list or np.array) times of all detected peaks (seconds)
-        dt_range=(0.05,0.8): valid values for t(i) - t(i-1)
-        dy_range=(-0.2,0): valid values for change in y
+        dt_range: valid values for t(i) - t(i-1) [default: (0.05, 0.8)]
+        dy_range: valid values for change in y [default: (-0.2, 0)]
             (grouse: difference in time between consecutive beats should decrease)
-        d2y_range=(-.05,.15): limit change in dy: should not show large decrease
+        d2y_range: limit change in dy; should not show large decrease [default: (-0.05, 0.15)]
             (sharp curve downward on y vs t plot)
-        max_skip=3: max invalid points between valid points for a sequence
+        max_skip: max invalid points between valid points for a sequence [default: 3]
             (grouse: should not have many noisy points between beats)
-        duration_range=(1,15): total duration of sequence (sec)
-        points_range=(9,100): total number of points in sequence
+        duration_range: total duration of sequence (sec) [default: (1, 15)]
+        points_range: total number of points in sequence [default: (5, 100)]
 
     Returns:
         sequences_t, sequences_y: lists of t and y for each detected sequence
@@ -286,7 +288,7 @@ def detect_peak_sequence_cwt(
     points_range=(9, 100),
     plot=False,
 ):
-    """Use a continuous wavelet transform to detect accellerating sequences
+    """Use a continuous wavelet transform to detect accelerating sequences
 
     This function creates a continuous wavelet transform (cwt) feature and
     searches for accelerating sequences of peaks in the feature. It was developed
@@ -298,23 +300,23 @@ def detect_peak_sequence_cwt(
 
     Args:
         audio: Audio object
-        sample_rate=400: resample audio to this sample rate (Hz)
-        window_len=60: length of analysis window (sec)
-        center_frequency=50: target audio frequency of cwt
-        wavelet='morl': (str) pywt wavelet name (see pywavelets docs)
-        peak_threshold=0.2: height threhsold (0-1) for peaks in normalized signal
-        peak_separation=15/400: min separation (sec) for peak finding
-        dt_range=(0.05, 0.8): sequence detection point-to-point criterion 1
+        sample_rate: resample audio to this sample rate (Hz) [default: 400]
+        window_len: length of analysis window (sec) [default: 60]
+        center_frequency: target audio frequency of CWT in Hz [default: 50]
+        wavelet: (str) pywt wavelet name (see pywavelets docs) [default: 'morl']
+        peak_threshold: height threshold (0-1) for peaks in normalized signal [default: 0.2]
+        peak_separation: minimum separation (sec) for peak finding [default: 15/400]
+        dt_range: sequence detection point-to-point criterion 1 [default: (0.05, 0.8)]
             - Note: the upper limit is also used as sequence termination criterion 2
-        dy_range=(-0.2, 0): sequence detection point-to-point criterion 2
-        d2y_range=(-0.05, 0.15): sequence detection point-to-point criterion 3
-        max_skip=3: sequence termination criterion 1: max sequential invalid points
-        duration_range=(1, 15): sequence criterion 1: length (sec) of sequence
-        points_range=(9, 100): sequence criterion 2: num points in sequence
-        plot=False: if True, plot peaks and detected sequences with pyplot
+        dy_range: sequence detection point-to-point criterion 2 [default: (-0.2, 0)]
+        d2y_range: sequence detection point-to-point criterion 3 [default: (-0.05, 0.15)]
+        max_skip: sequence termination criterion 1: max sequential invalid points [default: 3]
+        duration_range: sequence criterion 1: length (sec) of sequence [default: (1, 15)]
+        points_range: sequence criterion 2: num points in sequence [default: (9, 100)]
+        plot: if True, plot peaks and detected sequences with pyplot [default: False]
 
     Returns:
-        dataframe summarizing detected sequences
+        pd.DataFrame: dataframe summarizing detected sequences
 
     Note: for Ruffed Grouse drumming, which is very low pitched, audio is resampled
     to 400 Hz. This greatly increases the efficiency of the cwt, but will only
@@ -446,8 +448,8 @@ def thresholded_event_durations(x, threshold, normalize=False, sample_rate=1):
         sample_rate: sample rate of input signal
 
     Returns:
-        start_times: start time of each detected event
-        durations: duration (# samples/sr) of each detected event
+        start_times: start time of each detected event (in seconds if sample_rate is in Hz)
+        durations: duration of each detected event (in seconds if sample_rate is in Hz)
     """
     if normalize:
         x = x / np.max(x)
@@ -633,7 +635,7 @@ def tdoa(
 
     Returns:
         estimated delay from reference signal to signal, in seconds
-        (note that default samping rate is 1.0 samples/second)
+        (note that the default sampling rate is 1.0 samples/second)
 
         if return_max is True, returns a second value, the maximum value of the
         result of generalized cross correlation
