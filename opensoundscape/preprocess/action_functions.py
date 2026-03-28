@@ -163,7 +163,7 @@ def random_lowpass(
         order_range: (min,max) range of filter orders to choose from
             - order is chosen randomly from this range with uniform distribution
             - higher order = steeper filter rolloff; default 1 = gentle rolloff
-            2 already creates steep enough rollof to eliminate most high freq content
+            2 already creates steep enough rolloff to eliminate most high freq content
 
     Returns:
         Audio object, possibly lowpass filtered
@@ -211,7 +211,7 @@ def torch_random_affine(tensor, degrees=0, translate=(0.3, 0.1), fill=0):
     (Tensor -> Tensor) or (PIL Img -> PIL Img)
 
     Args:
-        tensor: torch.Tensor input saple
+        tensor: torch.Tensor input sample
         degrees = 0
         translate = (0.3, 0.1)
         fill = 0-255, duplicated across channels
@@ -344,7 +344,11 @@ def tensor_add_noise(tensor, std=1):
     """Add gaussian noise to sample (Tensor -> Tensor)
 
     Args:
+        tensor: input torch.Tensor
         std: standard deviation for Gaussian noise [default: 1]
+
+    Returns:
+        tensor with additive Gaussian noise
 
     Note: be aware that scaling before/after this action will change the
     effect of a fixed stdev Gaussian noise
@@ -355,6 +359,17 @@ def tensor_add_noise(tensor, std=1):
 
 @register_action_fn
 def pcen(s, **kwargs):
+    """Apply Per-Channel Energy Normalization (PCEN) to a Spectrogram
+
+    Applies librosa.pcen() to the power spectrogram of a Spectrogram object.
+
+    Args:
+        s: Spectrogram object with .power_spectrogram attribute
+        **kwargs: additional keyword arguments passed to librosa.pcen()
+
+    Returns:
+        Spectrogram with PCEN-normalized power spectrogram
+    """
     return s._spawn(power_spectrogram=librosa.pcen(S=s.power_spectrogram, **kwargs))
 
 
@@ -449,31 +464,3 @@ def audio_time_mask(
     # mix with original audio
     samples = (np.array(samples) + audio.samples).clip(-1, 1)
     return audio._spawn(samples=samples)
-
-
-@register_action_fn
-def frequency_mask(tensor, max_masks=3, max_width=0.2):
-    """add random horizontal bars over Tensor
-
-    Args:
-        tensor: input Torch.tensor sample
-        max_masks: max number of horizontal bars [default: 3]
-        max_width: maximum size of horizontal bars as fraction of sample height
-
-    Returns:
-        augmented tensor
-    """
-
-    # convert max_width from fraction of sample to pixels
-    max_width_px = int(tensor.shape[-2] * max_width)
-
-    # add "batch" dimension expected by tensor_augment
-    tensor = tensor.unsqueeze(0)
-
-    # perform transform
-    tensor = tensor_augment.freq_mask(tensor, F=max_width_px, max_masks=max_masks)
-
-    # remove "batch" dimension
-    tensor = tensor.squeeze(0)
-
-    return tensor

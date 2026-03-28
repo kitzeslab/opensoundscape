@@ -214,7 +214,7 @@ def overlay(
     if len(overlay_df.columns) > 0 and sample.labels is not None:
         assert list(overlay_df.columns) == list(
             sample.labels.index
-        ), "overlay_df mast have same columns as sample's _labels or no columns"
+        ), "overlay_df must have same columns as sample's _labels or no columns"
 
     ## OVERLAY ##
     # iteratively perform overlays until stopping condition

@@ -163,11 +163,7 @@ class BasePreprocessor:
             break_on_key: if not None, the pipeline will be stopped when it
                 reaches an Action whose index equals this value. The matching
                 action is not performed.
-            clip_times: can be either
-                - None: the file is treated as a single sample
-                - dictionary {"start_time":float,"end_time":float}:
-                    the start and end time of clip in audio
-            bypass_augmentations: if True, actions with .is_augmentatino=True
+            bypass_augmentations: if True, actions with .is_augmentation=True
                 are skipped
             trace (boolean - default False): if True, saves the output of each pipeline step in the `sample_info` output argument
                 Can be used for analysis/debugging of intermediate values of the sample during preprocessing
@@ -784,7 +780,7 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
             height: height of output sample (frequency axis)
                 - default None will use the original height of the spectrogram
             width: width of output sample (time axis)
-                -  default None will use the originalwidth of the spectrogram
+                -  default None will use the original width of the spectrogram
             channels: number of channels in output sample (default 1)
             noisereduce_kwargs: dictionary of args to pass to noisereduce.reduce_noise()
         """

@@ -368,10 +368,10 @@ def trim_audio(sample, target_duration, extend=True, random_trim=False, tol=1e-1
     audio = sample.data
 
     if len(audio.samples) == 0:
-        raise ValueError("recieved zero-length audio")
+        raise ValueError("received zero-length audio")
 
     # input audio is not as long as desired length
-    if extend:  # extend clip sith silence
+    if extend:  # extend clip with silence
         audio = audio.extend_to(target_duration)
     else:
         if audio.duration + tol < target_duration:

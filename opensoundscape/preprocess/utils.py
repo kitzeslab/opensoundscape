@@ -87,10 +87,10 @@ def show_tensor(
     """helper function for displaying a sample as an image
 
     Args:
-        tensor: torch.Tensor of shape [c,w,h] with values centered around zero
+        tensor: torch.Tensor of shape [c,w,h]
         channel: specify an integer to plot only one channel, otherwise will
             attempt to plot all channels
-        transform_from_zero_centered: if True, transforms values from [-1,1] to [0,1]
+        normalize_from_range: list of [min,max] values to normalize tensor from [default: [-1,1]]
         invert:
             if true, flips value range via x=1-x
         cmap: matplotlib colormap passed to plt.imshow()
