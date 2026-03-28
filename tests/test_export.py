@@ -87,7 +87,7 @@ class TestONNXModel:
         double.weight.data *= 2.0
 
         identity = nn.Identity()
-        model = ONNXModel({"double": double, "identity": identity})
+        model = ONNXModel({"double_value": double, "identity": identity})
         x = torch.ones(1, 4)
         result = model(x)
         # after doubling, identity should return the doubled tensor

@@ -8,9 +8,13 @@ class ONNXModel(torch.nn.Module):
     def __init__(self, sequential_models, outputs=None):
         """A wrapper torch.nn.Module to combine multiple sequential models for ONNX export
 
+        By default, the outpus of all sequential models are included in the output dict
+        (specify a subset to include using `outputs` argument).
+
         Args:
             sequential_models: dict of str: torch.nn.Module, a dictionary of sequential models to apply in order
-            outputs: list of str or None, list of keys in sequential_models to include in output dict; if None, includes outputs of all sequential models
+            outputs: list of str or None, list of keys in sequential_models to include in output dict
+            - if None, includes outputs of all sequential models!
         """
         super(ONNXModel, self).__init__()
 
