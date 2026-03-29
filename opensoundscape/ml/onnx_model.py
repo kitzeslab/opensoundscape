@@ -118,7 +118,7 @@ class ONNXModel(SpectrogramClassifier):
             sample_duration=self.sample_duration,
         )
 
-    def batch_forward(self, batch_samples, targets=(-1), avgpool=False):
+    def batch_forward(self, batch_samples, targets=(-1,), avgpool=False):
         """Run inference on a batch of AudioSample
 
         Note: avgpool is currently not implemented for ONNX models, is ignored.
@@ -163,7 +163,8 @@ class ONNXModel(SpectrogramClassifier):
         if target_layer is None:
             target_layer = self.embedding_outputs_key
         else:
-            assert (
-                target_layer in self.output_names
-            ), f"Requested target_layer {target_layer} not found in model outputs: {self.output_names}"
+            if target_layer not in self.output_names:
+                raise ValueError(
+                    f"Requested target_layer {target_layer} not found in model outputs: {self.output_names}"
+                )
         return target_layer
