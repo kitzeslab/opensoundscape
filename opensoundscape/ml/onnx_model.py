@@ -22,7 +22,7 @@ class ONNXModel(SpectrogramClassifier):
     def __init__(
         self,
         onnx_model_path,
-        audio_sample_rate=None,
+        sample_rate=None,
         sample_duration=None,
         classes=None,
         class_outputs_key=None,
@@ -33,7 +33,7 @@ class ONNXModel(SpectrogramClassifier):
         Initialize the ONNXModel from a model file.
         Args:
             onnx_model_path: Path to ONNX model file, or an ORT InferenceSession object
-            audio_sample_rate: Sample rate model expects for input audio signals, Hz
+            sample_rate: Sample rate model expects for input audio signals, Hz
                 - if None, attempts to read from model metadata 'sample_rate'
             sample_duration: Duration model expects for input audio signals, seconds
                 - if None, attempts to read from model metadata 'sample_duration'
@@ -61,15 +61,15 @@ class ONNXModel(SpectrogramClassifier):
                 str(onnx_model_path), providers=execution_providers
             )
 
-        # audio_sample_rate, sample_duration, class_list, class_outputs_key are
+        # sample_rate, sample_duration, class_list, class_outputs_key are
         # either extracted from the ONNX model metadata or passed directly
         meta = ort_session.get_modelmeta().custom_metadata_map
         missing_fields = []
-        if audio_sample_rate is None:
+        if sample_rate is None:
             try:
-                audio_sample_rate = int(meta["sample_rate"])
+                sample_rate = int(meta["sample_rate"])
             except Exception:
-                missing_fields.append("audio_sample_rate")
+                missing_fields.append("sample_rate")
         if sample_duration is None:
             try:
                 sample_duration = float(meta["sample_duration"])
@@ -120,7 +120,7 @@ class ONNXModel(SpectrogramClassifier):
 
         self.preprocessor = AudioPreprocessor(
             sample_duration=sample_duration,
-            sample_rate=audio_sample_rate,
+            sample_rate=sample_rate,
         )
 
     def batch_forward(self, batch_samples, targets=None, avgpool=False):
@@ -222,7 +222,7 @@ class ONNXModel(SpectrogramClassifier):
         ort_session = onnxruntime.InferenceSession(model_bytes)
         return cls(
             ort_session,
-            audio_sample_rate=model.preprocessor.sample_rate,
+            sample_rate=model.preprocessor.sample_rate,
             sample_duration=model.preprocessor.sample_duration,
             classes=model.classes,
             class_outputs_key="classifier",

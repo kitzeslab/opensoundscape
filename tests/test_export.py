@@ -60,7 +60,7 @@ class IdentityTransform(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-class TestONNXModel:
+class TestSequentialModelExporter:
     def test_forward_returns_all_outputs_by_default(self):
         """ONNXModel returns outputs for every key when outputs=None."""
         m1 = nn.Identity()

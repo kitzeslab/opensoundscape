@@ -51,7 +51,9 @@ def _sample_with_audio(audio_array):
 
 @pytest.fixture
 def patch_onnxmodel_dependencies(monkeypatch):
-    monkeypatch.setattr(onnx_model_module.ort, "InferenceSession", FakeORTSession)
+    monkeypatch.setattr(
+        onnx_model_module.onnxruntime, "InferenceSession", FakeORTSession
+    )
 
     def _fake_classifier_init(self, architecture, classes, sample_duration):
         self._init_args = {
@@ -81,7 +83,7 @@ def test_init_reads_required_metadata_when_args_not_provided(
 
     model = onnx_model_module.ONNXModel(session)
 
-    assert model.audio_sample_rate == 32000
+    assert model.sample_rate == 32000
     assert model.sample_duration == 3.5
     assert model.classes == ["a", "b"]
     assert model.class_outputs_key == "class_logits"
@@ -105,14 +107,14 @@ def test_init_uses_explicit_arguments_over_missing_metadata(
 
     model = onnx_model_module.ONNXModel(
         session,
-        audio_sample_rate=44100,
+        sample_rate=44100,
         sample_duration=2.0,
         classes=["x", "y", "z"],
         class_outputs_key="class_logits",
         embedding_outputs_key="embedding",
     )
 
-    assert model.audio_sample_rate == 44100
+    assert model.sample_rate == 44100
     assert model.sample_duration == 2.0
     assert model.classes == ["x", "y", "z"]
 
@@ -123,7 +125,7 @@ def test_init_creates_session_from_path_with_requested_execution_providers(
     provider_tuple = ("CPUExecutionProvider",)
     model = onnx_model_module.ONNXModel(
         "dummy_model.onnx",
-        audio_sample_rate=32000,
+        sample_rate=32000,
         sample_duration=3.0,
         classes=["c0"],
         class_outputs_key="class_logits",
@@ -239,7 +241,7 @@ def test_check_or_get_default_embedding_layer_invalid_name_raises(
         embedding_outputs_key="embedding",
     )
 
-    with pytest.raises(AssertionError, match="target_layer"):
+    with pytest.raises(ValueError, match="target_layer"):
         model._check_or_get_default_embedding_layer("missing")
 
 
@@ -269,7 +271,7 @@ def test_real_onnx_export_and_inference_roundtrip(tmp_path):
     # Load exported model through ONNXModel and run one real forward pass.
     onnx_model = onnx_model_module.ONNXModel(onnx_path)
 
-    n_samples = int(onnx_model.audio_sample_rate * onnx_model.sample_duration)
+    n_samples = int(onnx_model.sample_rate * onnx_model.sample_duration)
     samples = [
         _sample_with_audio(
             np.random.randn(n_samples).astype(np.float32),
