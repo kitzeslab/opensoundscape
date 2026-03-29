@@ -63,7 +63,7 @@ perch-hoplite = {version = ">=1.0.1", optional = true}
 
 # security alert updates
 aiohttp=">=3.13.3"
-tornado=">=6.5.1"
+tornado=">=6.5.5"
 setuptools=">=78.1.1"
 urllib3=">=2.6.3"
 protobuf = ">=5.29.6"
