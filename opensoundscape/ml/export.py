@@ -185,6 +185,8 @@ def to_onnx_program(
     # the resulting model allows dynamic batch size
     example_input_batch = torch.rand(2, 1, input_length)
 
+    sequential_model.eval()
+
     return torch.onnx.export(
         sequential_model,
         (example_input_batch,),

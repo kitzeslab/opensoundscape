@@ -3,7 +3,9 @@ import types
 import importlib.util
 
 import numpy as np
+import onnxruntime
 import pytest
+import torch
 
 pytest.importorskip("onnx")
 pytest.importorskip("onnxruntime")
@@ -259,7 +261,10 @@ def test_real_onnx_export_and_inference_roundtrip(tmp_path):
         sample_rate=8000,
         arch_weights=None,
     )
-    model.save_onnx(onnx_path)
+    torch_onnx_model = model.save_onnx(onnx_path)
+
+    # Check return type
+    assert isinstance(torch_onnx_model, torch.onnx.ONNXProgram)
 
     # Load exported model through ONNXModel and run one real forward pass.
     onnx_model = onnx_model_module.ONNXModel(onnx_path)
@@ -275,3 +280,46 @@ def test_real_onnx_export_and_inference_roundtrip(tmp_path):
     assert onnx_path.exists()
     assert onnx_model.class_outputs_key in outputs
     assert outputs[onnx_model.class_outputs_key].shape == (1, len(onnx_model.classes))
+
+
+def test_from_spectrogram_classifier_similar_values():
+    from opensoundscape import CNN, preprocessors, ONNXModel
+    import onnxruntime
+    import numpy as np
+    import opensoundscape as opso
+
+    model = CNN(
+        architecture="efficientnet_b0",
+        classes=[0, 1, 2, 3],
+        sample_duration=3,
+        preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+        sample_rate=32000,
+    )
+    torch_onnx_program = model.save_onnx(path=None)  # , **save_onnx_kwargs)
+    torch_onnx_program.optimize()
+    # onnx_model = ONNXModel.from_spectrogram_classifier(model)
+    # onnx_model.predict(audio_file_list)
+
+    model_bytes = torch_onnx_program.model_proto.SerializeToString()
+    ort_session = onnxruntime.InferenceSession(model_bytes)
+    om = ONNXModel(
+        # "onnx_test.onnx",
+        ort_session,
+        audio_sample_rate=model.sample_rate,
+        sample_duration=model.sample_duration,
+        classes=model.classes,
+        class_outputs_key="classifier",
+        embedding_outputs_key="embedding",
+    )
+
+    embs = model.embed(opso.birds_path)
+    logits = model.predict(opso.birds_path)
+
+    om_embs = om.embed(opso.birds_path)
+    om_logits = om.predict(opso.birds_path)
+
+    # compare embs and om_embs, logits and om_logits
+    assert embs.shape == om_embs.shape
+    assert logits.shape == om_logits.shape
+    assert np.allclose(embs, om_embs, atol=0.2)  # sometimes large differences!
+    assert np.allclose(logits, om_logits, atol=0.2)  # sometimes large differences!

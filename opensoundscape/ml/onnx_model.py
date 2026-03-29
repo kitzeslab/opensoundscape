@@ -1,4 +1,5 @@
 import numpy as np
+import onnxruntime
 
 from opensoundscape.ml.cnn import SpectrogramClassifier
 from opensoundscape.preprocess.preprocessors import AudioPreprocessor
@@ -102,8 +103,6 @@ class ONNXModel(SpectrogramClassifier):
         )  # TODO refactor so arch not required
         self.ort_session = ort_session
         self.ort_input = self.ort_session.get_inputs()[0].name
-        self.audio_sample_rate = audio_sample_rate
-        self.sample_duration = sample_duration
         self.classes = classes
         self.class_outputs_key = class_outputs_key
         self.embedding_outputs_key = embedding_outputs_key
@@ -120,11 +119,11 @@ class ONNXModel(SpectrogramClassifier):
         # self.n_audio_channels = 2
 
         self.preprocessor = AudioPreprocessor(
-            sample_rate=self.audio_sample_rate,
-            sample_duration=self.sample_duration,
+            sample_duration=sample_duration,
+            sample_rate=audio_sample_rate,
         )
 
-    def batch_forward(self, batch_samples, targets=(-1,), avgpool=False):
+    def batch_forward(self, batch_samples, targets=None, avgpool=False):
         """Run inference on a batch of AudioSample
 
         Note: avgpool is currently not implemented for ONNX models, is ignored.
@@ -174,3 +173,58 @@ class ONNXModel(SpectrogramClassifier):
                     f"Requested target_layer {target_layer} not found in model outputs: {self.output_names}"
                 )
         return target_layer
+
+    @classmethod
+    def from_spectrogram_classifier(
+        cls,
+        model: SpectrogramClassifier,
+        execution_providers=("CPUExecutionProvider",),
+        **save_onnx_kwargs,
+    ):
+        """Create an ONNXModel from a SpectrogramClassifier (pytorch model).
+
+        This method exports the given PyTorch model to ONNX format and initializes an ONNXModel with it.
+        Note that the resulting ONNXModel is frozen and cannot be further trained. If you wish to train
+        a classifier on top of the ONNX model, you should extract embeddings using the embed() method and
+        train opensoundscape.ml.shallow_classifier.MLPClassifier separately.
+
+        Currently onnx export from SpectrogramClassifier requires that the preprocessor is a TorchSpectrogramPreprocessor
+
+        Note: due to implementation details, ONNXmodels can produce slightly different outputs for classifier and embedding outputs,
+        e.g. +/- 0.02 on logits and +/- 0.1 on embeddings in some experiments
+
+        Args:
+            model: A SpectrogramClassifier object to convert to ONNXModel.
+            execution_providers: Tuple of ONNX Runtime execution providers to use for the resulting ONNXModel.
+                 EG: "CPUExecutionProvider", "CUDAExecutionProvider", "CoreMLExecutionProvider"
+            **save_onnx_kwargs: Additional kwargs to pass to model.save_onnx() method
+
+        Returns:
+            An ONNXModel initialized with the exported ONNX model.
+
+        Example usage:
+        ```python
+        from opensoundscape import CNN, preprocessors, ONNXModel
+        model = CNN(
+            architecture="efficientnet_b0",
+            classes=[0, 1, 2, 3],
+            sample_duration=3,
+            preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+            sample_rate=32000,
+        )
+        onnx_model = ONNXModel.from_spectrogram_classifier(model)
+        onnx_model.predict(audio_file_list)
+        """
+        torch_onnx_program = model.save_onnx(path=None)  # , **save_onnx_kwargs)
+        torch_onnx_program.optimize()
+
+        model_bytes = torch_onnx_program.model_proto.SerializeToString()
+        ort_session = onnxruntime.InferenceSession(model_bytes)
+        return cls(
+            ort_session,
+            audio_sample_rate=model.preprocessor.sample_rate,
+            sample_duration=model.preprocessor.sample_duration,
+            classes=model.classes,
+            class_outputs_key="classifier",
+            embedding_outputs_key="embedding",
+        )

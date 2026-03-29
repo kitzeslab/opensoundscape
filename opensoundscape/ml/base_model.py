@@ -1,18 +1,15 @@
 """base class for machine learning models in opensoundscape"""
 
-from pathlib import Path
 import warnings
+from pathlib import Path
+
 import torch
-import opensoundscape
-from opensoundscape.preprocess.preprocessors import (
-    BasePreprocessor,
-)
-from opensoundscape.ml.dataloaders import collate_audio_samples
 from torchmetrics import Accuracy
 
 import opensoundscape
+from opensoundscape.ml.dataloaders import SafeAudioDataloader, collate_audio_samples
 from opensoundscape.ml.loss import BCEWithLogitsLoss_hot
-from opensoundscape.ml.dataloaders import SafeAudioDataloader
+from opensoundscape.preprocess.preprocessors import BasePreprocessor
 from opensoundscape.utils import identity
 
 
@@ -276,7 +273,7 @@ class BaseModule:
             except Exception as e:
                 raise ValueError(
                     "Could not access self.classifier.parameters(). "
-                    "Make sure self.classifier propoerty returns a torch.nn.Module object."
+                    "Make sure self.classifier property returns a torch.nn.Module object."
                 ) from e
 
             # add them to a new group with custom learning rate

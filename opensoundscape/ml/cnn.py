@@ -1693,13 +1693,11 @@ class SpectrogramClassifier(SpectrogramModule):
 
         Returns:
             outs: dictionary of outputs for each requested target layer
-                keys are layer indices (int), values are np.arrays
-                with first dimension corresponding to samples
-                output array dtypes depend on the layer output shapes;
-                if avgpool_intermediates=True, outputs are always 2D arrays
-                with shape (n_samples, n_features);
-                if avgpool_intermediates=False, output array shapes and
-                dtypes depend on the layer output shapes.
+                keys are layers and/or value of self.class_outputs_key (eg, -1 for final output)
+                values are np.arrays with first dimension corresponding to samples output array
+                dtypes depend on the layer output shapes; if avgpool_intermediates=True, outputs are
+                always 2D arrays with shape (n_samples, n_features); if avgpool_intermediates=False,
+                output array shapes and dtypes depend on the layer output shapes.
         """
         if targets is None:
             targets = [self.class_outputs_key]
@@ -2613,23 +2611,25 @@ class SpectrogramClassifier(SpectrogramModule):
         torch.nn.Modules in preprocessor.pipeline['transform'].transforms
         (see example below)
 
+        See also: to_onnx_model() to create opensoundscape.ONNXModel for inference
+
         Requires that onnx, onnxruntime, and onnxscript are packages are installed
 
         Args:
             path: file path to save the ONNX model
-                if None, returns an in-memory ONNX model object without saving to disk
+                pass None to return an in-memory torch.onnx.ONNXProgram object without saving to disk
             activation_layer: if provided, applies an activation layer to classifier outputs
                 options: 'softmax', 'sigmoid', or None [default: None]
             include_preprocessor_output: if True, includes the output of the preprocessor
-                in the ONNX model outputs [default: True]
+                in the ONNX model outputs as key "preprocessor" [default: True]
             include_embedding_output: if True, includes the output of the embedding layer
-                in the ONNX model outputs [default: True]
+                in the ONNX model outputs as key "embedding" [default: True]
             include_classifier_output: if True, includes the output of the classifier
-                in the ONNX model outputs [default: True]
+                in the ONNX model outputs as key "classifier" [default: True]
             **kwargs: additional keyword arguments passed to
                 opensoundscape.ml.export.to_onnx_program()
         Returns:
-            onnx_program: an in-memory ONNX program object
+            onnx_program: a torch.onnx.ONNXProgram object
 
         Example:
 
@@ -2760,6 +2760,10 @@ class SpectrogramClassifier(SpectrogramModule):
         n_audio_samples_per_input = int(
             self.preprocessor.sample_rate * self.preprocessor.sample_duration
         )
+        # set network to evaluation mode
+        self.network.eval()
+
+        # create torch.onnx.ONNXProgram composing the preprocessor and the network
         onnx_program = opensoundscape.ml.export.to_onnx_program(
             preprocessing_transforms=transforms,
             torch_model=self.network,
@@ -2775,7 +2779,6 @@ class SpectrogramClassifier(SpectrogramModule):
             onnx_program.save(path)
 
             # re-load model to add metadata
-
             om = onnx.load(path)
 
             # add metadata properties
@@ -2801,6 +2804,23 @@ class SpectrogramClassifier(SpectrogramModule):
             onnx.save(om, path)
 
         return onnx_program
+
+    @property
+    def sample_duration(self):
+        return self.preprocessor.sample_duration
+
+    # setter
+    @sample_duration.setter
+    def sample_duration(self, duration):
+        self.preprocessor.sample_duration = duration
+
+    @property
+    def sample_rate(self):
+        return self.preprocessor.sample_rate
+
+    @sample_rate.setter
+    def sample_rate(self, rate):
+        self.preprocessor.sample_rate = rate
 
 
 # alias for convenience
