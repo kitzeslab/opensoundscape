@@ -1,5 +1,4 @@
 import numpy as np
-import onnxruntime as ort
 
 from opensoundscape.ml.cnn import SpectrogramClassifier
 from opensoundscape.preprocess.preprocessors import AudioPreprocessor
@@ -46,6 +45,13 @@ class ONNXModel(SpectrogramClassifier):
             execution_providers: Tuple of ONNX Runtime execution providers to use
                 Including: "CPUExecutionProvider", "CUDAExecutionProvider", "CoreMLExecutionProvider", etc.
         """
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            raise ImportError(
+                "onnxruntime is required to use ONNXModel. Please install with `pip install onnxruntime` "
+                "or `pip install opensoundscape[onnx]`."
+            )
 
         if isinstance(onnx_model_path, ort.InferenceSession):
             ort_session = onnx_model_path

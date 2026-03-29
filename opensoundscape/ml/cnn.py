@@ -4,6 +4,7 @@ For tutorials, see notebooks on opensoundscape.org
 """
 
 import copy
+import json
 import os
 import warnings
 from pathlib import Path
@@ -2726,6 +2727,13 @@ class SpectrogramClassifier(SpectrogramModule):
         onnx_program = model.save_onnx("./opso_efficientnet_custom.onnx")
         ```
         """
+        try:
+            import onnx
+        except ImportError as e:
+            raise ImportError(
+                "onnx package is required for ONNX export. Please install to use this feature. "
+                "For example `pip install opensoundscape[onnx]`"
+            ) from e
 
         # give helpful error if preprocessor is not TorchSpectrogramPreprocessor
         # or if preprocessor.pipeline['transform'].transforms is not accessible
@@ -2767,9 +2775,6 @@ class SpectrogramClassifier(SpectrogramModule):
             onnx_program.save(path)
 
             # re-load model to add metadata
-            import json
-
-            import onnx
 
             om = onnx.load(path)
 
