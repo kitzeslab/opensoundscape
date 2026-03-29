@@ -326,7 +326,7 @@ class BaseModule:
         """currently only used for lightning
 
         not used by SpectrogramClassifier"""
-        batch_tensors, batch_labels = samples
+        batch_tensors, batch_labels = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
         batch_labels = batch_labels.to(self.device)
 
