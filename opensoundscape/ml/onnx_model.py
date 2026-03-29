@@ -1,13 +1,8 @@
-from opensoundscape.ml.cnn import BaseModule
-import onnxruntime as ort
-import onnx
 import numpy as np
-from tqdm.autonotebook import tqdm
+import onnxruntime as ort
+
+from opensoundscape.ml.cnn import SpectrogramClassifier
 from opensoundscape.preprocess.preprocessors import AudioPreprocessor
-import pandas as pd
-from opensoundscape.ml.cnn import SpectrogramClassifier, _warn_output_size
-from opensoundscape.ml.utils import apply_activation_layer
-from opensoundscape.utils import identity
 
 
 class ONNXModel(SpectrogramClassifier):
