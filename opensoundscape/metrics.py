@@ -19,8 +19,9 @@ def predict_single_target_labels(scores):
         scores: 2d np.array, 2d list, 2d torch.Tensor, or pd.DataFrame
             containing continuous scores
 
-    Returns: boolean value where each row has 1 for the highest scoring class and
-    0 for all other classes. Returns same datatype as input.
+    Returns:
+        boolean values where each row has 1 for the highest scoring class and
+        0 for all other classes. Returns same datatype as input.
 
     See also: predict_multi_target_labels
 
@@ -79,7 +80,9 @@ def predict_multi_target_labels(scores, threshold):
                 value in the list will be used as a threshold for each respective
                 class (column).
 
-    Returns: 1/0 values with 1 if score exceeded threshold and 0 otherwise
+    Returns:
+        1/0 values with 1 if score exceeded threshold and 0 otherwise;
+        returns the same datatype as input
 
     See also: predict_single_target_labels
     """

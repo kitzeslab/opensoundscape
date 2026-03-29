@@ -247,6 +247,14 @@ def get_existing_windows(
 
 
 def build_index(B):
+    """Build an inverted index from a list, mapping each value to its list of positions.
+
+    Args:
+        B: iterable of hashable elements
+
+    Returns:
+        dict mapping each unique value in B to a list of integer indices where it appears
+    """
     index = defaultdict(list)
     for i, t in enumerate(B):
         index[t].append(i)
@@ -254,6 +262,16 @@ def build_index(B):
 
 
 def find_matches(A, B):
+    """For each element in A, find the indices in B where the same value occurs.
+
+    Args:
+        A: iterable of hashable elements to look up
+        B: iterable of hashable elements to search in
+
+    Returns:
+        list of tuples, one per element of A; each tuple contains the indices
+        in B where the corresponding value in A is found (empty tuple if not found)
+    """
     index = build_index(B)
     return [tuple(index.get(a, ())) for a in A]
 
@@ -541,6 +559,10 @@ def find_matching_windows(
         recordings_filter: custom filter dict for recordings; if provided, overrides recordings argument
         windows_filter: custom filter dict for windows; if provided, overrides date_range, time_range arguments
         annotations_filter: custom filter dict for annotations in hoplite DB
+
+    Returns:
+        list of hoplite window objects matching the specified filters, each with
+        .filename, .datetime, .deployment, and .project attributes added
     """
     _require_hoplite()
     # find all matching clips
@@ -635,6 +657,15 @@ def find_matching_windows(
 
 
 def windows_to_dataframe(windows):
+    """Convert a list of hoplite window objects to a DataFrame
+
+    Args:
+        windows: list of hoplite window objects (with .filename, .offsets, .datetime,
+            .deployment, .project, and .id attributes)
+
+    Returns:
+        pd.DataFrame with columns: file, start_time, end_time, datetime, deployment, project, window_id
+    """
     cols = [
         "file",
         "start_time",
@@ -687,18 +718,19 @@ def similarity_search_hoplite_db(
             Note: only implemented for exact_search=True
         target_score: if specified, searches for similarity scores close to target_score
             default [None] searches for most similar embeddings
-        audio_root: root directory for relative paths to query audio files
         search_kwargs: dict of additional keyword arguments passed to db.ui.search() or
             brutalism.threaded_brute_search() if exact_search=True
             exact_search=False: radius, threads, exact, log, progress
             exact_search=True: batch_size, max_workers, rng_seed
-        **embedding_kwargs: additional keyword arguments passed to self.embed(), such as
-            batch_size and num_workers
+
     Returns:
-        A list of dictionaries with the search results, one item per query sample:
-        Each item is a dictionary with the following keys:
-            - "query": dictionary with query metadata
-            - "results": list of dictionaries with metadata for each retrieved sample
+        list of dictionaries with the search results, one per query sample;
+        each dictionary has the following keys:
+            - "file": filename of the matching clip
+            - "start_time": start time of the matching clip
+            - "end_time": end time of the matching clip
+            - "window_id": window ID in the hoplite database
+            - "sort_score": similarity score
     """
     try:
         from perch_hoplite.db import brutalism

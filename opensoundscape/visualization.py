@@ -422,7 +422,14 @@ def inspect(
 
 
 def get_selected_row_ids(fw):
-    row_ids = []
+    """Extract the row IDs of points currently selected in a Plotly FigureWidget.
+
+    Args:
+        fw: plotly FigureWidget with selectedpoints set on its traces
+
+    Returns:
+        np.ndarray of unique integer row IDs for the selected points
+    """
 
     for tr in fw.data:
         if tr.selectedpoints is None:
@@ -444,7 +451,27 @@ def explore_features(
     hover_name_col=None,
     **inspect_kwargs,
 ):
-    _require("ipywidgets", "plotly", "IPython")
+    """Interactive 2-D scatter plot for exploring feature-space embeddings.
+
+    Displays a Plotly scatter plot of the data, with an "Inspect selected" button that
+    calls :func:`inspect` on the points lasso-selected in the plot.
+
+    Requires ``ipywidgets``, ``plotly``, and ``IPython`` to be installed.
+
+    Args:
+        df (pd.DataFrame): DataFrame with at least ``x_col`` and ``y_col`` columns,
+            plus 'file', 'start_time', 'end_time' columns for the inspect callback.
+        x_col (str): Column name for x-axis values [default: "x"].
+        y_col (str): Column name for y-axis values [default: "y"].
+        color_col (str, optional): Column name for point colors.
+        symbol_col (str, optional): Column name for point symbols.
+        size_col (str, optional): Column name for point sizes.
+        hover_name_col (str, optional): Column name for hover labels.
+        **inspect_kwargs: Additional keyword arguments passed to :func:`inspect`.
+
+    Returns:
+        plotly.graph_objects.FigureWidget: The interactive scatter plot widget.
+    """
 
     fig_out = widgets.Output()
     inspect_out = widgets.Output()

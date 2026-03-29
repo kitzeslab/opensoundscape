@@ -268,6 +268,10 @@ def fit_on_hoplite(
         [Default: None, which means no early stopping]
 
         **kwargs: additional keyword arguments passed to HopliteDataset; see HopliteDataset.__init__()
+
+    Returns:
+        dict with validation metrics for the best model (if validation_df is provided),
+        or None if no validation data is provided. Keys: 'loss', 'auroc', 'map', 'per_class_auroc'.
     """
     _require_hoplite()
     # if no optimizer or criterion provided, use default AdamW and BCEWithLogitsLoss
@@ -501,6 +505,10 @@ def fit(
         early_stopping_patience: if provided and validation data is available, training will stop
         early if validation loss doesn't improve for this many steps (not validation evaluations)
         [Default: None, which means no early stopping]
+
+    Returns:
+        dict with validation metrics for the best model (if validation data is provided),
+        or None if no validation data is provided. Keys: 'loss', 'auroc', 'map', 'per_class_auroc'.
     """
     # if no optimizer or criterion provided, use default AdamW and BCEWithLogitsLoss
     if optimizer is None:
