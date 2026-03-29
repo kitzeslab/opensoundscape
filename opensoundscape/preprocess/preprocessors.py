@@ -919,13 +919,13 @@ class AudioPreprocessor(BasePreprocessor):
             }
         )
 
-        @property
-        def sample_rate(self):
-            return self.pipeline["load_audio"].get("sample_rate")
+    @property
+    def sample_rate(self):
+        return self.pipeline["load_audio"].get("sample_rate")
 
-        @sample_rate.setter
-        def sample_rate(self, value):
-            self.pipeline["load_audio"].set(sample_rate=value)
+    @sample_rate.setter
+    def sample_rate(self, value):
+        self.pipeline["load_audio"].set(sample_rate=value)
 
 
 @register_preprocessor_cls
