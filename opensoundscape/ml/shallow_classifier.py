@@ -163,6 +163,7 @@ class MLPClassifier(torch.nn.Module):
         Args:
             path: file path to save to
         """
+        torch.save(
             {
                 "input_size": self.in_features,
                 "output_size": self.out_features,
