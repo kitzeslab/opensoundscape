@@ -3,7 +3,7 @@ import warnings
 import torch
 import torch.nn as nn
 
-from opensoundscape.ml.export import ONNXModel, to_onnx_program
+from opensoundscape.ml.export import SequentialModelExporter, to_onnx_program
 
 
 # ---------------------------------------------------------------------------
@@ -60,12 +60,12 @@ class IdentityTransform(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-class TestONNXModel:
+class TestSequentialModelExporter:
     def test_forward_returns_all_outputs_by_default(self):
         """ONNXModel returns outputs for every key when outputs=None."""
         m1 = nn.Identity()
         m2 = nn.Linear(4, 2)
-        model = ONNXModel({"a": m1, "b": m2})
+        model = SequentialModelExporter({"a": m1, "b": m2})
         x = torch.rand(3, 4)
         result = model(x)
         assert set(result.keys()) == {"a", "b"}
@@ -74,7 +74,7 @@ class TestONNXModel:
         """ONNXModel only returns keys listed in outputs."""
         m1 = nn.Identity()
         m2 = nn.Linear(4, 2)
-        model = ONNXModel({"a": m1, "b": m2}, outputs=["b"])
+        model = SequentialModelExporter({"a": m1, "b": m2}, outputs=["b"])
         x = torch.rand(3, 4)
         result = model(x)
         assert "a" not in result
@@ -87,7 +87,7 @@ class TestONNXModel:
         double.weight.data *= 2.0
 
         identity = nn.Identity()
-        model = ONNXModel({"double_value": double, "identity": identity})
+        model = SequentialModelExporter({"double_value": double, "identity": identity})
         x = torch.ones(1, 4)
         result = model(x)
         # after doubling, identity should return the doubled tensor
@@ -97,13 +97,13 @@ class TestONNXModel:
         """ONNXModel calls eval() on submodels during __init__."""
         linear = nn.Linear(2, 2)
         linear.train()  # set to training mode first
-        ONNXModel({"l": linear})
+        SequentialModelExporter({"l": linear})
         assert not linear.training
 
     def test_output_values_are_clones(self):
         """Outputs stored in the dict are clones, not the same tensor."""
         identity = nn.Identity()
-        model = ONNXModel({"id": identity})
+        model = SequentialModelExporter({"id": identity})
         x = torch.rand(2, 4)
         result = model(x)
         assert result["id"] is not x

@@ -190,3 +190,13 @@ def _version_mismatch_warn(opensoundscape_version):
             f"but you are currently using version {opensoundscape.__version__}. "
             "This might not be an issue but you should confirm that the model behaves as expected."
         )
+
+
+def _warn_output_size(dataloader, size, output_size_warning):
+    if output_size_warning and len(dataloader.dataset) * size > output_size_warning:
+        warnings.warn(
+            f"Generating ~{len(dataloader.dataset)*size:,} output values "
+            f"({len(dataloader.dataset):,} samples x ~{size:,} per sample). "
+            f"This may use a lot of memory (~1Gb per 3e8 outputs). To disable this warning, set "
+            f"`output_size_warning` to None or 0."
+        )

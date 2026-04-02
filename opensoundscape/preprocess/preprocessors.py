@@ -1,29 +1,28 @@
 """Preprocessor classes: tools for preparing and augmenting audio samples"""
 
-from pathlib import Path
-import pandas as pd
 import copy
-import time
 import json
-import yaml
 import pathlib
+import time
 import warnings
+from pathlib import Path
 
-from opensoundscape.preprocess import actions, action_functions, io
+import pandas as pd
+import yaml
+
+from opensoundscape.audio import Audio
+from opensoundscape.preprocess import action_functions, actions, io, preprocessors
 from opensoundscape.preprocess.actions import (
+    ACTION_CLS_DICT,
     Action,
     AudioClipLoader,
     AudioTrim,
     SpectrogramToTensor,
 )
 from opensoundscape.preprocess.overlay import Overlay
-from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
-from opensoundscape.spectrogram import Spectrogram
-from opensoundscape.audio import Audio
+from opensoundscape.preprocess.utils import PreprocessingError, get_args
 from opensoundscape.sample import AudioSample
-from opensoundscape.preprocess.actions import ACTION_CLS_DICT
-from opensoundscape.preprocess import io
-from opensoundscape.preprocess import preprocessors, actions
+from opensoundscape.spectrogram import Spectrogram
 from opensoundscape.utils import make_clip_df
 
 PREPROCESSOR_CLS_DICT = {}
@@ -609,6 +608,14 @@ class SpectrogramPreprocessor(BasePreprocessor):
 
         return sample
 
+    @property
+    def sample_rate(self):
+        return self.pipeline["load_audio"].get("sample_rate")
+
+    @sample_rate.setter
+    def sample_rate(self, value):
+        self.pipeline["load_audio"].set(sample_rate=value)
+
 
 @register_preprocessor_cls
 class TorchSpectrogramPreprocessor(BasePreprocessor):
@@ -709,7 +716,8 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
         self.channels = 1
 
         try:
-            import torchaudio, torchvision
+            import torchaudio
+            import torchvision
         except ImportError:
             raise ImportError(
                 "TorchSpectrogramPreprocessor requires torchaudio and torchvision packages. Please install them to use this preprocessor."
@@ -911,6 +919,14 @@ class AudioPreprocessor(BasePreprocessor):
             }
         )
 
+    @property
+    def sample_rate(self):
+        return self.pipeline["load_audio"].get("sample_rate")
+
+    @sample_rate.setter
+    def sample_rate(self, value):
+        self.pipeline["load_audio"].set(sample_rate=value)
+
 
 @register_preprocessor_cls
 class AudioAugmentationPreprocessor(AudioPreprocessor):
@@ -1047,9 +1063,6 @@ def replace_nones(value):
         return "None"
     else:
         return str(value)
-
-
-from IPython.display import display, HTML
 
 
 def _action_html(title, action):
