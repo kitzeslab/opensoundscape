@@ -4,9 +4,11 @@ import warnings
 from aru_metadata_parser.parse import ARUFileTimestampParser
 from sklearn.metrics import average_precision_score, roc_auc_score
 import numpy as np
-from opensoundscape.ml.shallow_classifier import predict_on_hoplite
-from opensoundscape.ml.shallow_classifier import MLPClassifier
-from opensoundscape.ml.shallow_classifier import fit_on_hoplite_db
+from opensoundscape.ml.shallow_classifier import (
+    predict_on_hoplite,
+    MLPClassifier,
+    fit_on_hoplite_db,
+)
 from opensoundscape.ml.loss import BCELossWeakNegatives
 from opensoundscape.vector_database import (
     _find_matching_window_ids,
@@ -46,43 +48,66 @@ class SongSpace:
     We can add one or more shallow classifiers, and labeled training and evaluation datasets
 
     It provides utilities for:
-    - fitting a classifier on embeddings with optional validation and early stopping
-    - applying a classifier to embeddings in a hoplite database with filtering by metadata and existing scores
+    - ingesting audio datasets by saving their deep learning embeddings in a database
+    - creating and evaluating (shallow) classifiers
+    - applying a classifier to embeddings in a hoplite database with filtering by metadata and scores
     - selecting top-scoring or random clips from the database based on classifier predictions and filters
+    - embedding-based similarity search
 
-    The main idea is to enable users to easily complete an active learning loop:
+    The main purpose of this class is to enable users to easily complete an active learning loop:
     - start with a few labeled samples and a bunch of unlabeled audio
     - embed everything
     - use similarity search, shallow classifiers, or targeted/random search to find clips
     - review clips and label more data
     - apply the final classifier to select clips for manual verification
     - end with manually verified detections for downstream analysis
+    - potentially repeat with other species/classes
     """
 
-    def __init__(self, database, feature_extractor="birdnet"):
+    def __init__(self, database, feature_extractor="bs-convnext"):
         if isinstance(feature_extractor, str):
             _require_bmz()
             import bioacoustics_model_zoo as bmz
 
-            if feature_extractor == "birdnet":
+            if feature_extractor == "bs-convnext":
+                feature_extractor = bmz.BirdSetConvNeXT()
+            elif feature_extractor == "birdnet":
                 feature_extractor = bmz.BirdNET()
             elif feature_extractor == "perch":
                 feature_extractor = bmz.Perch()
+            elif feature_extractor == "perch2":
+                feature_extractor = bmz.Perch2()
             else:
                 raise ValueError(
-                    f"Unsupported feature extractor: {feature_extractor}. Supported options are 'birdnet' and 'perch'."
+                    f"Unsupported feature extractor: {feature_extractor}. Supported options are "
+                    "'bs-convnext','birdnet', 'perch', and 'perch2' (or pass your own model)."
                 )
+            version = getattr(feature_extractor, "version", "unknown_version")
+            self.model_source = f"bmz_v{bmz.__version__}:{feature_extractor.__class__.__name__}:{version}"
+        else:
+            version = getattr(feature_extractor, "version", "unknown_version")
+            self.model_source = (
+                f"custom:{feature_extractor.__class__.__name__}:{version}"
+            )
+
         if isinstance(database, (str, Path)):
             database = load_or_create_hoplite_usearch_db(
                 database,
                 embedding_dim=feature_extractor.classifier.in_features,
             )
+        else:
+            if database.get_embedding_dim() != feature_extractor.classifier.in_features:
+                raise ValueError(
+                    f"Database embedding dimension {database.get_embedding_dim()} does not match feature extractor output dimension {feature_extractor.classifier.in_features}"
+                )
         self.feature_extractor = feature_extractor
-        self.database = database
+        self._database = database
         self.classifiers = {}
         self.datasets = {}
         self.embedding_dim = database.get_embedding_dim()
         self.sample_duration = feature_extractor.preprocessor.sample_duration
+
+        # TODO: can we use a hash of feature extractor and preprocessor to ensure same model when re-loading the SongSpace
 
     def remove_classifier(self, name):
         """Remove a classifier from the SongSpace by name"""
@@ -98,7 +123,16 @@ class SongSpace:
 
     @property
     def db(self):
+        """alias for self.database"""
         return self.database
+
+    @property
+    def database(self):
+        """The database object used to store embeddings for this SongSpace
+
+        property to protect from accidental modification
+        """
+        return self._database
 
     def remove_dataset(self, name):
         """Remove a dataset from the SongSpace by name"""
@@ -156,7 +190,6 @@ class SongSpace:
             **kwargs: additional keyword arguments to pass to the feature extractor's embed() method
 
         """
-
         from opensoundscape.ml.datasets import _ingest_samples_argument
 
         samples_df, _ = _ingest_samples_argument(samples)
@@ -183,9 +216,12 @@ class SongSpace:
                 deployment_to_files[d] = [f]
 
         # loop over each deployment, embedding the corresponding samples
-        all_embedded = []
+        # all_embedded = []
         for deployment, files in deployment_to_files.items():
             deployment_samples_df = samples_df.loc[files]
+            # was trying to keep track of sample_id as embeddings are inserted, but
+            # this function skips already-embedded samples, making this tricky. Instead
+            # we will look up the sample ids as needed based on (file,start_time,end_time) windows
             _, sample_info = self.feature_extractor.embed_to_hoplite_db(
                 deployment_samples_df,
                 db=self.database,
@@ -195,13 +231,11 @@ class SongSpace:
                 project=dataset_name,
                 file_to_datetime=file_to_datetime,
                 **kwargs,
-                # target_layer=None,
                 # wandb_session=None,
                 # progress_bar=True,
                 # commit_frequency_batches=100,
                 # overflow_mode="warn",
-                # embedding_dim=None,
-                # strict_matching=False,
+                # strict_matching=False, # do we want True here?
                 # **dataloader_kwargs,
             )
         if dataset_name in self.datasets:
@@ -228,6 +262,55 @@ class SongSpace:
                 "allow_training": allow_training,
                 "audio_root": audio_root,
             }
+
+    # TODO: dictionary to manage audio_root per dataset (so that user can update if audio data moves)
+
+    def similarity_search(
+        self,
+        query_samples,
+        
+        k=5,
+        exact_search=False,
+        search_subset_size=None,
+        target_score=None,
+        audio_root=None,
+        search_kwargs=None,
+        **embedding_kwargs,
+    ):
+        """Find the k most similar embeddings in the database to each query audio sample
+
+        Args:
+            query_samples: audio file path, list of files, or dataframe with columns "file", "start_time", "end_time" specifying clips to embed and search for
+            k: number of similar samples to return; default 5
+            exact_search: default (False) uses an approximate nearest neighbor search for speed;
+                if True, uses exact search for maximum recall but slower speed
+            search_subset_size: if provided, limits the search to a random subset of all samples
+            target_score: if provided, returns samples close to the target similarity score rather than _most_ similar samples
+                - useful for finding samples that are similar but not too similar to the query samples
+            audio_root: if provided, used as prefix for audio files in query_samples;
+                if None, assumes query_samples already have absolute audio paths
+            search_kwargs: dict of additional keyword arguments passed to db.ui.search() or
+                brutalism.threaded_brute_search() if exact_search=True
+                exact_search=False: radius, threads, exact, log, progress
+                exact_search=True: batch_size, max_workers, rng_seed
+            **embedding_kwargs: additional keyword arguments passed to self.embed(), such as
+                batch_size and num_workers
+        Returns:
+            A dataframe with the same columns as the database metadata and an additional 'similarity' column, sorted by similarity to the query embedding
+        """
+        # use the database's built-in similarity search function
+        results = self.feature_extractor.similarity_search_hoplite_db(
+            query_samples,
+            self.database,
+            num_results=k,
+            exact_search=exact_search,
+            search_subset_size=search_subset_size,
+            target_score=target_score,
+            audio_root=audio_root,
+            search_kwargs=search_kwargs,
+            **embedding_kwargs,
+        )
+        return results
 
     def fit_classifier(
         self,
