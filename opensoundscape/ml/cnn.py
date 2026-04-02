@@ -2547,6 +2547,7 @@ class SpectrogramClassifier(SpectrogramModule):
         forward=True,
         backward=True,
         bypass_augmentations=False,
+        **dataloader_kwargs,
     ):
         """Profile the model preprocessing, forward, and backward speeds on a set of samples
 
@@ -2563,6 +2564,7 @@ class SpectrogramClassifier(SpectrogramModule):
             backward: bool, if True, profiles backward pass time [default: True]
             bypass_augmentations: bool, if True, bypasses data augmentations
                 during preprocessing [default: False]
+            **dataloader_kwargs: additional keyword arguments to pass to the dataloader
         Returns:
             a dictionary with timing information for:
                 - breakdown of time spent on each preprocessing step
@@ -2588,7 +2590,7 @@ class SpectrogramClassifier(SpectrogramModule):
             )
 
         dataloader = self.predict_dataloader(
-            samples, batch_size=batch_size, num_workers=num_workers
+            samples, batch_size=batch_size, num_workers=num_workers, **dataloader_kwargs
         )
         dataloader.dataset.dataset.bypass_augmentations = bypass_augmentations
 
