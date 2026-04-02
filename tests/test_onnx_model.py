@@ -307,7 +307,7 @@ def test_from_spectrogram_classifier_similar_values():
     om = ONNXModel(
         # "onnx_test.onnx",
         ort_session,
-        audio_sample_rate=model.sample_rate,
+        sample_rate=model.sample_rate,
         sample_duration=model.sample_duration,
         classes=model.classes,
         class_outputs_key="classifier",
