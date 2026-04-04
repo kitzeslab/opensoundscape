@@ -38,7 +38,7 @@ from opensoundscape.ml.cam import CAM
 from opensoundscape.ml.schedulers import CosineAnnealingWithWarmupScheduler
 import pytorch_grad_cam
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-
+from opensoundscape.vector_database import _require_hoplite
 
 from torchmetrics.classification import (
     MultilabelAveragePrecision,
@@ -54,6 +54,10 @@ from opensoundscape.ml.loss import (
     BCEWithLogitsLoss_hot,
     CrossEntropyLoss_hot,
     ResampleLoss,
+)
+from opensoundscape.vector_database import (
+    _check_or_set_model_id,
+    _check_or_set_sample_duration,
 )
 
 
@@ -395,7 +399,7 @@ class BaseModule:
         """currently only used for lightning
 
         not used by SpectrogramClassifier"""
-        batch_tensors, batch_labels = samples
+        batch_tensors, batch_labels = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
         batch_labels = batch_labels.to(self.device)
 
@@ -655,11 +659,57 @@ class SpectrogramModule(BaseModule):
         self.compute_per_class_metrics = True
         """if True, compute and log per-class metrics during training/validation"""
 
+    def change_classifier(self, new_classifier, classes=None):
+        """Replaces the classifier layer
+
+        replaces the network's final linear classifier layer with a new classifier
+
+        Args:
+            new_classifier: the new classifier to replace the existing one
+                typically, torch.nn.Linear or opensoundscape.ml.shallow_classifier.MLPClassifier object
+            classes: optional list of class names to set for the new classifier; if None, will attempt to copy from new_classifier.classes attribute
+        """
+        if classes is None:
+            try:
+                classes = new_classifier.classes
+            except AttributeError:
+                raise ValueError(
+                    "classes argument must be provided if new_classifier does not have a .classes attribute"
+                )
+
+        # get the number of input features to the classifier layer
+        # for torch.nn.Linear and MLPClassifier, this is the in_features attribute
+        # check that the new classifier has the same number of input features as the existing classifier layer, if possible
+        try:
+            in_features = self.classifier.in_features
+            assert (
+                new_classifier.in_features == in_features
+            ), f"new_classifier has {new_classifier.in_features} input features, but expected {in_features} to match existing classifier layer."
+        except AttributeError:
+            warnings.warn(
+                "Couldn't access .in_features of current classifier layer to check correct input dimension"
+            )
+
+        # replace the classifier layer with a new layer
+        clf_layer_name = self.network.classifier_layer
+        cnn_architectures.set_layer_from_name(
+            self.network, clf_layer_name, new_classifier
+        )
+
+        # update class list
+        self.classes = classes
+
+        # re-initialize metrics, using the new number of classes
+        # otherwise we'll get errors when computing metrics
+        # (plus we should discard any old metrics after changing classes)
+        self._init_torch_metrics()
+
     def change_classes(self, new_classes, hidden_layers=None):
         """change the classes that the model predicts
 
-        replaces the network's final linear classifier layer with a new layer
-        with random weights and the correct number of output features
+        replaces the network's final linear classifier layer with a new layer (or MLP, if
+        hidden_layers is not None) initialized with random weights and the correct number of output
+        features
 
         Supports torch.nn.Linear and opensoundscape.ml.shallow_classifier.MLPClassifier as the
         classifier layer to update. Will raise an error if self.network.classifier_layer is a
@@ -690,10 +740,11 @@ class SpectrogramModule(BaseModule):
 
         # create a new classifier layer with the correct number of output features
         if hidden_layers is None:
-            new_layer = torch.nn.Linear(in_features, len(new_classes))
+            new_classifier = torch.nn.Linear(in_features, len(new_classes))
+            new_classifier.classes = new_classes  # add classes attribute
         elif isinstance(hidden_layers, (list, tuple)):
             # create an MLPClassifier with the specified hidden layers
-            new_layer = shallow_classifier.MLPClassifier(
+            new_classifier = shallow_classifier.MLPClassifier(
                 input_size=in_features,
                 output_size=len(new_classes),
                 hidden_layer_sizes=hidden_layers,
@@ -705,22 +756,16 @@ class SpectrogramModule(BaseModule):
                 f"Got {hidden_layers} instead."
             )
 
-        # replace the classifier layer with a new layer
-        clf_layer_name = self.network.classifier_layer
-        cnn_architectures.set_layer_from_name(self.network, clf_layer_name, new_layer)
-
-        # update class list
-        self.classes = new_classes
-
-        # re-initialize metrics, using the new number of classes
-        # otherwise we'll get errors when computing metrics
-        # (plus we should discard any old metrics after changing classes)
-        self._init_torch_metrics()
+        self.change_classifier(new_classifier, classes=new_classes)
 
     @property
     def classifier(self):
         """return the classifier layer of the network, based on .network.classifier_layer string"""
         return self.network.get_submodule(self.network.classifier_layer)
+
+    @classifier.setter
+    def classifier(self, new_classifier):
+        self.change_classifier(new_classifier)
 
     @property
     def single_target(self):
@@ -740,6 +785,38 @@ class SpectrogramModule(BaseModule):
             self._single_target = st
             self._init_torch_metrics()
             self.loss_fn = CrossEntropyLoss_hot() if st else BCEWithLogitsLoss_hot()
+
+    def _generate_wandb_config(self):
+        # create a dictionary of parameters to save for this run
+        wandb_config = dict(
+            architecture=io.build_name(self.network),
+            sample_duration=self.preprocessor.sample_duration,
+            cuda_device_count=torch.cuda.device_count(),
+            mps_available=torch.backends.mps.is_available(),
+            classes=self.classes,
+            single_target=self.single_target,
+            opensoundscape_version=self.opensoundscape_version,
+        )
+        if "weight_decay" in self.optimizer_params:
+            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
+        else:
+            wandb_config["l2_regularization"] = "n/a"
+
+        if "lr" in self.optimizer_params:
+            wandb_config["learning_rate"] = self.optimizer_params["lr"]
+        else:
+            wandb_config["learning_rate"] = "n/a"
+
+        try:
+            wandb_config["sample_shape"] = [
+                self.preprocessor.height,
+                self.preprocessor.width,
+                self.preprocessor.channels,
+            ]
+        except:
+            wandb_config["sample_shape"] = "n/a"
+
+        return wandb_config
 
     def _init_torch_metrics(self):
         if self.single_target:
@@ -873,7 +950,7 @@ def _warn_output_size(dataloader, size, output_size_warning):
 
 
 @register_model_cls
-class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
+class SpectrogramClassifier(SpectrogramModule):
     """defines pure pytorch train, predict, and eval methods for a spectrogram classifier"""
 
     name = "SpectrogramClassifier"
@@ -1103,9 +1180,9 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 Optionally apply an activation layer such as sigmoid or
                 softmax to the raw outputs of the model.
                 options:
-                - None: no activation, return raw scores (ie logit, [-inf:inf])
-                - 'softmax': scores all classes sum to 1
-                - 'sigmoid': all scores in [0,1] but don't sum to 1
+                - None: no activation, return raw logit scores [-inf:inf]
+                - 'softmax': scores all classes sum to 1, scores between 0 and 1
+                - 'sigmoid': each class is independent, scores between 0 and 1
                 - 'softmax_and_logit': applies softmax first then logit
                 [default: None]
             split_files_into_clips:
@@ -1348,8 +1425,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         metrics = {}
         if targets is not None:
             # move tensors to device; avoid error float64 not supported on mps
-            targets = torch.tensor(targets, dtype=torch.float32).to(self.device)
-            scores = torch.tensor(scores, dtype=torch.float32).to(self.device)
+            targets = torch.as_tensor(targets, dtype=torch.float32).to(self.device)
+            scores = torch.as_tensor(scores, dtype=torch.float32).to(self.device)
 
             # check for invalid label values outside range of [0,1]
             assert (
@@ -2092,14 +2169,13 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # disable gradient updates during inference
 
-        for i, samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
-            (batch_data, _) = collate_audio_samples(samples)
+        for i, batch_samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
             batch_outs = self.batch_forward(
-                batch_data,
+                batch_samples,
                 targets=targets,
                 avgpool=avgpool_intermediates,
             )
-            invalid_sample_mask = [s.is_alternative for s in samples]
+            invalid_sample_mask = [s.is_alternative for s in batch_samples]
             # process and store outputs from batch
             for k, v in batch_outs.items():
                 # mask outputs for any invalid samples (samples that failed in preprocessing)
@@ -2138,6 +2214,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         commit_frequency_batches=100,
         overflow_mode="warn",
         embedding_dim=None,
+        strict_matching=False,
         **dataloader_kwargs,
     ):
         """Run inference on a dataloader, saving 1D outputs of target_layer to a hoplite database
@@ -2147,8 +2224,10 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             db: a hoplite database object or a path to a hoplite database folder
                 - if a path is provided, the database will be created if it does not exist
                 - when creating a new db, the embedding_dim argument must be provided
-            deployment: name of deployment to associate embeddings with
+            deployment: name of deployment (ie one recorder deployed once) to associate embeddings with
                 - if deployment does not exist in db, it will be created
+                - if you wish to include metadata per deployment (eg lat, lon, point name), first
+                    add the deployment to the db using perch_hoplite.db.interface.HopliteDB.insert_deployment()
             project: optional project name to associate deployment with
             file_to_datetime: optional function or dictionary mapping filenames to datetime objects
                 - used to set recording start times in the database
@@ -2167,10 +2246,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             audio_root: the root directory for relative paths to audio files
             embedding_exists_mode: str, behavior when an embedding already exists for a given
-                (dataset_name, source_id, offset) tuple. Options are:
+                embedding. Options are:
                     "skip": skip inserting the embedding (default)
                     "error": raise an error
                     "add": add a new embedding entry to the db with the same source info
+                Note: the strict_matching argument affects whether existing embeddings are only
+                    matched within a deployment/project or across all deployments/projects.
                 Note that hoplite doesn't currently support removing or replacing existing entries
             commit_frequency_batches: int, commit to db after every N batches[default: 1]
             overflow_mode: 'warn', 'error', or 'ignore' behvior when embedding values exceed
@@ -2179,6 +2260,11 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 - only used when creating a new hoplite db
                 - must match the output dimension of the model's target_layer
                 - if creating new db and embedding_dim is None, guesses based on self.classifier.in_features
+            strict_matching: bool, select strategy for matching existing deployments and embeddings
+                - if True, deployments are only considered matching if both deployment name and project match;
+                    embeddings are only considered matching if project, deployment, source_id, and offset all match
+                - if False [default], deployments from any project are matched by name only;
+                    embeddings are matched across all deployments and projects by source_id and offset only
             **dataloader_kwargs: additional keyword arguments to pass to the dataloader
 
         Returns:
@@ -2186,30 +2272,19 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         Effects:
             Inserts embeddings into the provided hoplite database
-            Adds deployment (and project) if they do not already exist in the database
+            Adds deployment and recording entries to db as needed
 
         """
-        # TODO: when passing a dataframe as sampels, we should be able to provide
-        # per-row deployment info (eg recorder id, point name, lat, lon, project),
-        # recording info (filename, timestamp)
-        # that gets inserted into the db and associated with the embeddings
-        # alternative api:
-        # embed_to_hoplite_db(samples_df, project_metadata)
-        # where project metadata is essentially info to merge with samples_df,
-        # what do we use as the merging index? need a file:deployment mapping
-        try:
-            import perch_hoplite
-
-        except ImportError as e:
-            raise ImportError(
-                "hoplite is not installed. Please install hoplite to use this feature."
-            ) from e
-        from perch_hoplite.db import interface as hoplite_interface
+        _require_hoplite()
+        from ml_collections import config_dict
         from opensoundscape.vector_database import (
             load_or_create_hoplite_usearch_db,
             _handle_existing_windows,
             _insert_embeddings,
         )
+
+        if project is None:
+            project = ""
 
         # load or create hoplite db if a path is provided (if hoplite db is passed, use it directly)
         if embedding_dim is None:
@@ -2219,16 +2294,24 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 pass  # keep None value
         db = load_or_create_hoplite_usearch_db(db, embedding_dim=embedding_dim)
 
-        # add deployment if provided and not yet in db
-        from ml_collections import config_dict
+        # check / insert metadata for model ID
+        _check_or_set_model_id(db, self.name)
 
+        # add deployment if provided and not yet in db
         # create deployment in db if it doesnt exist yet
-        # TODO: should we only match within project?
-        matching = db.get_all_deployments(config_dict.create(eq=dict(name=deployment)))
-        if len(matching) == 0:
-            deployment_id = db.insert_deployment(name=deployment, project=project or "")
+        if strict_matching:
+            project_matching_pattern = config_dict.create(
+                eq=dict(name=deployment, project=project),
+            )
         else:
-            deployment_id = matching[0].id
+            project_matching_pattern = config_dict.create(
+                eq=dict(name=deployment),
+            )
+        matching_deployments = db.get_all_deployments(project_matching_pattern)
+        if len(matching_deployments) == 0:
+            deployment_id = db.insert_deployment(name=deployment, project=project)
+        else:
+            deployment_id = matching_deployments[0].id
 
         # create dataloader, collate using `identity` to return list of AudioSample
         # rather than (samples, labels) tensors
@@ -2239,21 +2322,58 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         )
 
         # avoid duplicating embeddings in the db depending on embedding_exists_mode
-        # TODO: should we care if deployment and project match, or just (file, start, end)?
+        # this function modifies the sample dataframe in place to remove existing samples
         _handle_existing_windows(
-            db,
-            dataloader.dataset.dataset.label_df,
-            embedding_exists_mode,
-            audio_root=audio_root,
+            db=db,
+            clips=dataloader.dataset.dataset.label_df,
+            embedding_exists_mode=embedding_exists_mode,
+            deployment_id=deployment_id if strict_matching else None,
+            project=project if strict_matching else None,
         )
 
-        # check current files in db
-        file_to_id = {rec.filename: rec.id for rec in db.get_all_recordings()}
+        if len(dataloader.dataset) == 0:
+            # all samples already have embeddings, nothing to do
+            print("all samples already have embeddings in the database")
+            return db, {
+                "preprocessing_failures": dataloader.dataset.report(),
+                "insertion_failures": pd.DataFrame(
+                    columns=["file", "start_time", "end_time", "reason"]
+                ),
+            }
+        else:
+            print(
+                f"embedding {len(dataloader.dataset.dataset.label_df)} new windows to database"
+            )
+
+        # check current files in db;
+        # if strict_matching, only consider files from this deployment_id
+        # (will create new recording_id for a file if match is not found)
+        recordings = db.get_all_recordings(
+            filter=(
+                config_dict.create(eq=dict(deployment_id=deployment_id))
+                if strict_matching
+                else None
+            )
+        )
+
+        file_to_id = {rec.filename: rec.id for rec in recordings}
 
         # if file_to_datetime is a function, pre-compute look-up dictionary
         # to avoid recomputing datetime from file string for each embedding (many per file)
         if callable(file_to_datetime):
-            file_to_datetime = {f: file_to_datetime(f) for f in file_to_id.keys()}
+            # print("creating cached function for audio-> dateteme")
+            import functools
+
+            @functools.lru_cache(maxsize=None)
+            def cached_file_to_datetime(file):
+                if audio_root is not None:
+                    # use the relative path for the source name stored in the db
+                    file = str(Path(file).relative_to(audio_root))
+                return file_to_datetime(file)
+
+            file_mapper = cached_file_to_datetime
+        else:
+            file_mapper = file_to_datetime
 
         # move network to device
         self.network.to(self.device)
@@ -2262,23 +2382,26 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # use default target layer if none provided
         target_layer = self._check_or_get_default_embedding_layer(target_layer)
 
+        failed_to_insert = []
         for i, batch_samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
 
-            batch_data, _ = collate_audio_samples(batch_samples)
-
             # forward pass of network, getting only target_layer outputs
-            outs = self.batch_forward(batch_data, targets=[target_layer], avgpool=True)
+            outs = self.batch_forward(
+                batch_samples, targets=[target_layer], avgpool=True
+            )
 
-            _insert_embeddings(
+            batch_insertion_failures = _insert_embeddings(
                 db=db,
                 batch_samples=batch_samples,
                 batch_embeddings=outs[target_layer],
                 overflow_mode=overflow_mode,
                 file_to_id=file_to_id,
-                file_to_datetime=file_to_datetime,
+                file_to_datetime=file_mapper,
                 audio_root=audio_root,
                 deployment_id=deployment_id,
             )
+
+            failed_to_insert.extend(batch_insertion_failures)
 
             # commit once per commit_frequency_batches batches
             # committing is relatively slow, but we don't want to lose progress if interrupted
@@ -2299,7 +2422,16 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         db.commit()
 
         # return database object and info about any failed samples
-        return (db, {"failed_samples": dataloader.dataset.report()})
+        insertion_failures = pd.DataFrame(
+            failed_to_insert, columns=["file", "start_time", "end_time", "reason"]
+        )
+        return (
+            db,
+            {
+                "preprocessing_failures": dataloader.dataset.report(),
+                "insertion_failures": insertion_failures,
+            },
+        )
 
     def similarity_search_hoplite_db(
         self,
@@ -2342,64 +2474,28 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                 - "query": dictionary with query metadata
                 - "results": list of dictionaries with metadata for each retrieved sample
         """
-        try:
-            from perch_hoplite.db import brutalism
-            from perch_hoplite.db import score_functions
-            from perch_hoplite.db import search_results
-            from opensoundscape.vector_database import _collate_search_results
-        except ImportError as e:
-            raise ImportError(
-                "hoplite is not installed. Please install hoplite to use this feature."
-            ) from e
-
-        if search_kwargs is None:
-            search_kwargs = {}
-
-        if not exact_search:
-            if search_subset_size is not None:
-                raise NotImplementedError(
-                    "search_subset_size is only implemented for exact_search=True"
-                )
-            if target_score is not None:
-                raise NotImplementedError(
-                    "target_score is only implemented for exact_search=True"
-                )
+        _require_hoplite()
+        from opensoundscape.vector_database import similarity_search_hoplite_db
 
         # generate embeddings for the query samples
         print("embedding query samples")
         embeddings = self.embed(
             query_samples, audio_root=audio_root, **embedding_kwargs
         )
-
         print(
             f"performing similarity search for each of {embeddings.shape[0]} query samples"
         )
         compiled_search_results = []
         for (qfile, qstart_time, qend_time), emb in embeddings.iterrows():
-            query_embedding = emb.values.astype(db.get_embedding_dtype())
-            if exact_search:
-                score_fn = score_functions.get_score_fn(
-                    "dot", target_score=target_score
-                )
-                results, all_scores = brutalism.threaded_brute_search(
-                    db,
-                    query_embedding,
-                    num_results,
-                    score_fn=score_fn,
-                    sample_size=search_subset_size,
-                    **search_kwargs,
-                )
-
-            else:
-                ann_matches = db.ui.search(
-                    query_embedding, count=num_results, **search_kwargs
-                )
-                results = search_results.TopKSearchResults(top_k=num_results)
-                for k, d in zip(ann_matches.keys, ann_matches.distances):
-                    results.update(search_results.SearchResult(k, d))
-
-            # we have a TopKSearchResults object with .search_results containing
-            # a list of num_results SearchResult objects with .window_id and .sort_score
+            search_results = similarity_search_hoplite_db(
+                db=db,
+                query_embedding=emb.values,
+                num_results=num_results,
+                exact_search=exact_search,
+                search_subset_size=search_subset_size,
+                target_score=target_score,
+                search_kwargs=search_kwargs,
+            )
             compiled_search_results.append(
                 {
                     "query": {
@@ -2409,7 +2505,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
                         # "embedding": query_embedding,
                         "audio_root": audio_root,
                     },
-                    "results": _collate_search_results(db, results),
+                    "results": search_results,
                 }
             )
         return compiled_search_results
@@ -2511,7 +2607,8 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
 
         # iterate batches
         start_time = time()
-        for i, (batch_tensors, _) in enumerate(tqdm(dataloader)):
+        for i, samples_batch in enumerate(tqdm(dataloader)):
+            batch_tensors, _ = collate_audio_samples(samples_batch)
             preprocess_times.append(time() - start_time)
             batch_tensors = batch_tensors.to(self.device)
             batch_tensors.requires_grad = True
@@ -2775,12 +2872,12 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         # return list of AudioSamples containing .cam attributes
         return generated_samples
 
-    def batch_forward(self, batch_data, targets=(-1,), avgpool=True):
+    def batch_forward(self, batch_samples, targets=(-1,), avgpool=True):
         """
         Forward pass for a batch of data
 
         Args:
-            batch_data: a batch of samples from a dataloader
+            batch_samples: a batch of samples from a dataloader
             targets: list of layers from self.network to extract intermediate outputs from
                 the key -1 in the returned dictionary corresponds to the final output of the model
             avgpool: bool, if True, applies global average pooling to
@@ -2788,6 +2885,7 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         Returns:
             dictionary with key for each target layer. Key -1 corresponds to final model output.
         """
+        batch_data, _ = collate_audio_samples(batch_samples)
         outs = {k: None for k in targets}
 
         # define a function that will be used to save the output of each target layer
@@ -2943,6 +3041,176 @@ class SpectrogramClassifier(SpectrogramModule, torch.nn.Module):
         """
         self._device = torch.device(device)
 
+    def save_onnx(
+        self,
+        path,
+        activation_layer=None,
+        include_preprocessor_output=True,
+        include_embedding_output=True,
+        include_classifier_output=True,
+        **kwargs,
+    ):
+        """Export the model to ONNX format
+
+        The preprocessor must be a TorchSpectrogramPreprocessor with
+        torch.nn.Modules in preprocessor.pipeline['transform'].transforms
+        (see example below)
+
+        Requires that onnx, onnxruntime, and onnxscript are packages are installed
+
+        Args:
+            path: file path to save the ONNX model
+                if None, returns an in-memory ONNX model object without saving to disk
+            activation_layer: if provided, applies an activation layer to classifier outputs
+                options: 'softmax', 'sigmoid', or None [default: None]
+            include_preprocessor_output: if True, includes the output of the preprocessor
+                in the ONNX model outputs [default: True]
+            include_embedding_output: if True, includes the output of the embedding layer
+                in the ONNX model outputs [default: True]
+            include_classifier_output: if True, includes the output of the classifier
+                in the ONNX model outputs [default: True]
+            **kwargs: additional keyword arguments passed to
+                opensoundscape.ml.export.to_onnx_program()
+        Returns:
+            onnx_program: an in-memory ONNX program object
+
+        Example:
+
+        Exporting an EfficientNet model to ONNX format:
+        ```python
+        from opensoundscape import CNN, preprocessors
+
+        model = CNN(
+            architecture="efficientnet_b0",
+            classes=[0, 1, 2, 3],
+            sample_duration=3,
+            preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+            sample_rate=32000,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet.onnx")
+        ```
+
+        Using the saved model for inference with onnx runtime:
+
+        ```python
+        import onnx, onnxruntime
+        import numpy as np
+
+        combined_model = onnx.load("opso_efficientnet.onnx")
+        output_names = [node.name for node in combined_model.graph.output]
+
+        onnx.checker.check_model(combined_model)
+
+
+        EP_list = ["CPUExecutionProvider"]  # ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        ort_session = onnxruntime.InferenceSession("opso_efficientnet.onnx", providers=EP_list)
+
+        # make up some random inputs
+        audio_samples_per_input = (
+            combined_model.graph.input[0].type.tensor_type.shape.dim[2].dim_value
+        )
+        batch_size = 3
+        input_batched = np.random.rand(batch_size, 1, audio_samples_per_input).astype(
+            np.float32
+        )
+
+        # compute ONNX Runtime output prediction
+        ort_inputs = {ort_session.get_inputs()[0].name: input_batched}
+        ort_outs = ort_session.run(None, ort_inputs)
+
+        # restore the name-value dictionary mapping of outputs
+        outs_dict = {name: ort_outs[i] for i, name in enumerate(output_names)}
+        print(f"shape of outputs for inference on one batch of batch size {batch_size}:")
+        print({k: v.shape for k, v in outs_dict.items()})
+        ```
+
+        Example 2: Exporting a model with customized preprocessing transforms
+
+        ```python
+        from opensoundscape import CNN, preprocessors
+
+        model = CNN(
+            architecture="efficientnet_b0",
+            classes=[0, 1, 2, 3],
+            sample_duration=3,
+            preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+            sample_rate=32000,
+            bandpass_range=(3000, 10000),
+            lower_dB_range=-30,
+            rescale_mean_sd=(-30, 20),
+            spec_nfft=512,
+            spec_window_length=512,
+            spec_hop_length=128,
+            # resize_ft=(200, 512), # using resize_ft breaks serialization for json save/load!
+            n_mels=64,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet_melspec.onnx")
+        ```
+
+        Example 3: Writing a custom list of preprocessing transforms
+
+        ```python
+        import torchaudio
+        from opensoundscape import CNN, preprocessors
+        model = CNN("resnet18", classes=[0], sample_duration=5)
+        # custom list of torchaudio and torchvision transforms
+        my_transforms = [
+            torchaudio.transforms.Spectrogram(
+                n_fft=512,
+                win_length=512,
+                hop_length=128,
+            ),
+            torchaudio.transforms.AmplitudeToDB(top_db=80),
+        ]
+        model.preprocessor = preprocessors.TorchSpectrogramPreprocessor(
+            sample_rate=32000,
+            sample_duration=model.preprocessor.sample_duration,
+            torch_transforms=my_transforms,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet_custom.onnx")
+        ```
+        """
+
+        # give helpful error if preprocessor is not TorchSpectrogramPreprocessor
+        # or if preprocessor.pipeline['transform'].transforms is not accessible
+        assert isinstance(
+            self.preprocessor,
+            opensoundscape.preprocess.preprocessors.TorchSpectrogramPreprocessor,
+        ), """ONNX export only supported for TorchSpectrogramPreprocessor in which
+            preprocessor.pipeline["transform"].transforms contains a list of torch.nn.Modules
+            that preprocess the audio waveform signal into the model input format (eg spectrograms).
+            """
+
+        try:
+            transforms = self.preprocessor.pipeline["transform"].transforms
+        except AttributeError as e:
+            raise AttributeError(
+                """Could not access self.preprocessor.pipeline['transform'].transforms. 
+                ONNX export only supported for TorchSpectrogramPreprocessor in which
+                preprocessor.pipeline['transform'].transforms contains a list of
+                torch.nn.Modules that preprocess the audio waveform signal into the model
+                input format (eg spectrograms).
+                """
+            ) from e
+
+        n_audio_samples_per_input = (
+            self.preprocessor.sample_rate * self.preprocessor.sample_duration
+        )
+        onnx_program = opensoundscape.ml.export.to_onnx_program(
+            preprocessing_transforms=transforms,
+            torch_model=self.network,
+            input_length=n_audio_samples_per_input,
+            activation_layer=activation_layer,
+            include_embedding_output=include_embedding_output,
+            include_classifier_output=include_classifier_output,
+            include_preprocessor_output=include_preprocessor_output,
+            **kwargs,
+        )
+        if path is not None:
+            onnx_program.save(path)
+
+        return onnx_program
+
 
 # alias for convenience
 CNN = SpectrogramClassifier
@@ -3052,7 +3320,7 @@ class InceptionV3(SpectrogramClassifier):
         Returns:
             loss: loss value for the batch
         """
-        batch_tensors, batch_labels = samples
+        batch_tensors, batch_labels = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
         batch_labels = batch_labels.to(self.device)
 

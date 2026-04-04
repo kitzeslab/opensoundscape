@@ -1,10 +1,18 @@
-from tqdm.autonotebook import tqdm
+from typing import Literal
+
+import numpy as np
+import pandas as pd
 import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
+from torch.utils.data import DataLoader
+from tqdm.autonotebook import tqdm
+
 import opensoundscape
-from opensoundscape.ml.utils import _version_mismatch_warn
-from torch.utils.data import DataLoader, Dataset
+from opensoundscape.ml.datasets import EmbeddingDataset, HopliteDataset
 from opensoundscape.ml.loss import BCELossWeakNegatives
+from opensoundscape.ml.utils import _version_mismatch_warn
+from opensoundscape.vector_database import _require_hoplite
+from opensoundscape.vector_database import find_matching_windows, windows_to_dataframe
 
 
 class MLPClassifier(torch.nn.Module):
@@ -170,83 +178,36 @@ class MLPClassifier(torch.nn.Module):
         # all other keys are used as args to __init__
         return cls(**model_dict)
 
+    @classmethod
+    def from_torch_linear(cls, linear_layer, classes=None):
+        """initialize an MLPClassifier from a torch.nn.Linear layer
 
-class EmbeddingDataset(Dataset):
-    """simple dataset wrapper for embedding features and labels
-
-    Args:
-        features: tensor or np.array of input features
-            first dimension should be samples
-        labels: tensor or np.array of target labels
-            first dimension should be samples
-    """
-
-    def __init__(self, features, labels):
-        self.features = features
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.features)
-
-    def __getitem__(self, idx):
-        return self.features[idx], self.labels[idx]
-
-
-import numpy as np
-
-
-class HopliteDataset(Dataset):
-    """Dataset that retrieves embeddings from a HopliteDB for given files and start times"""
-
-    def __init__(self, db, label_df, dataset_name):
-        """Initialize the HopliteDataset
-
-        #TODO: to go fast, do we need to do batched retrieval?
+        Initializes 1-layer MLP, copying weights from linear_layer
 
         Args:
-            db: HopliteDB instance to retrieve embeddings from
-            label_df: DataFrame with multi-index (file, start_time, end_time) for samples and labels
-            dataset_name: name of the dataset in the HopliteDB to retrieve embeddings from
+            linear_layer: a torch.nn.Linear layer whose weight and bias will be used to initialize the classifier layer
+            of the MLPClassifier; should have shape (output_size, input_size) for weight and (output_size,) for bias
+            classes (optional): list of class names, if provided should have len=output_size
+                default: None
         """
-        self.db = db
-        self.label_df = label_df
-        self.dataset_name = dataset_name
-        self.selection_mode = "first"  # first or random for matching embeddings
-
-    @property
-    def label_df(self):
-        return self._label_df
-
-    @label_df.setter
-    def label_df(self, new_df):
-        self._label_df = new_df
-        self.files = new_df.index.get_level_values("file").astype(str).to_numpy()
-        self.start_times = (
-            new_df.index.get_level_values("start_time").to_numpy().astype(np.float16)
+        if not isinstance(linear_layer, torch.nn.Linear):
+            raise ValueError(f"linear_layer must be an instance of torch.nn.Linear")
+        input_size = linear_layer.in_features
+        output_size = linear_layer.out_features
+        model = cls(
+            input_size=input_size,
+            output_size=output_size,
+            classes=classes,
         )
-
-    def __len__(self):
-        return len(self.label_df)
-
-    def __getitem__(self, idx):
-        ids = self.db.get_embeddings_by_source(
-            self.dataset_name,
-            source_id=self.files[idx],
-            offsets=np.array([self.start_times[idx]], np.float16),
-        )
-        if self.selection_mode == "first":
-            id = ids[0]
-        elif self.selection_mode == "random":
-            id = np.random.choice(ids)
-        emb = self.db.get_embedding(id)
-
-        return emb, self.label_df.iloc[idx].values
+        # copy weights and bias from the linear layer to the classifier layer of the MLPClassifier
+        model.classifier.weight.data.copy_(linear_layer.weight.data)
+        model.classifier.bias.data.copy_(linear_layer.bias.data)
+        return model
 
 
-def fit_on_hoplite_db(
+def fit_on_hoplite(
     model,
     hoplite_db,
-    dataset_name,
     train_df,
     validation_df=None,
     batch_size=128,
@@ -254,9 +215,10 @@ def fit_on_hoplite_db(
     optimizer=None,
     criterion=None,
     device=torch.device("cpu"),
-    validation_interval=1,
+    validation_interval=100,
     logging_interval=100,
     early_stopping_patience=None,
+    **kwargs,
 ):
     """train a PyTorch model on Hoplite Embedding DB and labels with batching and early stopping
 
@@ -300,7 +262,10 @@ def fit_on_hoplite_db(
         early_stopping_patience: if provided and validation data is available, training will stop
         early if validation loss doesn't improve for this many steps (not validation evaluations)
         [Default: None, which means no early stopping]
+
+        **kwargs: additional keyword arguments passed to HopliteDataset; see HopliteDataset.__init__()
     """
+    _require_hoplite()
     # if no optimizer or criterion provided, use default AdamW and BCEWithLogitsLoss
     if optimizer is None:
         optimizer = torch.optim.AdamW(model.parameters())
@@ -310,7 +275,7 @@ def fit_on_hoplite_db(
     # move the model to the device
     model.to(device)
 
-    train_dataset = HopliteDataset(hoplite_db, train_df, dataset_name)
+    train_dataset = HopliteDataset(hoplite_db, train_df, **kwargs)
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=0
     )
@@ -320,7 +285,7 @@ def fit_on_hoplite_db(
     best_model_state = None
     best_step = -1
     if validation_df is not None:
-        validation_dataset = HopliteDataset(hoplite_db, validation_df, dataset_name)
+        validation_dataset = HopliteDataset(hoplite_db, validation_df, **kwargs)
         validation_loader = DataLoader(
             validation_dataset, batch_size=batch_size, shuffle=False, num_workers=0
         )
@@ -511,8 +476,7 @@ def fit(
             the entire dataset is used as a single batch
             [Default: 128]
 
-        steps: number of training steps (epochs); each step, all data is passed forward and
-        backward, and the optimizer updates the weights
+        steps: number of training steps forward/backward passes on one batch
             [Default: 1000]
 
         optimizer: torch.optim optimizer to use; default None uses AdamW
@@ -543,6 +507,18 @@ def fit(
     # move the model to the device
     model.to(device)
 
+    # if dataframes, extract values
+    if isinstance(train_features, pd.DataFrame):
+        train_features = train_features.values
+    if isinstance(train_labels, pd.DataFrame):
+        train_labels = train_labels.values
+    if validation_features is not None and isinstance(
+        validation_features, pd.DataFrame
+    ):
+        validation_features = validation_features.values
+    if validation_labels is not None and isinstance(validation_labels, pd.DataFrame):
+        validation_labels = validation_labels.values
+
     # convert x and y to tensors and move to the device
     train_features = torch.as_tensor(train_features, dtype=torch.float32, device=device)
     train_labels = torch.as_tensor(train_labels, dtype=torch.float32, device=device)
@@ -552,15 +528,23 @@ def fit(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=0
     )
 
+    def make_infinite(loader):
+        while True:
+            for data in loader:
+                yield data
+
+    infinite_data_loader = iter(make_infinite(train_loader))
+
     # if validation data provided, convert to tensors and move to the device
     best_val_loss = float("inf")
     best_model_state = None
     best_step = -1
+
     if validation_features is not None:
-        validation_features = torch.tensor(
+        validation_features = torch.as_tensor(
             validation_features, dtype=torch.float32, device=device
         )
-        validation_labels = torch.tensor(
+        validation_labels = torch.as_tensor(
             validation_labels, dtype=torch.float32, device=device
         )
         validation_dataset = EmbeddingDataset(validation_features, validation_labels)
@@ -570,24 +554,25 @@ def fit(
 
     for step in range(steps):
         model.train()
+        batch_features, batch_labels = next(infinite_data_loader)
 
-        # iterate over the training data in batches
-        for batch_features, batch_labels in train_loader:
-            batch_features = batch_features.to(device)
-            batch_labels = batch_labels.to(device)
+        # # iterate over the training data in batches
+        # for batch_features, batch_labels in train_loader:
+        batch_features = batch_features.to(device)
+        batch_labels = batch_labels.to(device)
 
-            # zero the gradients
-            optimizer.zero_grad()
+        # zero the gradients
+        optimizer.zero_grad()
 
-            # forward pass
-            outputs = model(batch_features)
+        # forward pass
+        outputs = model(batch_features)
 
-            # compute loss
-            loss = criterion(outputs, batch_labels)
+        # compute loss
+        loss = criterion(outputs, batch_labels)
 
-            # backward pass and optimization
-            loss.backward()
-            optimizer.step()
+        # backward pass and optimization
+        loss.backward()
+        optimizer.step()
 
         # Validation (optional)
         if validation_features is not None and (step + 1) % validation_interval == 0:
@@ -635,10 +620,8 @@ def fit(
             # log the loss and metrics
             if (step + 1) % logging_interval == 0:
                 print(
-                    f"Epoch {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}"
+                    f"Step {step+1}/{steps}, Loss: {loss:0.3f}, Val Loss: {val_loss:0.3f}, val AU ROC: {auroc:0.3f}, val MAP: {map:0.3f}"
                 )
-                print(f"\tval AU ROC: {auroc:0.3f}")
-                print(f"\tval MAP: {map:0.3f}")
 
             # Check early stopping condition based on steps since last improvement
             if early_stopping_patience is not None and best_step >= 0:
@@ -813,7 +796,9 @@ def fit_classifier_on_embeddings(
             if None, assumes train_df and validation_df already have absolute audio paths
 
     Returns:
-        x_train, y_train, x_val, y_val: the embedded training and validation samples and their labels, as torch.tensor
+        x_train, y_train, x_val, y_val, metrics:
+        the embedded training and validation samples and their labels, as torch.tensor, plus a
+        dictionary of validation metrics for the best model found during training
     """
     if n_augmentation_variants > 0:
         print(
@@ -821,7 +806,7 @@ def fit_classifier_on_embeddings(
         )
         x_train, y_train = augmented_embed(
             embedding_model,
-            train_df,
+            train_df[[]],
             n_augmentation_variants=n_augmentation_variants,
             batch_size=embedding_batch_size,
             num_workers=embedding_num_workers,
@@ -831,33 +816,39 @@ def fit_classifier_on_embeddings(
 
     else:
         print(f"Embedding the training samples without augmentation")
-        x_train = torch.tensor(
-            embedding_model.embed(
-                train_df,
-                return_dfs=False,
-                batch_size=embedding_batch_size,
-                num_workers=embedding_num_workers,
-                progress_bar=True,
-                audio_root=audio_root,
-            )
-        ).to(device)
-        y_train = torch.tensor(train_df.values).to(device).float()
+        x_train = embedding_model.embed(
+            train_df[[]],
+            return_dfs=False,
+            batch_size=embedding_batch_size,
+            num_workers=embedding_num_workers,
+            progress_bar=True,
+            audio_root=audio_root,
+        )
+        y_train = train_df.values
+
+    # cast to float tensor and move to device
+    # MPS framework doesn't support float64, so force float32 (.float() is an alias for float32)
+    x_train = torch.as_tensor(x_train, dtype=torch.float32, device=device)
+    y_train = torch.as_tensor(y_train, dtype=torch.float32, device=device)
 
     if validation_df is None:
         x_val = None
         y_val = None
     else:
         print("Embedding the validation samples")
-        x_val = torch.tensor(
-            embedding_model.embed(
-                validation_df,
-                return_dfs=False,
-                batch_size=embedding_batch_size,
-                num_workers=embedding_num_workers,
-                audio_root=audio_root,
-            )
-        ).to(device)
-        y_val = torch.tensor(validation_df.values).to(device).float()
+        x_val = embedding_model.embed(
+            validation_df[[]],
+            return_dfs=False,
+            batch_size=embedding_batch_size,
+            num_workers=embedding_num_workers,
+            audio_root=audio_root,
+        )
+        y_val = validation_df.values
+
+        # cast to float and move to device
+        # note that MPS framework doesn't support float64, use float32 instead
+        x_val = torch.as_tensor(x_val, dtype=torch.float32, device=device)
+        y_val = torch.as_tensor(y_val, dtype=torch.float32, device=device)
 
     print("Fitting the classifier")
     metrics = fit(
@@ -878,3 +869,347 @@ def fit_classifier_on_embeddings(
     # returning the embeddings and labels is useful
     # for re-training without re-embedding
     return x_train, y_train, x_val, y_val, metrics
+
+
+def predict_on_hoplite(
+    db,
+    samples,
+    classifier,
+    batch_size=1024,
+    return_df=True,
+    **kwargs,
+):
+    """Apply model to embeddings from database for each clip in samples
+
+    Args:
+        db: hoplite database containing embeddings
+        samples: dataframe with columns "file", "start_time", "end_time" specifying clips to apply the model to
+            - can pass None to apply classifier to all clips matching filters
+        classifier: MLPClassifier object or other classifier object to call on the torch.tensor embeddings
+        batch_size: n samples simultaneously processed when applying classifier to embeddings; default 1024
+        return_df: if True, returns a dataframe with the same index as samples and columns for each class;
+            if False, returns a numpy array of predictions
+            uses classifier.classes if available for df column names, otherwise uses integer column names
+        **kwargs: additional keyword arguments to pass to HopliteDataset
+    """
+    _require_hoplite()
+    # generate clip dataframe from samples
+    sample_duration = db.get_metadata("model").get("sample_duration")
+    dataset = HopliteDataset(
+        db=db, samples=samples, clip_duration=sample_duration, **kwargs
+    )
+    dataloader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,  # collate_fn=opso.utils.identity
+    )
+    preds = []
+    device = next(classifier.parameters()).device
+    for batch_emb, batch_labels in tqdm(dataloader):
+        with torch.no_grad():
+            batch_preds = classifier(
+                torch.as_tensor(batch_emb, dtype=torch.float32, device=device)
+            )
+            preds.append(batch_preds.cpu().numpy())
+    preds = np.concatenate(preds)
+
+    if return_df:
+        classes = (
+            classifier.classes
+            if hasattr(classifier, "classes")
+            else range(preds.shape[1])
+        )
+        preds = pd.DataFrame(preds, columns=classes)
+        preds.index = dataset.label_df.index
+    return preds
+
+
+def select_from_hoplite(
+    db,
+    classifier,
+    classes,
+    k=5,
+    strategy: Literal["top_k", "random_k", "all"] = "top_k",
+    batch_size=1024,
+    date_range=None,
+    time_range=None,
+    min_score=None,
+    max_score=None,
+    deployments=None,
+    projects=None,
+    recordings=None,
+    deployments_filter=None,
+    recordings_filter=None,
+    windows_filter=None,
+    annotations_filter=None,
+    random_state=None,
+    return_windows=False,
+    progress_bar=False,
+):
+    """Extract top-scoring or random clips from the database based on classifier predictions and filters
+
+    Args:
+        db: hoplite database containing embeddings
+        classifier: MLPClassifier object or other classifier object to call on the torch.tensor embeddings
+        classes: list of class names to select clips for; if None, selects clips for every class in classifier
+        k: number of clips to return per class; default 5 (ignored if strategy="all")
+        strategy: which clips to select:
+            "top_k" to return the top k clips for each class
+            "random_k" to return k random clips
+            "all" to return all clips (ignores `k`)
+            default "top_k"
+        batch_size: n samples simultaneously processed when applying classifier to embeddings; default 1024
+        date_range: tuple of (start_date, end_date) to filter clips by date;
+            Formats: datetime.datetime, datetime.date, or string in "YYYY-MM-DD" format; if None, does not filter by date
+            Can pass (date,None) or (None,date) to filter by only start or end date, respectively
+        time_range: tuple of (start_time, end_time) to filter clips by time of day; if None, does not filter by time of day
+            Formats: datetime.datetime, datetime.time or string in "HH:MM:SS" format
+            Note: filters by time of day of the _recording_ start time (rather than audio clip start time)
+            Assumes time zone match between time_range values and recording timestamps in the database
+        min_score: minimum score to filter clips by existing score in the database; if None, does not threshold by min score
+        max_score: maximum score to filter clips by existing score in the database; if None, does not restrict by max score
+        deployments: list of deployment names to filter by; if None, does not filter by deployment
+        projects: list of project names to filter by; if None, does not filter by project
+        recordings: list of recording names to filter by; if None, does not filter by recording
+        deployments_filter: custom filter dict for deployments; if provided, overrides deployments argument
+        recordings_filter: custom filter dict for recordings; if provided, overrides recordings argument
+        windows_filter: custom filter dict for windows; if provided, overrides date_range, time_range arguments
+        annotations_filter: custom filter dict for annotations in hoplite DB
+    """
+    np.random.seed(random_state)
+
+    _require_hoplite()
+    # find all matching clips
+    from ml_collections import config_dict
+
+    matching_windows = find_matching_windows(
+        db=db,
+        date_range=date_range,
+        time_range=time_range,
+        deployments=deployments,
+        projects=projects,
+        recordings=recordings,
+        deployments_filter=deployments_filter,
+        recordings_filter=recordings_filter,
+        windows_filter=windows_filter,
+        annotations_filter=annotations_filter,
+    )
+
+    # apply classifier in batches to matching windows
+    all_scores = []
+    device = next(classifier.parameters()).device  # probably just stay on CPU here?
+    for i in tqdm(
+        range(0, len(matching_windows), batch_size), disable=not progress_bar
+    ):
+        batch_windows = matching_windows[i : i + batch_size]
+        batch_window_ids = [w.id for w in batch_windows]
+        batch_embs = db.get_embeddings_batch(batch_window_ids)
+        batch_embs_tensor = torch.as_tensor(
+            batch_embs, dtype=torch.float32, device=device
+        )
+        with torch.no_grad():
+            batch_scores = classifier(batch_embs_tensor).cpu().numpy()
+        all_scores.append(batch_scores)
+    all_scores = np.concatenate(all_scores)  # shape (n_matching_windows, n_classes)
+
+    if classes is None:
+        classes = (
+            classifier.classes
+            if hasattr(classifier, "classes")
+            else range(all_scores.shape[1])
+        )
+    else:
+        # check that class names are valid
+        if hasattr(classifier, "classes"):
+            mismatch = set(classes) - set(classifier.classes)
+            if len(mismatch) > 0:
+                raise ValueError(
+                    f"Invalid class names: {mismatch}. Class names must be in classifier.classes: {classifier.classes}"
+                )
+        else:
+            if max(classes) >= all_scores.shape[1]:
+                raise ValueError(
+                    f"Invalid class indices: {set(classes) - set(range(all_scores.shape[1]))}. Class indices must be between 0 and {all_scores.shape[1]-1}"
+                )
+
+    class_dict = {c: i for i, c in enumerate(classes)}  # map class names to indices
+
+    results = {}
+    for class_name, clsidx in class_dict.items():
+        cls_scores = all_scores[:, clsidx]
+        cls_windows = np.array(matching_windows)
+
+        # score thresholding by min and max score
+        mask = np.ones_like(cls_scores, dtype=bool)
+        if min_score is not None:
+            mask = mask & (cls_scores >= min_score)
+        if max_score is not None:
+            mask = mask & (cls_scores <= max_score)
+        cls_scores = cls_scores[mask]
+        cls_windows = np.array(cls_windows)[mask]
+
+        # select clips based on strategy
+        # if len(cls_windows) == 0:
+        #     print(f"No clips found for class {class_name} after applying filters and score thresholds")
+        if len(cls_windows) < k:
+            # select all since fewer than k
+            pass
+        elif strategy == "top_k":
+            indices_of_k_largest = np.argpartition(cls_scores, -k)[-k:]
+            cls_windows = cls_windows[indices_of_k_largest]
+            cls_scores = cls_scores[indices_of_k_largest]
+
+        elif strategy == "random_k":
+            selected_indices = np.random.choice(len(cls_windows), size=k, replace=False)
+            cls_windows = cls_windows[selected_indices]
+            cls_scores = cls_scores[selected_indices]
+        elif strategy == "all":
+            pass  # retain all
+        else:
+            raise ValueError(
+                f"Invalid strategy: {strategy}. Must be one of 'top_k', 'random_k', or 'all'."
+            )
+        # add score to each window
+        for w, s in zip(cls_windows, cls_scores):
+            w.score = s
+
+        results[class_name] = cls_windows
+
+    # optimization: if random and not using score filtering, we could select random windows first the apply classifier
+    if return_windows:
+        return results
+    # return dataframe:
+    per_class_results = []
+    for class_name, windows in results.items():
+        df = windows_to_dataframe(windows)
+        df["class"] = class_name
+        per_class_results.append(df)
+    return pd.concat(per_class_results)
+
+
+def count_dets_hoplite(
+    db,
+    classifier,
+    classes,
+    min_score=None,
+    max_score=None,
+    score_bins=None,
+    batch_size=1024,
+    date_range=None,
+    time_range=None,
+    deployments=None,
+    projects=None,
+    recordings=None,
+    deployments_filter=None,
+    recordings_filter=None,
+    windows_filter=None,
+    annotations_filter=None,
+    progress_bar=False,
+):
+    """Count detections in score bins/ranges based on classifier predictions and filters
+
+    Compared to select_from_hoplite, this function does not return the selected clips but just
+    counts the number of clips in each score bin/range for each class. This can be quick and
+    memory efficient for counting detections in large datasets if you don't need clip info.
+
+    Args:
+        db: hoplite database containing embeddings classifier: MLPClassifier object or other
+        classifier object to call on the torch.tensor embeddings classes: list of class names to
+        select clips for; if None, selects clips for every class in classifier min_score: minimum
+        score to filter clips by existing score in the database; if None, does not threshold by min
+        score max_score: maximum score to filter clips by existing score in the database; if None,
+        does not restrict by max score score_bins: if provided, a list of tuples (low, high) score
+        ranges to count detections in
+            - if None, reports all scores above min_score and below max_score in a single bin
+            - if provided, min_score and max_score are ignored and bins are determined by score_bins
+        batch_size: n samples simultaneously processed when applying classifier to embeddings;
+        default 1024 date_range: tuple of (start_date, end_date) to filter clips by date;
+            Formats: datetime.datetime, datetime.date, or string in "YYYY-MM-DD" format; if None,
+            does not filter by date Can pass (date,None) or (None,date) to filter by only start or
+            end date, respectively
+        time_range: tuple of (start_time, end_time) to filter clips by time of day; if None, does
+        not filter by time of day
+            Formats: datetime.datetime, datetime.time or string in "HH:MM:SS" format Note: filters
+            by time of day of the _recording_ start time (rather than audio clip start time) Assumes
+            time zone match between time_range values and recording timestamps in the database
+        deployments: list of deployment names to filter by; if None, does not filter by deployment
+        projects: list of project names to filter by; if None, does not filter by project
+        recordings: list of recording names to filter by; if None, does not filter by recording
+        deployments_filter: custom filter dict for deployments; if provided, overrides deployments
+        argument recordings_filter: custom filter dict for recordings; if provided, overrides
+        recordings argument windows_filter: custom filter dict for windows; if provided, overrides
+        date_range, time_range arguments annotations_filter: custom filter dict for annotations in
+        hoplite DB
+
+    Returns:
+        counts: dict of dicts with counts[class][bin_range] = count of clips for class in score bin;
+        if score_bins is None, bin_range is (min_score, max_score)
+        (if min_score and/or max_score are also None, uses -inf &/or +inf)
+    """
+
+    _require_hoplite()
+
+    if classes is None:
+        classes = (
+            classifier.classes
+            if hasattr(classifier, "classes")
+            else range(classifier.out_features)
+        )
+    else:
+        # check that class names are valid
+        if hasattr(classifier, "classes"):
+            mismatch = set(classes) - set(classifier.classes)
+            if len(mismatch) > 0:
+                raise ValueError(
+                    f"Invalid class names: {mismatch}. Class names must be in classifier.classes: {classifier.classes}"
+                )
+        else:
+            n_classes = classifier.out_features
+            if max(classes) >= n_classes:
+                raise ValueError(
+                    f"Invalid class indices: {set(classes) - set(range(n_classes))}. "
+                    f"Class indices must be between 0 and {n_classes-1}."
+                )
+
+    class_dict = {c: i for i, c in enumerate(classes)}  # map class names to indices
+
+    # find all matching clips
+    matching_windows = find_matching_windows(
+        db=db,
+        date_range=date_range,
+        time_range=time_range,
+        deployments=deployments,
+        projects=projects,
+        recordings=recordings,
+        deployments_filter=deployments_filter,
+        recordings_filter=recordings_filter,
+        windows_filter=windows_filter,
+        annotations_filter=annotations_filter,
+    )
+
+    # apply classifier in batches to matching windows
+    if score_bins is None:
+        min_score = float("-inf") if min_score is None else min_score
+        max_score = float("inf") if max_score is None else max_score
+        score_bins = [(min_score, max_score)]
+    # else: score bins provides edges; min_score and max_score are ignored
+
+    counts = {c: {bin_range: 0 for bin_range in score_bins} for c in classes}
+    device = next(classifier.parameters()).device  # probably just stay on CPU here?
+    for i in tqdm(
+        range(0, len(matching_windows), batch_size), disable=not progress_bar
+    ):
+        batch_windows = matching_windows[i : i + batch_size]
+        batch_window_ids = [w.id for w in batch_windows]
+        batch_embs = db.get_embeddings_batch(batch_window_ids)
+        batch_embs_tensor = torch.as_tensor(
+            batch_embs, dtype=torch.float32, device=device
+        )
+        with torch.no_grad():
+            batch_scores = classifier(batch_embs_tensor).cpu().numpy()
+        # immediately count scores in bins for each class to avoid storing all scores in memory
+        for class_name, clsidx in class_dict.items():
+            cls_scores = batch_scores[:, clsidx]
+            for bin_range in score_bins:
+                bin_mask = (cls_scores >= bin_range[0]) & (cls_scores < bin_range[1])
+                counts[class_name][bin_range] += np.sum(bin_mask)
+    return counts

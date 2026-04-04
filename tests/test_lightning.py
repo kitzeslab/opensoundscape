@@ -40,7 +40,8 @@ def model_save_dir(request):
 
     # always delete this at the end
     def fin():
-        shutil.rmtree(path)
+        if path.exists():
+            shutil.rmtree(path)
 
         # lightning logs to a folder in the current dir by default
         # might want to change this to log to save_dir instead?
@@ -63,7 +64,9 @@ def test_lightning_spectrogram_module_save_load(model, model_save_dir):
     p = f"{model_save_dir}/temp.ptl"
     model.preprocessor.sample_duration = 5
     model.save(p)
-    m2 = lightning.LightningSpectrogramModule.load_from_checkpoint(p)
+    m2 = lightning.LightningSpectrogramModule.load_from_checkpoint(
+        p, weights_only=False
+    )
     assert m2.preprocessor.sample_duration == 5
 
 
@@ -79,6 +82,35 @@ def test_lightning_spectrogram_module_train(model, train_df_clips, model_save_di
     # remove saved checkpoints after test
     for f in model_save_dir.glob("*.*"):
         f.unlink()
+
+
+def test_lightning_spectrogram_module_train_wandb(
+    model, train_df_clips, model_save_dir
+):
+    # Use disabled mode so this test is hermetic in CI.
+    try:
+        import wandb
+
+        session = wandb.init(mode="disabled", reinit=True)
+    except Exception:
+        pytest.skip("Could not init wandb session")
+
+    model.fit_with_trainer(
+        train_df=train_df_clips,
+        validation_df=train_df_clips,
+        epochs=1,
+        batch_size=8,
+        accelerator="auto",
+        save_path=model_save_dir,
+        wandb_session=session,
+    )
+    session.finish()
+
+    # clean up wandb files
+    import os
+
+    if os.path.exists("wandb"):
+        shutil.rmtree("wandb")
 
 
 def test_lightning_spectrogram_module_predict(model, train_df_clips):

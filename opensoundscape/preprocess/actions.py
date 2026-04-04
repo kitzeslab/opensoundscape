@@ -20,13 +20,11 @@ See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
 
-import random
-import warnings
 import numpy as np
+import torch
 import torchvision
 import pandas as pd
 import copy
-from types import MethodType, FunctionType
 
 from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
 from opensoundscape.preprocess.action_functions import (
@@ -277,6 +275,14 @@ class Action(BaseAction):
 
 
 @register_action_cls
+class AudioToSamplesTensor(BaseAction):
+    """extract Audio.samples to a PyTorch tensor and add channel dimensions"""
+
+    def __call__(self, sample, **kwargs):
+        sample.data = torch.from_numpy(sample.data.samples).unsqueeze(0)
+
+
+@register_action_cls
 class AudioClipLoader(Action):
     """Action to load clips from an audio file
 
@@ -309,6 +315,21 @@ class AudioClipLoader(Action):
             sample_rate=sr,
             **dict(self.params, **kwargs),
         )
+
+
+@register_action_cls
+class AudioToTensor(BaseAction):
+    def __call__(self, sample, **kwargs):
+        """convert sample.data from Audio to Tensor
+
+        Args:
+            sample: AudioSample with .data=Audio object
+            **kwargs: ignored
+
+        Effects:
+            updates sample.data to be a torch.Tensor
+        """
+        sample.data = torch.tensor(sample.data.samples)
 
 
 @register_action_cls
@@ -387,11 +408,12 @@ def trim_audio(sample, target_duration, extend=True, random_trim=False, tol=1e-1
 
     # update the sample in-place
     sample.data = audio
-    if sample.start_time is None:
-        sample.start_time = start_time
-    else:
-        sample.start_time += start_time
-    sample.duration = target_duration
+    # retain original start_time and duration so that we know what audio was _loaded_ from the file
+    # if sample.start_time is None:
+    #     sample.start_time = start_time
+    # else:
+    #     sample.start_time += start_time
+    # sample.duration = target_duration
 
 
 @register_action_cls
@@ -417,3 +439,158 @@ class SpectrogramToTensor(Action):
         # use info from sample for desired shape and n channels
         kwargs.update(shape=[sample.height, sample.width], channels=sample.channels)
         sample.data = self.action_fn(sample.data, **dict(self.params, **kwargs))
+
+
+@register_action_cls
+class TorchTransforms(BaseAction):
+    """Action to apply torchvision transforms to sample
+
+    Args:
+        transforms: list of torchvision transform objects to apply in sequence
+            see https://pytorch.org/vision/stable/transforms.html
+            and https://pytorch.org/audio/stable/transforms.html
+    """
+
+    def __init__(self, transforms):
+        super().__init__()
+        self.transforms = transforms
+
+    @property
+    def transforms(self):
+        return self._sequential_transforms
+
+    @transforms.setter
+    def transforms(self, value):
+        """convert list of transforms to nn.Sequential object"""
+        if isinstance(value, torch.nn.Sequential):
+            self._sequential_transforms = value
+        else:
+            self._sequential_transforms = torch.nn.Sequential(*value)
+
+    def __call__(self, sample):
+        sample.data = self.transforms(sample.data)
+        return sample
+
+    def to_dict(self, ignore_attributes=()):
+        """export the composed transforms and their parameters to a dictionary
+
+        useful for saving to JSON
+
+        Will fail if any of the transforms or their parameters are not serializable.
+        """
+        d = super().to_dict(
+            ignore_attributes=ignore_attributes + ("transforms", "_transforms_composed")
+        )
+        try:
+            d["transforms"] = [
+                serialize_transform(t) for t in self.transforms.transforms
+            ]
+        except Exception as e:
+            raise ValueError(f"Could not serialize torch transforms") from e
+
+        return d
+
+    @classmethod
+    def from_dict(cls, dict):
+        """initialize from dictionary created by .to_dict()"""
+        try:
+            transforms = [
+                deserialize_transform(t_dict) for t_dict in dict["transforms"]
+            ]
+        except Exception as e:
+            raise ValueError(f"Could not deserialize torch transforms") from e
+
+        return cls(transforms=transforms)
+
+
+import torchaudio
+
+
+class MelScale(torchaudio.transforms.MelScale):
+    """Patch of torchaudio.transforms.MelScale that saves n_stft attribute
+
+    This allows re-loading from a dictionary with the correct n_stft value.
+    """
+
+    def __init__(
+        self,
+        n_mels=128,
+        sample_rate=16000,
+        f_min=0.0,
+        f_max=None,
+        n_stft=201,
+        norm=None,
+        mel_scale="htk",
+    ):
+        super().__init__(
+            n_mels=n_mels,
+            sample_rate=sample_rate,
+            n_stft=n_stft,
+            f_min=f_min,
+            f_max=f_max,
+            norm=norm,
+            mel_scale=mel_scale,
+        )
+        self.n_stft = n_stft
+
+
+import inspect
+
+
+def serialize_transform(transform):
+    """
+    Convert a torchvision/torchaudio transform object into a JSON-serializable dict.
+    """
+    cls = transform.__class__
+    params = {}
+
+    # Try to extract the constructor arguments (safe for most TorchVision/Audio transforms)
+    sig = inspect.signature(cls.__init__)
+    for name, param in sig.parameters.items():
+        if name == "self":
+            continue
+        if hasattr(transform, name):
+            value = getattr(transform, name)
+            # Convert tensors, enums, etc. to JSON-friendly types
+            if hasattr(value, "tolist"):
+                value = value.tolist()
+            params[name] = value
+
+    return {"module": cls.__module__, "class": cls.__name__, "params": params}
+
+
+def deserialize_transform(transform_dict):
+    """
+    Recreate a transform from a serialized dict.
+    """
+    module_name = transform_dict["module"]
+    class_name = transform_dict["class"]
+    params = transform_dict["params"]
+
+    # Dynamically import module and class
+    module = __import__(module_name, fromlist=[class_name])
+    cls = getattr(module, class_name)
+    return cls(**params)
+
+
+import torch
+
+
+class TorchCropFreq(torch.nn.Module):
+
+    # note: only for linear frequency spectrograms
+    # for MelSpectrograms, specify f_min and f_max during MelSpectrogram creation
+    def __init__(self, f_min, f_max, sample_rate, n_fft):
+        super().__init__()
+        self.f_min = f_min
+        self.f_max = f_max
+        self.sample_rate = sample_rate
+        self.n_fft = n_fft
+
+    def forward(self, tensor):
+        freq_res = self.sample_rate / self.n_fft
+        min_bin = int(self.f_min / freq_res)
+        max_bin = int(self.f_max / freq_res)
+        return torchvision.transforms.functional.crop(
+            tensor, min_bin, 0, max_bin - min_bin, tensor.shape[-1]
+        )
