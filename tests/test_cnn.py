@@ -198,7 +198,7 @@ def test_save_load_pickel(train_df, model_save_path, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -226,7 +226,7 @@ def test_train_single_target(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -243,12 +243,14 @@ def test_train_wandb(train_df, temp_model_dir):
     except Exception:
         pytest.skip("Could not init wandb session")
 
-    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model = cnn.CNN(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, sample_rate=None
+    )
     model.train(
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -284,7 +286,7 @@ def test_train_multi_target(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -310,7 +312,7 @@ def test_train_on_clip_df(train_df_clips, temp_model_dir):
         train_df_clips,
         train_df_clips,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -336,7 +338,7 @@ def test_train_with_audio_root(train_df_relative, temp_model_dir):
         train_df_relative,
         train_df_relative,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -359,7 +361,7 @@ def test_classifier_custom_lr(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=0,
+        steps=0,
     )
     assert model.optimizer.param_groups[0]["lr"] == 0.001
     assert next(model.network.parameters()) in model.optimizer.param_groups[0]["params"]
@@ -385,7 +387,7 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -395,7 +397,7 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=0,
+        steps=0,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -409,7 +411,7 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=0,
+        steps=0,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -431,7 +433,7 @@ def test_reset_or_keep_optimizer_and_scheduler(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=0,
+        steps=0,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -461,7 +463,7 @@ def test_train_amp_cpu(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -488,7 +490,7 @@ def test_train_amp_cuda(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -514,7 +516,7 @@ def test_train_amp_mps(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -536,7 +538,7 @@ def test_train_resample_loss(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -556,7 +558,7 @@ def test_train_one_class(train_df, temp_model_dir):
         train_df[[0]],
         train_df[[0]],
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -663,7 +665,7 @@ def test_predict_on_empty_list():
     expected = ["file", "start_time", "end_time", 0, 1]
     assert list(scores.reset_index().columns) == expected
 
-    scores = model.predict([], split_files_into_clips=False)
+    scores = model.predict([])
     expected = ["index", 0, 1]
     assert list(scores.reset_index().columns) == expected
 
@@ -733,7 +735,7 @@ def test_prediction_overlap(test_df):
         architecture="resnet18",
         classes=[0, 1],
         sample_duration=5.0,
-        sample_rate=22050,
+        sample_rate=None,
         arch_weights=None,
     )
     model.single_target = True
@@ -779,7 +781,7 @@ def test_predict_missing_file_is_invalid_sample(missing_file_df, test_df):
         arch_weights=None,
     )
 
-    with pytest.raises(ValueError):
+    with pytest.raises(FileNotFoundError):
         # first file is bad, will give ValueError
         model.predict(missing_file_df)
 
@@ -867,7 +869,7 @@ def test_train_predict_inception(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -906,23 +908,11 @@ def test_train_bad_index(train_df, temp_model_dir):
             train_df,
             train_df,
             save_path=temp_model_dir,
-            epochs=1,
+            steps=1,
             batch_size=2,
             save_interval=10,
             num_workers=0,
         )
-
-
-def test_predict_without_splitting(test_df):
-    model = cnn.CNN(
-        architecture="resnet18",
-        classes=[0, 1],
-        sample_duration=5.0,
-        sample_rate=22050,
-        arch_weights=None,
-    )
-    scores = model.predict(test_df, split_files_into_clips=False)
-    assert len(scores) == len(test_df)
 
 
 def test_predict_splitting_short_file(short_file_df):
@@ -961,14 +951,13 @@ def test_train_early_stopping(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=2,
+        steps=50,
         batch_size=2,
         save_interval=10,
         num_workers=0,
     )
     assert hasattr(model, "_best_score_early_stopping")
     assert hasattr(model, "_best_epoch_early_stopping")
-    # No need to manually remove directory - fixture handles cleanup
 
 
 def test_train_revert_to_best_epoch(train_df, temp_model_dir):
@@ -983,7 +972,7 @@ def test_train_revert_to_best_epoch(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=2,
         batch_size=2,
         save_interval=1,
         num_workers=0,
@@ -1063,7 +1052,7 @@ def test_save_load_and_train_model_resample_loss(
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -1166,8 +1155,8 @@ def test_eval(train_df):
         sample_rate=22050,
         arch_weights=None,
     )
-    scores = model.predict(train_df, split_files_into_clips=False)
-    model.eval(train_df.values, scores.values)
+    scores = np.random.uniform(0, 1, (len(train_df), 2))
+    model.eval(train_df.values, scores)
 
 
 def test_eval_raises_bad_labels(train_df):
@@ -1178,11 +1167,11 @@ def test_eval_raises_bad_labels(train_df):
         sample_rate=22050,
         arch_weights=None,
     )
-    scores = model.predict(train_df, split_files_into_clips=False)
+    scores = np.random.uniform(0, 1, (len(train_df), 2))
     train_df.iat[0, 0] = 2
     with pytest.raises(AssertionError):
         # raises AssertionError bc values outside [0,1] not allowed
-        model.eval(train_df.values, scores.values)
+        model.eval(train_df.values, scores)
 
 
 def test_train_no_validation(train_df, temp_model_dir):
@@ -1408,7 +1397,7 @@ def test_train_with_posixpath(train_df, temp_model_dir):
         train_df,
         train_df,
         save_path=temp_model_dir,
-        epochs=1,
+        steps=1,
         batch_size=2,
         save_interval=10,
         num_workers=0,
@@ -1445,28 +1434,6 @@ def test_predict_posixpath_missing_files(missing_file_df, test_df):
     assert (
         missing_file_df.index.values[0] in invalid_samples.reset_index()["file"].values
     )
-
-
-def test_predict_overlap_fraction_deprecated(test_df):
-    """
-    should give deprecation error if clip_overlap_fraction is passed.
-
-    Future version will remove this argument in favor of clip_overlap_fraction
-
-    also, should raise AssertionError if both args are passed (over-specified)
-    """
-    model = cnn.CNN(
-        architecture="resnet18",
-        classes=[0, 1],
-        sample_duration=5.0,
-        sample_rate=22050,
-        arch_weights=None,
-    )
-    with pytest.warns(DeprecationWarning):
-        scores = model.predict(test_df, overlap_fraction=0.5, final_clip=None)
-        assert len(scores) == 3
-    with pytest.raises(AssertionError):
-        model.predict(test_df, overlap_fraction=0.5, clip_overlap_fraction=0.5)
 
 
 def test_embed(test_df):
@@ -1610,7 +1577,11 @@ def test_call_masks_invalid_alternative_samples():
     them from being used in downstream processing or metrics calculations.
     """
     model = cnn.SpectrogramClassifier(
-        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        arch_weights=None,
+        sample_rate=None,
     )
     model.device = "cpu"
 

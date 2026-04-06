@@ -117,11 +117,11 @@ def test_spectrogram_preprocessor_output_size(
     """should return a sample with a tensor, check output shapes"""
 
     s = preprocessor.forward(sample)
-    assert list(s.data.shape) == [1, 224, 224]
+    assert list(s.data.shape) == [1, 257, 171]  # was 224,224 in <0.13.0
     s = preprocessor_3x50x50.forward(sample)
     assert list(s.data.shape) == [3, 50, 50]
     s = preprocessor_with_overlay.forward(sample)
-    assert list(s.data.shape) == [1, 224, 224]
+    assert list(s.data.shape) == [1, 257, 171]
     # retain original spec height if width/height are None
     preprocessor.width = None
     preprocessor.height = None
@@ -140,7 +140,7 @@ def test_interrupt_get_item(preprocessor, sample):
     """should retain original sample rate"""
     audio = preprocessor.forward(sample, break_on_key="random_trim_audio").data
     assert type(audio) == Audio
-    assert audio.samples.shape == (44100 * 10,)
+    assert audio.samples.shape == (preprocessor.sample_rate * 10,)
 
 
 def test_profile(preprocessor, sample):
@@ -152,10 +152,10 @@ def test_profile(preprocessor, sample):
 
 
 def test_audio_resample(preprocessor, sample):
-    """should retain original sample rate"""
-    preprocessor.pipeline.load_audio.set(sample_rate=16000)
+    """should use preprocessor's sample rate"""
+    preprocessor.sample_rate = 16000
     audio = preprocessor.forward(sample, break_on_key="random_trim_audio").data
-    assert audio.samples.shape == (16000 * 10,)
+    assert audio.samples.shape == (preprocessor.sample_rate * 10,)
 
 
 def test_spec_preprocessor_fails_on_short_file(short_sample, preprocessor):
@@ -249,10 +249,12 @@ def test_noisereduceaudiopreprocessor(sample):
 def test_noisereducespectrogrampreprocessor(short_sample):
     p1 = preprocessors.NoiseReduceSpectrogramPreprocessor(
         sample_duration=1,
+        sample_rate=32000,
         noisereduce_kwargs=dict(prop_decrease=1),
     )
     p2 = preprocessors.NoiseReduceSpectrogramPreprocessor(
         sample_duration=1,
+        sample_rate=32000,
         noisereduce_kwargs=dict(prop_decrease=0.5),
     )
     s1 = p1.forward(short_sample, bypass_augmentations=True).data

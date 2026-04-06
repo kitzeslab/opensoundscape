@@ -21,6 +21,7 @@ from opensoundscape.ml.utils import (
     apply_activation_layer,
     check_labels,
     _version_mismatch_warn,
+    _infinite_dataloader,
 )
 from opensoundscape.preprocess.preprocessors import (
     SpectrogramPreprocessor,
@@ -183,7 +184,7 @@ class BaseModule:
         self.lr_scheduler_params = {
             "class": CosineAnnealingWithWarmupScheduler,
             "kwargs": {
-                "max_steps": 10_000,
+                "max_steps": 1_000,
                 "warmup_fraction": 0.05,
                 "final_lr_ratio": 0.1,
             },
@@ -452,7 +453,6 @@ class BaseModule:
         return self.train_dataloader_cls(
             samples=samples,
             preprocessor=self.preprocessor,
-            split_files_into_clips=True,
             clip_overlap=0,
             final_clip="extend",
             bypass_augmentations=bypass_augmentations,
@@ -1114,7 +1114,7 @@ class SpectrogramClassifier(SpectrogramModule):
         """Early stopping configuration dictionary.
 
         Early stopping halts training if the validation score does not improve
-        for a specified number of epochs (patience).
+        for a specified number of steps (patience).
 
         The metric monitored for improvement is defined by self.score_metric, but
         adjust "mode" according to whether the score should be minimized (loss) or
@@ -1123,7 +1123,7 @@ class SpectrogramClassifier(SpectrogramModule):
         To enable early stopping, set `self.early_stopping_config['enabled']=True`
         and modify other parameters as desired. 
 
-        'patience': number of epochs with no improvement before stopping
+        'patience': number of steps with no improvement before stopping
         'min_delta': minimum change in the monitored quantity to qualify as an improvement
         'mode': 'max' or 'min', whether to look for maximum or minimum of the monitored quantity
         """
@@ -1142,11 +1142,9 @@ class SpectrogramClassifier(SpectrogramModule):
         batch_size=1,
         num_workers=0,
         activation_layer=None,
-        split_files_into_clips=True,
         clip_overlap=None,
-        clip_overlap_fraction=None,
-        clip_step=None,
         overlap_fraction=None,
+        clip_step=None,
         final_clip="extend",
         bypass_augmentations=True,
         invalid_samples_log=None,
@@ -1185,12 +1183,8 @@ class SpectrogramClassifier(SpectrogramModule):
                 - 'sigmoid': each class is independent, scores between 0 and 1
                 - 'softmax_and_logit': applies softmax first then logit
                 [default: None]
-            split_files_into_clips:
-                If True, internally splits and predicts on clips from longer audio files
-                Otherwise, assumes each row of `samples` corresponds to one complete sample
-            clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+            overlap_fraction, clip_overlap, clip_step, final_clip:
                 see `opensoundscape.utils.generate_clip_times_df`
-            overlap_fraction: deprecated alias for clip_overlap_fraction
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
             invalid_samples_log: if not None, samples that failed to preprocess
@@ -1247,10 +1241,8 @@ class SpectrogramClassifier(SpectrogramModule):
         dataloader = self.predict_dataloader(
             samples,
             bypass_augmentations=bypass_augmentations,
-            split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
             clip_overlap=clip_overlap,
-            clip_overlap_fraction=clip_overlap_fraction,
             clip_step=clip_step,
             final_clip=final_clip,
             batch_size=batch_size,
@@ -1598,7 +1590,7 @@ class SpectrogramClassifier(SpectrogramModule):
         wandb_session=None,
         progress_bar=True,
         audio_root=None,
-        reload_best_at_end=False,
+        reload_best_at_end=True,
         **dataloader_kwargs,
     ):
         """train the model on samples from train_dataset
@@ -1632,9 +1624,9 @@ class SpectrogramClassifier(SpectrogramModule):
             log_interval:
                 interval in batches to print training loss/metrics
             validation_interval:
-                interval in epochs to test the model on the validation set
+                interval in steps to test the model on the validation set
                 Note that model will only update it's best score and save best.model
-                file on epochs that it performs validation.
+                file on steps that it performs validation.
             reset_optimizer:
                 if True, resets the optimizer rather than retaining state_dict
                 of self.optimizer [default: False]
@@ -1666,7 +1658,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 - if None (default), samples must contain full paths to files
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             reload_best_at_end: if True, after training completes, reloads the best
-                model weights into self.network [default: False]
+                model weights into self.network [default: True]
                 Best model is determined by validation set's self.score_metric score
             **dataloader_kwargs: additional arguments passed to train_dataloader()
         Effects:
@@ -1772,7 +1764,7 @@ class SpectrogramClassifier(SpectrogramModule):
             **dataloader_kwargs,
         )
         # unlimited steps, cycle through dataset as needed
-        train_loader = _infinite_dataloader(train_loader)
+        train_batch_generator = _infinite_dataloader(train_loader)
 
         ######################
         # Optimization setup #
@@ -1800,23 +1792,27 @@ class SpectrogramClassifier(SpectrogramModule):
         for step in tqdm(range(steps), disable=not progress_bar):
             # 1 epoch = 1 view of each training sample
             # loss fn, backpropogation, and optimizer step generally occur after each batch
-            # validation generally occurs after validation_interval epochs
+            # validation generally occurs after validation_interval steps
 
             ### Training ###
             self._log(f"\nTraining Epoch {self.current_step}")
             self.network.train()
 
             # get one batch of training data and run training step
-            train_batch = next(train_loader)
+            train_batch = next(train_batch_generator)
             loss = self.training_step(train_batch, step)
             self.loss_hist.append(loss.item())
+
+            # update learning parameters each step
+            self.scheduler.step()
+            self.lr_scheduler_step += 1
 
             ###########
             # Logging #
             ###########
             # log basic train info (used to print every batch)
             if step % self.log_interval == 0:
-                # show some basic progress metrics during the epoch
+                # show some basic progress
                 self._log(f"Step: {step}/{steps} ({100 * step / steps :.1f}%)")
 
                 # Log the Loss function
@@ -1824,19 +1820,18 @@ class SpectrogramClassifier(SpectrogramModule):
                 self._log(f"\Running Average Loss: {avg_loss:.3f}")
                 self._log(f"\tMost Recent Step Loss: {loss.item():.3f}")
 
-            # update learning parameters each epoch
-            self.scheduler.step()
-            self.lr_scheduler_step += 1
+                # compute and reset TorchMetrics for training set
+                self.train_metrics[self.current_step] = self.eval()
 
-            if wandb_session is not None:
-                wandb_session.log({"loss": loss.item()})
-                wandb_session.log({"training": self.train_metrics[self.current_step]})
-                wandb_session.log({"step": self.current_step})
+                if wandb_session is not None:
+                    wandb_session.log({"loss": loss.item()})
+                    wandb_session.log(
+                        {"training": self.train_metrics[self.current_step]}
+                    )
+                    wandb_session.log({"step": self.current_step})
 
             #### Validation ###
             if step % validation_interval == 0:
-                # compute and reset TorchMetrics for training set
-                self.train_metrics[self.current_step] = self.eval()
 
                 if validation_df is not None:
                     self._log("\nValidation.")
@@ -1871,7 +1866,7 @@ class SpectrogramClassifier(SpectrogramModule):
                         level=2,
                     )
 
-            # save pickled model every n epochs
+            # save pickled model every n steps
             # pickled model file allows us to resume training
             if (
                 self.current_step + 1
@@ -1898,16 +1893,19 @@ class SpectrogramClassifier(SpectrogramModule):
         # optionally reload best epoch model weights at end of training
         if reload_best_at_end:
             best_model_path = f"{self.save_path}/best.pickle"
-            self._log(
-                f"Reloading best model from step {self.best_step} at end of training",
-                level=2,
-            )
-            self.load(best_model_path)
+            try:
+                self._log(
+                    f"Reloading best model from step {self.best_step} at end of training",
+                    level=2,
+                )
+                self.load(best_model_path)
+            except Exception as e:
+                self._log(f"Error occurred while reloading best model: {e}", level=2)
 
         ### Logging ###
         self._log("Training complete", level=2)
         self._log(
-            f"\nBest Model Appears at Epoch {self.best_step} "
+            f"\nBest Model Appears at Step {self.best_step} "
             f"with Validation score {self.best_score:.3f}."
         )
 
@@ -3462,17 +3460,3 @@ def _gpu_if_available():
     else:
         device = torch.device("cpu")
     return device
-
-
-def _infinite_dataloader(dataloader):
-    """Create an infinite iterator over a DataLoader
-
-    Args:
-        dataloader: a PyTorch DataLoader object
-
-    Returns:
-        an infinite iterator over the DataLoader
-    """
-    while True:
-        for batch in dataloader:
-            yield batch

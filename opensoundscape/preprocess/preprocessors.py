@@ -694,7 +694,7 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
         ```
 
         """
-        super().__init__(sample_duration=sample_duration)
+        super().__init__(sample_duration=sample_duration, sample_rate=sample_rate)
         self.channels = 1
 
         try:
@@ -979,6 +979,7 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
     def __init__(
         self,
         sample_duration,
+        sample_rate,
         overlay_samples=None,
         height=None,
         width=None,
@@ -995,6 +996,7 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
 
         Args:
             sample_duration: length in seconds of audio samples generated
+            sample_rate: target audio sample rate. if None, does not resample
             overlay_samples: if not None, will include an overlay action
                 samples can be a dataframe of file/start/end times or a set of audio files
             height: height of output sample (frequency axis)
@@ -1008,6 +1010,7 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
         noisereduce_kwargs = noisereduce_kwargs or {}
         super().__init__(
             sample_duration=sample_duration,
+            sample_rate=sample_rate,
             overlay_samples=overlay_samples,
             height=height,
             width=width,

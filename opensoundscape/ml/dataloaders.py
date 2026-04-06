@@ -24,9 +24,8 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
     - Dataframe with (file) as column
     - CategoricalLabels object
 
-    If start_times are not specified, default split_files_into_clips=True means that it will
-    automatically determine the number of clips that can be created from the file
-    (with overlap between subsequent clips based on overlap_fraction)
+    If start_times are not specified, it will automatically determine the number of clips that can
+    be created from the file (with overlap between subsequent clips based on overlap_fraction)
 
     Args:
         samples: any of the following:
@@ -38,11 +37,8 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             - Dataframe with (file) as column
             - CategoricalLabels object
         preprocessor: preprocessor object, eg AudioPreprocessor or SpectrogramPreprocessor
-        split_files_into_clips=True: use AudioFileDataset to automatically split
-            audio files into appropriate-lengthed clips
-        clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+        overlap_fraction, clip_overlap, clip_step, final_clip:
             see `opensoundscape.utils.generate_clip_times_df`
-        overlap_fraction: deprecated alias for clip_overlap_fraction
         bypass_augmentations: if True, don't apply any augmentations [default: True]
         invalid_sample_behavior: how to handle samples that fail to preprocess,
             one of "substitute", "placeholder", "raise", or "none"
@@ -69,7 +65,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         samples,
         preprocessor,
         clip_overlap=None,
-        clip_overlap_fraction=None,
+        overlap_fraction=None,
         clip_step=None,
         final_clip="extend",
         bypass_augmentations=True,
@@ -118,7 +114,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             samples=samples,
             preprocessor=preprocessor,
             clip_overlap=clip_overlap,
-            clip_overlap_fraction=clip_overlap_fraction,
+            overlap_fraction=overlap_fraction,
             clip_step=clip_step,
             final_clip=final_clip,
             audio_root=audio_root,

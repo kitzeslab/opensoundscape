@@ -173,7 +173,7 @@ train_df, validation_df = train_test_split(labels, test_size=0.3)
 model = CNN(architecture='resnet18', sample_duration=2, classes=class_list)
 
 # train the model to recognize the classes of interest in audio data
-model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
+model.train(train_df, validation_df, steps=500, num_workers=8, batch_size=256)
 ```
 
 ### Train a custom classifier on BirdNET or Perch embeddings

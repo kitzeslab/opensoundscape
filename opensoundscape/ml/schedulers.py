@@ -39,11 +39,11 @@ class CosineAnnealingWithWarmupScheduler(torch.optim.lr_scheduler.LRScheduler):
         else:
             # Cosine annealing
             cosine_epoch = self.last_epoch - self.warmup_steps
-            cosine_total_epochs = self.max_steps - self.warmup_steps
-            # Spread cosine function from [0,pi] over the remaining epochs
+            cosine_total_steps = self.max_steps - self.warmup_steps
+            # Spread cosine function from [0,pi] over the remaining steps
             # LR goes from base_lr to final_lr_ratio * base_lr
             cosine_value = torch.cos(
-                torch.tensor(torch.pi * cosine_epoch / cosine_total_epochs)
+                torch.tensor(torch.pi * cosine_epoch / cosine_total_steps)
             )
             # rescale and shift cosine to [final_lr_ratio,1]
             relative_lr = (1 + cosine_value) / 2

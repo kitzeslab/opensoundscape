@@ -12,6 +12,20 @@ import opensoundscape
 from opensoundscape.ml.sampling import ClassAwareSampler
 
 
+def _infinite_dataloader(dataloader):
+    """Create an infinite iterator over a DataLoader
+
+    Args:
+        dataloader: a PyTorch DataLoader object
+
+    Returns:
+        an infinite iterator over the DataLoader
+    """
+    while True:
+        for batch in dataloader:
+            yield batch
+
+
 def cas_dataloader(dataset, batch_size, num_workers):
     """
     Return a dataloader that uses the class aware sampler

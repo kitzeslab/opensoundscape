@@ -262,9 +262,7 @@ def test_audio_splitting_dataset(dataset_df, pre):
 
 
 def test_audio_splitting_dataset_overlap(dataset_df, pre):
-    dataset = AudioFileDataset(
-        dataset_df, pre, clip_overlap_fraction=0.5, final_clip=None
-    )
+    dataset = AudioFileDataset(dataset_df, pre, overlap_fraction=0.5, final_clip=None)
     assert len(dataset) == 18
 
     # load a sample
@@ -276,7 +274,7 @@ def test_audio_splitting_dataset_overlap_rounding(dataset_df):
     # issue #945 some overlap fractions like .1 caused rounding errors
     # modified AudioSample.from_series to round duration
     dataset = AudioFileDataset(
-        dataset_df, audio_pre, clip_overlap_fraction=0.1, final_clip=None
+        dataset_df, audio_pre, overlap_fraction=0.1, final_clip=None
     )
     for x in dataset:
         assert len(x.data.samples) == 48000 * 2

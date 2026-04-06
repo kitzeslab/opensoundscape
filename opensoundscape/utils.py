@@ -127,7 +127,7 @@ def generate_clip_times_df(
     full_duration,
     clip_duration,
     clip_overlap=None,
-    clip_overlap_fraction=None,
+    overlap_fraction=None,
     clip_step=None,
     final_clip="extend",
     rounding_precision=10,
@@ -144,9 +144,9 @@ def generate_clip_times_df(
         full_duration: The amount of time (seconds) to split into clips
         clip_duration (float):  The duration in seconds of the clips
         clip_overlap (float):   The overlap of the clips in seconds
-        clip_overlap_fraction (float): The overlap of the clips as a fraction of clip_duration
+        overlap_fraction (float): The overlap of the clips as a fraction of clip_duration
         clip_step (float):      The increment in seconds between starts of consecutive clips
-            - must only specify one of clip_overlap, clip_overlap_fraction, or clip_step
+            - must only specify one of clip_overlap, overlap_fraction, or clip_step
             - if all are None, overlap is set to 0
         final_clip (str):       Behavior if final_clip is less than clip_duration
             seconds long. By default, discards remaining time if less than
@@ -173,22 +173,22 @@ def generate_clip_times_df(
         )
 
     overspecified_overlap_err = (
-        "only one of clip_overlap, clip_overlap_fraction, or clip_step can be specified"
+        "only one of clip_overlap, overlap_fraction, or clip_step can be specified"
     )
     if clip_overlap is not None:
-        if clip_overlap_fraction is not None or clip_step is not None:
+        if overlap_fraction is not None or clip_step is not None:
             raise ValueError(overspecified_overlap_err)
         assert (
             clip_overlap < clip_duration
         ), "clip_overlap must be less than clip_duration"
-    elif clip_overlap_fraction is not None:
+    elif overlap_fraction is not None:
         if clip_overlap is not None or clip_step is not None:
             raise ValueError(overspecified_overlap_err)
-        assert 0 <= clip_overlap_fraction < 1, "clip_overlap_fraction must be in [0, 1)"
-        clip_overlap = clip_overlap_fraction * clip_duration
+        assert 0 <= overlap_fraction < 1, "overlap_fraction must be in [0, 1)"
+        clip_overlap = overlap_fraction * clip_duration
     elif clip_step is not None:
         # allow values outside of [0, clip_duration]
-        if clip_overlap is not None or clip_overlap_fraction is not None:
+        if clip_overlap is not None or overlap_fraction is not None:
             raise ValueError(overspecified_overlap_err)
         clip_overlap = clip_duration - clip_step
     else:
@@ -246,7 +246,7 @@ def make_clip_df(
     files,
     clip_duration,
     clip_overlap=None,
-    clip_overlap_fraction=None,
+    overlap_fraction=None,
     clip_step=None,
     final_clip="extend",
     return_invalid_samples=False,
@@ -273,7 +273,7 @@ def make_clip_df(
             belonging to that file in the returned clip dataframe.
         clip_duration (float): see generate_clip_times_df
         clip_overlap (float): see generate_clip_times_df
-        clip_overlap_fraction (float): see generate_clip_times_df
+        overlap_fraction (float): see generate_clip_times_df
         clip_step (float): see generate_clip_times_df
         final_clip (str): see generate_clip_times_df
         return_invalid_samples (bool): if True, returns additional value,
@@ -328,7 +328,7 @@ def make_clip_df(
                 full_duration=t,
                 clip_duration=clip_duration,
                 clip_overlap=clip_overlap,
-                clip_overlap_fraction=clip_overlap_fraction,
+                overlap_fraction=overlap_fraction,
                 clip_step=clip_step,
                 final_clip=final_clip,
             )

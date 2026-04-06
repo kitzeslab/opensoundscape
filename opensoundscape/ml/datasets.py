@@ -63,7 +63,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
 
     Effects:
         self.invalid_samples will contain a set of paths that did not successfully
-            produce a list of clips with start/end times, if split_files_into_clips=True
+            produce a list of clips with start/end times
     """
 
     def __init__(
@@ -88,7 +88,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
             audio_root=audio_root,
             sample_duration=preprocessor.sample_duration,
         )
-        _check_first_path(samples)
+        _check_first_path(samples, audio_root=audio_root)
         _check_label_types(samples)
         if len(samples) == 0:
             warnings.warn("Zero samples!")
@@ -272,7 +272,7 @@ class HopliteDataset(torch.utils.data.Dataset):
             **kwargs: passed to make_clip_df if samples need to be split into clips
         """
         label_df, invalid_samples = _ingest_samples_argument(
-            samples, audio_root=audio_root, clip_duration=clip_duration, **kwargs
+            samples, audio_root=audio_root, sample_duration=clip_duration, **kwargs
         )
         self.db = db
         self.selection_mode = selection_mode
@@ -330,7 +330,7 @@ class HopliteDataset(torch.utils.data.Dataset):
         return emb, self.label_df.iloc[idx].values
 
 
-def _ingest_samples_argument(samples, audio_root=None, clip_duration=None, **kwargs):
+def _ingest_samples_argument(samples, audio_root=None, sample_duration=None, **kwargs):
     """create clip df with MultiIndex (file,start_time,end_time)
 
     Args:
@@ -367,14 +367,14 @@ def _ingest_samples_argument(samples, audio_root=None, clip_duration=None, **kwa
 
     if type(samples) == list or type(samples) == np.ndarray:
         assert (
-            clip_duration is not None
+            sample_duration is not None
         ), "clip_duration must be provided when samples is a list of file paths"
         # create clip df
         # self.label_df will have multi-index (file,start_time,end_time)
         # can contain rows with start/end time np.nan for failed samples
         samples, invalid_samples = make_clip_df(
             files=samples,
-            clip_duration=clip_duration,
+            clip_duration=sample_duration,
             return_invalid_samples=True,
             audio_root=audio_root,
             **kwargs,
@@ -391,7 +391,7 @@ def _ingest_samples_argument(samples, audio_root=None, clip_duration=None, **kwa
         else:
             # one row per file, "file" is either a column or the index
             assert (
-                clip_duration is not None
+                sample_duration is not None
             ), "clip_duration must be provided when samples is a df without clip start/end times"
 
             if not "file" in samples.columns:
@@ -401,21 +401,28 @@ def _ingest_samples_argument(samples, audio_root=None, clip_duration=None, **kwa
                 samples = samples.reset_index()
 
             # 4. Samples dataframe has a column for "file"
-            # First, make a clip df
-            clip_df, invalid_samples = make_clip_df(
-                files=samples["file"],
-                clip_duration=clip_duration,
-                return_invalid_samples=True,
-                audio_root=audio_root,
-                **kwargs,
-            ).reset_index()
-            # Second, copy labels from original sample df to each row of the clip_df
-            # corresponding to the same file
-            clip_df = clip_df.merge(
-                samples,
-                on="file",
-                how="left",
-            ).set_index(keys)
+            # For each file, make clip df and copy labels
+            clip_dfs = []
+            files = samples["file"].values
+            labels = samples.drop(columns=["file"])
+            for i, file in enumerate(files):
+                clip_df, invalids = make_clip_df(
+                    files=[file],
+                    clip_duration=sample_duration,
+                    return_invalid_samples=True,
+                    audio_root=audio_root,
+                    **kwargs,
+                )
+                # copy labels from this file's row to all clip rows
+                labels_i = labels.iloc[i : i + 1].values  # keep as 2D array for concat
+                labels_i = np.repeat(labels_i, len(clip_df), axis=0)
+                labels_i_df = pd.DataFrame(
+                    labels_i, columns=labels.columns, index=clip_df.index
+                )
+                clip_df = pd.concat([clip_df, labels_i_df], axis=1)
+                clip_dfs.append(clip_df)
+                invalid_samples.update(invalids)
+            samples = pd.concat(clip_dfs, ignore_index=True).set_index(keys)
     else:
         raise ValueError(f"Unsupported type for samples: {type(samples)}")
 
@@ -428,10 +435,10 @@ def _check_first_path(samples, audio_root=None):
         first_path, start, end = samples.index[0]
         if audio_root is not None:
             first_path = Path(audio_root) / first_path
-        assert isinstance(
-            first_path, (str, Path)
-        ), f"Expected str or Path, got {type(first_path)}"
-        assert Path(first_path).exists(), f"First file {first_path} was not found."
+        if not isinstance(first_path, (str, Path)):
+            raise TypeError(f"Expected str or Path, got {type(first_path)}")
+        if not Path(first_path).exists():
+            raise FileNotFoundError(f"First file {first_path} was not found.")
 
 
 def _check_label_types(samples):

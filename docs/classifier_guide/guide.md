@@ -303,11 +303,13 @@ For example, as shown here (Fig. 14a), a 2x2 region of pixels in the image is mu
 
 Fig. 14. Example of how kernels work on images to generate predictions.
 
-## Batches and epochs
+## Batches, steps, and epochs
 
 As described at the start of this section, a CNN learns on batches of clips viewed many times. There will usually be multiple batches of clips viewed each epoch, model weights are updated from epoch to epoch, models are evaluated at the end of each epoch to determine how they perform on the validation dataset, and the final epoch during training does not necessarily produce the best model.
 
 We have typically used 20-100 epochs as our standard for training models, but this is not necessarily the correct choice in every case. Too high and a model may "overfit" to a dataset (i.e., it thinks only clips exactly like the training clips are the target sound for its classes). Too low and it might not learn enough about the target sound(s). You may choose to investigate how much performance changes from epoch to epoch throughout the training process to make a decision.
+
+OpenSoundscape v0.13.0 switches to a "step based" training schedule: each batch is one step, and we choose the duration of training and learning rate schedule based on number of steps rather than keeping track of epochs. The default number of training steps is 1000. 
 
 ## Preprocessing
 
