@@ -92,6 +92,14 @@ opensoundscape.ml.utils module
    :undoc-members:
    :show-inheritance:
 
+opensoundscape.ml.export module
+-------------------------------
+
+.. automodule:: opensoundscape.ml.export
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 

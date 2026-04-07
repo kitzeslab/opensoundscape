@@ -24,7 +24,7 @@ docs/tutorials/rana_sierrae_2022.zip
 CLAUDE.md
 docs/tutorials/rasi_hawkears_train_val/
 docs/tutorials/*.csv
-docs/tutorials/agileDB/
+docs/tutorials/agileDB
 docs/tutorials/*.pt
+docs/tutorials/ssdb/
 opensoundscape/ml/datasets.py
-docs/tutorials/ssdb

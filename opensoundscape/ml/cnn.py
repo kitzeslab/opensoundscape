@@ -3,65 +3,51 @@
 For tutorials, see notebooks on opensoundscape.org
 """
 
+import copy
+import json
+import os
+import warnings
 from pathlib import Path
 from time import time
-import warnings
+
 import numpy as np
 import pandas as pd
-import os
-import copy
-
+import pytorch_grad_cam
 import torch
-import torch.nn.functional as F
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from torchmetrics.classification import (
+    MulticlassAUROC,
+    MulticlassAveragePrecision,
+    MultilabelAUROC,
+    MultilabelAveragePrecision,
+)
 from tqdm.autonotebook import tqdm
 
 import opensoundscape
-from opensoundscape.ml import cnn_architectures
-from opensoundscape.ml.utils import (
-    apply_activation_layer,
-    check_labels,
-    _version_mismatch_warn,
-)
-from opensoundscape.preprocess.preprocessors import (
-    SpectrogramPreprocessor,
-    BasePreprocessor,
-    preprocessor_from_dict,
-)
-from opensoundscape.preprocess import io
-from opensoundscape.ml.datasets import AudioFileDataset
-from opensoundscape.ml.cnn_architectures import inception_v3
-from opensoundscape.ml.dataloaders import SafeAudioDataloader, collate_audio_samples
-from opensoundscape.utils import identity
 from opensoundscape.logging import wandb_table
-from opensoundscape.ml import shallow_classifier
+from opensoundscape.ml import cnn_architectures, shallow_classifier
+from opensoundscape.ml.base_model import BaseModule
 from opensoundscape.ml.cam import CAM
-import pytorch_grad_cam
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from opensoundscape.vector_database import _require_hoplite
-
-from torchmetrics.classification import (
-    MultilabelAveragePrecision,
-    MultilabelAUROC,
-    MulticlassAveragePrecision,
-    MulticlassAUROC,
-)
-from torchmetrics import Accuracy
-
-import opensoundscape
-from opensoundscape.ml import cnn_architectures
+from opensoundscape.ml.cnn_architectures import inception_v3
+from opensoundscape.ml.dataloaders import collate_audio_samples
+from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.loss import (
     BCEWithLogitsLoss_hot,
     CrossEntropyLoss_hot,
     ResampleLoss,
 )
-from opensoundscape.vector_database import (
-    _check_or_set_model_id,
-    _check_or_set_sample_duration,
+from opensoundscape.ml.utils import (
+    _version_mismatch_warn,
+    _warn_output_size,
+    apply_activation_layer,
+    check_labels,
 )
-
-
-import warnings
-
+from opensoundscape.preprocess import io
+from opensoundscape.preprocess.preprocessors import (
+    SpectrogramPreprocessor,
+    preprocessor_from_dict,
+)
+from opensoundscape.vector_database import _check_or_set_model_id, _require_hoplite
 
 MODEL_CLS_DICT = dict()
 
@@ -83,409 +69,6 @@ def register_model_cls(model_cls):
     MODEL_CLS_DICT[io.build_name(model_cls)] = model_cls
     # return the function
     return model_cls
-
-
-class BaseModule:
-    """base class for pytorch and lightning models in opensoundscape
-
-    This class is intended to be subclassed by classes with more customized functionality.
-    For example, see SpectrogramModule, SpectrogramClassifier, and LightningSpectrogramModule.
-    """
-
-    def __init__(self):
-        super().__init__()
-
-        self.name = "BaseModule"
-        self.opensoundscape_version = opensoundscape.__version__
-
-        # TODO: set up logging of hyperparameters to arbitary logger
-
-        # model characteristics # TODO: maybe group into self.training_state dictionary
-        self.scheduler = None
-        """torch.optim.lr_scheduler object for learning rate scheduling"""
-
-        self.torch_metrics = {"accuracy": Accuracy("binary")}
-        """specify torchmetrics "name":object pairs to compute metrics during training/validation"""
-
-        self.score_metric = "accuracy"
-        """choose one of the keys in self.torch_metrics to use as the overall score metric
-        
-        this metric will be used to determine the best model during training
-        """
-
-        self.preprocessor = BasePreprocessor()
-        """an instance of BasePreprocessor or subclass that preprocesses audio samples into tensors
-
-        The preprocessor contains .pipline, and ordered set of Actions to run
-
-        preprocessor will have attributes .sample_duration (seconds)
-        and .height, .width, .channels for output shape (input shape to self.network)
-        
-        The pipeline can be modified by adding or removing actions, and by modifying parameters:
-        ```python
-            my_obj.preprocessor.remove_action('add_noise')
-            my_obj.preprocessor.insert_action('add_noise',Action(my_function),after_key='frequency_mask')
-        ```
-
-        Or, the preprocessor can be replaced with a different or custom preprocessor, for instance:
-        ```python
-        from opensoundscape.preprocess import AudioPreprocessor
-        my_obj.preprocessor = AudioPreprocessor(
-            sample_duration=5, 
-            sample_rate=22050
-        )
-        # this preprocessor returns 1d arrays of the audio signal
-        ```
-        """
-
-        # to use a custom DataLoader or Sampler, change these attributes
-        # to the custom class (init must take same arguments)
-        # or override .train_dataloader(), .predict_dataloader()
-        self.train_dataloader_cls = SafeAudioDataloader
-        """a DataLoader class to use for training, defaults to SafeAudioDataloader"""
-        self.inference_dataloader_cls = SafeAudioDataloader
-        """a DataLoader class to use for inference, defaults to SafeAudioDataloader"""
-
-        self.network = torch.nn.Module()
-        """a pytorch Module such as Resnet18 or a custom object"""
-
-        ### loss function ###
-        self.loss_fn = BCEWithLogitsLoss_hot()
-        """specify a loss function to use for training, eg BCEWithLogitsLoss_hot,
-        
-        by initializing a callable object or passing a function
-        """
-
-        self.optimizer_params = {
-            "class": torch.optim.SGD,
-            "kwargs": {
-                "lr": 0.01,
-                "momentum": 0.9,
-                "weight_decay": 0.0005,
-            },
-            "classifier_lr": None,  # optionally specify different lr for classifier layer
-        }
-        """optimizer settings: dictionary with "class" and "kwargs" to class.__init__
-        
-        for example, to use Adam optimizer set:
-        ```python
-        my_instance.optimizer_params = {
-            "class": torch.optim.Adam,
-            "kwargs": {
-                "lr": 0.001,
-                "weight_decay": 0.0005,
-            },
-        }
-        ```
-        """
-
-        self.lr_scheduler_params = {
-            "class": torch.optim.lr_scheduler.StepLR,
-            "kwargs": {
-                "step_size": 10,
-                "gamma": 0.7,
-            },
-        }
-        """learning rate schedule: dictionary with "class" and "kwargs" to class.__init__
-        
-        for example, to use Cosine Annealing, set:
-        ```python
-        model.lr_scheduler_params = {
-            "class": torch.optim.lr_scheduler.CosineAnnealingLR,
-            "kwargs":{
-                "T_max": n_epochs,
-                "eta_min": 1e-7,
-                "last_epoch":self.current_epoch-1
-        }
-        ```
-        """
-
-        self.use_amp = False
-        """if True, uses automatic mixed precision for training"""
-
-    def training_step(self, samples, batch_idx):
-        """a standard Lightning method used within the training loop, acting on each batch
-
-        returns loss
-
-        Effects:
-            logs metrics and loss to the current logger
-        """
-        batch_tensors, batch_labels = collate_audio_samples(samples)
-        batch_tensors = batch_tensors.to(self.device)
-        batch_labels = batch_labels.to(self.device)
-
-        batch_size = len(batch_tensors)
-
-        # automatic mixed precision
-        self.scaler = torch.amp.GradScaler(enabled=self.use_amp)
-        if "cuda" in str(self.device):
-            device_type = "cuda"
-            dtype = torch.float16
-        else:
-            device_type = "cpu"
-            dtype = torch.bfloat16
-        with torch.autocast(device_type=device_type, dtype=dtype):
-            output = self.network(batch_tensors)
-            loss = self.loss_fn(output, batch_labels)
-        if not self.lightning_mode:
-            # if not using Lightning, we manually call
-            # loss.backward() and optimizer.step()
-            # Lightning does this behind the scenes
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-            self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
-
-        # single-target torchmetrics expect labels as integer class indices rather than one-hot
-        y = batch_labels.argmax(dim=1) if self.single_target else batch_labels
-        # TODO: does not allow soft labels, but some torchmetrics expect long type?
-        batch_metrics = {
-            f"train_{name}": metric.to(self.device)(
-                output.detach(), y.detach().long()
-            ).cpu()
-            for name, metric in self.torch_metrics.items()
-        }
-
-        if self.lightning_mode:
-            self.log(
-                f"train_loss",
-                loss,
-                on_step=True,
-                on_epoch=True,
-                batch_size=len(batch_tensors),
-            )
-            self.log_dict(
-                batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
-            )
-            # when on_epoch=True, compute() is called to reset the metric at epoch end
-
-        return loss
-
-    # def predict_step(self, batch): #runs forward() if we don't override default
-
-    @property
-    def classifier_params(self):
-        """return the parameters of the classifier layer of the network
-
-        override this method if the classifier parameters should be retrieved in a different way
-        """
-        return self.classifier.parameters()
-
-    def configure_optimizers(
-        self,
-        reset_optimizer=False,
-        restart_scheduler=False,
-    ):
-        """standard Lightning method to initialize an optimizer and learning rate scheduler
-
-        Lightning uses this function at the start of training. Weirdly it needs to
-        return {"optimizer": optimizer, "scheduler": scheduler}.
-
-        Initializes the optimizer and  learning rate scheduler using the parameters
-        self.optimizer_params and self.scheduler_params, which are dictionaries with a key
-        "class" and a key "kwargs" (containing a dictionary of keyword arguments to initialize
-        the class with). We initialize the class with the kwargs and the appropriate
-        first argument: optimizer=opt_cls(self.parameters(), **opt_kwargs) and
-        scheduler=scheduler_cls(optimizer, **scheduler_kwargs)
-
-        You can also override this method and write one that returns
-        {"optimizer": optimizer, "scheduler": scheduler}
-
-        Uses the attributes:
-        - self.optimizer_params: dictionary with "class" key such as torch.optim.Adam,
-            and "kwargs", dict of keyword args for class's init
-        - self.scheduler_params: dictionary with "class" key such as
-            torch.optim.lr_scheduler.StepLR, and and "kwargs", dict of keyword args for class's init
-        - self.lr_scheduler_step: int, number of times lr_scheduler.step() has been called
-            - can set to -1 to restart learning rate schedule
-            - can set to another value to start lr scheduler from an arbitrary position
-
-        Note: when used by lightning, self.optimizer and self.scheduler should not be modified
-        directly, lightning handles these internally. Lightning will call the method without
-        passing reset_optimizer or restart_scheduler, so default=False results in not modifying .optimizer or .scheduler
-
-        Documentation:
-        https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.core.LightningModule.html#lightning.pytorch.core.LightningModule.configure_optimizers
-        Args:
-            reset_optimizer: if True, initializes the optimizer from scratch even if self.optimizer is not None
-            reset_scheduler: if True, initializes the scheduler from scratch even if self.scheduler is not None
-        Returns:
-            dictionary with keys "optimizer" and "scheduler" containing the
-            optimizer and learning rate scheduler objects to use during training
-        """
-
-        if reset_optimizer:
-            self.optimizer = None
-        if restart_scheduler:
-            self.scheduler = None
-            self.lr_scheduler_step = -1
-
-        # create optimizer, if it doesn't exist yet
-        # self.optimizer_params dictionary has "class" and "kwargs" keys
-        # copy the kwargs dict to avoid modifying the original values
-        # when the optimizer is stepped
-        optimizer = self.optimizer_params["class"](
-            self.network.parameters(), **self.optimizer_params["kwargs"].copy()
-        )
-
-        if self.optimizer_params["classifier_lr"] is not None:
-            # customize the learning rate of the classifier layer
-            try:
-                # Cannot check `param in param_list`. Instead, compare the objects' ids.
-                # see https://discuss.pytorch.org/t/confused-by-runtimeerror-when-checking-for-parameter-in-list/211308
-                classifier_param_ids = {id(p) for p in self.classifier_params}
-                # remove these parameters from their current group
-                for param_group in optimizer.param_groups:
-                    param_group["params"] = [
-                        p
-                        for p in param_group["params"]
-                        if id(p) not in classifier_param_ids
-                    ]
-            except Exception as e:
-                raise ValueError(
-                    "Could not access self.classifier.parameters(). "
-                    "Make sure self.classifier propoerty returns a torch.nn.Module object."
-                ) from e
-
-            # add them to a new group with custom learning rate
-            optimizer.add_param_group(
-                {
-                    "params": self.classifier_params,
-                    "lr": self.optimizer_params["classifier_lr"],
-                }
-            )
-
-        if hasattr(self, "optimizer") and self.optimizer is not None:
-            # load the state dict of the previously existing optimizer,
-            # updating the params references to match current instance of self.network
-            try:
-                opt_state_dict = self.optimizer.state_dict().copy()
-                opt_state_dict["params"] = self.network.parameters()
-                optimizer.load_state_dict(opt_state_dict)
-            except:
-                warnings.warn(
-                    "attempt to load state dict of existing self.optimizer failed. "
-                    "Optimizer will be initialized from scratch"
-                )
-            # TODO: write tests for lightning to check behavior of continued training
-
-        # create learning rate scheduler
-        # self.scheduler_params dictionary has "class" key and kwargs for init
-        # additionally use self.lr_scheduler_step to initialize the scheduler's "last_epoch"
-        # which determines the starting point of the learning rate schedule
-        # (-1 restarts the lr schedule from the initial lr)
-        args = self.lr_scheduler_params["kwargs"].copy()
-        args.update({"last_epoch": self.lr_scheduler_step})
-        scheduler = self.lr_scheduler_params["class"](optimizer, **args)
-
-        if self.scheduler is not None:
-            # load the state dict of the previously existing scheduler,
-            # updating the params references to match current instance of self.network
-            try:
-                scheduler_state_dict = self.scheduler.state_dict().copy()
-                # scheduler_state_dict["params"] = self.network.parameters()
-                scheduler.load_state_dict(scheduler_state_dict)
-            except:
-                warnings.warn(
-                    "attempt to load state dict of existing self.scheduler failed. "
-                    "Scheduler will be initialized from scratch"
-                )
-
-        return {"optimizer": optimizer, "scheduler": scheduler}
-
-    def validation_step(self, samples, batch_idx, dataloader_idx=0):
-        """currently only used for lightning
-
-        not used by SpectrogramClassifier"""
-        batch_tensors, batch_labels = collate_audio_samples(samples)
-        batch_tensors = batch_tensors.to(self.device)
-        batch_labels = batch_labels.to(self.device)
-
-        batch_size = len(batch_tensors)
-        logits = self.network(batch_tensors)
-        loss = self.loss_fn(logits, batch_labels)
-
-        # compute and log any metrics in self.torch_metrics
-        # TODO: consider using validation set names rather than integer index
-        # (would have to store a set of names for the validation set)
-        batch_metrics = {
-            f"val{dataloader_idx}_{name}": metric.to(self.device)(
-                logits.detach(), batch_labels.detach().int()
-            ).cpu()
-            for name, metric in self.torch_metrics.items()
-        }
-        if self.lightning_mode:
-            self.log_dict(
-                batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
-            )
-            # when on_epoch=True, compute() is called to reset the metric at epoch end
-            self.log(
-                f"val{dataloader_idx}_loss",
-                loss,
-                on_step=False,
-                on_epoch=True,
-                batch_size=len(batch_tensors),
-            )
-        return loss
-
-    def train_dataloader(
-        self,
-        samples,
-        bypass_augmentations=False,
-        collate_fn=identity,
-        raise_errors=False,
-        **kwargs,
-    ):
-        """generate dataloader for training
-
-        train_loader samples batches of images + labels from training set
-
-        Args: see self.train_dataloader_cls docstring for arguments
-            **kwargs: any arguments to pass to the DataLoader __init__
-            Note: some arguments are fixed and should not be passed in kwargs:
-            - shuffle=True: shuffle samples for training
-            - bypass_augmentations=False: apply augmentations to training samples
-
-        """
-        return self.train_dataloader_cls(
-            samples=samples,
-            preprocessor=self.preprocessor,
-            split_files_into_clips=True,
-            clip_overlap=0,
-            final_clip="extend",
-            bypass_augmentations=bypass_augmentations,
-            shuffle=True,  # SHUFFLE SAMPLES because we are training
-            # use pin_memory=True when loading files on CPU and training on CUDA GPU
-            pin_memory=self.device.type == "cuda",
-            invalid_sample_behavior="raise" if raise_errors else "substitute",
-            collate_fn=collate_fn,
-            **kwargs,
-        )
-
-    def predict_dataloader(
-        self, samples, collate_fn=identity, raise_errors=False, **kwargs
-    ):
-        """generate dataloader for inference (predict/validate/test)
-
-        Args: see self.inference_dataloader_cls docstring for arguments
-            **kwargs: any arguments to pass to the DataLoader __init__
-            Note: these arguments are fixed and should not be passed in kwargs:
-            - shuffle=False: retain original sample order
-        """
-        # for convenience, convert str/pathlib.Path to list of length 1
-        if isinstance(samples, (str, Path)):
-            samples = [samples]
-
-        return self.inference_dataloader_cls(
-            samples=samples,
-            preprocessor=self.preprocessor,
-            shuffle=False,  # keep original order
-            pin_memory=self.device.type == "cuda",
-            collate_fn=collate_fn,
-            invalid_sample_behavior="raise" if raise_errors else "placeholder",
-            **kwargs,
-        )
 
 
 class ChannelDimCheckError(Exception):
@@ -557,6 +140,9 @@ class SpectrogramModule(BaseModule):
         self.classes = classes
         self._single_target = single_target
         self.name = "SpectrogramModule"
+        self.class_outputs_key = (
+            -1
+        )  # key to use for model outputs corresponding to class predictions
 
         self.use_amp = False  # use automatic mixed precision
         self.lightning_mode = False  # True: skip things done automatically by Lightning
@@ -781,6 +367,38 @@ class SpectrogramModule(BaseModule):
             self._init_torch_metrics()
             self.loss_fn = CrossEntropyLoss_hot() if st else BCEWithLogitsLoss_hot()
 
+    def _generate_wandb_config(self):
+        # create a dictionary of parameters to save for this run
+        wandb_config = dict(
+            architecture=io.build_name(self.network),
+            sample_duration=self.preprocessor.sample_duration,
+            cuda_device_count=torch.cuda.device_count(),
+            mps_available=torch.backends.mps.is_available(),
+            classes=self.classes,
+            single_target=self.single_target,
+            opensoundscape_version=self.opensoundscape_version,
+        )
+        if "weight_decay" in self.optimizer_params:
+            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
+        else:
+            wandb_config["l2_regularization"] = "n/a"
+
+        if "lr" in self.optimizer_params:
+            wandb_config["learning_rate"] = self.optimizer_params["lr"]
+        else:
+            wandb_config["learning_rate"] = "n/a"
+
+        try:
+            wandb_config["sample_shape"] = [
+                self.preprocessor.height,
+                self.preprocessor.width,
+                self.preprocessor.channels,
+            ]
+        except:
+            wandb_config["sample_shape"] = "n/a"
+
+        return wandb_config
+
     def _init_torch_metrics(self):
         if self.single_target:
             self.torch_metrics = {
@@ -900,16 +518,6 @@ class SpectrogramModule(BaseModule):
         Modifies the object in place
         """
         self.network.requires_grad_(True)
-
-
-def _warn_output_size(dataloader, size, output_size_warning):
-    if output_size_warning and len(dataloader.dataset) * size > output_size_warning:
-        warnings.warn(
-            f"Generating ~{len(dataloader.dataset)*size:,} output values "
-            f"({len(dataloader.dataset):,} samples x ~{size:,} per sample). "
-            f"This may use a lot of memory (~1Gb per 3e8 outputs). To disable this warning, set "
-            f"`output_size_warning` to None or 0."
-        )
 
 
 @register_model_cls
@@ -1139,9 +747,9 @@ class SpectrogramClassifier(SpectrogramModule):
                 Optionally apply an activation layer such as sigmoid or
                 softmax to the raw outputs of the model.
                 options:
-                - None: no activation, return raw scores (ie logit, [-inf:inf])
-                - 'softmax': scores all classes sum to 1
-                - 'sigmoid': all scores in [0,1] but don't sum to 1
+                - None: no activation, return raw logit scores [-inf:inf]
+                - 'softmax': scores all classes sum to 1, scores between 0 and 1
+                - 'sigmoid': each class is independent, scores between 0 and 1
                 - 'softmax_and_logit': applies softmax first then logit
                 [default: None]
             split_files_into_clips:
@@ -1251,7 +859,7 @@ class SpectrogramClassifier(SpectrogramModule):
             dataloader=dataloader,
             wandb_session=wandb_session,
             progress_bar=progress_bar,
-        )[-1]
+        )[self.class_outputs_key]
 
         ### Apply activation layer ###
         pred_scores = apply_activation_layer(pred_scores, activation_layer)
@@ -1564,38 +1172,6 @@ class SpectrogramClassifier(SpectrogramModule):
 
         # return a single overall score for the epoch
         return self.train_metrics[self.current_epoch]
-
-    def _generate_wandb_config(self):
-        # create a dictionary of parameters to save for this run
-        wandb_config = dict(
-            architecture=io.build_name(self.network),
-            sample_duration=self.preprocessor.sample_duration,
-            cuda_device_count=torch.cuda.device_count(),
-            mps_available=torch.backends.mps.is_available(),
-            classes=self.classes,
-            single_target=self.single_target,
-            opensoundscape_version=self.opensoundscape_version,
-        )
-        if "weight_decay" in self.optimizer_params:
-            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
-        else:
-            wandb_config["l2_regularization"] = "n/a"
-
-        if "lr" in self.optimizer_params:
-            wandb_config["learning_rate"] = self.optimizer_params["lr"]
-        else:
-            wandb_config["learning_rate"] = "n/a"
-
-        try:
-            wandb_config["sample_shape"] = [
-                self.preprocessor.height,
-                self.preprocessor.width,
-                self.preprocessor.channels,
-            ]
-        except:
-            wandb_config["sample_shape"] = "n/a"
-
-        return wandb_config
 
     def train(
         self,
@@ -2095,7 +1671,7 @@ class SpectrogramClassifier(SpectrogramModule):
         dataloader,
         wandb_session=None,
         progress_bar=True,
-        targets=(-1,),
+        targets=None,
         avgpool_intermediates=True,
     ):
         """Run inference on a dataloader, generating scores for each sample
@@ -2109,15 +1685,23 @@ class SpectrogramClassifier(SpectrogramModule):
                 Note: expects list of AudioSample objects, not (tensors, labels)
             wandb_session: a wandb session to log progress to (e.g. return value of wandb.init())
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
-            targets: list of layers to return outputs from. -1 corresponds to final layer outputs
-                [default: (-1)]returns final layer outputs
+            targets: list of layers to return outputs from. Default [None] will return final outputs
+                with key self.class_outputs_key
             avgpool_intermediates: bool, if True, applies global average pooling to intermediate outputs
                 i.e. averages across all dimensions except first to get a 1D vector per sample
                 [default: True] (note that False may results in large memory usage)
 
         Returns:
-            outs: dictionary with keys:
+            outs: dictionary of outputs for each requested target layer
+                keys are layers and/or value of self.class_outputs_key (eg, -1 for final output)
+                values are np.arrays with first dimension corresponding to samples output array
+                dtypes depend on the layer output shapes; if avgpool_intermediates=True, outputs are
+                always 2D arrays with shape (n_samples, n_features); if avgpool_intermediates=False,
+                output array shapes and dtypes depend on the layer output shapes.
         """
+        if targets is None:
+            targets = [self.class_outputs_key]
+
         if not isinstance(dataloader, torch.utils.data.DataLoader):
             warnings.warn(
                 "dataloader is not an instance of torch.utils.data.DataLoader!"
@@ -2141,6 +1725,7 @@ class SpectrogramClassifier(SpectrogramModule):
             )
             invalid_sample_mask = [s.is_alternative for s in batch_samples]
             # process and store outputs from batch
+            # TODO: subset to desired target outputs?
             for k, v in batch_outs.items():
                 # mask outputs for any invalid samples (samples that failed in preprocessing)
                 # with np.nan, since the returned values don't correspond to the sample
@@ -2244,10 +1829,11 @@ class SpectrogramClassifier(SpectrogramModule):
         """
         _require_hoplite()
         from ml_collections import config_dict
+
         from opensoundscape.vector_database import (
-            load_or_create_hoplite_usearch_db,
             _handle_existing_windows,
             _insert_embeddings,
+            load_or_create_hoplite_usearch_db,
         )
 
         if project is None:
@@ -2446,64 +2032,28 @@ class SpectrogramClassifier(SpectrogramModule):
                 - "query": dictionary with query metadata
                 - "results": list of dictionaries with metadata for each retrieved sample
         """
-        try:
-            from perch_hoplite.db import brutalism
-            from perch_hoplite.db import score_functions
-            from perch_hoplite.db import search_results
-            from opensoundscape.vector_database import _collate_search_results
-        except ImportError as e:
-            raise ImportError(
-                "hoplite is not installed. Please install hoplite to use this feature."
-            ) from e
-
-        if search_kwargs is None:
-            search_kwargs = {}
-
-        if not exact_search:
-            if search_subset_size is not None:
-                raise NotImplementedError(
-                    "search_subset_size is only implemented for exact_search=True"
-                )
-            if target_score is not None:
-                raise NotImplementedError(
-                    "target_score is only implemented for exact_search=True"
-                )
+        _require_hoplite()
+        from opensoundscape.vector_database import similarity_search_hoplite_db
 
         # generate embeddings for the query samples
         print("embedding query samples")
         embeddings = self.embed(
             query_samples, audio_root=audio_root, **embedding_kwargs
         )
-
         print(
             f"performing similarity search for each of {embeddings.shape[0]} query samples"
         )
         compiled_search_results = []
         for (qfile, qstart_time, qend_time), emb in embeddings.iterrows():
-            query_embedding = emb.values.astype(db.get_embedding_dtype())
-            if exact_search:
-                score_fn = score_functions.get_score_fn(
-                    "dot", target_score=target_score
-                )
-                results, all_scores = brutalism.threaded_brute_search(
-                    db,
-                    query_embedding,
-                    num_results,
-                    score_fn=score_fn,
-                    sample_size=search_subset_size,
-                    **search_kwargs,
-                )
-
-            else:
-                ann_matches = db.ui.search(
-                    query_embedding, count=num_results, **search_kwargs
-                )
-                results = search_results.TopKSearchResults(top_k=num_results)
-                for k, d in zip(ann_matches.keys, ann_matches.distances):
-                    results.update(search_results.SearchResult(k, d))
-
-            # we have a TopKSearchResults object with .search_results containing
-            # a list of num_results SearchResult objects with .window_id and .sort_score
+            search_results = similarity_search_hoplite_db(
+                db=db,
+                query_embedding=emb.values,
+                num_results=num_results,
+                exact_search=exact_search,
+                search_subset_size=search_subset_size,
+                target_score=target_score,
+                search_kwargs=search_kwargs,
+            )
             compiled_search_results.append(
                 {
                     "query": {
@@ -2513,7 +2063,7 @@ class SpectrogramClassifier(SpectrogramModule):
                         # "embedding": query_embedding,
                         "audio_root": audio_root,
                     },
-                    "results": _collate_search_results(db, results),
+                    "results": search_results,
                 }
             )
         return compiled_search_results
@@ -2878,19 +2428,23 @@ class SpectrogramClassifier(SpectrogramModule):
         # return list of AudioSamples containing .cam attributes
         return generated_samples
 
-    def batch_forward(self, batch_samples, targets=(-1,), avgpool=True):
+    def batch_forward(self, batch_samples, targets=None, avgpool=True):
         """
         Forward pass for a batch of data
 
         Args:
             batch_samples: a batch of samples from a dataloader
-            targets: list of layers from self.network to extract intermediate outputs from
-                the key -1 in the returned dictionary corresponds to the final output of the model
+            targets: list of layers from self.network to extract outputs from
+                The key `self.class_outputs_key` (-1 by default) corresponds to final model output.
+                If None, only returns final model output.
             avgpool: bool, if True, applies global average pooling to
                 intermediate outputs (average across all dimensions except first to get
         Returns:
-            dictionary with key for each target layer. Key -1 corresponds to final model output.
+            dictionary with key for each output request in `targets`
+            Key matching `self.class_outputs_key` corresponds to final model output.
         """
+        if targets is None:
+            targets = [self.class_outputs_key]
         batch_data, _ = collate_audio_samples(batch_samples)
         outs = {k: None for k in targets}
 
@@ -2911,7 +2465,7 @@ class SpectrogramClassifier(SpectrogramModule):
         # initialize forward hooks to save intermediate outputs
         fhooks = []  # keep the handles so we can remove the hooks later
         for idx, l in enumerate(targets):
-            if l == -1:
+            if l == self.class_outputs_key:
                 continue  # final model output is handled separately
             fhooks.append(l.register_forward_hook(forward_hook_to_save_output(l)))
 
@@ -2920,9 +2474,10 @@ class SpectrogramClassifier(SpectrogramModule):
 
         # forward pass of network: feature extractor + classifier
         with torch.set_grad_enabled(False):
+            # run the forward pass
             model_out = self.network(batch_tensors).detach().cpu().numpy()
-            if -1 in outs:
-                outs[-1] = model_out
+            if self.class_outputs_key in outs:  # store final model output if requested
+                outs[self.class_outputs_key] = model_out
 
         # clean up by removing forward hooks
         for fh in fhooks:
@@ -2983,7 +2538,7 @@ class SpectrogramClassifier(SpectrogramModule):
 
         """
         dataloader_kwargs.update(
-            dict(batch_size=batch_size, num_workers=num_workers, audio_root=audio_root)
+            dict(audio_root=audio_root, batch_size=batch_size, num_workers=num_workers)
         )
         if not avgpool:  # cannot create a DataFrame with >2 dimensions
             return_dfs = False
@@ -3003,11 +2558,15 @@ class SpectrogramClassifier(SpectrogramModule):
             out_dim = 1000  # guess embedding size
         _warn_output_size(dataloader, out_dim, output_size_warning)
 
-        # run inference, returns dict with keys for each target (-1 is final model output)
+        # run inference, returns dict with keys for each target
         outs = self(
             dataloader=dataloader,
             progress_bar=progress_bar,
-            targets=[target_layer, -1] if return_preds else [target_layer],
+            targets=(
+                [target_layer, self.class_outputs_key]
+                if return_preds
+                else [target_layer]
+            ),
             avgpool_intermediates=avgpool,
         )
         embeddings = outs[target_layer]
@@ -3019,7 +2578,7 @@ class SpectrogramClassifier(SpectrogramModule):
             )
 
         if return_preds:
-            preds = outs[-1]
+            preds = outs[self.class_outputs_key]
             if return_dfs:
                 # put predictions in a DataFrame with same index as embeddings
                 preds = pd.DataFrame(
@@ -3046,6 +2605,232 @@ class SpectrogramClassifier(SpectrogramModule):
             device: a torch.device object or str such as 'cuda:0', 'mps', 'cpu'
         """
         self._device = torch.device(device)
+
+    def save_onnx(
+        self,
+        path,
+        activation_layer=None,
+        include_preprocessor_output=True,
+        include_embedding_output=True,
+        include_classifier_output=True,
+        **kwargs,
+    ):
+        """Export the model to ONNX format
+
+        The preprocessor must be a TorchSpectrogramPreprocessor with
+        torch.nn.Modules in preprocessor.pipeline['transform'].transforms
+        (see example below)
+
+        See also: to_onnx_model() to create opensoundscape.ONNXModel for inference
+
+        Requires that onnx, onnxruntime, and onnxscript are packages are installed
+
+        Args:
+            path: file path to save the ONNX model
+                pass None to return an in-memory torch.onnx.ONNXProgram object without saving to disk
+            activation_layer: if provided, applies an activation layer to classifier outputs
+                options: 'softmax', 'sigmoid', or None [default: None]
+            include_preprocessor_output: if True, includes the output of the preprocessor
+                in the ONNX model outputs as key "preprocessor" [default: True]
+            include_embedding_output: if True, includes the output of the embedding layer
+                in the ONNX model outputs as key "embedding" [default: True]
+            include_classifier_output: if True, includes the output of the classifier
+                in the ONNX model outputs as key "classifier" [default: True]
+            **kwargs: additional keyword arguments passed to
+                opensoundscape.ml.export.to_onnx_program()
+        Returns:
+            onnx_program: a torch.onnx.ONNXProgram object
+
+        Example:
+
+        Exporting an EfficientNet model to ONNX format:
+        ```python
+        from opensoundscape import CNN, preprocessors
+
+        model = CNN(
+            architecture="efficientnet_b0",
+            classes=[0, 1, 2, 3],
+            sample_duration=3,
+            preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+            sample_rate=32000,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet.onnx")
+        ```
+
+        Using the saved model for inference with onnx runtime:
+
+        ```python
+        import onnx, onnxruntime
+        import numpy as np
+
+        combined_model = onnx.load("opso_efficientnet.onnx")
+        output_names = [node.name for node in combined_model.graph.output]
+
+        onnx.checker.check_model(combined_model)
+
+
+        EP_list = ["CPUExecutionProvider"]  # ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        ort_session = onnxruntime.InferenceSession("opso_efficientnet.onnx", providers=EP_list)
+
+        # make up some random inputs
+        audio_samples_per_input = (
+            combined_model.graph.input[0].type.tensor_type.shape.dim[2].dim_value
+        )
+        batch_size = 3
+        input_batched = np.random.rand(batch_size, 1, audio_samples_per_input).astype(
+            np.float32
+        )
+
+        # compute ONNX Runtime output prediction
+        ort_inputs = {ort_session.get_inputs()[0].name: input_batched}
+        ort_outs = ort_session.run(None, ort_inputs)
+
+        # restore the name-value dictionary mapping of outputs
+        outs_dict = {name: ort_outs[i] for i, name in enumerate(output_names)}
+        print(f"shape of outputs for inference on one batch of batch size {batch_size}:")
+        print({k: v.shape for k, v in outs_dict.items()})
+        ```
+
+        Example 2: Exporting a model with customized preprocessing transforms
+
+        ```python
+        from opensoundscape import CNN, preprocessors
+
+        model = CNN(
+            architecture="efficientnet_b0",
+            classes=[0, 1, 2, 3],
+            sample_duration=3,
+            preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+            sample_rate=32000,
+            bandpass_range=(3000, 10000),
+            lower_dB_range=-30,
+            rescale_mean_sd=(-30, 20),
+            spec_nfft=512,
+            spec_window_length=512,
+            spec_hop_length=128,
+            # resize_ft=(200, 512), # using resize_ft breaks serialization for json save/load!
+            n_mels=64,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet_melspec.onnx")
+        ```
+
+        Example 3: Writing a custom list of preprocessing transforms
+
+        ```python
+        import torchaudio
+        from opensoundscape import CNN, preprocessors
+        model = CNN("resnet18", classes=[0], sample_duration=5)
+        # custom list of torchaudio and torchvision transforms
+        my_transforms = [
+            torchaudio.transforms.Spectrogram(
+                n_fft=512,
+                win_length=512,
+                hop_length=128,
+            ),
+            torchaudio.transforms.AmplitudeToDB(top_db=80),
+        ]
+        model.preprocessor = preprocessors.TorchSpectrogramPreprocessor(
+            sample_rate=32000,
+            sample_duration=model.preprocessor.sample_duration,
+            torch_transforms=my_transforms,
+        )
+        onnx_program = model.save_onnx("./opso_efficientnet_custom.onnx")
+        ```
+        """
+        try:
+            import onnx
+        except ImportError as e:
+            raise ImportError(
+                "onnx package is required for ONNX export. Please install to use this feature. "
+                "For example `pip install opensoundscape[onnx]`"
+            ) from e
+
+        # give helpful error if preprocessor is not TorchSpectrogramPreprocessor
+        # or if preprocessor.pipeline['transform'].transforms is not accessible
+        assert isinstance(
+            self.preprocessor,
+            opensoundscape.preprocess.preprocessors.TorchSpectrogramPreprocessor,
+        ), """ONNX export only supported for TorchSpectrogramPreprocessor in which
+            preprocessor.pipeline["transform"].transforms contains a list of torch.nn.Modules
+            that preprocess the audio waveform signal into the model input format (eg spectrograms).
+            """
+
+        try:
+            transforms = self.preprocessor.pipeline["transform"].transforms
+        except AttributeError as e:
+            raise AttributeError(
+                """Could not access self.preprocessor.pipeline['transform'].transforms. 
+                ONNX export only supported for TorchSpectrogramPreprocessor in which
+                preprocessor.pipeline['transform'].transforms contains a list of
+                torch.nn.Modules that preprocess the audio waveform signal into the model
+                input format (eg spectrograms).
+                """
+            ) from e
+
+        n_audio_samples_per_input = int(
+            self.preprocessor.sample_rate * self.preprocessor.sample_duration
+        )
+        # set network to evaluation mode
+        self.network.eval()
+
+        # create torch.onnx.ONNXProgram composing the preprocessor and the network
+        onnx_program = opensoundscape.ml.export.to_onnx_program(
+            preprocessing_transforms=transforms,
+            torch_model=self.network,
+            input_length=n_audio_samples_per_input,
+            activation_layer=activation_layer,
+            include_embedding_output=include_embedding_output,
+            include_classifier_output=include_classifier_output,
+            include_preprocessor_output=include_preprocessor_output,
+            **kwargs,
+        )
+        if path is not None:
+            # save model to disk
+            onnx_program.save(path)
+
+            # re-load model to add metadata
+            om = onnx.load(path)
+
+            # add metadata properties
+            meta = om.metadata_props.add()
+            meta.key = "sample_duration"
+            meta.value = str(self.preprocessor.sample_duration)
+            meta = om.metadata_props.add()
+            meta.key = "sample_rate"
+            meta.value = str(self.preprocessor.pipeline.load_audio.params.sample_rate)
+            meta = om.metadata_props.add()
+            meta.key = "classes"
+            meta.value = json.dumps(self.classes)
+            if include_classifier_output:
+                meta = om.metadata_props.add()
+                meta.key = "class_outputs_key"
+                meta.value = "classifier"
+            if include_embedding_output:
+                meta = om.metadata_props.add()
+                meta.key = "embedding_outputs_key"
+                meta.value = "embedding"
+
+            # re save model with metadata
+            onnx.save(om, path)
+
+        return onnx_program
+
+    @property
+    def sample_duration(self):
+        return self.preprocessor.sample_duration
+
+    # setter
+    @sample_duration.setter
+    def sample_duration(self, duration):
+        self.preprocessor.sample_duration = duration
+
+    @property
+    def sample_rate(self):
+        return self.preprocessor.sample_rate
+
+    @sample_rate.setter
+    def sample_rate(self, rate):
+        self.preprocessor.sample_rate = rate
 
 
 # alias for convenience

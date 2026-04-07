@@ -383,13 +383,14 @@ def _handle_existing_windows(
         # filter df to clips without existing embeddings
         diff_idx = clip_df_norm.difference(db_windows_norm)
 
-        if embedding_exists_mode == "error" and len(diff_idx) > 0:
+        # subset the clip dataframe in place to exclude overlapping_idxs
+        mask = clip_df_norm.isin(diff_idx)
+
+        if embedding_exists_mode == "error" and not mask.all():
             raise ValueError(
                 'Some embeddings exist in db and embedding_exists_mode="error"'
             )
 
-        # subset the clip dataframe in place to exclude overlapping_idxs
-        mask = clip_df_norm.isin(diff_idx)
         clips.drop(clips.index[~mask], inplace=True)
 
     # else: embedding_exists_mode == "add", add more embeddings even if matching
@@ -401,17 +402,17 @@ def _collate_search_results(db, results):
     # we have a TopKSearchResults object with .search_results containing
     # a list of num_results SearchResult objects with .window_id and .sort_score
 
-    # extract relevant info for each match into dictionaries
+    # for each match, extract relevant window info from db into dictionaries
     results_list = []
     for match in results.search_results:
         window = db.get_window(int(match.window_id))
         results_list.append(
             {
-                "window_id": int(match.window_id),
-                "sort_score": match.sort_score,
+                "file": db.get_recording(window.recording_id).filename,
                 "start_time": window.offsets[0],
                 "end_time": window.offsets[1],
-                "file": db.get_recording(window.recording_id).filename,
+                "window_id": int(match.window_id),
+                "sort_score": match.sort_score,
             }
         )
     return results_list
@@ -519,3 +520,235 @@ def _require_hoplite():
             "hoplite package is required to use hoplite databases. "
             "Please install with `pip install opensoundscape[hoplite]` to use this functionality."
         ) from e
+
+
+def find_matching_windows(
+    db,
+    date_range=None,
+    time_range=None,
+    deployments=None,
+    projects=None,
+    recordings=None,
+    deployments_filter=None,
+    recordings_filter=None,
+    windows_filter=None,
+    annotations_filter=None,
+):
+    """Match database windows based on filters for date, time, deployment, project, recording, and annotations
+
+    Args:
+        db: hoplite database containing embeddings
+        date_range: tuple of (start_date, end_date) to filter clips by date;
+            Formats: datetime.datetime, datetime.date, or string in "YYYY-MM-DD" format; if None, does not filter by date
+            Can pass (date,None) or (None,date) to filter by only start or end date, respectively
+        time_range: tuple of (start_time, end_time) to filter clips by time of day; if None, does not filter by time of day
+            Formats: datetime.datetime, datetime.time or string in "HH:MM:SS" format
+            Note: filters by time of day of the _recording_ start time (rather than audio clip start time)
+            Assumes time zone match between time_range values and recording timestamps in the database
+        deployments: list of deployment names to filter by; if None, does not filter by deployment
+        projects: list of project names to filter by; if None, does not filter by project
+        recordings: list of recording names to filter by; if None, does not filter by recording
+        deployments_filter: custom filter dict for deployments; if provided, overrides deployments argument
+        recordings_filter: custom filter dict for recordings; if provided, overrides recordings argument
+        windows_filter: custom filter dict for windows; if provided, overrides date_range, time_range arguments
+        annotations_filter: custom filter dict for annotations in hoplite DB
+    """
+    _require_hoplite()
+    # find all matching clips
+    from ml_collections import config_dict
+
+    if deployments_filter is None and (deployments is not None or projects is not None):
+        # compose the deployments_filter element by element
+        deployments_filter = config_dict.create()
+        if deployments is not None:
+            if isinstance(deployments, str):
+                deployments_filter.update({"eq": dict(name=deployments)})
+            else:
+                assert hasattr(
+                    deployments, "__iter__"
+                ), "deployments should be a string or an iterable of strings"
+                deployments_filter.update({"isin": dict(name=deployments)})
+        if projects is not None:
+            if isinstance(projects, str):
+                deployments_filter.update({"eq": dict(project=projects)})
+            else:
+                assert hasattr(
+                    projects, "__iter__"
+                ), "projects should be a string or an iterable of strings"
+                deployments_filter.update({"isin": dict(project=projects)})
+
+    if recordings_filter is None:
+        recordings_filter = config_dict.create()
+        if recordings is not None:
+            if isinstance(recordings, str):
+                recordings_filter.update({"eq": dict(filename=recordings)})
+            else:
+                assert hasattr(
+                    recordings, "__iter__"
+                ), "recordings should be a string or an iterable of strings"
+                recordings_filter.update({"isin": dict(filename=recordings)})
+        # parse dates if date_range is provided as strings
+        if date_range is not None:
+            start_date, end_date = date_range
+            if isinstance(start_date, str):
+                start_date = pd.to_datetime(start_date).date()
+            if isinstance(end_date, str):
+                end_date = pd.to_datetime(end_date).date()
+            # create date_range filters
+            # for time range, we will need to do post-filtering after retrieving the windows, since time of day is not a native filter in hoplite
+            if start_date is not None:
+                recordings_filter.update(gte=dict(datetime=start_date))
+            if end_date is not None:
+                recordings_filter.update(lte=dict(datetime=end_date))
+            # print(recordings_filter)
+    # now find all window ids that match the filters
+    window_ids = db.match_window_ids(
+        deployments_filter=deployments_filter,
+        recordings_filter=recordings_filter,
+        windows_filter=windows_filter,
+        annotations_filter=annotations_filter,
+    )
+    # get the relevant info for each window
+    windows = [db.get_window(id) for id in window_ids]
+
+    # add recording info
+    for window in windows:
+        recording = db.get_recording(window.recording_id)
+        window.filename = recording.filename
+        window.datetime = recording.datetime
+
+    # now filter by time if time_range is provided
+    import datetime
+
+    if time_range is not None:
+        start_t, end_t = time_range
+        for w in windows:
+            if hasattr(w, "datetime") and w.datetime is not None:
+                w.time = w.datetime.time()
+            else:
+                w.time = None
+        if start_t is not None:
+
+            if isinstance(start_t, str):
+                start_t = datetime.datetime.strptime(start_t, "%H:%M:%S").time()
+            windows = [w for w in windows if w.time is not None and w.time >= start_t]
+        if end_t is not None:
+            if isinstance(end_t, str):
+                end_t = datetime.datetime.strptime(end_t, "%H:%M:%S").time()
+            windows = [w for w in windows if w.time is not None and w.time <= end_t]
+
+    # add deployment info
+    for window in windows:
+        deployment = db.get_deployment(recording.deployment_id)
+        window.deployment = deployment.name
+        window.project = deployment.project
+    return windows
+
+
+def windows_to_dataframe(windows):
+    cols = [
+        "file",
+        "start_time",
+        "end_time",
+        "datetime",
+        "deployment",
+        "project",
+        "window_id",
+    ]
+    records = [
+        [
+            w.filename,
+            w.offsets[0],
+            w.offsets[1],
+            w.datetime,
+            w.deployment,
+            w.project,
+            w.id,
+        ]
+        for w in windows
+    ]
+    results_df = pd.DataFrame(records, columns=cols)
+    return results_df
+
+
+# TODO provide detection-counting in-loop as an alternative to selection
+
+
+def similarity_search_hoplite_db(
+    query_embedding,
+    db,
+    num_results=5,
+    exact_search=False,
+    search_subset_size=None,
+    # filters=None, # config_dict.create(...)
+    target_score=None,
+    search_kwargs=None,
+):
+    """Perform a similarity search in the Hoplite database.
+
+    Args:
+        query_embedding: np.ndarray of shape (embedding_dim,) representing the embedding of the query audio clip
+        db: a Hoplite database containing embeddings from the same model
+        num_results: The number of results to return for each query
+        exact_search: default False for usearch (faster), if True uses brute force search
+        search_subset_size: Number of embeddings to compare with. If None, all embeddings
+            are used. For floats between 0 and 1, sample a proportion of the database.
+            For ints, sample the specified number of embeddings.
+            if None [default], searches all embeddings
+            Note: only implemented for exact_search=True
+        target_score: if specified, searches for similarity scores close to target_score
+            default [None] searches for most similar embeddings
+        audio_root: root directory for relative paths to query audio files
+        search_kwargs: dict of additional keyword arguments passed to db.ui.search() or
+            brutalism.threaded_brute_search() if exact_search=True
+            exact_search=False: radius, threads, exact, log, progress
+            exact_search=True: batch_size, max_workers, rng_seed
+        **embedding_kwargs: additional keyword arguments passed to self.embed(), such as
+            batch_size and num_workers
+    Returns:
+        A list of dictionaries with the search results, one item per query sample:
+        Each item is a dictionary with the following keys:
+            - "query": dictionary with query metadata
+            - "results": list of dictionaries with metadata for each retrieved sample
+    """
+    try:
+        from perch_hoplite.db import brutalism
+        from perch_hoplite.db import score_functions
+        from perch_hoplite.db import search_results
+    except ImportError as e:
+        raise ImportError(
+            "hoplite is not installed. Please install hoplite to use this feature."
+        ) from e
+
+    if search_kwargs is None:
+        search_kwargs = {}
+
+    if not exact_search:
+        if search_subset_size is not None:
+            raise NotImplementedError(
+                "search_subset_size is only implemented for exact_search=True"
+            )
+        if target_score is not None:
+            raise NotImplementedError(
+                "target_score is only implemented for exact_search=True"
+            )
+
+    query_embedding = query_embedding.astype(db.get_embedding_dtype())
+    if exact_search:
+        score_fn = score_functions.get_score_fn("dot", target_score=target_score)
+        results, all_scores = brutalism.threaded_brute_search(
+            db,
+            query_embedding,
+            num_results,
+            score_fn=score_fn,
+            sample_size=search_subset_size,
+            **search_kwargs,
+        )
+
+    else:
+        ann_matches = db.ui.search(query_embedding, count=num_results, **search_kwargs)
+        results = search_results.TopKSearchResults(top_k=num_results)
+        for k, d in zip(ann_matches.keys, ann_matches.distances):
+            results.update(search_results.SearchResult(k, d))
+
+    return _collate_search_results(db, results)

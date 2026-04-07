@@ -1,5 +1,7 @@
+import importlib.util
 import pandas as pd
 from pathlib import Path
+import types
 
 import numpy as np
 import pandas as pd
@@ -37,6 +39,25 @@ def model_save_path(request, tmp_path):
     for each test, ensuring no conflicts between parallel test runs.
     """
     path = tmp_path / "temp.model"
+
+    # Cleanup function to remove the file if it exists
+    def fin():
+        if path.exists():
+            path.unlink()
+
+    request.addfinalizer(fin)
+
+    return path
+
+
+@pytest.fixture()
+def onnx_save_path(request, tmp_path):
+    """Fixture providing a temporary ONNX model save path with proper cleanup.
+
+    Uses pytest's tmp_path fixture to create isolated temporary directories
+    for each test, ensuring no conflicts between parallel test runs.
+    """
+    path = tmp_path / "temp.onnx"
 
     # Cleanup function to remove the file if it exists
     def fin():
@@ -193,6 +214,44 @@ def test_train_single_target(train_df, temp_model_dir):
         num_workers=0,
     )
     # No need to manually remove directory - fixture handles cleanup
+
+
+def test_train_wandb(train_df, temp_model_dir):
+    # Use disabled mode so this test never depends on network/credentials.
+    try:
+        import wandb
+
+        session = wandb.init(mode="disabled", reinit=True)
+    except Exception:
+        pytest.skip("Could not init wandb session")
+
+    model = cnn.CNN(architecture="resnet18", classes=[0, 1], sample_duration=5.0)
+    model.train(
+        train_df,
+        train_df,
+        save_path=temp_model_dir,
+        epochs=1,
+        batch_size=2,
+        save_interval=10,
+        num_workers=0,
+        wandb_session=session,
+    )
+    session.finish()
+
+    # clean up wandb files
+    import os
+
+    if os.path.exists("wandb"):
+        shutil.rmtree("wandb")
+
+
+onnx_deps = pytest.mark.skipif(
+    not all(
+        importlib.util.find_spec(pkg) is not None
+        for pkg in ("onnx", "onnxruntime", "onnxscript")
+    ),
+    reason="onnx, onnxruntime, or onnxscript not installed",
+)
 
 
 def test_train_multi_target(train_df, temp_model_dir):
@@ -1349,6 +1408,84 @@ def test_call_with_targets(test_df):
     assert np.shape(outs[model.network.layer4]) == (2, 512, 7, 7)
 
 
+def test_batch_forward_returns_requested_targets():
+    """Verify batch_forward() returns outputs for all requested layer targets.
+
+    The batch_forward() method accepts a list of target layers and returns a dictionary
+    with outputs from each target. This test verifies that intermediate layer outputs
+    have correct shapes and that the special key -1 represents the final model output.
+    Includes testing with and without average pooling applied to intermediate outputs.
+    """
+    model = cnn.SpectrogramClassifier(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
+    model.device = "cpu"
+
+    labels = pd.Series([1, 0], index=[0, 1], name=("tests/audio/silence_10s.mp3", 0, 5))
+    sample1 = AudioSample(
+        source="tests/audio/silence_10s.mp3",
+        start_time=0,
+        duration=5,
+        labels=labels,
+    )
+    sample2 = AudioSample(
+        source="tests/audio/silence_10s.mp3",
+        start_time=5,
+        duration=5,
+        labels=labels,
+    )
+    sample1.data = torch.randn(1, 224, 224)
+    sample2.data = torch.randn(1, 224, 224)
+    sample1.is_alternative = False
+    sample2.is_alternative = False
+
+    outs = model.batch_forward(
+        [sample1, sample2], targets=[-1, model.network.layer4], avgpool=False
+    )
+    assert set(outs.keys()) == {-1, model.network.layer4}
+    assert np.shape(outs[-1]) == (2, 2)
+    assert np.shape(outs[model.network.layer4]) == (2, 512, 7, 7)
+
+
+def test_call_masks_invalid_alternative_samples():
+    """Verify __call__() masks outputs to NaN for invalid/alternative samples.
+
+    When the preprocessing pipeline fails on a sample, it returns a placeholder
+    (alternative) sample. The model's __call__ method should detect these invalid
+    samples (via is_alternative attribute) and mask their outputs to NaN, preventing
+    them from being used in downstream processing or metrics calculations.
+    """
+    model = cnn.SpectrogramClassifier(
+        architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
+    )
+    model.device = "cpu"
+
+    labels = pd.Series([1, 0], index=[0, 1], name=("tests/audio/silence_10s.mp3", 0, 5))
+    sample1 = AudioSample(
+        source="tests/audio/silence_10s.mp3",
+        start_time=0,
+        duration=5,
+        labels=labels,
+    )
+    sample2 = AudioSample(
+        source="tests/audio/silence_10s.mp3",
+        start_time=5,
+        duration=5,
+        labels=labels,
+    )
+    sample1.data = torch.randn(1, 224, 224)
+    sample2.data = torch.randn(1, 224, 224)
+    sample1.is_alternative = False
+    sample2.is_alternative = True
+
+    dataloader = torch.utils.data.DataLoader(
+        [sample1, sample2], batch_size=2, collate_fn=identity
+    )
+    outs = model(dataloader, targets=[-1], progress_bar=False)
+    assert np.isfinite(outs[-1][0]).all()
+    assert np.isnan(outs[-1][1]).all()
+
+
 def test_freeze_layers_except_and_unfreeze():
     model = cnn.SpectrogramClassifier(
         architecture="resnet18", classes=[0, 1], sample_duration=5.0, arch_weights=None
@@ -1694,3 +1831,262 @@ def test_change_classes_preserves_device():
     dummy_input = torch.randn(1, 1, 224, 224).to(model.device)
     output = model.network(dummy_input)
     assert output.device == model.device
+
+
+def test_embed_to_hoplite_db_inserts_embeddings_and_commits(monkeypatch):
+    """Verify embed_to_hoplite_db() inserts batch embeddings and commits progress to DB."""
+
+    class FakeDataset(torch.utils.data.Dataset):
+        def __init__(self, label_df):
+            self.dataset = types.SimpleNamespace(label_df=label_df)
+            self._samples = [
+                types.SimpleNamespace(
+                    source="tests/audio/silence_10s.mp3", start_time=0.0, duration=1.0
+                ),
+                types.SimpleNamespace(
+                    source="tests/audio/silence_10s.mp3", start_time=1.0, duration=1.0
+                ),
+            ]
+
+        def __len__(self):
+            return len(self._samples)
+
+        def __getitem__(self, idx):
+            return self._samples[idx]
+
+        def report(self, log=None):
+            return pd.DataFrame(columns=["file", "start_time", "end_time", "error"])
+
+    class FakeDB:
+        def __init__(self):
+            self.commits = 0
+            self._deployments = []
+
+        def get_all_deployments(self, filter=None):
+            return self._deployments
+
+        def insert_deployment(self, name, project=""):
+            self._deployments.append(
+                types.SimpleNamespace(id=42, name=name, project=project)
+            )
+            return 42
+
+        def get_all_recordings(self, filter=None):
+            return []
+
+        def commit(self):
+            self.commits += 1
+
+    inserted_batches = []
+
+    def fake_insert_embeddings(
+        db,
+        batch_samples,
+        batch_embeddings,
+        overflow_mode,
+        file_to_id,
+        file_to_datetime=None,
+        audio_root=None,
+        deployment_id=None,
+    ):
+        inserted_batches.append(
+            (len(batch_samples), batch_embeddings.shape[0], deployment_id)
+        )
+        return []
+
+    def fake_load_or_create(db, embedding_dim=None, cfg=None):
+        return db
+
+    def fake_handle_existing_windows(
+        db,
+        clips,
+        embedding_exists_mode,
+        deployment_id=None,
+        deployment_name=None,
+        project=None,
+        rounding_precision=6,
+    ):
+        return None
+
+    monkeypatch.setattr(cnn, "_require_hoplite", lambda: None)
+    monkeypatch.setattr(cnn, "_check_or_set_model_id", lambda db, model_id: None)
+
+    import opensoundscape.vector_database as vector_db
+
+    monkeypatch.setattr(
+        vector_db, "load_or_create_hoplite_usearch_db", fake_load_or_create
+    )
+    monkeypatch.setattr(
+        vector_db, "_handle_existing_windows", fake_handle_existing_windows
+    )
+    monkeypatch.setattr(vector_db, "_insert_embeddings", fake_insert_embeddings)
+
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=1.0,
+        arch_weights=None,
+    )
+    label_df = pd.DataFrame(
+        {0: [1, 0], 1: [0, 1]},
+        index=pd.MultiIndex.from_tuples(
+            [
+                ("tests/audio/silence_10s.mp3", 0.0, 1.0),
+                ("tests/audio/silence_10s.mp3", 1.0, 2.0),
+            ],
+            names=["file", "start_time", "end_time"],
+        ),
+    )
+
+    model.predict_dataloader = lambda *args, **kwargs: torch.utils.data.DataLoader(
+        FakeDataset(label_df), batch_size=1, collate_fn=identity
+    )
+    model._check_or_get_default_embedding_layer = lambda target_layer=None: "fake_layer"
+    model.batch_forward = lambda batch_samples, targets, avgpool=True: {
+        "fake_layer": np.ones((len(batch_samples), 2), dtype=np.float32)
+    }
+
+    db = FakeDB()
+    out_db, info = model.embed_to_hoplite_db(
+        samples=label_df,
+        db=db,
+        deployment="dep-1",
+        batch_size=1,
+        commit_frequency_batches=1,
+        progress_bar=False,
+    )
+
+    assert out_db is db
+    assert len(inserted_batches) == 2
+    assert all(item[0] == 1 for item in inserted_batches)
+    assert db.commits >= 2
+    assert "insertion_failures" in info
+
+
+def test_similarity_search_hoplite_db_returns_compiled_results(monkeypatch):
+    """Verify similarity_search_hoplite_db() embeds queries and wraps vector-db search results."""
+    monkeypatch.setattr(cnn, "_require_hoplite", lambda: None)
+
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=1.0,
+        arch_weights=None,
+    )
+
+    emb_df = pd.DataFrame(
+        [[0.1, 0.2], [0.3, 0.4]],
+        index=pd.MultiIndex.from_tuples(
+            [("q1.wav", 0.0, 1.0), ("q2.wav", 1.0, 2.0)],
+            names=["file", "start_time", "end_time"],
+        ),
+    )
+    model.embed = lambda query_samples, audio_root=None, **kwargs: emb_df
+
+    import opensoundscape.vector_database as vector_db
+
+    monkeypatch.setattr(
+        vector_db,
+        "similarity_search_hoplite_db",
+        lambda **kwargs: [{"file": "m.wav", "window_id": 9, "sort_score": 0.9}],
+    )
+
+    results = model.similarity_search_hoplite_db(
+        query_samples=["q1.wav", "q2.wav"],
+        db=object(),
+        num_results=1,
+        audio_root="/audio",
+    )
+
+    assert len(results) == 2
+    assert results[0]["query"]["file"] == "q1.wav"
+    assert results[0]["query"]["audio_root"] == "/audio"
+    assert results[0]["results"][0]["window_id"] == 9
+
+
+@onnx_deps
+def test_save_onnx(onnx_save_path):
+    from opensoundscape import CNN, preprocessors
+
+    model = CNN(
+        architecture="efficientnet_b0",
+        classes=[0, 1, 2, 3],
+        sample_duration=3,
+        preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+        sample_rate=32000,
+        arch_weights=None,
+    )
+    onnx_program = model.save_onnx(onnx_save_path)
+
+    # Using the saved model for inference with onnx runtime:
+
+    import onnx, onnxruntime
+    import numpy as np
+
+    combined_model = onnx.load(onnx_save_path)
+    output_names = [node.name for node in combined_model.graph.output]
+
+    onnx.checker.check_model(combined_model)
+
+    EP_list = [
+        "CPUExecutionProvider"
+    ]  # ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    ort_session = onnxruntime.InferenceSession(onnx_save_path, providers=EP_list)
+
+    # make up some random inputs
+    audio_samples_per_input = (
+        combined_model.graph.input[0].type.tensor_type.shape.dim[2].dim_value
+    )
+    batch_size = 3
+    input_batched = np.random.rand(batch_size, 1, audio_samples_per_input).astype(
+        np.float32
+    )
+
+    # compute ONNX Runtime output prediction
+    ort_inputs = {ort_session.get_inputs()[0].name: input_batched}
+    ort_outs = ort_session.run(None, ort_inputs)
+
+    # restore the name-value dictionary mapping of outputs
+    outs_dict = {name: ort_outs[i] for i, name in enumerate(output_names)}
+    assert outs_dict["classifier"].shape == (batch_size, 4)
+    assert outs_dict["embedding"].shape == (batch_size, 1280)
+    assert outs_dict["sample"].shape == (batch_size, 1, 257, 376)
+
+    # Example 2: Exporting a model with customized preprocessing transforms
+    model = CNN(
+        architecture="efficientnet_b0",
+        classes=[0, 1, 2, 3],
+        sample_duration=3,
+        preprocessor_cls=preprocessors.TorchSpectrogramPreprocessor,
+        sample_rate=32000,
+        bandpass_range=(3000, 10000),
+        lower_dB_range=-30,
+        rescale_mean_sd=(-30, 20),
+        spec_nfft=512,
+        spec_window_length=512,
+        spec_hop_length=128,
+        # resize_ft=(200, 512), # using resize_ft breaks serialization for json save/load!
+        n_mels=64,
+    )
+    onnx_program = model.save_onnx(onnx_save_path)
+
+    # Example 3: Writing a custom list of preprocessing transforms
+    import torchaudio
+    from opensoundscape import CNN, preprocessors
+
+    model = CNN("resnet18", classes=[0], sample_duration=5, arch_weights=None)
+    # custom list of torchaudio and torchvision transforms
+    my_transforms = [
+        torchaudio.transforms.Spectrogram(
+            n_fft=512,
+            win_length=512,
+            hop_length=128,
+        ),
+        torchaudio.transforms.AmplitudeToDB(top_db=80),
+    ]
+    model.preprocessor = preprocessors.TorchSpectrogramPreprocessor(
+        sample_rate=32000,
+        sample_duration=model.preprocessor.sample_duration,
+        torch_transforms=my_transforms,
+    )
+    onnx_program = model.save_onnx(onnx_save_path)
