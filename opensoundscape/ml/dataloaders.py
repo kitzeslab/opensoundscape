@@ -4,10 +4,10 @@ import pandas as pd
 import warnings
 from pathlib import Path
 
-from opensoundscape.utils import identity, _check_is_path
 from opensoundscape.ml.safe_dataset import SafeDataset
-from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
+from opensoundscape.ml.datasets import AudioFileDataset, AudioFileDataset
 from opensoundscape.annotations import CategoricalLabels
+from opensoundscape.utils import identity
 
 
 class SafeAudioDataloader(torch.utils.data.DataLoader):
@@ -15,27 +15,30 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
 
     SafeDataset contains AudioFileDataset or AudioSampleDataset depending on sample type
 
-    During inference, we allow the user to pass any of 3 things to samples:
+    During inference, we allow the user to pass any of these formatas for `samples`:
     - list of file paths
     - Dataframe with file as index
-    - Dataframe with file, start_time, end_time of clips as index
+    - Dataframe with (file, start_time, end_time) of clips as MultiIndex
+    - Dataframe with (file, start_time, end_time) as columns
+    - Dataframe with (file, start_time) as column
+    - Dataframe with (file) as column
+    - CategoricalLabels object
 
-    If file as index, default split_files_into_clips=True means that it will
-    automatically determine the number of clips that can be created from the file
-    (with overlap between subsequent clips based on overlap_fraction)
+    If start_times are not specified, it will automatically determine the number of clips that can
+    be created from the file (with overlap between subsequent clips based on overlap_fraction)
 
     Args:
         samples: any of the following:
             - list of file paths
-            - Dataframe with file as index
             - Dataframe with file, start_time, end_time of clips as index
+            - Dataframe with (file, start_time, end_time) as columns
+            - Dataframe with (file, start_time) as columns
+            - Dataframe with file as index
+            - Dataframe with (file) as column
             - CategoricalLabels object
         preprocessor: preprocessor object, eg AudioPreprocessor or SpectrogramPreprocessor
-        split_files_into_clips=True: use AudioSplittingDataset to automatically split
-            audio files into appropriate-lengthed clips
-        clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+        overlap_fraction, clip_overlap, clip_step, final_clip:
             see `opensoundscape.utils.generate_clip_times_df`
-        overlap_fraction: deprecated alias for clip_overlap_fraction
         bypass_augmentations: if True, don't apply any augmentations [default: True]
         invalid_sample_behavior: how to handle samples that fail to preprocess,
             one of "substitute", "placeholder", "raise", or "none"
@@ -61,11 +64,9 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         self,
         samples,
         preprocessor,
-        split_files_into_clips=True,
         clip_overlap=None,
-        clip_overlap_fraction=None,
-        clip_step=None,
         overlap_fraction=None,
+        clip_step=None,
         final_clip="extend",
         bypass_augmentations=True,
         invalid_sample_behavior="placeholder",
@@ -78,9 +79,17 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         assert type(samples) in (list, np.ndarray, pd.DataFrame, CategoricalLabels), (
             "`samples` must be either: "
             "(a) list or np.array of files, or DataFrame with (b) file as Index, "
-            "(c) (file,start_time,end_time) as MultiIndex, or "
+            "(c) (file,start_time,end_time) as MultiIndex, or with these as columns, or "
             "(d) CategoricalLabels object"
         )
+
+        # if (file,start_time,end_time) are in the columns, convert to MultiIndex
+        if isinstance(samples, pd.DataFrame):
+            if all(
+                col in samples.columns for col in ["file", "start_time", "end_time"]
+            ):
+                samples.set_index(["file", "start_time", "end_time"], inplace=True)
+        # if (file)
 
         if isinstance(samples, CategoricalLabels):
             # extract sparse multihot label df
@@ -101,62 +110,15 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         # remove `dataset` kwarg possibly passed from Lightning
         kwargs.pop("dataset", None)
 
-        if overlap_fraction is not None:
-            warnings.warn(
-                "`overlap_fraction` argument is deprecated and will be removed in a future version. Use `clip_overlap_fraction` instead.",
-                DeprecationWarning,
-            )
-            assert (
-                clip_overlap_fraction is None
-            ), "Cannot specify both overlap_fraction and clip_overlap_fraction"
-            clip_overlap_fraction = overlap_fraction
-
-        # validate that file paths are correctly placed in the input index or list
-        # and check that the first one exist as a way to quickly catch mistakes
-        if len(samples) > 0:
-            if isinstance(samples, pd.DataFrame):  # samples is a pd.DataFrame
-                if isinstance(samples.index, pd.core.indexes.multi.MultiIndex):
-                    # index is (file, start_time, end_time)
-                    first_path = samples.index.values[0][0]
-                else:  # index of df is just file path
-                    first_path = samples.index.values[0]
-            else:  # samples is a list of file path
-                first_path = samples[0]
-            if audio_root is not None:
-                first_path = Path(first_path) / Path(audio_root)
-            _check_is_path(first_path)
-
-        # set up prediction Dataset, considering three possible cases:
-        # (c1) user provided multi-index df with file,start_time,end_time of clips
-        # (c2) user provided file list and wants clips to be split out automatically
-        # (c3) split_files_into_clips=False -> one sample & one prediction per file provided
-        if (
-            type(samples) == pd.DataFrame
-            and type(samples.index) == pd.core.indexes.multi.MultiIndex
-        ):  # c1 user provided multi-index df with file,start_time,end_time of clips
-            # raise AssertionError if first item of multi-index is not str or Path
-            dataset = AudioFileDataset(
-                samples=samples, preprocessor=preprocessor, audio_root=audio_root
-            )
-        elif (
-            split_files_into_clips
-        ):  # c2 user provided file list; split each file into appropriate length clips
-            # raise AssertionError if first item is not str or Path
-            dataset = AudioSplittingDataset(
-                samples=samples,
-                preprocessor=preprocessor,
-                clip_overlap=clip_overlap,
-                clip_overlap_fraction=clip_overlap_fraction,
-                clip_step=clip_step,
-                final_clip=final_clip,
-                audio_root=audio_root,
-            )
-        else:  # c3 samples is list of files and
-            # split_files_into_clips=False -> one sample & one prediction per file provided
-            # eg, each file is a 5 second clips and the model expects 5 second clips
-            dataset = AudioFileDataset(
-                samples=samples, preprocessor=preprocessor, audio_root=audio_root
-            )
+        dataset = AudioFileDataset(
+            samples=samples,
+            preprocessor=preprocessor,
+            clip_overlap=clip_overlap,
+            overlap_fraction=overlap_fraction,
+            clip_step=clip_step,
+            final_clip=final_clip,
+            audio_root=audio_root,
+        )
 
         dataset.bypass_augmentations = bypass_augmentations
 

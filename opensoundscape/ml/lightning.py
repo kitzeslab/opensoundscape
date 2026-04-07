@@ -282,7 +282,6 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
-            split_files_into_clips=True,
             clip_overlap=0,
             final_clip="extend",
             bypass_augmentations=True,
@@ -329,11 +328,9 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         batch_size=1,
         num_workers=0,
         activation_layer=None,
-        split_files_into_clips=True,
         clip_overlap=None,
-        clip_overlap_fraction=None,
-        clip_step=None,
         overlap_fraction=None,
+        clip_step=None,
         final_clip="extend",
         bypass_augmentations=True,
         invalid_samples_log=None,
@@ -370,12 +367,8 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
                 - 'sigmoid': all scores in [0,1] but don't sum to 1
                 - 'softmax_and_logit': applies softmax first then logit
                 [default: None]
-            split_files_into_clips:
-                If True, internally splits and predicts on clips from longer audio files
-                Otherwise, assumes each row of `samples` corresponds to one complete sample
-            clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+            overlap_fraction, clip_overlap, clip_step, final_clip:
                 see `opensoundscape.utils.generate_clip_times_df`
-            overlap_fraction: deprecated alias for clip_overlap_fraction
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
             invalid_samples_log: if not None, samples that failed to preprocess
@@ -428,10 +421,8 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         # create dataloader to generate batches of AudioSamples
         dataloader = self.predict_dataloader(
             samples=samples,
-            split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
             clip_overlap=clip_overlap,
-            clip_overlap_fraction=clip_overlap_fraction,
             clip_step=clip_step,
             final_clip=final_clip,
             bypass_augmentations=bypass_augmentations,

@@ -25,7 +25,10 @@ def train_df_clips(train_df):
 @pytest.fixture()
 def model(train_df_clips):
     model = lightning.LightningSpectrogramModule(
-        architecture="resnet18", classes=train_df_clips.columns, sample_duration=1.0
+        architecture="resnet18",
+        classes=train_df_clips.columns,
+        sample_duration=1.0,
+        sample_rate=22050,
     )
     return model
 

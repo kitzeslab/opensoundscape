@@ -81,11 +81,12 @@ def sample_df():
 def test_audio_clip_loader_file(sample):
     action = actions.AudioClipLoader()
     action.__call__(sample)
-    assert sample.data.sample_rate == 44100
+    assert isinstance(sample.data, Audio)
 
 
 def test_audio_clip_loader_resample(sample):
-    action = actions.AudioClipLoader(sample_rate=32000)
+    action = actions.AudioClipLoader()
+    sample.sample_rate = 32000
     action.__call__(sample)
     assert sample.data.sample_rate == 32000
 
@@ -293,13 +294,18 @@ def test_action_to_from_dict():
 
 
 def test_overlay_to_from_dict(sample_df):
-    action = Overlay(overlay_df=sample_df, update_labels=True)
+    action = Overlay(
+        overlay_samples=sample_df,
+        update_labels=True,
+        break_on_key="overlay",
+        sample_duration=1.0,
+    )
     d = action.to_dict()
 
     action2 = Overlay.from_dict(d)  # raises warning about not having overlay_df
     # new action will have empty overlay_df and will be bypassed
     assert action2.bypass == True
-    assert action2.overlay_df.empty
+    assert action2.overlay_df is None
 
 
 def test_pcen(sample_audio):
@@ -379,7 +385,7 @@ def test_adaptive_random_noise_adds_noise(sample_audio):
     original_samples = sample_audio.data.samples.copy()
 
     result = action_functions.adaptive_random_noise(
-        sample_audio.data, snr_range=(-10, 0), signal_dB=0, color="white"
+        sample_audio.data, snr_range=(-10, 0), input_gain=0, color="white"
     )
 
     # Audio should be different from original (noise was added)
@@ -394,7 +400,7 @@ def test_adaptive_random_noise_adapts_to_signal_level():
     # Add noise to quiet audio
     snr_range = (2, 3)  # fairly narrow range for testing
     result = action_functions.adaptive_random_noise(
-        quiet_audio, snr_range=snr_range, signal_dB=0, color="white"
+        quiet_audio, snr_range=snr_range, input_gain=0, color="white"
     )
     assert quiet_audio.dBFS < result.dBFS < quiet_audio.dBFS + 6
 
@@ -405,7 +411,7 @@ def test_adaptive_random_noise_different_colors(sample_audio):
 
     for color in colors:
         result = action_functions.adaptive_random_noise(
-            sample_audio.data, snr_range=(-10, 0), signal_dB=0, color=color
+            sample_audio.data, snr_range=(-10, 0), input_gain=0, color=color
         )
         # Should produce different output
         assert not np.array_equal(result.samples, sample_audio.data.samples)
@@ -416,7 +422,7 @@ def test_adaptive_random_noise_stochastic(sample_audio):
     results = []
     for _ in range(5):
         result = action_functions.adaptive_random_noise(
-            sample_audio.data, snr_range=(-20, 0), signal_dB=0, color="white"
+            sample_audio.data, snr_range=(-20, 0), input_gain=0, color="white"
         )
         results.append(result.samples.copy())
 
@@ -432,11 +438,11 @@ def test_adaptive_random_noise_with_signal_gain(sample_audio):
     """Test that signal_dB parameter affects the output"""
     # Test with different signal_dB values
     result_0db = action_functions.adaptive_random_noise(
-        sample_audio.data, snr_range=(-1, 1), signal_dB=0, color="white"
+        sample_audio.data, snr_range=(-1, 1), input_gain=0, color="white"
     )
 
     result_minus10db = action_functions.adaptive_random_noise(
-        sample_audio.data, snr_range=(-1, 1), signal_dB=-10, color="white"
+        sample_audio.data, snr_range=(-1, 1), input_gain=-10, color="white"
     )
     # Result with -10 dB signal gain should be quieter
     assert result_minus10db.dBFS < result_0db.dBFS
@@ -447,7 +453,7 @@ def test_adaptive_random_noise_with_action_wrapper(sample_audio):
     action = actions.Action(
         action_functions.adaptive_random_noise,
         snr_range=(-15, -5),
-        signal_dB=0,
+        input_gain=0,
         color="pink",
     )
     original_samples = sample_audio.data.samples.copy()

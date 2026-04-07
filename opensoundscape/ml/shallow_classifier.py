@@ -12,7 +12,7 @@ from tqdm.autonotebook import tqdm
 import opensoundscape
 from opensoundscape.ml.datasets import EmbeddingDataset, HopliteDataset
 from opensoundscape.ml.loss import BCELossWeakNegatives
-from opensoundscape.ml.utils import _version_mismatch_warn
+from opensoundscape.ml.utils import _version_mismatch_warn, _infinite_dataloader
 from opensoundscape.vector_database import _require_hoplite
 from opensoundscape.ml.loss import BCELossWeakNegatives
 import opensoundscape as opso
@@ -277,13 +277,14 @@ def fit_on_hoplite(
     train_df,
     validation_df=None,
     batch_size=128,
-    steps=1000,
+    steps=10_000,
     optimizer=None,
     criterion=None,
     device=torch.device("cpu"),
     validation_interval=100,
     logging_interval=100,
     early_stopping_patience=None,
+    progress_bar=False,
     **kwargs,
 ):
     """train a PyTorch classifier on Hoplite Embedding DB and label dataframe
@@ -307,9 +308,9 @@ def fit_on_hoplite(
             the entire dataset is used as a single batch
             [Default: 128]
 
-        steps: number of training steps (epochs); each step, all data is passed forward and
-        backward, and the optimizer updates the weights
-            [Default: 1000]
+        steps: number of training steps (epochs; each step, all data is passed forward and
+            backward, and the optimizer updates the weights
+            [Default: 10_000]
 
         optimizer: torch.optim optimizer to use; default None uses AdamW
 
@@ -328,6 +329,8 @@ def fit_on_hoplite(
         early_stopping_patience: if provided and validation data is available, training will stop
         early if validation loss doesn't improve for this many steps (not validation evaluations)
         [Default: None, which means no early stopping]
+
+        progress_bar: whether to show a progress bar during training; default False
 
         **kwargs: additional keyword arguments passed to HopliteDataset; see HopliteDataset.__init__()
     """
@@ -358,28 +361,27 @@ def fit_on_hoplite(
             validation_dataset, batch_size=batch_size, shuffle=False, num_workers=0
         )
 
-    for step in range(steps):
+    train_loader = _infinite_dataloader(train_loader)
+
+    for step in tqdm(range(steps), disable=not progress_bar):
         classifier.train()
+        batch_features, batch_labels = next(train_loader)
 
-        # iterate over the training data in batches
-        for batch_features, batch_labels in train_loader:
-            batch_features = torch.as_tensor(batch_features, dtype=torch.float32).to(
-                device
-            )
-            batch_labels = torch.as_tensor(batch_labels, dtype=torch.float32).to(device)
+        batch_features = torch.as_tensor(batch_features, dtype=torch.float32).to(device)
+        batch_labels = torch.as_tensor(batch_labels, dtype=torch.float32).to(device)
 
-            # zero the gradients
-            optimizer.zero_grad()
+        # zero the gradients
+        optimizer.zero_grad()
 
-            # forward pass
-            outputs = classifier(batch_features)
+        # forward pass
+        outputs = classifier(batch_features)
 
-            # compute loss
-            loss = criterion(outputs, batch_labels)
+        # compute loss
+        loss = criterion(outputs, batch_labels)
 
-            # backward pass and optimization
-            loss.backward()
-            optimizer.step()
+        # backward pass and optimization
+        loss.backward()
+        optimizer.step()
 
         # Validation (optional)
         if validation_df is not None and (step + 1) % validation_interval == 0:

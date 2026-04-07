@@ -8,7 +8,7 @@ from opensoundscape.ml.safe_dataset import SafeDataset
 
 @pytest.fixture()
 def preprocessor():
-    pre = SpectrogramPreprocessor(sample_duration=5.0)
+    pre = SpectrogramPreprocessor(sample_duration=5.0, sample_rate=22050)
     return pre
 
 

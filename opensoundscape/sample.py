@@ -34,6 +34,7 @@ class AudioSample(Sample):
         duration=None,
         labels=None,
         trace=None,
+        sample_rate=None,
     ):
         """initialize AudioSample
         Args:
@@ -50,6 +51,7 @@ class AudioSample(Sample):
         self.duration = duration
         self.labels = labels
         self.trace = trace
+        self.sample_rate = sample_rate
         self.preprocessing_exception = None
 
         # to begin with, set the data to source

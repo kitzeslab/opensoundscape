@@ -39,10 +39,14 @@ def wandb_table(
         dataset = dataset.sample(n=n, random_state=random_state)
 
     # set up columns for WandB display table
-    table_columns = ["audio", "tensor", "labels", "path"]
-    if dataset.has_clips:  # keep track of clip start/ends
-        table_columns += ["clip start time"]
-        table_columns += ["clip duration"]
+    table_columns = [
+        "audio",
+        "tensor",
+        "labels",
+        "path",
+        "clip start time",
+        "clip duration",
+    ]
     for c in classes_to_extract:
         table_columns.append(c)
 
@@ -69,9 +73,9 @@ def wandb_table(
                 image,  # spectrogram image
                 sample.categorical_labels,
                 str(sample.source),
+                sample.start_time,
+                sample.duration,
             ]
-            if dataset.has_clips:
-                row_info += [sample.start_time, sample.duration]
             for c in classes_to_extract:
                 row_info += [sample.labels[c]]
 

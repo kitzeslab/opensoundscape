@@ -106,7 +106,7 @@ def action_from_dict(dict):
 class BaseAction:
     """Parent class for all Actions (used in Preprocessor pipelines)
 
-    New actions should subclass this class.
+    New actions should subclass this class (or Action for pre-wired functionality).
     """
 
     def __init__(self, is_augmentation=False):
@@ -301,14 +301,26 @@ class AudioClipLoader(Action):
         if "fn" in kwargs:
             kwargs.pop("fn")
         super().__init__(fn=Audio.from_file, **kwargs)
-        # two params are provided by sample.start_time and sample.duration
-        self.params = self.params.drop(["offset", "duration"])
+        # warn user that "offset", "duration", "sample_rate" parameters will be ignored since they are provided by sample attributes
+        if any(k in kwargs for k in ["offset", "duration", "sample_rate"]):
+            print(
+                """Warning: 'offset', 'duration', and 'sample_rate' parameters will be ignored since
+                they are provided by sample.start_time, sample.duration, and sample.sample_rate
+                attributes, respectively, during sample preprocessing."""
+            )
+        # these params are provided by sample.start_time and sample.duration
+        self.params = self.params.drop(["offset", "duration", "sample_rate"])
 
     def __call__(self, sample, **kwargs):
         offset = 0 if sample.start_time is None else sample.start_time
         duration = sample.duration
+        sr = sample.sample_rate
         sample.data = self.action_fn(
-            sample.data, offset=offset, duration=duration, **dict(self.params, **kwargs)
+            sample.data,
+            offset=offset,
+            duration=duration,
+            sample_rate=sr,
+            **dict(self.params, **kwargs),
         )
 
 
@@ -474,11 +486,12 @@ class TorchTransforms(BaseAction):
         Will fail if any of the transforms or their parameters are not serializable.
         """
         d = super().to_dict(
-            ignore_attributes=ignore_attributes + ("transforms", "_transforms_composed")
+            ignore_attributes=ignore_attributes
+            + ("transforms", "_sequential_transforms")
         )
         try:
             d["transforms"] = [
-                serialize_transform(t) for t in self.transforms.transforms
+                serialize_transform(t) for t in self.transforms.children()
             ]
         except Exception as e:
             raise ValueError(f"Could not serialize torch transforms") from e

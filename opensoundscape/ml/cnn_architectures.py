@@ -19,7 +19,7 @@ model has 10 output classes, write
 Then you can initialize a model object from
 `opensoundscape.ml.cnn` with your architecture:
 
-`model=CNN(my_arch,classes,sample_duration)`
+`model=CNN(my_arch,classes,sample_duration, sample_rate)`
 
 or override an existing model's architecture:
 

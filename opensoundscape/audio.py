@@ -162,6 +162,14 @@ class Audio:
         requested, especially when dBFS is near zero
         """
         n_samples = int(duration * sample_rate)
+        if n_samples < 1:
+            # return empty Audio object
+            return cls(np.array([]), sample_rate)
+        elif n_samples == 1:
+            # single sample, return constant value at desired dBFS, random sign
+            sample_value = (10 ** (dBFS / 20)) / np.sqrt(2) * np.sign(np.random.randn())
+            return cls(np.array([sample_value]), sample_rate)
+
         assert color in _noise_psd_functions, f"Invalid color {color}"
 
         # get target power spectral density for desired color
@@ -357,10 +365,15 @@ class Audio:
         It uses the IPython.display.Audio class to create an interactive Audio widget.
 
         """
+        if len(self.samples) == 0:
+            return "[Audio object with 0 samples]"
         return self._to_ipdisplay_audio()._repr_html_()
 
     def show_widget(self, normalize=False, autoplay=False):
         """create and display IPython.display.Audio widget; see that class for docs"""
+        if len(self.samples) == 0:
+            print("<Audio object with 0 samples>")
+            return
         if max(abs(self.samples)) > 1:
             normalize = True  # avoid error in display with out-of-bounds samples
         IPython.display.display(
@@ -1035,7 +1048,7 @@ class Audio:
 
         Args:
             clip_duration (float):  The duration in seconds of the clips
-            **kwargs (such as clip_overlap_fraction, final_clip) are passed to
+            **kwargs (such as overlap_fraction, final_clip) are passed to
                 opensoundscape.utils.generate_clip_times_df()
                 - extends last Audio object if user passes final_clip == "extend"
         Returns:
@@ -1077,7 +1090,7 @@ class Audio:
         function,
         clip_duration,
         clip_overlap=None,
-        clip_overlap_fraction=None,
+        overlap_fraction=None,
         clip_step=None,
         final_clip="extend",
         rounding_precision=10,
@@ -1090,7 +1103,7 @@ class Audio:
                 and returns a value (e.g. scalar, array, etc.)
             clip_duration: duration (seconds) of each window
             clip_overlap: overlap (seconds) of each window [default: None]
-            clip_overlap_fraction: fraction of overlap (0 to 1) of each window
+            overlap_fraction: fraction of overlap (0 to 1) of each window
                 [default: None]
             clip_step: step size (seconds) between windows [default: None]
             final_clip: behavior if final_clip is less than clip_duration seconds long.
@@ -1114,7 +1127,7 @@ class Audio:
             full_duration=self.duration,
             clip_duration=clip_duration,
             clip_overlap=clip_overlap,
-            clip_overlap_fraction=clip_overlap_fraction,
+            overlap_fraction=overlap_fraction,
             clip_step=clip_step,
             final_clip=final_clip,
             rounding_precision=rounding_precision,
