@@ -484,8 +484,8 @@ class SpectrogramPreprocessor(BasePreprocessor):
             shorter clips will be extended (modify random_trim_audio and
             trim_audio to change behavior).
         sample_rate: target sample rate. if None, does not resample
-        overlay_samples: if not None, will include an overlay action drawing
-            samples from this set of samples (audio files / dataframe)
+        overlay_samples: if not None, will include an overlay (mixup) action
+            samples can be a dataframe of file/start/end times or a set of audio files
         height: height of output sample (frequency axis)
             - default None will use the original height of the spectrogram
         width: width of output sample (time axis)
@@ -521,7 +521,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
-                "load_audio": AudioClipLoader(out_of_bounds_mode="ignore"),
+                "load_audio": AudioClipLoader(),
                 # if we are augmenting and get more audio than target duration, take a random trim from it
                 "random_trim_audio": AudioTrim(
                     target_duration=sample_duration,
@@ -574,6 +574,8 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 "rescale": Action(action_functions.scale_tensor),
             }
         )
+        if bandpass_range is None and sample_rate is not None:
+            bandpass_range = (0, sample_rate / 2)
         if bandpass_range is not None:
             self.insert_action(
                 "bandpass",
@@ -607,7 +609,7 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
         self,
         sample_duration,
         sample_rate,
-        overlay_df=None,
+        overlay_samples=None,
         torch_transforms=None,
         spec_nfft=512,
         spec_window_length=None,
@@ -639,8 +641,8 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
                 trim_audio to change behavior).
             sample_rate:
                 sample rate to which audio files are resampled when loaded
-            overlay_df: if not None, will include an overlay action drawing
-                samples from this df
+            overlay_samples: if not None, will include an overlay (mixup) action
+                samples can be a dataframe of file/start/end times or a set of audio files
             torch_transforms: optionally pass custom list of torchvision transforms
                 to use instead of default set
             spec_nfft: number of FFT components for spectrogram
@@ -683,6 +685,7 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
                 n_fft=512,
                 win_length=512,
                 hop_length=128,
+                center=False, #highly recommended because default=True will zero-pad, creating extra columns
             ),
             torchaudio.transforms.AmplitudeToDB(top_db=80),
         ]
@@ -714,6 +717,7 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
                     n_fft=spec_nfft,
                     win_length=spec_window_length,
                     hop_length=spec_hop_length,
+                    center=False,  # stick with opso convention here because default=True will zero-pad, creating extra columns
                 )
             ]
             if n_mels is not None:
@@ -764,10 +768,8 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
         self.pipeline = pd.Series(
             {
                 # load a segment of an audio file into an Audio object
-                # references AudioSample attributes: start_time and duration
-                "load_audio": AudioClipLoader(
-                    out_of_bounds_mode="ignore", sample_rate=sample_rate
-                ),
+                # references AudioSample attributes: start_time, duration, sample_rate
+                "load_audio": AudioClipLoader(),
                 # if we are augmenting and get a long file, take a random trim from it
                 "random_trim_audio": AudioTrim(
                     target_duration=sample_duration,
@@ -785,9 +787,13 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
                 "transform": transform_action,
                 "overlay": (
                     Overlay(
+                        break_on_key="overlay",
                         is_augmentation=True,
-                        overlay_df=pd.DataFrame() if overlay_df is None else overlay_df,
+                        # if None/empty overlay_samples, action will be set to .bypass=True
+                        # and skipped during preprocessing (can be used as a placeholder for later setting of overlay_samples)
+                        overlay_samples=overlay_samples,
                         update_labels=True,
+                        sample_duration=sample_duration,
                     )
                 ),
                 # add vertical (time) and horizontal (frequency) masking bars
@@ -808,27 +814,6 @@ class TorchSpectrogramPreprocessor(BasePreprocessor):
                 ),
             }
         )
-
-        # bypass overlay if overlay_df was not provided (None)
-        # keep the action in the pipeline for ease of enabling it later
-        if overlay_df is None or len(overlay_df) < 1:
-            self.pipeline["overlay"].bypass = True
-
-    @property
-    def sample_rate(self):
-        return self.pipeline["load_audio"].get("sample_rate")
-
-    @sample_rate.setter
-    def sample_rate(self, value):
-        self.pipeline["load_audio"].set(sample_rate=value)
-
-    @classmethod
-    def from_dict(cls, dict):
-        # extract sample rate from load_audio action
-        sr = dict["pipeline"]["load_audio"]["params"].get("sample_rate")
-        dict["init_kwargs"]["sample_rate"] = sr
-
-        return super().from_dict(dict)
 
 
 class PCENPreprocessor(preprocessors.SpectrogramPreprocessor):
@@ -889,7 +874,7 @@ class AudioPreprocessor(BasePreprocessor):
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
-                "load_audio": AudioClipLoader(sample_rate=sample_rate),
+                "load_audio": AudioClipLoader(),
                 # trim samples to correct length
                 # if extend_short_clips=True, extend short clips with silence
                 "trim_audio": AudioTrim(
@@ -997,7 +982,7 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
         Args:
             sample_duration: length in seconds of audio samples generated
             sample_rate: target audio sample rate. if None, does not resample
-            overlay_samples: if not None, will include an overlay action
+            overlay_samples: if not None, will include an overlay (mixup) action
                 samples can be a dataframe of file/start/end times or a set of audio files
             height: height of output sample (frequency axis)
                 - default None will use the original height of the spectrogram

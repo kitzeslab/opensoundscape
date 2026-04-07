@@ -79,7 +79,7 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
         assert type(samples) in (list, np.ndarray, pd.DataFrame, CategoricalLabels), (
             "`samples` must be either: "
             "(a) list or np.array of files, or DataFrame with (b) file as Index, "
-            "(c) (file,start_time,end_time) as MultiIndex, or "
+            "(c) (file,start_time,end_time) as MultiIndex, or with these as columns, or "
             "(d) CategoricalLabels object"
         )
 

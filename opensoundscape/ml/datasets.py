@@ -53,7 +53,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
         audio_root:
             optionally pass a root directory (pathlib.Path or str) to prepend to each file path
             - if None (default), samples must contain full paths to files
-        **kwargs:
+        **kwargs: passed to make_clip_df via _ingest_samples_argument
 
     Returns:
         sample (AudioSample object)
@@ -87,6 +87,7 @@ class AudioFileDataset(torch.utils.data.Dataset):
             samples=samples,
             audio_root=audio_root,
             sample_duration=preprocessor.sample_duration,
+            **kwargs,
         )
         _check_first_path(samples, audio_root=audio_root)
         _check_label_types(samples)
@@ -414,15 +415,10 @@ def _ingest_samples_argument(samples, audio_root=None, sample_duration=None, **k
                     **kwargs,
                 )
                 # copy labels from this file's row to all clip rows
-                labels_i = labels.iloc[i : i + 1].values  # keep as 2D array for concat
-                labels_i = np.repeat(labels_i, len(clip_df), axis=0)
-                labels_i_df = pd.DataFrame(
-                    labels_i, columns=labels.columns, index=clip_df.index
-                )
-                clip_df = pd.concat([clip_df, labels_i_df], axis=1)
+                clip_df.loc[:, labels.columns] = labels.iloc[i].to_numpy()
                 clip_dfs.append(clip_df)
                 invalid_samples.update(invalids)
-            samples = pd.concat(clip_dfs, ignore_index=True).set_index(keys)
+            samples = pd.concat(clip_dfs)
     else:
         raise ValueError(f"Unsupported type for samples: {type(samples)}")
 

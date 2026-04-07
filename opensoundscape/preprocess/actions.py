@@ -301,6 +301,13 @@ class AudioClipLoader(Action):
         if "fn" in kwargs:
             kwargs.pop("fn")
         super().__init__(fn=Audio.from_file, **kwargs)
+        # warn user that "offset", "duration", "sample_rate" parameters will be ignored since they are provided by sample attributes
+        if any(k in kwargs for k in ["offset", "duration", "sample_rate"]):
+            print(
+                """Warning: 'offset', 'duration', and 'sample_rate' parameters will be ignored since
+                they are provided by sample.start_time, sample.duration, and sample.sample_rate
+                attributes, respectively, during sample preprocessing."""
+            )
         # these params are provided by sample.start_time and sample.duration
         self.params = self.params.drop(["offset", "duration", "sample_rate"])
 
@@ -479,11 +486,12 @@ class TorchTransforms(BaseAction):
         Will fail if any of the transforms or their parameters are not serializable.
         """
         d = super().to_dict(
-            ignore_attributes=ignore_attributes + ("transforms", "_transforms_composed")
+            ignore_attributes=ignore_attributes
+            + ("transforms", "_sequential_transforms")
         )
         try:
             d["transforms"] = [
-                serialize_transform(t) for t in self.transforms.transforms
+                serialize_transform(t) for t in self.transforms.children()
             ]
         except Exception as e:
             raise ValueError(f"Could not serialize torch transforms") from e

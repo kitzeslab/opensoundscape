@@ -126,7 +126,7 @@ def test_spectrogram_preprocessor_output_size(
     preprocessor.width = None
     preprocessor.height = None
     s = preprocessor.forward(sample)
-    assert list(s.data.shape) == [1, 129, 343]
+    assert list(s.data.shape) == [1, 257, 171]
 
 
 def test_remove_action(preprocessor):
@@ -359,6 +359,29 @@ def test_preprocessor_to_from_json_with_custom_action_cls(
     set_seed(0)
     sample2 = preprocessor2.forward(sample)
     assert np.array_equal(sample0.data, sample2.data)
+
+
+def test_torchspectrogrampreprocessor(sample):
+    p = preprocessors.TorchSpectrogramPreprocessor(sample_duration=1, sample_rate=22050)
+    s = p.forward(sample, bypass_augmentations=True).data
+    expected_shape = (
+        SpectrogramPreprocessor(sample_duration=1, sample_rate=22050)
+        .forward(sample, bypass_augmentations=True)
+        .data.shape
+    )
+    assert isinstance(s, torch.Tensor)
+    assert s.shape == expected_shape
+
+
+def test_save_load_torchspectrogrampreprocessor(sample, temp_json_path):
+    set_seed(0)
+    p = preprocessors.TorchSpectrogramPreprocessor(sample_duration=1, sample_rate=22050)
+    sample0 = p.forward(sample).data
+    p.save(temp_json_path)
+    p2 = preprocessors.load_json(temp_json_path)
+    set_seed(0)
+    sample2 = p2.forward(sample).data
+    assert np.array_equal(sample0, sample2)
 
 
 # several specific scenarios are tested using Datasets in test_datasets.py

@@ -77,9 +77,9 @@ def test_init_multiindex(dataset_df, pre):
     SafeAudioDataloader(dataset_df, pre)
 
 
-def test_catch_index_not_set(bad_dataset_df_multiindex, pre):
-    with pytest.raises(AssertionError):
-        SafeAudioDataloader(bad_dataset_df_multiindex, pre)
+def test_allow_index_not_set(bad_dataset_df_multiindex, pre):
+    dl = SafeAudioDataloader(bad_dataset_df_multiindex, pre)
+    next(iter(dl))
 
 
 def test_collate_samples():

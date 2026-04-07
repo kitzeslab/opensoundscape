@@ -1109,7 +1109,7 @@ class SpectrogramClassifier(SpectrogramModule):
             "enabled": False,
             "patience": 10,
             "min_delta": 0.0,
-            "mode": "min",
+            "mode": "max",
         }
         """Early stopping configuration dictionary.
 
@@ -1125,7 +1125,7 @@ class SpectrogramClassifier(SpectrogramModule):
 
         'patience': number of steps with no improvement before stopping
         'min_delta': minimum change in the monitored quantity to qualify as an improvement
-        'mode': 'max' or 'min', whether to look for maximum or minimum of the monitored quantity
+        'mode': 'max' or 'min', whether to look for maximum (eg accuracy) or minimum (eg loss) of the monitored quantity
         """
 
     def _log(self, message, level=1):
@@ -1895,10 +1895,14 @@ class SpectrogramClassifier(SpectrogramModule):
             best_model_path = f"{self.save_path}/best.pickle"
             try:
                 self._log(
-                    f"Reloading best model from step {self.best_step} at end of training",
+                    f"Reloading best model weights from step {self.best_step} at end of training",
                     level=2,
                 )
-                self.load(best_model_path)
+                model = torch.load(
+                    best_model_path, map_location=self.device, weights_only=False
+                )
+                weights = model.network.state_dict()
+                self.network.load_state_dict(weights)
             except Exception as e:
                 self._log(f"Error occurred while reloading best model: {e}", level=2)
 
@@ -2565,7 +2569,7 @@ class SpectrogramClassifier(SpectrogramModule):
 
         Example:
         ```python
-        m=opso.CNN('resnet18',[0,1],1)
+        m=opso.CNN('resnet18',[0,1],1,32000)
         # m.device='cpu' # optionally set a specific device
         m.network.to(m.device)
         samples = opso.utils.make_clip_df([opso.birds_path]*10,clip_duration=1)
@@ -3150,13 +3154,14 @@ class SpectrogramClassifier(SpectrogramModule):
         ```python
         import torchaudio
         from opensoundscape import CNN, preprocessors
-        model = CNN("resnet18", classes=[0], sample_duration=5)
+        model = CNN("resnet18", classes=[0], sample_duration=5, sample_rate=32000)
         # custom list of torchaudio and torchvision transforms
         my_transforms = [
             torchaudio.transforms.Spectrogram(
                 n_fft=512,
                 win_length=512,
                 hop_length=128,
+                center=False, #highly recommended because default=True will zero-pad, creating extra columns
             ),
             torchaudio.transforms.AmplitudeToDB(top_db=80),
         ]
@@ -3214,6 +3219,7 @@ class SpectrogramClassifier(SpectrogramModule):
 CNN = SpectrogramClassifier
 register_model_cls(CNN)
 CNN.__doc__ = SpectrogramClassifier.__doc__
+CNN.__init__.__doc__ = SpectrogramClassifier.__init__.__doc__
 
 
 def _check_classes_inference(samples, model_classes):

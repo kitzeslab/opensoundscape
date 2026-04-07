@@ -96,10 +96,13 @@ class Overlay(BaseAction):
             self.overlay_df = overlay_df
 
     def __call__(self, sample, **kwargs):
-        sample.data = overlay(
+        params = dict(self.params, **kwargs)
+        params.pop("sample_duration", None)
+        # overlay modifies sample in place
+        overlay(
             sample,
             overlay_df=self.overlay_df,
-            **dict(self.params, **kwargs),
+            **params,
         )
 
     def to_dict(self):
@@ -332,11 +335,11 @@ def overlay(
                         0, sample.data.duration
                     ).loop(length=sample.data.duration)
                 # ensure same sample rate (does nothing if already same)
-                overlay_sample = overlay_sample.data.resample(sample.data.sample_rate)
+                overlay_audio = overlay_sample.data.resample(sample.data.sample_rate)
                 # use a weighted sum to overlay (blend) the samples (arrays or tensors)
                 sample.data = sample.data._spawn(
                     samples=sample.data.samples * (1 - weight)
-                    + overlay_sample.data.samples * weight
+                    + overlay_audio.samples * weight
                 )
             else:
                 raise PreprocessingError(
