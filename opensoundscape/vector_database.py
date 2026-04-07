@@ -736,7 +736,7 @@ def similarity_search_hoplite_db(
     query_embedding = query_embedding.astype(db.get_embedding_dtype())
     if exact_search:
         score_fn = score_functions.get_score_fn("dot", target_score=target_score)
-        results, all_scores = brutalism.threaded_brute_search(
+        results = brutalism.threaded_brute_search(
             db,
             query_embedding,
             num_results,

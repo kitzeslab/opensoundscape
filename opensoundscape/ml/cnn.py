@@ -2120,19 +2120,12 @@ class SpectrogramClassifier(SpectrogramModule):
                 target_score=target_score,
                 search_kwargs=search_kwargs,
             )
-            compiled_search_results.append(
-                {
-                    "query": {
-                        "file": qfile,
-                        "start_time": qstart_time,
-                        "end_time": qend_time,
-                        # "embedding": query_embedding,
-                        "audio_root": audio_root,
-                    },
-                    "results": search_results,
-                }
-            )
-        return compiled_search_results
+            matches = pd.DataFrame(search_results)
+            matches["query_file"] = qfile
+            matches["query_start_time"] = qstart_time
+            matches["query_end_time"] = qend_time
+            compiled_search_results.append(matches)
+        return pd.concat(compiled_search_results, ignore_index=True)
 
     def _check_or_get_default_embedding_layer(self, target_layer=None):
         """helper function to get default target layer for embeddings

@@ -7,7 +7,7 @@ import numpy as np
 from opensoundscape.ml.shallow_classifier import (
     predict_on_hoplite,
     MLPClassifier,
-    fit_on_hoplite_db,
+    fit_on_hoplite,
 )
 from opensoundscape.ml.loss import BCELossWeakNegatives
 from opensoundscape.vector_database import (
@@ -268,7 +268,6 @@ class SongSpace:
     def similarity_search(
         self,
         query_samples,
-        
         k=5,
         exact_search=False,
         search_subset_size=None,
@@ -408,7 +407,7 @@ class SongSpace:
         )
         if criterion is None:
             criterion = BCELossWeakNegatives(weak_negative_weight=weak_negatives_weight)
-        clf.val_metrics = fit_on_hoplite_db(
+        clf.val_metrics = fit_on_hoplite(
             classifier=clf,
             hoplite_db=self.database,
             train_df=train_df,
