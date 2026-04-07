@@ -11,6 +11,7 @@ from opensoundscape.ml.dataloaders import SafeAudioDataloader, collate_audio_sam
 from opensoundscape.ml.loss import BCEWithLogitsLoss_hot
 from opensoundscape.preprocess.preprocessors import BasePreprocessor
 from opensoundscape.utils import identity
+from opensoundscape.ml.schedulers import CosineAnnealingWithWarmupScheduler
 
 
 class BaseModule:
@@ -85,22 +86,22 @@ class BaseModule:
         """
 
         self.optimizer_params = {
-            "class": torch.optim.SGD,
+            "class": torch.optim.AdamW,
             "kwargs": {
-                "lr": 0.01,
-                "momentum": 0.9,
+                "lr": 0.001,
                 "weight_decay": 0.0005,
             },
             "classifier_lr": None,  # optionally specify different lr for classifier layer
         }
         """optimizer settings: dictionary with "class" and "kwargs" to class.__init__
         
-        for example, to use Adam optimizer set:
+        for example, to use SGD optimizer set:
         ```python
         my_instance.optimizer_params = {
-            "class": torch.optim.Adam,
+            "class": torch.optim.SGD,
             "kwargs": {
-                "lr": 0.001,
+                "lr": 0.01,
+                "momentum": 0.9,
                 "weight_decay": 0.0005,
             },
         }
@@ -108,24 +109,24 @@ class BaseModule:
         """
 
         self.lr_scheduler_params = {
+            "class": CosineAnnealingWithWarmupScheduler,
+            "kwargs": {
+                "max_steps": 1_000,
+                "warmup_fraction": 0.05,
+                "final_lr_ratio": 0.1,
+            },
+        }
+        """learning rate schedule: dictionary with "class" and "kwargs" to class.__init__
+        
+        for example, to use StepLR scheduler set:
+        ```python
+        my_instance.lr_scheduler_params = {
             "class": torch.optim.lr_scheduler.StepLR,
             "kwargs": {
                 "step_size": 10,
                 "gamma": 0.7,
             },
         }
-        """learning rate schedule: dictionary with "class" and "kwargs" to class.__init__
-        
-        for example, to use Cosine Annealing, set:
-        ```python
-        model.lr_scheduler_params = {
-            "class": torch.optim.lr_scheduler.CosineAnnealingLR,
-            "kwargs":{
-                "T_max": n_epochs,
-                "eta_min": 1e-7,
-                "last_epoch":self.current_epoch-1
-        }
-        ```
         """
 
         self.use_amp = False
@@ -379,7 +380,6 @@ class BaseModule:
         return self.train_dataloader_cls(
             samples=samples,
             preprocessor=self.preprocessor,
-            split_files_into_clips=True,
             clip_overlap=0,
             final_clip="extend",
             bypass_augmentations=bypass_augmentations,
