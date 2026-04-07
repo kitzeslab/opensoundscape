@@ -7,6 +7,9 @@ from . import safe_dataset
 from . import sampling
 from . import utils
 from . import export
+from . import lightning
+from . import onnx_model
+from . import shallow_classifier
 import torch.multiprocessing
 
 # using 'file_system' avoids errors with "Too many open files",

@@ -4,7 +4,7 @@ import warnings
 import torch
 
 
-class ONNXModel(torch.nn.Module):
+class SequentialModelExporter(torch.nn.Module):
     def __init__(self, sequential_models, outputs=None):
         """A wrapper torch.nn.Module to combine multiple sequential models for ONNX export
 
@@ -16,7 +16,7 @@ class ONNXModel(torch.nn.Module):
             outputs: list of str or None, list of keys in sequential_models to include in output dict
             - if None, includes outputs of all sequential models!
         """
-        super(ONNXModel, self).__init__()
+        super(SequentialModelExporter, self).__init__()
 
         for name, m in sequential_models.items():
             try:
@@ -162,7 +162,7 @@ def to_onnx_program(
         raise ValueError(f"invalid option for activation_layer: {activation_layer}")
 
     if "embedding" in outputs:
-        onnx_model = ONNXModel(
+        sequential_model = SequentialModelExporter(
             {
                 "sample": preprocessing_transforms,
                 "embedding": embedding_model,
@@ -171,7 +171,7 @@ def to_onnx_program(
             outputs=outputs,
         )
     else:
-        onnx_model = ONNXModel(
+        sequential_model = SequentialModelExporter(
             {
                 "sample": preprocessing_transforms,
                 "classifier": classifier,
@@ -185,8 +185,10 @@ def to_onnx_program(
     # the resulting model allows dynamic batch size
     example_input_batch = torch.rand(2, 1, input_length)
 
+    sequential_model.eval()
+
     return torch.onnx.export(
-        onnx_model,
+        sequential_model,
         (example_input_batch,),
         dynamic_shapes=[{0: "dim_x"}],  # allow dynamic batch size
         dynamo=True,
