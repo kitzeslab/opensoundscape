@@ -14,6 +14,7 @@ from opensoundscape.vector_database import (
     _find_matching_window_ids,
     load_or_create_hoplite_usearch_db,
 )
+import json
 
 default_datetime_parser = ARUFileTimestampParser()
 
@@ -64,11 +65,98 @@ class SongSpace:
     - potentially repeat with other species/classes
     """
 
-    def __init__(self, database, feature_extractor="bs-convnext"):
+    @classmethod
+    def open(cls, path, feature_extractor=None):
+        """Open an existing SongSpace from a specified path
+
+        if the feature_extractor is not one of the registered bioacoustics model zoo options
+        ("bs-convnext", "birdnet", "perch", "perch2"), create the feature extractor used previously,
+        then pass it to this method.
+        """
+        path = Path(path)
+        # load songspace metadata
+        with open(path / "songspace.json") as f:
+            metadata = json.load(f)
+        if metadata["feature_extractor"]["source"] == "bioacoustics_model_zoo":
+            # for standard feature extractors, we can just initialize by passing the name
+            feature_extractor = metadata["feature_extractor"]["key"]
+        elif feature_extractor is None:
+            raise ValueError(
+                f"""The SongSpace at {path} was created with a custom feature extractor, so you must
+                 provide the same feature extractor to open it. The metadata indicates the feature
+                 extractor used was {metadata['feature_extractor']}."""
+            )
+        instance = cls(
+            path=path,
+            feature_extractor=feature_extractor,
+            sample_duration=metadata["sample_duration"],
+        )
+
+        # load classifiers
+        for name, clf_path in metadata["classifiers"].items():
+            instance.classifiers[name] = MLPClassifier.load(path / clf_path)
+
+        # load datasets
+        for name, ds_info in metadata["datasets"].items():
+            instance.datasets[name] = {
+                "allow_training": ds_info["allow_training"],
+                "audio_root": ds_info["audio_root"],
+                "label_df": pd.read_pickle(path / ds_info["label_df_path"]),
+            }
+        return instance
+
+    def save(self):
+        """Save the SongSpace metadata to the SongSpace path, so that it can be re-loaded later with SongSpace.open()"""
+        # TODO: use a hash of feature extractor and preprocessor to ensure same model when re-loading the SongSpace
+
+        # save datasets to pickle in the SongSpace directory
+        (Path(self.path) / "datasets").mkdir(exist_ok=True)
+        for name, ds in self.datasets.items():
+            ds["label_df"].to_pickle(
+                Path(self.path) / "datasets" / f"{name}_labels.pkl"
+            )
+        # save classifiers
+        (Path(self.path) / "classifiers").mkdir(exist_ok=True)
+        for name, clf in self.classifiers.items():
+            clf.save(Path(self.path) / "classifiers" / f"{name}_classifier.mlp")
+
+        # save metadata json for re-loading the SongSpace with the same models and datasets
+        metadata = {
+            "feature_extractor": self.feature_extractor_info,
+            "datasets": {
+                name: {
+                    "allow_training": ds["allow_training"],
+                    "audio_root": ds["audio_root"],
+                    "label_df_path": f"datasets/{name}_labels.pkl",
+                }
+                for name, ds in self.datasets.items()
+            },
+            "classifiers": {
+                name: f"classifiers/{name}_classifier.mlp"
+                for name, _ in self.classifiers.items()
+            },
+            "sample_duration": self.sample_duration,
+        }
+        with open(Path(self.path) / "songspace.json", "w") as f:
+            json.dump(metadata, f)
+        print(
+            f"Saved SongSpace to {self.path} with {len(self.classifiers)} classifiers and {len(self.datasets)} datasets."
+        )
+
+    def __init__(self, path, feature_extractor="perch2", sample_duration=None):
+        self.path = path
+
+        # create directory for this SongSpace, which will hold the database and metadata
+        Path(path).mkdir(parents=True, exist_ok=True)
+
         if isinstance(feature_extractor, str):
             _require_bmz()
             import bioacoustics_model_zoo as bmz
 
+            self.feature_extractor_info = {
+                "source": "bioacoustics_model_zoo",
+                "key": feature_extractor,
+            }
             if feature_extractor == "bs-convnext":
                 feature_extractor = bmz.BirdSetConvNeXT()
             elif feature_extractor == "birdnet":
@@ -82,32 +170,31 @@ class SongSpace:
                     f"Unsupported feature extractor: {feature_extractor}. Supported options are "
                     "'bs-convnext','birdnet', 'perch', and 'perch2' (or pass your own model)."
                 )
-            version = getattr(feature_extractor, "version", "unknown_version")
-            self.model_source = f"bmz_v{bmz.__version__}:{feature_extractor.__class__.__name__}:{version}"
-        else:
-            version = getattr(feature_extractor, "version", "unknown_version")
-            self.model_source = (
-                f"custom:{feature_extractor.__class__.__name__}:{version}"
-            )
 
-        if isinstance(database, (str, Path)):
-            database = load_or_create_hoplite_usearch_db(
-                database,
-                embedding_dim=feature_extractor.classifier.in_features,
-            )
         else:
-            if database.get_embedding_dim() != feature_extractor.classifier.in_features:
-                raise ValueError(
-                    f"Database embedding dimension {database.get_embedding_dim()} does not match feature extractor output dimension {feature_extractor.classifier.in_features}"
-                )
+            self.feature_extractor_info = {
+                "source": "custom",
+                "key": feature_extractor.__class__.__name__,
+            }
+        version = getattr(feature_extractor, "version", "unknown_version")
+        self.feature_extractor_info["version"] = version
+
+        database = load_or_create_hoplite_usearch_db(
+            path,
+            embedding_dim=feature_extractor.classifier.in_features,
+        )
+        if database.get_embedding_dim() != feature_extractor.classifier.in_features:
+            raise ValueError(
+                f"Database embedding dimension {database.get_embedding_dim()} does not match feature extractor output dimension {feature_extractor.classifier.in_features}"
+            )
         self.feature_extractor = feature_extractor
         self._database = database
         self.classifiers = {}
         self.datasets = {}
         self.embedding_dim = database.get_embedding_dim()
-        self.sample_duration = feature_extractor.preprocessor.sample_duration
-
-        # TODO: can we use a hash of feature extractor and preprocessor to ensure same model when re-loading the SongSpace
+        if sample_duration is None:
+            sample_duration = feature_extractor.sample_duration
+        self.sample_duration = sample_duration
 
     def remove_classifier(self, name):
         """Remove a classifier from the SongSpace by name"""
@@ -192,7 +279,9 @@ class SongSpace:
         """
         from opensoundscape.ml.datasets import _ingest_samples_argument
 
-        samples_df, _ = _ingest_samples_argument(samples)
+        samples_df, _ = _ingest_samples_argument(
+            samples, sample_duration=self.sample_duration
+        )
 
         # compute deployment name for each audio file
         unique_files = samples_df.index.get_level_values("file").unique()
@@ -523,6 +612,8 @@ class SongSpace:
                 - if False, returns random samples from the specified datasets without checking for labels
                 This is faster when selecting from large, unlabeled datasets
         """
+        # TODO: should be checking db rather than datasets? db could have many samples not listed in datasets?
+
         if dataset_list is None:
             # use all datasets with allow_training=True
             dataset_list = list(
@@ -542,7 +633,9 @@ class SongSpace:
         if len(unlabeled_dfs) == 0:
             # welp, we don't have weak negatives. No biggie, just suggest user ingests un-annotated data
             warnings.warn(
-                f"No datasets with allow_training=True have unlabeled samples for the specified classes. Consider ingesting un-annotated data with ingest_audio() and allow_training=True to get weak negatives."
+                f"""No datasets with allow_training=True have unlabeled samples for the specified
+                 classes. Consider ingesting un-annotated data with ingest_audio() and
+                 allow_training=True to get weak negatives."""
             )
             return None
         else:
