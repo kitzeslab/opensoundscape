@@ -396,3 +396,28 @@ def set_seed(seed, verbose=False):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+
+# utilities for guessing deployment name from file path
+
+
+def parent_folder_name(file_path):
+    """Utility function to extract the parent folder name from a file path"""
+    return Path(file_path).parent.name
+
+
+def two_parents_name(file_path):
+    """Utility function to extract "grandparent_parent" folder name from a file path"""
+    p = Path(file_path).parent
+    gp = p.parent
+    return f"{gp.name}_{p.name}"
+
+
+def second_parent_name(file_path):
+    """Utility function to extract the second parent folder name from a file path"""
+    return Path(file_path).parent.parent.name
+
+
+def filename_first_part(file_path):
+    """Utility function to extract the part of the filename before the first underscore from a file path"""
+    return Path(file_path).stem.split("_")[0]

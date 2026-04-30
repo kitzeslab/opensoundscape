@@ -16,30 +16,16 @@ from opensoundscape.vector_database import (
 )
 import json
 
+# helper functions for common patterns of mapping audio files to deployments
+# for the file_to_deployment argument in ingest_audio
+from opensoundscape.utils import (
+    parent_folder_name,
+    two_parents_name,
+    second_parent_name,
+    filename_first_part,
+)
+
 default_datetime_parser = ARUFileTimestampParser()
-
-
-# utilities for guessing deployment name from file path
-def parent_folder_name(file_path):
-    """Utility function to extract the parent folder name from a file path"""
-    return Path(file_path).parent.name
-
-
-def two_parents_name(file_path):
-    """Utility function to extract "grandparent_parent" folder name from a file path"""
-    p = Path(file_path).parent
-    gp = p.parent
-    return f"{gp.name}_{p.name}"
-
-
-def second_parent_name(file_path):
-    """Utility function to extract the second parent folder name from a file path"""
-    return Path(file_path).parent.parent.name
-
-
-def filename_first_part(file_path):
-    """Utility function to extract the part of the filename before the first underscore from a file path"""
-    return Path(file_path).stem.split("_")[0]
 
 
 class SongSpace:
@@ -255,7 +241,7 @@ class SongSpace:
                 - if dictionary or pd.Series, should map filenames (str) to deployment names (str)
                 - if str, the name of the deployment that all samples will be associated with
                 - if deployment does not exist in db, it will be created
-                Utility functions for common patterns are provided in opensoundscape.ml.song_space, including
+                Utility functions for common patterns are provided in opensoundscape.utils, including
                 parent_folder_name, two_parents_name, second_parent_name, filename_first_part
                 (an LLM would also be great at writing a custom function given your deployment:audio file structure)
             allow_training: if True, allows using this dataset for training classifiers; if False,
