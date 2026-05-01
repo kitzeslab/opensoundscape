@@ -16,7 +16,7 @@ def test_base_module_init_defaults():
     assert model.inference_dataloader_cls is SafeAudioDataloader
     assert "accuracy" in model.torch_metrics
     assert model.loss_fn is not None
-    assert model.optimizer_params["class"] is torch.optim.SGD
+    assert model.optimizer_params["class"] is torch.optim.AdamW
 
 
 def test_predict_dataloader_wraps_single_path_and_sets_fixed_args():
