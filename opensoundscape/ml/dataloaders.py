@@ -47,9 +47,9 @@ class SafeAudioDataloader(torch.utils.data.DataLoader):
             - "raise": raise the error
             - "none": return None
         collate_fn: function to collate list of AudioSample objects into batches
-            if None (default), uses collate_fn=collate_audio_samples to return
+            if None, uses collate_fn=collate_audio_samples to return
                 a tuple of (data, labels) tensors
-            use opso.utils.identity to return list of AudioSample objects
+            default is identity, which returns list of AudioSample objects (no collation)
         audio_root: optionally pass a root directory (pathlib.Path or str)
             - `audio_root` is prepended to each file path
             - if None (default), samples must contain full paths to files

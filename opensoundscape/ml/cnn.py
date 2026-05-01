@@ -166,6 +166,11 @@ class SpectrogramModule(BaseModule):
                     width, height, channels, sample_rate, sample_shape, overlay_df
         """
         super().__init__()
+        # don't allow ['file', 'start_time', 'end_time'] as class names since these are reserved for parsing samples dataframes
+        if any(col in classes for col in ["file", "start_time", "end_time"]):
+            raise ValueError(
+                "Class names cannot be 'file', 'start_time', or 'end_time' since these column names are reserved for parsing samples dataframes"
+            )
         self.classes = classes
         self._single_target = single_target
         self.name = "SpectrogramModule"
@@ -337,6 +342,11 @@ class SpectrogramModule(BaseModule):
                 - (): empty tuple creates an MLPClassifier with no hidden layers
         """
         assert len(new_classes) > 0, "new_classes must have >0 elements"
+        # don't allow ['file', 'start_time', 'end_time'] as class names since these are reserved for parsing samples dataframes
+        if any(col in new_classes for col in ["file", "start_time", "end_time"]):
+            raise ValueError(
+                "Class names cannot be 'file', 'start_time', or 'end_time' since these column names are reserved for parsing samples dataframes"
+            )
 
         # assert isinstance(self.classifier, torch.nn.Linear), (
         assert isinstance(
