@@ -25,8 +25,8 @@ jobs:
         run: sudo apt-get update
       - name: Install libsndfile1
         run: sudo apt-get install libsndfile1
-      # - name: Install ffmpeg v4
-      #   run: sudo snap install ffmpeg
+      - name: Install ffmpeg
+        run: sudo apt-get install -y ffmpeg
       - name: Install poetry
         run: curl -sSL https://install.python-poetry.org | python
       - name: Poetry install
