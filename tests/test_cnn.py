@@ -130,6 +130,11 @@ def test_df():
 
 
 @pytest.fixture()
+def test_sample_tuple():
+    return ("tests/audio/silence_10s.mp3", 0)
+
+
+@pytest.fixture()
 def short_file_df():
     return pd.DataFrame(index=["tests/audio/veryshort.wav"])
 
@@ -675,24 +680,19 @@ def test_predict_all_arch_4ch(test_df):
             arch = cnn_architectures.ARCH_DICT[arch_name](
                 num_classes=2, num_channels=4, weights=None
             )
-            if "inception" in arch_name:
-                # inception requires 3 channels
-                # (_transform_input() implementation is hard-coded for 3 channels)
-                continue
-            else:
-                model = cnn.CNN(
-                    architecture=arch,
-                    classes=[0, 1],
-                    sample_duration=5.0,
-                    sample_rate=22050,
-                    channels=4,
-                )
-                if arch_name in ("alexnet", "vgg11_bn"):
-                    # don't use MPS bc of adaptive pooling implementation gap
-                    # as of April 2026
-                    if str(model.device) == "mps":
-                        # model.device = "cpu"
-                        continue  # skip test for MPS for these architectures because of adaptive pooling implementation gap as of April 2026
+            model = cnn.CNN(
+                architecture=arch,
+                classes=[0, 1],
+                sample_duration=5.0,
+                sample_rate=22050,
+                channels=4,
+            )
+            if arch_name in ("alexnet", "vgg11_bn"):
+                # don't use MPS bc of adaptive pooling implementation gap
+                # as of April 2026
+                if str(model.device) == "mps":
+                    # model.device = "cpu"
+                    continue  # skip test for MPS for these architectures because of adaptive pooling implementation gap as of April 2026
             scores = model.predict(test_df.index.values)
             assert len(scores) == 2
         except Exception as e:
@@ -705,23 +705,20 @@ def test_predict_all_arch_1ch(test_df):
             arch = cnn_architectures.ARCH_DICT[arch_name](
                 num_classes=2, num_channels=1, weights=None
             )
-            if "inception" in arch_name:
-                # inception requires 3 channels
-                continue
-            else:
-                model = cnn.CNN(
-                    architecture=arch,
-                    classes=[0, 1],
-                    sample_duration=5.0,
-                    sample_rate=22050,
-                    channels=1,
-                )
-                if arch_name in ("alexnet", "vgg11_bn"):
-                    # don't use MPS bc of adaptive pooling implementation gap
-                    # as of April 2026
-                    if str(model.device) == "mps":
-                        # model.device = "cpu"
-                        continue  # skip test for MPS for these architectures because of adaptive pooling implementation gap as of April 2026
+
+            model = cnn.CNN(
+                architecture=arch,
+                classes=[0, 1],
+                sample_duration=5.0,
+                sample_rate=22050,
+                channels=1,
+            )
+            if arch_name in ("alexnet", "vgg11_bn"):
+                # don't use MPS bc of adaptive pooling implementation gap
+                # as of April 2026
+                if str(model.device) == "mps":
+                    # model.device = "cpu"
+                    continue  # skip test for MPS for these architectures because of adaptive pooling implementation gap as of April 2026
 
             scores = model.predict(test_df.index.values)
             assert len(scores) == 2
@@ -875,21 +872,6 @@ def test_profile(train_df):
     assert "backward_time_per_batch" in profile
 
 
-def test_train_predict_inception(train_df, temp_model_dir):
-    model = cnn.InceptionV3([0, 1], 5.0, weights=None, sample_rate=22050)
-    model.train(
-        train_df,
-        train_df,
-        save_path=temp_model_dir,
-        steps=1,
-        batch_size=2,
-        save_interval=10,
-        num_workers=0,
-    )
-    model.predict(train_df, num_workers=0)
-    # No need to manually remove directory - fixture handles cleanup
-
-
 def test_train_predict_architecture(train_df):
     """test passing architecture object to CNN class
 
@@ -1011,13 +993,6 @@ def test_save_and_load_model(model_save_path):
     m = cnn.load_model(model_save_path)
     assert m.classes == classes
     assert type(m) == cnn.CNN
-
-    cnn.InceptionV3(
-        classes=classes, sample_duration=1.0, sample_rate=22050, weights=None
-    ).save(model_save_path)
-    m = cnn.load_model(model_save_path)
-    assert m.classes == classes
-    assert type(m) == cnn.InceptionV3
 
 
 def test_save_and_load_model_custom_arch(model_save_path):
@@ -1465,8 +1440,6 @@ def test_embed(test_df):
     from opensoundscape.ml.cnn_architectures import list_architectures
 
     for arch in list_architectures():
-        if "inception" in arch:
-            continue
         try:
             m = cnn.SpectrogramClassifier(
                 classes=[0],
@@ -1719,8 +1692,8 @@ def test_change_classifier_all_arch():
                 sample_rate=22050,
                 channels=1,
             )
-            if arch_name == "squeezenet1_0" or arch_name == "inception_v3":
-                # not supported (squeezenet has conv2d classifier, inception has aux classifiers)
+            if arch_name == "squeezenet1_0":
+                # not supported (squeezenet has conv2d classifier)
                 continue
             else:
                 new_clf = torch.nn.Linear(model.classifier.in_features, 3)
@@ -1761,8 +1734,8 @@ def test_change_classes_all_arch():
                 sample_rate=22050,
                 channels=1,
             )
-            if arch_name == "squeezenet1_0" or arch_name == "inception_v3":
-                # not supported (squeezenet has conv2d classifier, inception has aux classifiers)
+            if arch_name == "squeezenet1_0":
+                # not supported (squeezenet has conv2d classifier)
                 continue
             else:
                 model.change_classes([0, 1, 2])
@@ -2182,7 +2155,7 @@ def test_similarity_search_hoplite_db_returns_compiled_results(monkeypatch):
 
 
 @onnx_deps
-def test_save_onnx(onnx_save_path):
+def test_save_onnx(onnx_save_path, test_sample_tuple):
     from opensoundscape import CNN, preprocessors
 
     model = CNN(
@@ -2193,6 +2166,7 @@ def test_save_onnx(onnx_save_path):
         sample_rate=32000,
         arch_weights=None,
     )
+    original_sample_shape = model.preprocessor.forward(test_sample_tuple).data.shape
     onnx_program = model.save_onnx(onnx_save_path)
 
     # Using the saved model for inference with onnx runtime:
@@ -2227,7 +2201,9 @@ def test_save_onnx(onnx_save_path):
     outs_dict = {name: ort_outs[i] for i, name in enumerate(output_names)}
     assert outs_dict["classifier"].shape == (batch_size, 4)
     assert outs_dict["embedding"].shape == (batch_size, 1280)
-    assert outs_dict["sample"].shape == (batch_size, 1, 257, 376)
+    assert outs_dict["sample"].shape == tuple(
+        [batch_size] + list(original_sample_shape)
+    )
 
     # Example 2: Exporting a model with customized preprocessing transforms
     model = CNN(

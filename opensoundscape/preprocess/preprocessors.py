@@ -599,6 +599,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
 
         return sample
 
+
 @register_preprocessor_cls
 class TorchSpectrogramPreprocessor(BasePreprocessor):
     """Spectrogram Preprocessor using torchvision.transforms for export to ONNX"""

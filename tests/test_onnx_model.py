@@ -55,11 +55,14 @@ def patch_onnxmodel_dependencies(monkeypatch):
         onnx_model_module.onnxruntime, "InferenceSession", FakeORTSession
     )
 
-    def _fake_classifier_init(self, architecture, classes, sample_duration):
+    def _fake_classifier_init(
+        self, architecture, classes, sample_duration, sample_rate
+    ):
         self._init_args = {
             "architecture": architecture,
             "classes": classes,
             "sample_duration": sample_duration,
+            "sample_rate": sample_rate,
         }
 
     monkeypatch.setattr(

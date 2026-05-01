@@ -15,7 +15,11 @@ import pandas as pd
 import os
 import copy
 
+import os
+import copy
+
 import torch
+import torch.nn.functional as F
 import torch.nn.functional as F
 from tqdm.autonotebook import tqdm
 
@@ -34,7 +38,6 @@ from opensoundscape.preprocess.preprocessors import (
 )
 from opensoundscape.preprocess import io
 from opensoundscape.ml.datasets import AudioFileDataset
-from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.ml.dataloaders import SafeAudioDataloader, collate_audio_samples
 from opensoundscape.utils import identity
 from opensoundscape.logging import wandb_table
@@ -57,7 +60,6 @@ from opensoundscape.logging import wandb_table
 from opensoundscape.ml import cnn_architectures, shallow_classifier
 from opensoundscape.ml.base_model import BaseModule
 from opensoundscape.ml.cam import CAM
-from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.ml.dataloaders import collate_audio_samples
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.loss import (
@@ -1655,8 +1657,8 @@ class SpectrogramClassifier(SpectrogramModule):
                     # these are kwargs to __init__():
                     "architecture": arch_name,
                     "classes": self.classes,
-                    "sample_duration": self.preprocessor.sample_duration,
-                    "sample_rate": self.preprocessor.sample_rate,
+                    "sample_duration": self.sample_duration,
+                    "sample_rate": self.sample_rate,
                     "single_target": self.single_target,
                     "preprocessor_dict": self.preprocessor.to_dict(),
                     "preprocessor_cls": io.build_name(self.preprocessor.__class__),
@@ -2861,7 +2863,7 @@ class SpectrogramClassifier(SpectrogramModule):
             meta.value = str(self.preprocessor.sample_duration)
             meta = om.metadata_props.add()
             meta.key = "sample_rate"
-            meta.value = str(self.preprocessor.pipeline.load_audio.params.sample_rate)
+            meta.value = str(self.preprocessor.sample_rate)
             meta = om.metadata_props.add()
             meta.key = "classes"
             meta.value = json.dumps(self.classes)
@@ -2930,140 +2932,6 @@ def use_resample_loss(model, train_df):
     """
     class_frequency = torch.tensor(train_df.values).sum(0).to(model.device)
     model.loss_fn = ResampleLoss(class_frequency)
-
-
-@register_model_cls
-class InceptionV3(SpectrogramClassifier):
-    """Child of SpectrogramClassifier class for InceptionV3 architecture"""
-
-    def __init__(
-        self,
-        classes,
-        sample_duration,
-        single_target=False,
-        freeze_feature_extractor=False,
-        weights="DEFAULT",
-        sample_width=299,
-        sample_height=299,
-        **kwargs,
-    ):
-        """Model object for InceptionV3 architecture subclassing CNN
-
-        See opensoundscape.org for exaple use.
-
-        Args:
-            classes:
-                list of output classes (usually strings)
-            sample_duration: duration in seconds of one audio sample
-            single_target: if True, predict exactly one class per sample
-                [default:False]
-            freeze-feature_extractor:
-                if True, feature weights don't have
-                gradient, and only final classification layer is trained
-            weights:
-                string containing version name of the pre-trained classification weights to use for
-                this architecture. if 'DEFAULT', model is loaded with best available weights (note
-                that these may change across versions). Pre-trained weights available for each
-                architecture are listed at https://pytorch.org/vision/stable/models.html
-            sample_height: height of input image in pixels
-            sample_width: width of input image in pixels
-            **kwargs passed to SpectrogramClassifier.__init__()
-
-        Note: InceptionV3 architecture implementation assumes channels=3
-        """
-
-        self.classes = classes
-
-        architecture = inception_v3(
-            len(self.classes),
-            freeze_feature_extractor=freeze_feature_extractor,
-            weights=weights,
-        )
-        architecture.constructor_name = "inception_v3"
-
-        if "architecture" in kwargs:
-            kwargs.pop("architecture")
-
-        super().__init__(
-            architecture=architecture,
-            classes=classes,
-            sample_duration=sample_duration,
-            single_target=single_target,
-            height=sample_height,
-            width=sample_width,
-            channels=3,
-            **kwargs,
-        )
-        self.name = "InceptionV3"
-
-    def training_step(self, samples, batch_idx):
-        """Training step for pytorch lightning
-
-        Args:
-            batch: a batch of data from the DataLoader
-            batch_idx: index of the batch
-
-        Returns:
-            loss: loss value for the batch
-        """
-        batch_tensors, batch_labels = collate_audio_samples(samples)
-        batch_tensors = batch_tensors.to(self.device)
-        batch_labels = batch_labels.to(self.device)
-
-        batch_size = len(batch_tensors)
-
-        # automatic mixed precision
-        self.scaler = torch.amp.GradScaler(enabled=self.use_amp)
-        if "cuda" in str(self.device):
-            device_type = "cuda"
-            dtype = torch.float16
-        else:
-            device_type = "cpu"
-            dtype = torch.bfloat16
-        with torch.autocast(device_type=device_type, dtype=dtype):
-            inception_outs = self.network(batch_tensors)
-            logits = inception_outs.logits
-            aux_logits = inception_outs.aux_logits
-
-            loss1 = self.loss_fn(logits, batch_labels)
-            loss2 = self.loss_fn(aux_logits, batch_labels)
-            loss = loss1 + 0.4 * loss2
-        if not self.lightning_mode:
-            # if not using Lightning, we manually call
-            # loss.backward() and optimizer.step()
-            # Lightning does this behind the scenes
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-            self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
-        # else, Lightning handles optimization steps
-
-        # compute and log any metrics in self.torch_metrics
-        batch_metrics = {
-            f"train_{name}": metric.to(self.device)(
-                logits.detach(), batch_labels.detach().int()
-            ).cpu()
-            for name, metric in self.torch_metrics.items()
-        }
-
-        if self.lightning_mode:
-            self.log(
-                f"train_loss",
-                loss,
-                on_step=True,
-                on_epoch=True,
-                batch_size=len(batch_tensors),
-            )
-            self.log_dict(
-                batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
-            )
-        return loss
-
-    @classmethod
-    def from_torch_dict(self):
-        raise NotImplementedError(
-            "Creating InceptionV3 from torch dict is not implemented."
-        )
 
 
 def load_model(path, device=None, unpickle=True):
