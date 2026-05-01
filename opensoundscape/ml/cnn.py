@@ -34,7 +34,6 @@ from opensoundscape.preprocess.preprocessors import (
 )
 from opensoundscape.preprocess import io
 from opensoundscape.ml.datasets import AudioFileDataset
-from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.ml.dataloaders import SafeAudioDataloader, collate_audio_samples
 from opensoundscape.utils import identity
 from opensoundscape.logging import wandb_table
@@ -57,7 +56,6 @@ from opensoundscape.logging import wandb_table
 from opensoundscape.ml import cnn_architectures, shallow_classifier
 from opensoundscape.ml.base_model import BaseModule
 from opensoundscape.ml.cam import CAM
-from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.ml.dataloaders import collate_audio_samples
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.loss import (
@@ -1655,8 +1653,8 @@ class SpectrogramClassifier(SpectrogramModule):
                     # these are kwargs to __init__():
                     "architecture": arch_name,
                     "classes": self.classes,
-                    "sample_duration": self.preprocessor.sample_duration,
-                    "sample_rate": self.preprocessor.sample_rate,
+                    "sample_duration": self.sample_duration,
+                    "sample_rate": self.sample_rate,
                     "single_target": self.single_target,
                     "preprocessor_dict": self.preprocessor.to_dict(),
                     "preprocessor_cls": io.build_name(self.preprocessor.__class__),
@@ -2858,7 +2856,7 @@ class SpectrogramClassifier(SpectrogramModule):
             meta.value = str(self.preprocessor.sample_duration)
             meta = om.metadata_props.add()
             meta.key = "sample_rate"
-            meta.value = str(self.preprocessor.pipeline.load_audio.params.sample_rate)
+            meta.value = str(self.preprocessor.sample_rate)
             meta = om.metadata_props.add()
             meta.key = "classes"
             meta.value = json.dumps(self.classes)

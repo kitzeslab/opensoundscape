@@ -130,6 +130,11 @@ def test_df():
 
 
 @pytest.fixture()
+def test_sample_tuple():
+    return ("tests/audio/silence_10s.mp3", 0)
+
+
+@pytest.fixture()
 def short_file_df():
     return pd.DataFrame(index=["tests/audio/veryshort.wav"])
 
@@ -2182,7 +2187,7 @@ def test_similarity_search_hoplite_db_returns_compiled_results(monkeypatch):
 
 
 @onnx_deps
-def test_save_onnx(onnx_save_path):
+def test_save_onnx(onnx_save_path, test_sample_tuple):
     from opensoundscape import CNN, preprocessors
 
     model = CNN(
@@ -2193,6 +2198,7 @@ def test_save_onnx(onnx_save_path):
         sample_rate=32000,
         arch_weights=None,
     )
+    original_sample_shape = model.preprocessor.forward(test_sample_tuple).data.shape
     onnx_program = model.save_onnx(onnx_save_path)
 
     # Using the saved model for inference with onnx runtime:
@@ -2227,7 +2233,9 @@ def test_save_onnx(onnx_save_path):
     outs_dict = {name: ort_outs[i] for i, name in enumerate(output_names)}
     assert outs_dict["classifier"].shape == (batch_size, 4)
     assert outs_dict["embedding"].shape == (batch_size, 1280)
-    assert outs_dict["sample"].shape == (batch_size, 1, 257, 376)
+    assert outs_dict["sample"].shape == tuple(
+        [batch_size] + list(original_sample_shape)
+    )
 
     # Example 2: Exporting a model with customized preprocessing transforms
     model = CNN(
