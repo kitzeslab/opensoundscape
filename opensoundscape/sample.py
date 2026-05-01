@@ -102,8 +102,6 @@ class AudioSample(Sample):
             file path
                 - if None (default), value of `file` must be full path
         """
-        # cast (potentially sparse input) to dense boolean #TODO: should it be int or long, or float?
-        # note that this implementation doesn't allow soft labels
         # make a copy to avoid modifying original
         labels_series = labels_series.copy().astype(np.float16)
 
