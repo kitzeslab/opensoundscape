@@ -297,10 +297,12 @@ class AudioClipLoader(Action):
         see Audio.from_file()
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, out_of_bounds_mode="ignore", **kwargs):
         if "fn" in kwargs:
             kwargs.pop("fn")
-        super().__init__(fn=Audio.from_file, **kwargs)
+        super().__init__(
+            fn=Audio.from_file, out_of_bounds_mode=out_of_bounds_mode, **kwargs
+        )
         # warn user that "offset", "duration", "sample_rate" parameters will be ignored since they are provided by sample attributes
         if any(k in kwargs for k in ["offset", "duration", "sample_rate"]):
             print(

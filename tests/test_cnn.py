@@ -2040,7 +2040,8 @@ def test_embed_to_hoplite_db_inserts_embeddings_and_commits(monkeypatch):
         inserted_batches.append(
             (len(batch_samples), batch_embeddings.shape[0], deployment_id)
         )
-        return []
+        # return window_ids, failed_to_insert
+        return list(range(len(batch_samples))), []
 
     def fake_load_or_create(db, embedding_dim=None, cfg=None):
         return db
@@ -2138,7 +2139,15 @@ def test_similarity_search_hoplite_db_returns_compiled_results(monkeypatch):
     monkeypatch.setattr(
         vector_db,
         "similarity_search_hoplite_db",
-        lambda **kwargs: [{"file": "m.wav", "window_id": 9, "sort_score": 0.9}],
+        lambda **kwargs: [
+            {
+                "file": "m.wav",
+                "window_id": 9,
+                "sort_score": 0.9,
+                "start_time": 0.0,
+                "end_time": 1.0,
+            }
+        ],
     )
 
     results = model.similarity_search_hoplite_db(
@@ -2149,9 +2158,11 @@ def test_similarity_search_hoplite_db_returns_compiled_results(monkeypatch):
     )
 
     assert len(results) == 2
-    assert results[0]["query"]["file"] == "q1.wav"
-    assert results[0]["query"]["audio_root"] == "/audio"
-    assert results[0]["results"][0]["window_id"] == 9
+    assert results.at[0, "query_file"] == "q1.wav"
+    assert results.at[0, "window_id"] == 9
+    assert results.at[0, "sort_score"] == 0.9
+    assert results.at[0, "start_time"] == 0.0
+    assert results.at[1, "query_file"] == "q2.wav"
 
 
 @onnx_deps

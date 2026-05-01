@@ -96,6 +96,8 @@ def _insert_embeddings(
             in the database
         deployment_id: optional int, deployment_id to associate with the recordings
 
+    Returns:
+        list of window_ids for the successfully inserted embeddings, and list of failed inserts with info on the failure
     Effects:
         inserts the embeddings into the hoplite database
         adds new recordings to the database as needed
@@ -118,6 +120,7 @@ def _insert_embeddings(
     )
 
     failed_to_insert = []
+    window_ids = []  # track and return window_id in database for each item
 
     # insert each embedding in the batch into the database, one-by-one
     for j, audiosample in enumerate(batch_samples):
@@ -147,20 +150,22 @@ def _insert_embeddings(
         try:
             # TODO: use insert_windows_batch
             # TODO: use hoplite's new options for 'raise', 'overwrite', 'ignore', 'add' duplicate keys
-            db.insert_window(
+            window_id = db.insert_window(
                 recording_id=recording_id,
                 embedding=batch_embeddings[j],
                 offsets=[start_time, end_time],
             )
+            window_ids.append(window_id)
         except RuntimeError as e:
-            # duplicate key error, window already exists
+            window_ids.append(None)  # placeholder for failed insert
             if "Duplicate key" in str(e):
+                # duplicate key error, window already exists
                 failed_to_insert.append(
                     (file, start_time, end_time, "duplicate window")
                 )
             else:
                 raise e
-    return failed_to_insert
+    return window_ids, failed_to_insert
 
 
 def normalize_index_to_tuples(idx, rounding_precision=6):
@@ -265,6 +270,7 @@ def _find_matching_window_ids(
     deployment_name=None,
     project=None,
     rounding_precision=6,
+    return_val="all",  # all or first
 ):
     """find window ids in the db matching each of the given clips (defined by their filename, start_time, and end_time), optionally constrained to a deployment/project
 
@@ -278,6 +284,7 @@ def _find_matching_window_ids(
         rounding_precision: int, number of decimal places to round start_time and end_time to when matching, to account for potential float precision issues
     Returns:
         list of window_id tuples for each row in clips; eg [(), (0,), (3,1)]
+        or list of integer if return_val == "first"
     """
     if len(clips) == 0:
         print("Zero samples passed to _find_matching_window_ids")
@@ -305,10 +312,15 @@ def _find_matching_window_ids(
     # find matching window ids for each clip in the input dataframe efficiently
     match_positions = find_matches(clip_df_tuples, db_window_tuples)
     window_ids = [w.id for w in windows]
-    matching_window_ids = [
+    if return_val == "first":
+        # return just the first matching window id for each clip, or None if no matches
+        matching_window_ids = [
+            index[0] if len(index) > 0 else None for index in match_positions
+        ]
+        return matching_window_ids
+    return [
         tuple(window_ids[pos] for pos in positions) for positions in match_positions
     ]
-    return matching_window_ids
 
 
 def _handle_existing_windows(
@@ -385,6 +397,7 @@ def _handle_existing_windows(
 
     # else: embedding_exists_mode == "add", add more embeddings even if matching
     # existing windows -> no subsetting needed
+    # TODO: we probably want to know the window id of existing embeddings
 
 
 def _collate_search_results(db, results):
@@ -660,9 +673,6 @@ def windows_to_dataframe(windows):
     return results_df
 
 
-# TODO provide detection-counting in-loop as an alternative to selection
-
-
 def similarity_search_hoplite_db(
     query_embedding,
     db,
@@ -725,7 +735,7 @@ def similarity_search_hoplite_db(
     query_embedding = query_embedding.astype(db.get_embedding_dtype())
     if exact_search:
         score_fn = score_functions.get_score_fn("dot", target_score=target_score)
-        results, all_scores = brutalism.threaded_brute_search(
+        results = brutalism.threaded_brute_search(
             db,
             query_embedding,
             num_results,

@@ -492,6 +492,39 @@ def efficientnet_b0(
 
 
 @register_arch
+def efficientnet_b1(
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
+):
+    """Wrapper for efficientnet_b1 architecture
+
+    Args:
+        num_classes:
+            number of output nodes for the final layer
+        freeze_feature_extractor:
+            if False (default), entire network will have gradients and can train
+            if True, feature block is frozen and only final layer is trained
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
+        num_channels:
+            specify channels in input sample, eg [channels h,w] sample shape
+    """
+    return generic_make_arch(
+        constructor=torchvision.models.efficientnet_b1,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="features.8",
+        name="efficientnet_b1",
+        input_conv2d_layer="features.0.0",
+        linear_clf_layer="classifier.1",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
+    )
+
+
+@register_arch
 def efficientnet_b4(
     num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):

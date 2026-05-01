@@ -27,3 +27,5 @@ docs/tutorials/*.csv
 docs/tutorials/agileDB
 docs/tutorials/*.pt
 docs/tutorials/ssdb/
+opensoundscape/ml/datasets.py
+docs/tutorials/Perch2SongSpace/

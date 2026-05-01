@@ -15,7 +15,11 @@ import pandas as pd
 import os
 import copy
 
+import os
+import copy
+
 import torch
+import torch.nn.functional as F
 import torch.nn.functional as F
 from tqdm.autonotebook import tqdm
 
@@ -1842,6 +1846,9 @@ class SpectrogramClassifier(SpectrogramModule):
     ):
         """Run inference on a dataloader, saving 1D outputs of target_layer to a hoplite database
 
+        Note that all samples are associated with a single deployment (e.g. one audio recorder on one season)
+        Call this method separately for each deployment to associate samples with different deployments in the database
+
         Args:
             samples: (same as CNN.predict())
             db: a hoplite database object or a path to a hoplite database folder
@@ -1869,7 +1876,7 @@ class SpectrogramClassifier(SpectrogramModule):
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             audio_root: the root directory for relative paths to audio files
             embedding_exists_mode: str, behavior when an embedding already exists for a given
-                embedding. Options are:
+                embedding. Options are: #TODO implement replace
                     "skip": skip inserting the embedding (default)
                     "error": raise an error
                     "add": add a new embedding entry to the db with the same source info
@@ -1891,7 +1898,7 @@ class SpectrogramClassifier(SpectrogramModule):
             **dataloader_kwargs: additional keyword arguments to pass to the dataloader
 
         Returns:
-            (embedding_db, dict with info about failed samples)
+            (embedding_db, dict with info about inserted window_id's and failed samples)
 
         Effects:
             Inserts embeddings into the provided hoplite database
@@ -1963,6 +1970,8 @@ class SpectrogramClassifier(SpectrogramModule):
                 "insertion_failures": pd.DataFrame(
                     columns=["file", "start_time", "end_time", "reason"]
                 ),
+                "window_id": [],
+                "embedded_samples": dataloader.dataset.dataset.label_df,
             }
         else:
             print(
@@ -2007,6 +2016,7 @@ class SpectrogramClassifier(SpectrogramModule):
         target_layer = self._check_or_get_default_embedding_layer(target_layer)
 
         failed_to_insert = []
+        window_ids = []  # track and return window_id in database for each item
         for i, batch_samples in enumerate(tqdm(dataloader, disable=not progress_bar)):
 
             # forward pass of network, getting only target_layer outputs
@@ -2014,7 +2024,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 batch_samples, targets=[target_layer], avgpool=True
             )
 
-            batch_insertion_failures = _insert_embeddings(
+            batch_window_ids, batch_insertion_failures = _insert_embeddings(
                 db=db,
                 batch_samples=batch_samples,
                 batch_embeddings=outs[target_layer],
@@ -2026,12 +2036,12 @@ class SpectrogramClassifier(SpectrogramModule):
             )
 
             failed_to_insert.extend(batch_insertion_failures)
+            window_ids.extend(batch_window_ids)
 
             # commit once per commit_frequency_batches batches
             # committing is relatively slow, but we don't want to lose progress if interrupted
             if (i + 1) % commit_frequency_batches == 0:
                 db.commit()
-
             if wandb_session is not None:
                 wandb_session.log(
                     {
@@ -2052,6 +2062,8 @@ class SpectrogramClassifier(SpectrogramModule):
         return (
             db,
             {
+                "embedded_samples": dataloader.dataset.dataset.label_df,
+                "window_id": window_ids,
                 "preprocessing_failures": dataloader.dataset.report(),
                 "insertion_failures": insertion_failures,
             },
@@ -2093,10 +2105,12 @@ class SpectrogramClassifier(SpectrogramModule):
             **embedding_kwargs: additional keyword arguments passed to self.embed(), such as
                 batch_size and num_workers
         Returns:
-            A list of dictionaries with the search results, one item per query sample:
-            Each item is a dictionary with the following keys:
-                - "query": dictionary with query metadata
-                - "results": list of dictionaries with metadata for each retrieved sample
+            A dataframe with the search results, including columns:
+                - query_file, query_start_time, query_end_time: the query sample info
+                - file, window_id: the matched sample filepath and window_id from the database
+                - start_time, end_time: the matched sample start and end time (relative to file) from the database
+                - sort_score: the similarity score between the query and matched sample
+
         """
         _require_hoplite()
         from opensoundscape.vector_database import similarity_search_hoplite_db
@@ -2120,19 +2134,12 @@ class SpectrogramClassifier(SpectrogramModule):
                 target_score=target_score,
                 search_kwargs=search_kwargs,
             )
-            compiled_search_results.append(
-                {
-                    "query": {
-                        "file": qfile,
-                        "start_time": qstart_time,
-                        "end_time": qend_time,
-                        # "embedding": query_embedding,
-                        "audio_root": audio_root,
-                    },
-                    "results": search_results,
-                }
-            )
-        return compiled_search_results
+            matches = pd.DataFrame(search_results)
+            matches["query_file"] = qfile
+            matches["query_start_time"] = qstart_time
+            matches["query_end_time"] = qend_time
+            compiled_search_results.append(matches)
+        return pd.concat(compiled_search_results, ignore_index=True)
 
     def _check_or_get_default_embedding_layer(self, target_layer=None):
         """helper function to get default target layer for embeddings
@@ -2163,6 +2170,7 @@ class SpectrogramClassifier(SpectrogramModule):
         forward=True,
         backward=True,
         bypass_augmentations=False,
+        **dataloader_kwargs,
     ):
         """Profile the model preprocessing, forward, and backward speeds on a set of samples
 
@@ -2179,6 +2187,7 @@ class SpectrogramClassifier(SpectrogramModule):
             backward: bool, if True, profiles backward pass time [default: True]
             bypass_augmentations: bool, if True, bypasses data augmentations
                 during preprocessing [default: False]
+            **dataloader_kwargs: additional keyword arguments to pass to the dataloader
         Returns:
             a dictionary with timing information for:
                 - breakdown of time spent on each preprocessing step
@@ -2204,7 +2213,7 @@ class SpectrogramClassifier(SpectrogramModule):
             )
 
         dataloader = self.predict_dataloader(
-            samples, batch_size=batch_size, num_workers=num_workers
+            samples, batch_size=batch_size, num_workers=num_workers, **dataloader_kwargs
         )
         dataloader.dataset.dataset.bypass_augmentations = bypass_augmentations
 

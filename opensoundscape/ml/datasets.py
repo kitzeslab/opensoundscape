@@ -248,13 +248,12 @@ class HopliteDataset(torch.utils.data.Dataset):
         project=None,
         audio_root=None,
         clip_duration=None,
+        window_ids=None,
         **kwargs,
     ):
         """Initialize the HopliteDataset
 
         Assumes that the Hoplite DB already contains windows for every audio clip
-
-        #TODO: to go fast, do we need to do batched retrieval?
 
         Args:
             db: HopliteDB instance to retrieve embeddings from
@@ -270,6 +269,8 @@ class HopliteDataset(torch.utils.data.Dataset):
             deployment_id, deployment_name, project: optional filters for retrieving windows from the db
             audio_root: if provided, audio paths are given and stored as paths relative to this root directory
             clip_duration: length of clips in seconds; only used to determine clip times when file list is provided
+            window_ids: optional pre-computed list of window_id (in db) for each sample in label_df
+                if known, pass to skip the matching step
             **kwargs: passed to make_clip_df if samples need to be split into clips
         """
         label_df, invalid_samples = _ingest_samples_argument(
@@ -280,32 +281,27 @@ class HopliteDataset(torch.utils.data.Dataset):
         self.deployment_id = deployment_id
         self.deployment_name = deployment_name
         self.project = project
-        # setting label_df also extracts files and start_times and initializes window_ids for caching retrieved window IDs
-        self.label_df = label_df  # avoid modifying input df in-place
+        # setting label_df also extracts files and start_times and initializes window_ids mapping
+        self._label_df = label_df
         self.invalid_samples = invalid_samples
+        if window_ids is None:
+            # list of tuples: matching window IDs for each sample in label_df
+            print("Finding matching window IDs for samples in label_df...")
+            self.window_ids = _find_matching_window_ids(
+                self.db,
+                self.label_df,  # clip dataframe
+                deployment_id=self.deployment_id,
+                deployment_name=self.deployment_name,
+                project=self.project,
+            )
+        else:
+            self.window_ids = window_ids
 
     @property
     def label_df(self):
         return self._label_df
 
-    @label_df.setter
-    def label_df(self, new_df):
-        self._label_df = new_df
-        self.files = new_df.index.get_level_values("file").astype(str).to_numpy()
-        self.start_times = (
-            new_df.index.get_level_values("start_time").to_numpy().astype(np.float16)
-        )
-
-        # list of tuples: matching window IDs for each sample in label_df
-        print("Finding matching window IDs for samples in label_df...")
-        self.window_ids = _find_matching_window_ids(
-            self.db,
-            self._label_df,  # clip dataframe
-            deployment_id=self.deployment_id,
-            deployment_name=self.deployment_name,
-            project=self.project,
-        )
-        print("Finished finding matching window IDs.")
+    # don't allow setting label_df
 
     def __len__(self):
         return len(self.label_df)
@@ -328,7 +324,7 @@ class HopliteDataset(torch.utils.data.Dataset):
         emb = self.db.get_embedding(id)
 
         # return (embedding, labels)
-        return emb, self.label_df.iloc[idx].values
+        return emb, self.label_df.iloc[idx].values.astype(float)
 
 
 def _ingest_samples_argument(samples, audio_root=None, sample_duration=None, **kwargs):

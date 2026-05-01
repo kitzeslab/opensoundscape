@@ -1,3 +1,5 @@
+import warnings
+
 from typing import Literal
 
 import numpy as np
@@ -12,6 +14,9 @@ from opensoundscape.ml.datasets import EmbeddingDataset, HopliteDataset
 from opensoundscape.ml.loss import BCELossWeakNegatives
 from opensoundscape.ml.utils import _version_mismatch_warn, _infinite_dataloader
 from opensoundscape.vector_database import _require_hoplite
+from opensoundscape.ml.loss import BCELossWeakNegatives
+import opensoundscape as opso
+from opensoundscape.ml.datasets import HopliteDataset
 from opensoundscape.vector_database import find_matching_windows, windows_to_dataframe
 
 
@@ -206,7 +211,7 @@ class MLPClassifier(torch.nn.Module):
 
 
 def fit_on_hoplite(
-    model,
+    classifier,
     hoplite_db,
     train_df,
     validation_df=None,
@@ -221,13 +226,13 @@ def fit_on_hoplite(
     progress_bar=False,
     **kwargs,
 ):
-    """train a PyTorch model on Hoplite Embedding DB and labels with batching and early stopping
+    """train a PyTorch classifier on Hoplite Embedding DB and label dataframe
 
     Defaults are for multi-target label problems and assume train_df is a dataframe of 0/1
     per class with multi-index (file, start_time, end_time)
 
     Args:
-        model: a torch.nn.Module object to train
+        classifier: a torch.nn.Module object to train
 
         hoplite_db: a HopliteDB instance containing the embeddings to train on
 
@@ -271,13 +276,15 @@ def fit_on_hoplite(
     _require_hoplite()
     # if no optimizer or criterion provided, use default AdamW and BCEWithLogitsLoss
     if optimizer is None:
-        optimizer = torch.optim.AdamW(model.parameters())
+        optimizer = torch.optim.AdamW(classifier.parameters())
     if criterion is None:
         criterion = BCELossWeakNegatives()
 
     # move the model to the device
-    model.to(device)
+    classifier.to(device)
 
+    # TODO: could switch to iterating the window_ids directly and using db.get_embeddings_batch
+    # (just make label df with index: window_id instead of file/start/end time)
     train_dataset = HopliteDataset(hoplite_db, train_df, **kwargs)
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=0
@@ -296,7 +303,7 @@ def fit_on_hoplite(
     train_loader = _infinite_dataloader(train_loader)
 
     for step in tqdm(range(steps), disable=not progress_bar):
-        model.train()
+        classifier.train()
         batch_features, batch_labels = next(train_loader)
 
         batch_features = torch.as_tensor(batch_features, dtype=torch.float32).to(device)
@@ -306,7 +313,7 @@ def fit_on_hoplite(
         optimizer.zero_grad()
 
         # forward pass
-        outputs = model(batch_features)
+        outputs = classifier(batch_features)
 
         # compute loss
         loss = criterion(outputs, batch_labels)
@@ -317,7 +324,7 @@ def fit_on_hoplite(
 
         # Validation (optional)
         if validation_df is not None and (step + 1) % validation_interval == 0:
-            model.eval()
+            classifier.eval()
             with torch.no_grad():
                 # val_outputs = model(validation_features)
                 # val_loss = criterion(val_outputs, validation_labels)
@@ -332,7 +339,7 @@ def fit_on_hoplite(
                     ).to(device)
 
                     # forward pass
-                    val_output = model(val_batch_features)
+                    val_output = classifier(val_batch_features)
                     val_outputs.append(val_output)
 
                     # compute loss
@@ -343,7 +350,7 @@ def fit_on_hoplite(
             # Check if this is the best validation loss and save model state
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                best_model_state = model.state_dict()
+                best_model_state = classifier.state_dict()
                 best_step = step
 
             # Store metrics
@@ -385,19 +392,19 @@ def fit_on_hoplite(
 
     # Load the best model state if validation was used
     if validation_df is not None and best_model_state is not None:
-        model.load_state_dict(best_model_state)
+        classifier.load_state_dict(best_model_state)
         print(
             f"Loaded best model with validation loss: {best_val_loss:0.3f} at step {best_step + 1} of {steps}"
         )
         # compute metrics for the best model
-        model.eval()
+        classifier.eval()
         with torch.no_grad():
             val_outputs = []
             for val_batch_features, _ in validation_loader:
                 val_batch_features = torch.as_tensor(
                     val_batch_features, dtype=torch.float32
                 ).to(device)
-                val_output = model(val_batch_features)
+                val_output = classifier(val_batch_features)
                 val_outputs.append(val_output)
             val_outputs = torch.cat(val_outputs, dim=0)
         try:
@@ -873,56 +880,76 @@ def fit_classifier_on_embeddings(
     return x_train, y_train, x_val, y_val, metrics
 
 
+def get_embeddings_from_hoplite(db, samples, **kwargs):
+    _require_hoplite()
+    dataset = HopliteDataset(db=db, samples=samples, **kwargs)
+    return np.array([x for x in dataset])
+
+
 def predict_on_hoplite(
     db,
     samples,
     classifier,
+    clip_duration=None,
     batch_size=1024,
     return_df=True,
+    device=torch.device("cpu"),
     **kwargs,
 ):
     """Apply model to embeddings from database for each clip in samples
 
     Args:
         db: hoplite database containing embeddings
-        samples: dataframe with columns "file", "start_time", "end_time" specifying clips to apply the model to
-            - can pass None to apply classifier to all clips matching filters
+        samples: a dataframe of clips or list of audio files
+            dataframe with columns "file", "start_time", "end_time" specifying clips to apply the model to
         classifier: MLPClassifier object or other classifier object to call on the torch.tensor embeddings
+        clip_duration: provide clip length (s) if passing files rather than pre-defined file/start_time/end_time clips
         batch_size: n samples simultaneously processed when applying classifier to embeddings; default 1024
         return_df: if True, returns a dataframe with the same index as samples and columns for each class;
             if False, returns a numpy array of predictions
             uses classifier.classes if available for df column names, otherwise uses integer column names
         **kwargs: additional keyword arguments to pass to HopliteDataset
+
+    Returns:
+        pandas.DataFrame or numpy.ndarray: predictions for each clip
+
+    See also:
+        select_from_hoplite if samples are already embedded and you wish to select filtered (random/top-scoring/all) clips
+
     """
     _require_hoplite()
-    # generate clip dataframe from samples
-    sample_duration = db.get_metadata("model").get("sample_duration")
-    dataset = HopliteDataset(
-        db=db, samples=samples, clip_duration=sample_duration, **kwargs
+
+    # move the model to the device
+    classifier.to(device)
+
+    dataset = HopliteDataset(db, samples, clip_duration=clip_duration, **kwargs)
+    dataloader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=False, num_workers=0
     )
-    dataloader = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=batch_size,  # collate_fn=opso.utils.identity
-    )
-    preds = []
-    device = next(classifier.parameters()).device
-    for batch_emb, batch_labels in tqdm(dataloader):
-        with torch.no_grad():
-            batch_preds = classifier(
-                torch.as_tensor(batch_emb, dtype=torch.float32, device=device)
+
+    classifier.eval()
+    all_outputs = []
+    with torch.no_grad():
+        for batch_features, _ in dataloader:  # discard labels
+            batch_features = torch.as_tensor(batch_features, dtype=torch.float32).to(
+                device
             )
-            preds.append(batch_preds.cpu().numpy())
-    preds = np.concatenate(preds)
+
+            # forward pass
+            outputs = classifier(batch_features)
+            all_outputs.append(outputs.cpu())
+
+    all_outputs = torch.cat(all_outputs, dim=0)
 
     if return_df:
         classes = (
             classifier.classes
             if hasattr(classifier, "classes")
-            else range(preds.shape[1])
+            else range(all_outputs.shape[1])
         )
-        preds = pd.DataFrame(preds, columns=classes)
-        preds.index = dataset.label_df.index
-    return preds
+        all_outputs = pd.DataFrame(all_outputs, columns=classes)
+        all_outputs.index = dataset.label_df.index
+    return all_outputs
 
 
 def select_from_hoplite(
@@ -946,6 +973,7 @@ def select_from_hoplite(
     random_state=None,
     return_windows=False,
     progress_bar=False,
+    warn_no_matches=False,
 ):
     """Extract top-scoring or random clips from the database based on classifier predictions and filters
 
@@ -976,6 +1004,7 @@ def select_from_hoplite(
         recordings_filter: custom filter dict for recordings; if provided, overrides recordings argument
         windows_filter: custom filter dict for windows; if provided, overrides date_range, time_range arguments
         annotations_filter: custom filter dict for annotations in hoplite DB
+        warn_no_matches: if True, raises a warning if no clips are found for a class after applying filters and score thresholds; default False
     """
     np.random.seed(random_state)
 
@@ -1049,9 +1078,12 @@ def select_from_hoplite(
         cls_scores = cls_scores[mask]
         cls_windows = np.array(cls_windows)[mask]
 
+        if len(cls_windows) == 0 and warn_no_matches:
+            warnings.warn(
+                f"No clips found for class {class_name} after applying filters and score thresholds"
+            )
+
         # select clips based on strategy
-        # if len(cls_windows) == 0:
-        #     print(f"No clips found for class {class_name} after applying filters and score thresholds")
         if len(cls_windows) < k:
             # select all since fewer than k
             pass
@@ -1059,7 +1091,6 @@ def select_from_hoplite(
             indices_of_k_largest = np.argpartition(cls_scores, -k)[-k:]
             cls_windows = cls_windows[indices_of_k_largest]
             cls_scores = cls_scores[indices_of_k_largest]
-
         elif strategy == "random_k":
             selected_indices = np.random.choice(len(cls_windows), size=k, replace=False)
             cls_windows = cls_windows[selected_indices]
