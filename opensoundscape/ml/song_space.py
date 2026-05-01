@@ -215,6 +215,15 @@ class SongSpace:
         """return labels_df for dataset name"""
         return self.datasets[name]["label_df"]
 
+    def update_dataset_audio_root(self, name, new_audio_root):
+        """Update the audio_root for a given dataset, which is used as the prefix for audio file paths when embedding new samples and searching for existing embeddings in the database
+
+        This is useful if you need to move your audio files after ingesting a dataset, or if you originally ingested with incorrect audio paths.
+
+        Note that this does not change the file paths in the label_df, but rather updates the audio_root that is prefixed to those file paths when embedding new samples or searching for existing embeddings in the database.
+        """
+        self.datasets[name]["audio_root"] = new_audio_root
+
     def ingest_audio(
         self,
         samples,
@@ -248,9 +257,10 @@ class SongSpace:
                 dataset can still be used for validation but not training; default True
             audio_root: if provided, used as prefix for audio files in samples;
                 if None, assumes samples already have absolute audio paths
-                #TODO: if full paths provided and audio_root provided, convert to relative paths by
+                if full paths provided and audio_root provided, converts to relative paths by
                 stripping audio_root from the start of the paths in samples before embedding and
                 storing in the database
+                (see also: update_dataset_audio_root() to update audio_root if you move the entire audio dataset)
             embedding_exists_mode: 'skip', 'error', or 'add' [default: 'skip']
                 how to handle cases where an embedding already exists in the database
                 # TODO impement 'replace'
@@ -268,6 +278,25 @@ class SongSpace:
         samples_df, _ = _ingest_samples_argument(
             samples, sample_duration=self.sample_duration
         )
+
+        # if audio_root is provided and the file paths in samples_df are absolute, all starting with audio_root,
+        # convert to relative paths by stripping audio_root from the start of the paths in samples_df
+        if audio_root is not None:
+            if dataset_name in self.datasets:  # ensure it matches existing audio_root
+                existing_audio_root = self.datasets[dataset_name]["audio_root"]
+                if existing_audio_root != audio_root:
+                    raise ValueError(
+                        f"""Provided audio_root {audio_root} does not match existing audio_root
+                         {existing_audio_root} for dataset {dataset_name}. One dataset cannot have
+                         multiple audio roots."""
+                    )
+            audio_root = str(audio_root)
+            # short-circuit if first path doesn't start with audio_root, to avoid unnecessary processing
+            # (do nothing if audio_root is not the beginning of all paths)
+            if samples_df.iloc[0]["file"].startswith(audio_root) and all(
+                samples_df["file"].str.startswith(audio_root)
+            ):
+                samples_df["file"] = samples_df["file"].str[len(audio_root) :]
 
         # compute deployment name for each audio file
         unique_files = samples_df.index.get_level_values("file").unique()
@@ -337,8 +366,6 @@ class SongSpace:
                 "allow_training": allow_training,
                 "audio_root": audio_root,
             }
-
-    # TODO: dictionary to manage audio_root per dataset (so that user can update if audio data moves)
 
     def similarity_search(
         self,
