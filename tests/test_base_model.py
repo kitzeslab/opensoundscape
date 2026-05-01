@@ -65,10 +65,13 @@ def test_configure_optimizers_classifier_lr_creates_second_param_group():
     out = model.configure_optimizers()
     optimizer = out["optimizer"]
     lrs = {group["lr"] for group in optimizer.param_groups}
+    # exract the target max lr (since we use a warmup schedule, initial lr is not the max target lr)
+    # confusingly, these are stored as "initial_lr" in the param groups, even though they are not the actual initial lr used at the start of training
+    max_lrs = {group["initial_lr"] for group in optimizer.param_groups}
 
     assert len(optimizer.param_groups) == 2
-    assert 0.123 in lrs
-    assert model.optimizer_params["kwargs"]["lr"] in lrs
+    assert 0.123 in max_lrs
+    assert model.optimizer_params["kwargs"]["lr"] in max_lrs
 
 
 def test_configure_optimizers_classifier_lr_without_classifier_raises_value_error():

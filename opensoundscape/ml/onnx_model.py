@@ -1,6 +1,6 @@
 import numpy as np
 import onnxruntime
-
+import torch
 from opensoundscape.ml.cnn import SpectrogramClassifier
 from opensoundscape.preprocess.preprocessors import AudioPreprocessor
 
@@ -98,25 +98,33 @@ class ONNXModel(SpectrogramClassifier):
                 "Please provide these arguments when initializing ONNXModel."
             )
 
+        # the Torch Model (.network) of SpectrogramClassifier will not be used
+        # pass an Identity just as a placeholder
         super().__init__(
-            architecture="resnet18", classes=classes, sample_duration=sample_duration
-        )  # TODO refactor so arch not required
+            architecture=torch.nn.Identity(),  # not used, but required for super init
+            classes=classes,
+            sample_duration=sample_duration,
+            sample_rate=sample_rate,
+        )
         self.ort_session = ort_session
         self.ort_input = self.ort_session.get_inputs()[0].name
         self.classes = classes
         self.class_outputs_key = class_outputs_key
         self.embedding_outputs_key = embedding_outputs_key
-        # should we require information on size of embedding output?
         self.embedding_dim = None
+
         self.add_channel_dim = True
+        """whether to add a channel dimension to the input audio (e.g. for mono models that expect shape (batch_size, 1, n_samples))
+        if False, input audio will be shape (batch_size, n_samples)
+        if True, input audio will be shape (batch_size, 1, n_samples)
+        """
 
         # get output names from the model
         self.output_names = [output.name for output in self.ort_session.get_outputs()]
 
-        # TODO: should we support multi-channel input? this could be configurable and
-        # is probably good for future-proofing
-        # self.include_channel_dim = False
-        # self.n_audio_channels = 2
+        # TODO: should we support multi-channel input? this could be configurable
+        # and is probably good for future-proofing
+        # self.n_audio_channels = 2 # None for no channel dim, 1 to add channel dim to mono, 2 for stereo audio, etc
 
         self.preprocessor = AudioPreprocessor(
             sample_duration=sample_duration,
