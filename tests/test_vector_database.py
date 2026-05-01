@@ -248,7 +248,7 @@ def test_insert_embeddings_inserts_and_tracks_duplicates_and_clip_overflow():
     file_to_id = {}
     embs = np.array([[1e9, -1e9], [0.1, 0.2]], dtype=np.float32)
 
-    failures = vector_database._insert_embeddings(
+    window_ids, failures = vector_database._insert_embeddings(
         db=db,
         batch_samples=[sample_a, sample_b],
         batch_embeddings=embs,

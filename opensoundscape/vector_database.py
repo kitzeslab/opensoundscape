@@ -96,6 +96,8 @@ def _insert_embeddings(
             in the database
         deployment_id: optional int, deployment_id to associate with the recordings
 
+    Returns:
+        list of window_ids for the successfully inserted embeddings, and list of failed inserts with info on the failure
     Effects:
         inserts the embeddings into the hoplite database
         adds new recordings to the database as needed
@@ -669,9 +671,6 @@ def windows_to_dataframe(windows):
     ]
     results_df = pd.DataFrame(records, columns=cols)
     return results_df
-
-
-# TODO provide detection-counting in-loop as an alternative to selection
 
 
 def similarity_search_hoplite_db(

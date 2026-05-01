@@ -1143,7 +1143,7 @@ class TestHopliteHelpers:
         model = opso.MLPClassifier(2, 2, hidden_layer_sizes=())
 
         metrics = shallow_classifier.fit_on_hoplite(
-            model=model,
+            classifier=model,
             hoplite_db=db,
             train_df=train_df,
             validation_df=train_df,

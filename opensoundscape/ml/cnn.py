@@ -2095,10 +2095,12 @@ class SpectrogramClassifier(SpectrogramModule):
             **embedding_kwargs: additional keyword arguments passed to self.embed(), such as
                 batch_size and num_workers
         Returns:
-            A list of dictionaries with the search results, one item per query sample:
-            Each item is a dictionary with the following keys:
-                - "query": dictionary with query metadata
-                - "results": list of dictionaries with metadata for each retrieved sample
+            A dataframe with the search results, including columns:
+                - query_file, query_start_time, query_end_time: the query sample info
+                - file, window_id: the matched sample filepath and window_id from the database
+                - start_time, end_time: the matched sample start and end time (relative to file) from the database
+                - sort_score: the similarity score between the query and matched sample
+
         """
         _require_hoplite()
         from opensoundscape.vector_database import similarity_search_hoplite_db
