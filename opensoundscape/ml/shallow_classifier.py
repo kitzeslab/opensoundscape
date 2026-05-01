@@ -210,67 +210,6 @@ class MLPClassifier(torch.nn.Module):
         return model
 
 
-def inference_on_hoplite_db(  # TODO use this in fit, eval, and predict
-    classifier,
-    hoplite_db,
-    label_df,
-    clip_duration=None,
-    batch_size=128,
-    device=torch.device("cpu"),
-    **kwargs,
-):
-    """evaluate a PyTorch classifier on Hoplite Embedding DB and label dataframe
-
-    Defaults are for multi-target label problems and assume label_df is a dataframe of 0/1
-    per class with multi-index (file, start_time, end_time)
-
-    Args:
-        classifier: a torch.nn.Module object to evaluate
-
-        hoplite_db: a HopliteDB instance containing the embeddings to evaluate on
-
-        label_df: labels for evaluation, generally one-hot encoded with shape
-        (n_samples,n_classes); should be a valid target for criterion()
-
-        batch_size: batch size for evaluation; if fewer samples than batch_size,
-            the entire dataset is used as a single batch
-            [Default: 128]
-        device: torch.device to use; default is torch.device('cpu')
-        **kwargs: additional keyword arguments passed to HopliteDataset; see HopliteDataset.__init__()
-    """
-    _require_hoplite()
-
-    # move the model to the device
-    classifier.to(device)
-
-    dataset = HopliteDataset(
-        hoplite_db, label_df, clip_duration=clip_duration, **kwargs
-    )
-    dataloader = DataLoader(
-        dataset, batch_size=batch_size, shuffle=False, num_workers=0
-    )
-
-    classifier.eval()
-    all_outputs = []
-    all_labels = []
-    with torch.no_grad():
-        for batch_features, batch_labels in dataloader:
-            batch_features = torch.as_tensor(batch_features, dtype=torch.float32).to(
-                device
-            )
-            batch_labels = torch.as_tensor(batch_labels, dtype=torch.float32).to(device)
-
-            # forward pass
-            outputs = classifier(batch_features)
-            all_outputs.append(outputs.cpu())
-            all_labels.append(batch_labels.cpu())
-
-    all_outputs = torch.cat(all_outputs, dim=0)
-    all_labels = torch.cat(all_labels, dim=0)
-
-    return all_outputs, all_labels
-
-
 def fit_on_hoplite(
     classifier,
     hoplite_db,
@@ -954,6 +893,7 @@ def predict_on_hoplite(
     clip_duration=None,
     batch_size=1024,
     return_df=True,
+    device=torch.device("cpu"),
     **kwargs,
 ):
     """Apply model to embeddings from database for each clip in samples
@@ -978,31 +918,38 @@ def predict_on_hoplite(
 
     """
     _require_hoplite()
-    # generate clip dataframe from samples
-    # sample_duration = db.get_metadata("model").get("sample_duration")
-    dataset = HopliteDataset(
-        db=db, samples=samples, clip_duration=clip_duration, **kwargs
+
+    # move the model to the device
+    classifier.to(device)
+
+    dataset = HopliteDataset(db, samples, clip_duration=clip_duration, **kwargs)
+    dataloader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=False, num_workers=0
     )
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size)
-    preds = []
-    device = next(classifier.parameters()).device
-    for batch_emb, batch_labels in tqdm(dataloader):
-        with torch.no_grad():
-            batch_preds = classifier(
-                torch.as_tensor(batch_emb, dtype=torch.float32, device=device)
+
+    classifier.eval()
+    all_outputs = []
+    with torch.no_grad():
+        for batch_features, _ in dataloader:  # discard labels
+            batch_features = torch.as_tensor(batch_features, dtype=torch.float32).to(
+                device
             )
-            preds.append(batch_preds.cpu().numpy())
-    preds = np.concatenate(preds)
+
+            # forward pass
+            outputs = classifier(batch_features)
+            all_outputs.append(outputs.cpu())
+
+    all_outputs = torch.cat(all_outputs, dim=0)
 
     if return_df:
         classes = (
             classifier.classes
             if hasattr(classifier, "classes")
-            else range(preds.shape[1])
+            else range(all_outputs.shape[1])
         )
-        preds = pd.DataFrame(preds, columns=classes)
-        preds.index = dataset.label_df.index
-    return preds
+        all_outputs = pd.DataFrame(all_outputs, columns=classes)
+        all_outputs.index = dataset.label_df.index
+    return all_outputs
 
 
 def select_from_hoplite(
