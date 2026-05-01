@@ -82,7 +82,7 @@ def ribbit(
     pulse_rate_range,
     clip_duration,
     clip_overlap=None,
-    clip_overlap_fraction=None,
+    overlap_fraction=None,
     clip_step=None,
     final_clip="remainder",
     noise_bands=None,
@@ -101,10 +101,10 @@ def ribbit(
         clip_duration: the length of audio (in seconds) to analyze at one time
             - each clip is analyzed independently and recieves a ribbit score
         clip_overlap (float): overlap between consecutive clips (sec)
-        clip_overlap_fraction (float): overlap between consecutive clips as a fraction of
+        overlap_fraction (float): overlap between consecutive clips as a fraction of
             clip_duration
         clip_step (float): step size between consecutive clips (sec)
-            - only one of clip_overlap, clip_overlap_fraction, or clip_step should be provided
+            - only one of clip_overlap, overlap_fraction, or clip_step should be provided
             - if all are None, defaults to clip_overlap=0
         final_clip (str): behavior if final clip is less than clip_duration
             seconds long. By default, discards remaining audio if less than
@@ -196,7 +196,7 @@ def ribbit(
         full_duration=spectrogram.duration,
         clip_duration=clip_duration,
         clip_overlap=clip_overlap,
-        clip_overlap_fraction=clip_overlap_fraction,
+        overlap_fraction=overlap_fraction,
         clip_step=clip_step,
         final_clip=final_clip,
     )

@@ -26,11 +26,11 @@ class SafeDataset:
     the current index (see __getitem__).
 
     Note that this class does not subclass DataSet. Instead, it contains a
-    `.dataset` attribute that is a DataSet (or AudioFileDataset / AudioSplittingDataset,
+    `.dataset` attribute that is a DataSet (or AudioFileDataset / AudioFileDataset,
     which subclass DataSet).
 
     Args:
-        dataset: a torch Dataset instance or child such as AudioFileDataset, AudioSplittingDataset
+        dataset: a torch Dataset instance or child such as AudioFileDataset, AudioFileDataset
         eager_eval: If True, checks if every file is able to be loaded during
             initialization (logs _valid_indices and _invalid_indices)
 

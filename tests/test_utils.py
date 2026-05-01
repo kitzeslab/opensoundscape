@@ -135,7 +135,7 @@ def test_generate_clip_times_df_overlap():
     assert clip_df.iloc[1]["end_time"] == 7.5
 
     clip_df = utils.generate_clip_times_df(
-        full_duration=10, clip_duration=5, clip_overlap_fraction=0.5, final_clip=None
+        full_duration=10, clip_duration=5, overlap_fraction=0.5, final_clip=None
     )
     assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -159,7 +159,7 @@ def test_generate_clip_times_df_overlap_raises_overspecified():
             full_duration=10,
             clip_duration=5,
             clip_overlap=2.5,
-            clip_overlap_fraction=0.5,
+            overlap_fraction=0.5,
         )
     with pytest.raises(ValueError):
         utils.generate_clip_times_df(
@@ -172,7 +172,7 @@ def test_generate_clip_times_df_overlap_raises_overspecified():
         utils.generate_clip_times_df(
             full_duration=10,
             clip_duration=5,
-            clip_overlap_fraction=0.5,
+            overlap_fraction=0.5,
             clip_step=0.5,
         )
 

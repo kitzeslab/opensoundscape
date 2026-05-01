@@ -72,11 +72,6 @@ def test_densenet121():
     assert isinstance(arch, torch.nn.Module)
 
 
-def test_inception_v3():
-    arch = cnn_architectures.inception_v3(1, weights=None)
-    assert isinstance(arch, torch.nn.Module)
-
-
 def test_use_no_weights():
     arch = cnn_architectures.resnet50(2000, weights=None)
     assert isinstance(arch, torch.nn.Module)

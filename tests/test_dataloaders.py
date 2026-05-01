@@ -61,7 +61,7 @@ def bad_dataset_df():
 
 @pytest.fixture()
 def pre():
-    return SpectrogramPreprocessor(sample_duration=1)
+    return SpectrogramPreprocessor(sample_duration=1, sample_rate=22050)
 
 
 def test_helpful_error_if_index_is_integer(bad_dataset_df, pre):
@@ -77,9 +77,9 @@ def test_init_multiindex(dataset_df, pre):
     SafeAudioDataloader(dataset_df, pre)
 
 
-def test_catch_index_not_set(bad_dataset_df_multiindex, pre):
-    with pytest.raises(AssertionError):
-        SafeAudioDataloader(bad_dataset_df_multiindex, pre)
+def test_allow_index_not_set(bad_dataset_df_multiindex, pre):
+    dl = SafeAudioDataloader(bad_dataset_df_multiindex, pre)
+    next(iter(dl))
 
 
 def test_collate_samples():

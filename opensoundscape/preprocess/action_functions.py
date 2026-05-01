@@ -56,7 +56,7 @@ def audio_random_gain(audio, dB_range=(-30, 0), clip_range=(-1, 1)):
 
 @register_action_fn
 def adaptive_random_gain(
-    audio, gain_range=(-30, 0), min_output_level=-40, clip_range=[-1, 1]
+    audio, gain_range=(-30, 0), min_output_level=-40, clip_range=(-1, 1)
 ):
     """apply gain while maintaining a minimum resulting dBFS level
 
@@ -83,7 +83,7 @@ def adaptive_random_gain(
 
 
 @register_action_fn
-def adaptive_random_noise(audio, snr_range=(-20, 0), signal_dB=0, color="white"):
+def adaptive_random_noise(audio, snr_range=(-20, 0), input_gain=0, color="white"):
     """apply random noise, selecting from a signal to noise ratio range
 
     Args:
@@ -91,7 +91,7 @@ def adaptive_random_noise(audio, snr_range=(-20, 0), signal_dB=0, color="white")
         snr_range: (min,max) decibels of signal to noise ratio
             - SNR is defined here as signal_dB - noise_dBFS
             - SNR is chosen from a uniform random distribution in this range
-        signal_dB: dB (decibels) gain to apply to the incoming Audio
+        input_gain: dB (decibels) gain to apply to the incoming Audio
             before mixing with noise [default: 0 dB]
         color: color of noise to add (see Audio.noise() `color` arg)
             options: "white", "pink", "brownian", "brown", "violet", "blue"
@@ -102,12 +102,12 @@ def adaptive_random_noise(audio, snr_range=(-20, 0), signal_dB=0, color="white")
     # the signal to noise ratio relative to the input is chosen from snr_range
     # signal_dB is the gain applied to the input signal before mixing with noise
     # (can be negative to reduce signal level)
-    signal_level = audio.dBFS + signal_dB
+    signal_level = audio.dBFS + input_gain
     noise_dB = signal_level + np.random.uniform(snr_range[0], snr_range[1])
     return audio_add_noise(
         audio,
         noise_dB=noise_dB,
-        signal_dB=signal_dB,
+        signal_dB=input_gain,
         color=color,
     )
 
@@ -205,7 +205,7 @@ def torch_color_jitter(tensor, brightness=0.3, contrast=0.3, saturation=0.3, hue
 
 
 @register_action_fn
-def torch_random_affine(tensor, degrees=0, translate=(0.3, 0.1), fill=0):
+def torch_random_affine(tensor, degrees=0, translate=(0.2, 0.05), fill=0):
     """Wraps for torchvision.transforms.RandomAffine
 
     (Tensor -> Tensor) or (PIL Img -> PIL Img)
@@ -284,7 +284,7 @@ def scale_tensor(tensor, input_mean=0.5, input_std=0.5):
 
 
 @register_action_fn
-def time_mask(tensor, max_masks=3, max_width=0.2):
+def time_mask(tensor, max_masks=4, max_width=0.05):
     """add random vertical bars over sample (Tensor -> Tensor)
 
     Args:
@@ -312,7 +312,7 @@ def time_mask(tensor, max_masks=3, max_width=0.2):
 
 
 @register_action_fn
-def frequency_mask(tensor, max_masks=3, max_width=0.2):
+def frequency_mask(tensor, max_masks=4, max_width=0.05):
     """add random horizontal bars over Tensor
 
     Args:
@@ -446,13 +446,11 @@ def audio_time_mask(
     # add the last segment of original audio, making sure we end up with correct total number of samples
     samples.extend(audio.samples[len(samples) - len(audio.samples) :])
 
-    # mix with original audio
-    samples = (np.array(samples) + audio.samples).clip(-1, 1)
     return audio._spawn(samples=samples)
 
 
 @register_action_fn
-def frequency_mask(tensor, max_masks=3, max_width=0.2):
+def frequency_mask(tensor, max_masks=3, max_width=0.05):
     """add random horizontal bars over Tensor
 
     Args:

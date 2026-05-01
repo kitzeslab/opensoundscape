@@ -31,12 +31,18 @@ def short_sample():
 
 @pytest.fixture()
 def preprocessor():
-    return SpectrogramPreprocessor(sample_duration=2.0)
+    return SpectrogramPreprocessor(sample_duration=2.0, sample_rate=22050)
 
 
 @pytest.fixture()
 def preprocessor_3x50x50():
-    return SpectrogramPreprocessor(sample_duration=2.0, height=50, width=50, channels=3)
+    return SpectrogramPreprocessor(
+        sample_duration=2.0,
+        sample_rate=22050,
+        height=50,
+        width=50,
+        channels=3,
+    )
 
 
 @pytest.fixture()
@@ -79,7 +85,11 @@ def train_df_clips(train_df):
 
 @pytest.fixture()
 def preprocessor_with_overlay(train_df_clips):
-    return SpectrogramPreprocessor(sample_duration=2.0, overlay_df=train_df_clips)
+    return SpectrogramPreprocessor(
+        sample_duration=2.0,
+        sample_rate=22050,
+        overlay_samples=train_df_clips,
+    )
 
 
 @pytest.fixture()
@@ -107,16 +117,16 @@ def test_spectrogram_preprocessor_output_size(
     """should return a sample with a tensor, check output shapes"""
 
     s = preprocessor.forward(sample)
-    assert list(s.data.shape) == [1, 224, 224]
+    assert list(s.data.shape) == [1, 257, 171]  # was 224,224 in <0.13.0
     s = preprocessor_3x50x50.forward(sample)
     assert list(s.data.shape) == [3, 50, 50]
     s = preprocessor_with_overlay.forward(sample)
-    assert list(s.data.shape) == [1, 224, 224]
+    assert list(s.data.shape) == [1, 257, 171]
     # retain original spec height if width/height are None
     preprocessor.width = None
     preprocessor.height = None
     s = preprocessor.forward(sample)
-    assert list(s.data.shape) == [1, 129, 343]
+    assert list(s.data.shape) == [1, 257, 171]
 
 
 def test_remove_action(preprocessor):
@@ -130,7 +140,7 @@ def test_interrupt_get_item(preprocessor, sample):
     """should retain original sample rate"""
     audio = preprocessor.forward(sample, break_on_key="random_trim_audio").data
     assert type(audio) == Audio
-    assert audio.samples.shape == (44100 * 10,)
+    assert audio.samples.shape == (preprocessor.sample_rate * 10,)
 
 
 def test_profile(preprocessor, sample):
@@ -142,10 +152,10 @@ def test_profile(preprocessor, sample):
 
 
 def test_audio_resample(preprocessor, sample):
-    """should retain original sample rate"""
-    preprocessor.pipeline.load_audio.set(sample_rate=16000)
+    """should use preprocessor's sample rate"""
+    preprocessor.sample_rate = 16000
     audio = preprocessor.forward(sample, break_on_key="random_trim_audio").data
-    assert audio.samples.shape == (16000 * 10,)
+    assert audio.samples.shape == (preprocessor.sample_rate * 10,)
 
 
 def test_spec_preprocessor_fails_on_short_file(short_sample, preprocessor):
@@ -238,10 +248,14 @@ def test_noisereduceaudiopreprocessor(sample):
 
 def test_noisereducespectrogrampreprocessor(short_sample):
     p1 = preprocessors.NoiseReduceSpectrogramPreprocessor(
-        sample_duration=1, noisereduce_kwargs=dict(prop_decrease=1)
+        sample_duration=1,
+        sample_rate=32000,
+        noisereduce_kwargs=dict(prop_decrease=1),
     )
     p2 = preprocessors.NoiseReduceSpectrogramPreprocessor(
-        sample_duration=1, noisereduce_kwargs=dict(prop_decrease=0.5)
+        sample_duration=1,
+        sample_rate=32000,
+        noisereduce_kwargs=dict(prop_decrease=0.5),
     )
     s1 = p1.forward(short_sample, bypass_augmentations=True).data
     s2 = p2.forward(short_sample, bypass_augmentations=True).data
@@ -250,7 +264,7 @@ def test_noisereducespectrogrampreprocessor(short_sample):
 
 def test_pcenpreprocessor(sample):
 
-    p1 = preprocessors.PCENPreprocessor(sample_duration=1)
+    p1 = preprocessors.PCENPreprocessor(sample_duration=1, sample_rate=22050)
     s1 = p1.forward(sample, bypass_augmentations=True).data
     assert isinstance(s1, torch.Tensor)
 
@@ -345,6 +359,29 @@ def test_preprocessor_to_from_json_with_custom_action_cls(
     set_seed(0)
     sample2 = preprocessor2.forward(sample)
     assert np.array_equal(sample0.data, sample2.data)
+
+
+def test_torchspectrogrampreprocessor(sample):
+    p = preprocessors.TorchSpectrogramPreprocessor(sample_duration=1, sample_rate=22050)
+    s = p.forward(sample, bypass_augmentations=True).data
+    expected_shape = (
+        SpectrogramPreprocessor(sample_duration=1, sample_rate=22050)
+        .forward(sample, bypass_augmentations=True)
+        .data.shape
+    )
+    assert isinstance(s, torch.Tensor)
+    assert s.shape == expected_shape
+
+
+def test_save_load_torchspectrogrampreprocessor(sample, temp_json_path):
+    set_seed(0)
+    p = preprocessors.TorchSpectrogramPreprocessor(sample_duration=1, sample_rate=22050)
+    sample0 = p.forward(sample).data
+    p.save(temp_json_path)
+    p2 = preprocessors.load_json(temp_json_path)
+    set_seed(0)
+    sample2 = p2.forward(sample).data
+    assert np.array_equal(sample0, sample2)
 
 
 # several specific scenarios are tested using Datasets in test_datasets.py

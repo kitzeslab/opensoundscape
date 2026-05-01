@@ -12,6 +12,34 @@ from time import time
 
 import numpy as np
 import pandas as pd
+import os
+import copy
+
+import torch
+import torch.nn.functional as F
+from tqdm.autonotebook import tqdm
+
+import opensoundscape
+from opensoundscape.ml import cnn_architectures
+from opensoundscape.ml.utils import (
+    apply_activation_layer,
+    check_labels,
+    _version_mismatch_warn,
+    _infinite_dataloader,
+)
+from opensoundscape.preprocess.preprocessors import (
+    SpectrogramPreprocessor,
+    BasePreprocessor,
+    preprocessor_from_dict,
+)
+from opensoundscape.preprocess import io
+from opensoundscape.ml.datasets import AudioFileDataset
+from opensoundscape.ml.dataloaders import SafeAudioDataloader, collate_audio_samples
+from opensoundscape.utils import identity
+from opensoundscape.logging import wandb_table
+from opensoundscape.ml import shallow_classifier
+from opensoundscape.ml.cam import CAM
+from opensoundscape.ml.schedulers import CosineAnnealingWithWarmupScheduler
 import pytorch_grad_cam
 import torch
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -28,7 +56,6 @@ from opensoundscape.logging import wandb_table
 from opensoundscape.ml import cnn_architectures, shallow_classifier
 from opensoundscape.ml.base_model import BaseModule
 from opensoundscape.ml.cam import CAM
-from opensoundscape.ml.cnn_architectures import inception_v3
 from opensoundscape.ml.dataloaders import collate_audio_samples
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.ml.loss import (
@@ -105,6 +132,7 @@ class SpectrogramModule(BaseModule):
         architecture,
         classes,
         sample_duration,
+        sample_rate,
         single_target=False,
         preprocessor_dict=None,
         preprocessor_cls=SpectrogramPreprocessor,
@@ -116,6 +144,7 @@ class SpectrogramModule(BaseModule):
             architecture: a pytorch Module such as Resnet18 or a custom object
             classes: list of class names
             sample_duration: duration of audio samples in seconds
+            sample_rate: audio sample rate (if None, audio is not resampled during preprocessing)
             single_target: if True, predict only class with max score
             channels: number of channels in input data
             sample_height: height of input data
@@ -137,6 +166,11 @@ class SpectrogramModule(BaseModule):
                     width, height, channels, sample_rate, sample_shape, overlay_df
         """
         super().__init__()
+        # don't allow ['file', 'start_time', 'end_time'] as class names since these are reserved for parsing samples dataframes
+        if any(col in classes for col in ["file", "start_time", "end_time"]):
+            raise ValueError(
+                "Class names cannot be 'file', 'start_time', or 'end_time' since these column names are reserved for parsing samples dataframes"
+            )
         self.classes = classes
         self._single_target = single_target
         self.name = "SpectrogramModule"
@@ -153,14 +187,16 @@ class SpectrogramModule(BaseModule):
         set to -1 to restart learning rate schedule from initial lr
         
         this value is used to initialize the lr_scheduler's `last_epoch` parameter
-        it is tracked separately from self.current_epoch because the lr_scheduler
-        might be stepped more or less than 1 time per epoch
+        it is tracked separately from self.current_step because the lr_scheduler
+        might be stepped once per epoch, per step, or at other intervals
 
         Note that the initial learning rate is set via self.optimizer_params['kwargs']['lr']
         """
 
         ### PREPROCESSOR ###
-        preprocessor_kwargs.update(sample_duration=sample_duration)
+        preprocessor_kwargs.update(
+            sample_duration=sample_duration, sample_rate=sample_rate
+        )
 
         if preprocessor_dict is None:
             self.preprocessor = preprocessor_cls(**preprocessor_kwargs)
@@ -306,6 +342,11 @@ class SpectrogramModule(BaseModule):
                 - (): empty tuple creates an MLPClassifier with no hidden layers
         """
         assert len(new_classes) > 0, "new_classes must have >0 elements"
+        # don't allow ['file', 'start_time', 'end_time'] as class names since these are reserved for parsing samples dataframes
+        if any(col in new_classes for col in ["file", "start_time", "end_time"]):
+            raise ValueError(
+                "Class names cannot be 'file', 'start_time', or 'end_time' since these column names are reserved for parsing samples dataframes"
+            )
 
         # assert isinstance(self.classifier, torch.nn.Linear), (
         assert isinstance(
@@ -531,6 +572,7 @@ class SpectrogramClassifier(SpectrogramModule):
         architecture,
         classes,
         sample_duration,
+        sample_rate,
         single_target=False,
         preprocessor_dict=None,
         preprocessor_cls=SpectrogramPreprocessor,
@@ -546,6 +588,8 @@ class SpectrogramClassifier(SpectrogramModule):
             architecture: a pytorch Module such as Resnet18 or a custom object
             classes: list of class names
             sample_duration: duration of audio samples in seconds
+            sample_rate: audio sample rate
+                - if None, audio is not resampled during preprocessing
             single_target: if True, predict only class with max score
             channels: number of channels in input data
             sample_height: height of input data
@@ -640,6 +684,7 @@ class SpectrogramClassifier(SpectrogramModule):
             architecture,
             classes,
             sample_duration,
+            sample_rate,
             single_target=single_target,
             preprocessor_dict=preprocessor_dict,
             preprocessor_cls=preprocessor_cls,
@@ -654,12 +699,12 @@ class SpectrogramClassifier(SpectrogramModule):
         """amount of logging to stdout. 0 for nothing, 1,2,3 for increasing printed output"""
         self.scheduler = None  # learning rate scheduler, initialized during configure_optimizers() call
         self.optimizer = None  # optimizer during training , initialized during configure_optimizers() call
-        self.current_epoch = 0
-        """track number of trained epochs"""
+        self.current_step = 0
+        """track number of complete training steps"""
 
         ### metrics ###
-        self.loss_hist = {}
-        """dictionary of epoch:mean batch loss during training"""
+        self.loss_hist = []
+        """list of batch loss values during training"""
         self.train_metrics = {}
         self.valid_metrics = {}
 
@@ -676,12 +721,12 @@ class SpectrogramClassifier(SpectrogramModule):
             "enabled": False,
             "patience": 10,
             "min_delta": 0.0,
-            "mode": "min",
+            "mode": "max",
         }
         """Early stopping configuration dictionary.
 
         Early stopping halts training if the validation score does not improve
-        for a specified number of epochs (patience).
+        for a specified number of steps (patience).
 
         The metric monitored for improvement is defined by self.score_metric, but
         adjust "mode" according to whether the score should be minimized (loss) or
@@ -690,9 +735,9 @@ class SpectrogramClassifier(SpectrogramModule):
         To enable early stopping, set `self.early_stopping_config['enabled']=True`
         and modify other parameters as desired. 
 
-        'patience': number of epochs with no improvement before stopping
+        'patience': number of steps with no improvement before stopping
         'min_delta': minimum change in the monitored quantity to qualify as an improvement
-        'mode': 'max' or 'min', whether to look for maximum or minimum of the monitored quantity
+        'mode': 'max' or 'min', whether to look for maximum (eg accuracy) or minimum (eg loss) of the monitored quantity
         """
 
     def _log(self, message, level=1):
@@ -709,11 +754,9 @@ class SpectrogramClassifier(SpectrogramModule):
         batch_size=1,
         num_workers=0,
         activation_layer=None,
-        split_files_into_clips=True,
         clip_overlap=None,
-        clip_overlap_fraction=None,
-        clip_step=None,
         overlap_fraction=None,
+        clip_step=None,
         final_clip="extend",
         bypass_augmentations=True,
         invalid_samples_log=None,
@@ -752,12 +795,8 @@ class SpectrogramClassifier(SpectrogramModule):
                 - 'sigmoid': each class is independent, scores between 0 and 1
                 - 'softmax_and_logit': applies softmax first then logit
                 [default: None]
-            split_files_into_clips:
-                If True, internally splits and predicts on clips from longer audio files
-                Otherwise, assumes each row of `samples` corresponds to one complete sample
-            clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+            overlap_fraction, clip_overlap, clip_step, final_clip:
                 see `opensoundscape.utils.generate_clip_times_df`
-            overlap_fraction: deprecated alias for clip_overlap_fraction
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
             invalid_samples_log: if not None, samples that failed to preprocess
@@ -814,10 +853,8 @@ class SpectrogramClassifier(SpectrogramModule):
         dataloader = self.predict_dataloader(
             samples,
             bypass_augmentations=bypass_augmentations,
-            split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
             clip_overlap=clip_overlap,
-            clip_overlap_fraction=clip_overlap_fraction,
             clip_step=clip_step,
             final_clip=final_clip,
             batch_size=batch_size,
@@ -1115,75 +1152,49 @@ class SpectrogramClassifier(SpectrogramModule):
         val_labels = dl.dataset.dataset.label_df.values
         return self.eval(val_labels, validation_scores.values)
 
-    def _train_epoch(self, train_loader, wandb_session=None, progress_bar=True):
-        """perform forward pass, loss, and backpropagation for one epoch
+    def _generate_wandb_config(self):
+        # create a dictionary of parameters to save for this run
+        wandb_config = dict(
+            architecture=io.build_name(self.network),
+            sample_duration=self.preprocessor.sample_duration,
+            cuda_device_count=torch.cuda.device_count(),
+            mps_available=torch.backends.mps.is_available(),
+            classes=self.classes,
+            single_target=self.single_target,
+            opensoundscape_version=self.opensoundscape_version,
+        )
+        if "weight_decay" in self.optimizer_params:
+            wandb_config["l2_regularization"] = self.optimizer_params["weight_decay"]
+        else:
+            wandb_config["l2_regularization"] = "n/a"
 
-        If wandb_session is passed, logs progress to wandb run
+        if "lr" in self.optimizer_params:
+            wandb_config["learning_rate"] = self.optimizer_params["lr"]
+        else:
+            wandb_config["learning_rate"] = "n/a"
 
-        Args:
-            train_loader: DataLoader object to create samples
-            wandb_session: a wandb session to log to
-                - pass the value returned by wandb.init() to progress log to a
-                Weights and Biases run
-                - if None, does not log to wandb
+        try:
+            wandb_config["sample_shape"] = [
+                self.preprocessor.height,
+                self.preprocessor.width,
+                self.preprocessor.channels,
+            ]
+        except:
+            wandb_config["sample_shape"] = "n/a"
 
-        Returns:
-            dictionary of evaluation metrics calculated with self.torch_metrics
-        """
-        self.network.train()
-        batch_loss = []
-
-        for batch_idx, batch_samples in enumerate(
-            tqdm(train_loader, disable=not progress_bar)
-        ):
-            # save loss for each batch; later take average for epoch
-            loss = self.training_step(batch_samples, batch_idx)
-            batch_loss.append(loss.detach().cpu().numpy())
-            ###########
-            # Logging #
-            ###########
-            # log basic train info (used to print every batch)
-            if batch_idx % self.log_interval == 0:
-                # show some basic progress metrics during the epoch
-                N = len(train_loader)
-                self._log(
-                    f"Epoch: {self.current_epoch} "
-                    f"[batch {batch_idx}/{N}, {100 * batch_idx / N :.2f}%] "
-                )
-
-                # Log the Loss function
-                epoch_loss_avg = np.mean(batch_loss)
-                self._log(f"\tEpoch Running Average Loss: {epoch_loss_avg:.3f}")
-                self._log(f"\tMost Recent Batch Loss: {batch_loss[-1]:.3f}")
-
-        # update learning parameters each epoch
-        self.scheduler.step()
-        self.lr_scheduler_step += 1
-
-        # compute and reset TorchMetrics
-        self.train_metrics[self.current_epoch] = self.eval()
-
-        # save the loss averaged over all batches
-        self.loss_hist[self.current_epoch] = np.mean(batch_loss)
-
-        if wandb_session is not None:
-            wandb_session.log({"loss": np.mean(batch_loss)})
-            wandb_session.log({"training": self.train_metrics[self.current_epoch]})
-
-        # return a single overall score for the epoch
-        return self.train_metrics[self.current_epoch]
+        return wandb_config
 
     def train(
         self,
         train_df,
         validation_df=None,
-        epochs=1,
-        batch_size=1,
+        steps=1000,
+        batch_size=64,
         num_workers=0,
         save_path=".",
-        save_interval=1,  # save weights every n epochs
+        save_interval=-1,  # save weights every n steps
         log_interval=10,  # print metrics every n batches
-        validation_interval=1,  # compute validation metrics every n epochs
+        validation_interval=100,  # compute validation metrics every n steps
         reset_optimizer=False,
         restart_scheduler=False,
         invalid_samples_log="./invalid_training_samples.log",
@@ -1191,7 +1202,7 @@ class SpectrogramClassifier(SpectrogramModule):
         wandb_session=None,
         progress_bar=True,
         audio_root=None,
-        reload_best_at_end=False,
+        reload_best_at_end=True,
         **dataloader_kwargs,
     ):
         """train the model on samples from train_dataset
@@ -1206,9 +1217,8 @@ class SpectrogramClassifier(SpectrogramModule):
             validation_df:
                 a dataframe of files and labels for evaluating the model
                 [default: None means no validation is performed]
-            epochs:
-                number of epochs to train for
-                (1 epoch constitutes 1 view of each training sample)
+            steps:
+                number of steps (ie batches or updates) to train the model for
             batch_size:
                 number of training files simultaneously passed through
                 forward pass, loss function, and backpropagation
@@ -1219,15 +1229,16 @@ class SpectrogramClassifier(SpectrogramModule):
                 location to save intermediate and best model objects
                 [default=".", ie current location of script]
             save_interval:
-                interval in epochs to save model object with weights [default:1]
+                interval in steps to save model object with weights
                 Note: the best model is always saved to best.model
-                in addition to other saved epochs.
+                [default:-1] means only save best.model and last.model
+                in addition to other saved steps.
             log_interval:
                 interval in batches to print training loss/metrics
             validation_interval:
-                interval in epochs to test the model on the validation set
+                interval in steps to test the model on the validation set
                 Note that model will only update it's best score and save best.model
-                file on epochs that it performs validation.
+                file on steps that it performs validation.
             reset_optimizer:
                 if True, resets the optimizer rather than retaining state_dict
                 of self.optimizer [default: False]
@@ -1259,7 +1270,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 - if None (default), samples must contain full paths to files
             progress_bar: bool, if True, shows a progress bar with tqdm [default: True]
             reload_best_at_end: if True, after training completes, reloads the best
-                model weights into self.network [default: False]
+                model weights into self.network [default: True]
                 Best model is determined by validation set's self.score_metric score
             **dataloader_kwargs: additional arguments passed to train_dataloader()
         Effects:
@@ -1302,7 +1313,7 @@ class SpectrogramClassifier(SpectrogramModule):
             # update the run config with training parameters
             wandb_session.config.update(
                 dict(
-                    epochs=epochs,
+                    steps=steps,
                     batch_size=batch_size,
                     num_workers=num_workers,
                     lr_sheculer_params=self.lr_scheduler_params,
@@ -1364,6 +1375,8 @@ class SpectrogramClassifier(SpectrogramModule):
             raise_errors=raise_errors,
             **dataloader_kwargs,
         )
+        # unlimited steps, cycle through dataset as needed
+        train_batch_generator = _infinite_dataloader(train_loader)
 
         ######################
         # Optimization setup #
@@ -1384,23 +1397,54 @@ class SpectrogramClassifier(SpectrogramModule):
         # can override like model.loss_fn = SomeLossCls()
 
         self.best_score = -np.inf
-        self.best_epoch = 0
+        self.best_step = 0
 
         ### Train ###
 
-        for epoch in range(epochs):
+        for step in tqdm(range(steps), disable=not progress_bar):
             # 1 epoch = 1 view of each training sample
             # loss fn, backpropogation, and optimizer step generally occur after each batch
-            # validation generally occurs after validation_interval epochs
+            # validation generally occurs after validation_interval steps
 
             ### Training ###
-            self._log(f"\nTraining Epoch {self.current_epoch}")
-            train_metrics = self._train_epoch(
-                train_loader, wandb_session, progress_bar=progress_bar
-            )
+            self._log(f"\nTraining Epoch {self.current_step}")
+            self.network.train()
+
+            # get one batch of training data and run training step
+            train_batch = next(train_batch_generator)
+            loss = self.training_step(train_batch, step)
+            self.loss_hist.append(loss.item())
+
+            # update learning parameters each step
+            self.scheduler.step()
+            self.lr_scheduler_step += 1
+
+            ###########
+            # Logging #
+            ###########
+            # log basic train info (used to print every batch)
+            if step % self.log_interval == 0:
+                # show some basic progress
+                self._log(f"Step: {step}/{steps} ({100 * step / steps :.1f}%)")
+
+                # Log the Loss function
+                avg_loss = np.mean(self.loss_hist[-self.log_interval :])
+                self._log(f"\Running Average Loss: {avg_loss:.3f}")
+                self._log(f"\tMost Recent Step Loss: {loss.item():.3f}")
+
+                # compute and reset TorchMetrics for training set
+                self.train_metrics[self.current_step] = self.eval()
+
+                if wandb_session is not None:
+                    wandb_session.log({"loss": loss.item()})
+                    wandb_session.log(
+                        {"training": self.train_metrics[self.current_step]}
+                    )
+                    wandb_session.log({"step": self.current_step})
 
             #### Validation ###
-            if epoch % validation_interval == 0:
+            if step % validation_interval == 0:
+
                 if validation_df is not None:
                     self._log("\nValidation.")
                     val_metrics = self.run_evaluation(
@@ -1410,47 +1454,48 @@ class SpectrogramClassifier(SpectrogramModule):
                         raise_errors=raise_errors,
                         **dataloader_kwargs,
                     )
-                    self.valid_metrics[self.current_epoch] = val_metrics
+                    self.valid_metrics[self.current_step] = val_metrics
                     score = val_metrics[self.score_metric]  # overall score
                     if wandb_session is not None:
                         wandb_session.log({"validation": val_metrics})
                 else:
                     # Get overall score from training metrics if no validation_df given
-                    score = train_metrics[self.score_metric]
+                    score = self.train_metrics[self.current_step][self.score_metric]
+
+                stop_early = self._check_early_stopping(score, step)
 
                 # if this is the best score, update & save weights to best.model
-                # we save both the pickled and unpickled formats here
+                # we save both the pickled and unpickled formats for best.model
                 if score > self.best_score:
                     self.best_score = score
-                    self.best_epoch = self.current_epoch
+                    self.best_step = self.current_step
                     save_path = f"{self.save_path}/best.model"
                     pickle_path = f"{self.save_path}/best.pickle"
-                    self._log(f"New best model saved to {save_path}", level=2)
                     self.save(save_path, pickle=False)
-                    self.save(pickle_path, pickle=True)
-
-                stop_early = self._check_early_stopping(score, epoch)
-
-            # save pickled model every n epochs and at end of training
-            # pickled model file allows us to resume training
-            if (
-                (self.current_epoch + 1) % self.save_interval == 0
-                or epoch == epochs - 1
-                or stop_early
-            ):
-                save_path = f"{self.save_path}/epoch-{self.current_epoch}.model"
-                self._log(f"Saving model to {save_path}", level=2)
-                try:
-                    self.save(save_path, pickle=True)
-                except Exception as e:
+                    self.save(pickle_path, pickle=True, error="warn")
                     self._log(
-                        "Saving pickled model failed. This may be beacuse the model is not picklable "
-                        "e.g. if it contains a lambda function, generator, or other non-picklable object."
+                        f"New best model at step {step} saved to {save_path}",
+                        level=2,
                     )
 
-            if wandb_session is not None:
-                wandb_session.log({"epoch": epoch})
-            self.current_epoch += 1
+            # save pickled model every n steps
+            # pickled model file allows us to resume training
+            if (
+                self.current_step + 1
+            ) % self.save_interval == 0 and self.save_interval > 0:
+                save_path = f"{self.save_path}/step_{self.current_step}.model"
+                self.save(save_path, pickle=False)
+                self._log(f"Saving model to {save_path}", level=2)
+
+            # save both pickle and non-pickle formats at last step
+            if step == steps - 1 or stop_early:
+                save_path = f"{self.save_path}/last.model"
+                pickle_path = f"{self.save_path}/last.pickle"
+                self._log(f"Saving model to {save_path}", level=2)
+                self.save(save_path, pickle=False)
+                self.save(pickle_path, pickle=True, error="warn")
+
+            self.current_step += 1
 
             # Early stopping (only check if validation score was updated this epoch)
             if stop_early:
@@ -1460,16 +1505,23 @@ class SpectrogramClassifier(SpectrogramModule):
         # optionally reload best epoch model weights at end of training
         if reload_best_at_end:
             best_model_path = f"{self.save_path}/best.pickle"
-            self._log(
-                f"Reloading best model from epoch {self.best_epoch} at end of training",
-                level=2,
-            )
-            self.load(best_model_path)
+            try:
+                self._log(
+                    f"Reloading best model weights from step {self.best_step} at end of training",
+                    level=2,
+                )
+                model = torch.load(
+                    best_model_path, map_location=self.device, weights_only=False
+                )
+                weights = model.network.state_dict()
+                self.network.load_state_dict(weights)
+            except Exception as e:
+                self._log(f"Error occurred while reloading best model: {e}", level=2)
 
         ### Logging ###
         self._log("Training complete", level=2)
         self._log(
-            f"\nBest Model Appears at Epoch {self.best_epoch} "
+            f"\nBest Model Appears at Step {self.best_step} "
             f"with Validation score {self.best_score:.3f}."
         )
 
@@ -1482,7 +1534,7 @@ class SpectrogramClassifier(SpectrogramModule):
         )
         self._log(f"List of invalid samples: {invalid_samples}", level=3)
 
-    def _check_early_stopping(self, current_score, current_epoch):
+    def _check_early_stopping(self, current_score, current_step):
         """check if training should stop early based on validation score
 
         and self.early_stopping_config settings
@@ -1490,15 +1542,15 @@ class SpectrogramClassifier(SpectrogramModule):
         Args:
             current_score: score from this epoch to compare against
                 self._best_early_stopping_score
-            current_epoch: current epoch number
+            current_step: current training step count
 
         Returns:
             True if training should stop early, False otherwise
         """
         if self.early_stopping_config["enabled"]:
-            if current_epoch == 0:
+            if current_step == 0:
                 self._best_score_early_stopping = current_score
-                self._best_epoch_early_stopping = 0
+                self._best_step_early_stopping = 0
             else:
                 improvement = current_score - self._best_score_early_stopping
                 if self.early_stopping_config["mode"] == "min":
@@ -1509,17 +1561,17 @@ class SpectrogramClassifier(SpectrogramModule):
                     # (but not necessarily best score overall: incremental progress
                     # <min_delta on best score does not update epoch or score)
                     self._best_score_early_stopping = current_score
-                    self._best_epoch_early_stopping = current_epoch
-            epochs_no_improve = current_epoch - self._best_epoch_early_stopping
-            if epochs_no_improve >= self.early_stopping_config["patience"]:
+                    self._best_step_early_stopping = current_step
+            steps_no_improve = current_step - self._best_step_early_stopping
+            if steps_no_improve >= self.early_stopping_config["patience"]:
                 self._log(
-                    f"Early stopping triggered at epoch {current_epoch}. No improvement in "
-                    f"{self.early_stopping_config['patience']} epochs.",
+                    f"Early stopping triggered at step {current_step}. No improvement in "
+                    f"{self.early_stopping_config['patience']} steps.",
                 )
                 return True
         return False
 
-    def save(self, path, save_hooks=False, pickle=False):
+    def save(self, path, save_hooks=False, pickle=False, error="raise"):
         """save model with weights using torch.save()
 
         load from saved file with cnn.load_model(path)
@@ -1537,6 +1589,11 @@ class SpectrogramClassifier(SpectrogramModule):
                 because it retains the state of the optimizer, scheduler, loss function, etc
                 pickle=False is recommended for saving models for inference/deployment/sharing
                 [default: False]
+            error: behavior if saving with pickle fails
+                - "raise": raise RuntimeError
+                - "warn": issue a warning and save unpickled model instead
+                - "ignore": no action (model not saved)
+                [default: "raise"]
         """
         os.makedirs(Path(path).parent, exist_ok=True)
 
@@ -1551,8 +1608,20 @@ class SpectrogramClassifier(SpectrogramModule):
                 m._backward_hooks = OrderedDict()
 
         if pickle:
-            # save a pickled model object; may not work across opso versions
-            torch.save(model_copy, path)
+            # save a pickled model object; may not work across environments / opso versions
+            try:
+                torch.save(model_copy, path)
+            except Exception as e:
+                msg = """Saving pickled model failed. This may be beacuse the model is not picklable
+                    e.g. if it contains a lambda function, generator, or other non-picklable
+                    object."""
+                if error == "warn":
+                    warnings.warn(msg)
+                elif error == "ignore":
+                    return
+                else:  # raise or any other value
+                    raise RuntimeError(msg) from e
+
         else:
             try:
                 arch_name = self.network.constructor_name
@@ -1587,13 +1656,18 @@ class SpectrogramClassifier(SpectrogramModule):
             # dictionary can be loaded with torch.load() to inspect individual components
             torch.save(
                 {
+                    # these are used explicitly during .load()
                     "weights": self.network.state_dict(),
                     "class": io.build_name(self),
-                    "classes": self.classes,
-                    "sample_duration": self.preprocessor.sample_duration,
-                    "architecture": arch_name,
-                    "preprocessor_dict": self.preprocessor.to_dict(),
                     "opensoundscape_version": opensoundscape.__version__,
+                    # these are kwargs to __init__():
+                    "architecture": arch_name,
+                    "classes": self.classes,
+                    "sample_duration": self.sample_duration,
+                    "sample_rate": self.sample_rate,
+                    "single_target": self.single_target,
+                    "preprocessor_dict": self.preprocessor.to_dict(),
+                    "preprocessor_cls": io.build_name(self.preprocessor.__class__),
                     # doesn't support resuming training across with optimizer/scheduler states
                     # because there are many other parameters that would need to be saved
                     # instead, use pickle=True for resuming training
@@ -2117,7 +2191,7 @@ class SpectrogramClassifier(SpectrogramModule):
 
         Example:
         ```python
-        m=opso.CNN('resnet18',[0,1],1)
+        m=opso.CNN('resnet18',[0,1],1,32000)
         # m.device='cpu' # optionally set a specific device
         m.network.to(m.device)
         samples = opso.utils.make_clip_df([opso.birds_path]*10,clip_duration=1)
@@ -2199,7 +2273,8 @@ class SpectrogramClassifier(SpectrogramModule):
         target_layers=None,
         guided_backprop=False,
         progress_bar=True,
-        **kwargs,
+        audio_root=None,
+        **dataloader_kwargs,
     ):
         """
         Generate a activation and/or backprop heatmaps for each sample
@@ -2240,6 +2315,9 @@ class SpectrogramClassifier(SpectrogramModule):
             guided_backprop: bool [default: False] if True, performs guided backpropagation
                 for each class in classes. AudioSamples will have attribute .gbp_maps,
                 a pd.Series indexed by class name
+            audio_root: str or Path, root directory to prepend to audio file paths
+                in samples, if samples do not contain full paths.
+                [default: None]
             **kwargs are passed to SafeAudioDataloader
                 (incl: batch_size, num_workers, split_file_into_clips, bypass_augmentations,
                 invalid_sample_behavior, overlap_fraction, final_clip, other DataLoader args)
@@ -2250,8 +2328,6 @@ class SpectrogramClassifier(SpectrogramModule):
 
         See pytorch_grad_cam documentation for references to the source of each method.
         """
-
-        ## INPUT VALIDATION ##
 
         if classes is not None:  # check that classes are in model.classes
             assert np.all(
@@ -2319,7 +2395,9 @@ class SpectrogramClassifier(SpectrogramModule):
 
         # create dataloader, collate using `identity` to return list of AudioSample
         # rather than (samples, labels) tensors
-        dataloader = self.predict_dataloader(samples, **kwargs)
+        if audio_root is not None:
+            dataloader_kwargs["audio_root"] = audio_root
+        dataloader = self.predict_dataloader(samples, **dataloader_kwargs)
 
         ## GENERATE SAMPLES ##
 
@@ -2709,13 +2787,14 @@ class SpectrogramClassifier(SpectrogramModule):
         ```python
         import torchaudio
         from opensoundscape import CNN, preprocessors
-        model = CNN("resnet18", classes=[0], sample_duration=5)
+        model = CNN("resnet18", classes=[0], sample_duration=5, sample_rate=32000)
         # custom list of torchaudio and torchvision transforms
         my_transforms = [
             torchaudio.transforms.Spectrogram(
                 n_fft=512,
                 win_length=512,
                 hop_length=128,
+                center=False, #highly recommended because default=True will zero-pad, creating extra columns
             ),
             torchaudio.transforms.AmplitudeToDB(top_db=80),
         ]
@@ -2787,7 +2866,7 @@ class SpectrogramClassifier(SpectrogramModule):
             meta.value = str(self.preprocessor.sample_duration)
             meta = om.metadata_props.add()
             meta.key = "sample_rate"
-            meta.value = str(self.preprocessor.pipeline.load_audio.params.sample_rate)
+            meta.value = str(self.preprocessor.sample_rate)
             meta = om.metadata_props.add()
             meta.key = "classes"
             meta.value = json.dumps(self.classes)
@@ -2827,6 +2906,7 @@ class SpectrogramClassifier(SpectrogramModule):
 CNN = SpectrogramClassifier
 register_model_cls(CNN)
 CNN.__doc__ = SpectrogramClassifier.__doc__
+CNN.__init__.__doc__ = SpectrogramClassifier.__init__.__doc__
 
 
 def _check_classes_inference(samples, model_classes):
@@ -2855,140 +2935,6 @@ def use_resample_loss(model, train_df):
     """
     class_frequency = torch.tensor(train_df.values).sum(0).to(model.device)
     model.loss_fn = ResampleLoss(class_frequency)
-
-
-@register_model_cls
-class InceptionV3(SpectrogramClassifier):
-    """Child of SpectrogramClassifier class for InceptionV3 architecture"""
-
-    def __init__(
-        self,
-        classes,
-        sample_duration,
-        single_target=False,
-        freeze_feature_extractor=False,
-        weights="DEFAULT",
-        sample_width=299,
-        sample_height=299,
-        **kwargs,
-    ):
-        """Model object for InceptionV3 architecture subclassing CNN
-
-        See opensoundscape.org for exaple use.
-
-        Args:
-            classes:
-                list of output classes (usually strings)
-            sample_duration: duration in seconds of one audio sample
-            single_target: if True, predict exactly one class per sample
-                [default:False]
-            freeze-feature_extractor:
-                if True, feature weights don't have
-                gradient, and only final classification layer is trained
-            weights:
-                string containing version name of the pre-trained classification weights to use for
-                this architecture. if 'DEFAULT', model is loaded with best available weights (note
-                that these may change across versions). Pre-trained weights available for each
-                architecture are listed at https://pytorch.org/vision/stable/models.html
-            sample_height: height of input image in pixels
-            sample_width: width of input image in pixels
-            **kwargs passed to SpectrogramClassifier.__init__()
-
-        Note: InceptionV3 architecture implementation assumes channels=3
-        """
-
-        self.classes = classes
-
-        architecture = inception_v3(
-            len(self.classes),
-            freeze_feature_extractor=freeze_feature_extractor,
-            weights=weights,
-        )
-        architecture.constructor_name = "inception_v3"
-
-        if "architecture" in kwargs:
-            kwargs.pop("architecture")
-
-        super().__init__(
-            architecture=architecture,
-            classes=classes,
-            sample_duration=sample_duration,
-            single_target=single_target,
-            height=sample_height,
-            width=sample_width,
-            channels=3,
-            **kwargs,
-        )
-        self.name = "InceptionV3"
-
-    def training_step(self, samples, batch_idx):
-        """Training step for pytorch lightning
-
-        Args:
-            batch: a batch of data from the DataLoader
-            batch_idx: index of the batch
-
-        Returns:
-            loss: loss value for the batch
-        """
-        batch_tensors, batch_labels = collate_audio_samples(samples)
-        batch_tensors = batch_tensors.to(self.device)
-        batch_labels = batch_labels.to(self.device)
-
-        batch_size = len(batch_tensors)
-
-        # automatic mixed precision
-        self.scaler = torch.amp.GradScaler(enabled=self.use_amp)
-        if "cuda" in str(self.device):
-            device_type = "cuda"
-            dtype = torch.float16
-        else:
-            device_type = "cpu"
-            dtype = torch.bfloat16
-        with torch.autocast(device_type=device_type, dtype=dtype):
-            inception_outs = self.network(batch_tensors)
-            logits = inception_outs.logits
-            aux_logits = inception_outs.aux_logits
-
-            loss1 = self.loss_fn(logits, batch_labels)
-            loss2 = self.loss_fn(aux_logits, batch_labels)
-            loss = loss1 + 0.4 * loss2
-        if not self.lightning_mode:
-            # if not using Lightning, we manually call
-            # loss.backward() and optimizer.step()
-            # Lightning does this behind the scenes
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-            self.optimizer.zero_grad()  # set_to_none=True here can modestly improve performance
-        # else, Lightning handles optimization steps
-
-        # compute and log any metrics in self.torch_metrics
-        batch_metrics = {
-            f"train_{name}": metric.to(self.device)(
-                logits.detach(), batch_labels.detach().int()
-            ).cpu()
-            for name, metric in self.torch_metrics.items()
-        }
-
-        if self.lightning_mode:
-            self.log(
-                f"train_loss",
-                loss,
-                on_step=True,
-                on_epoch=True,
-                batch_size=len(batch_tensors),
-            )
-            self.log_dict(
-                batch_metrics, on_epoch=True, on_step=False, batch_size=batch_size
-            )
-        return loss
-
-    @classmethod
-    def from_torch_dict(self):
-        raise NotImplementedError(
-            "Creating InceptionV3 from torch dict is not implemented."
-        )
 
 
 def load_model(path, device=None, unpickle=True):
