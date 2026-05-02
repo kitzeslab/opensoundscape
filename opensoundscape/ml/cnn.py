@@ -44,9 +44,7 @@ from opensoundscape.logging import wandb_table
 from opensoundscape.ml import shallow_classifier
 from opensoundscape.ml.cam import CAM
 from opensoundscape.ml.schedulers import CosineAnnealingWithWarmupScheduler
-import pytorch_grad_cam
 import torch
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from torchmetrics.classification import (
     MulticlassAUROC,
     MulticlassAveragePrecision,
@@ -100,6 +98,18 @@ def register_model_cls(model_cls):
     MODEL_CLS_DICT[io.build_name(model_cls)] = model_cls
     # return the function
     return model_cls
+
+
+def _require_grad_cam():
+    try:
+        import pytorch_grad_cam
+    except ImportError as exc:
+        raise ImportError(
+            "generate_cams() requires the optional 'grad-cam' dependency. "
+            "Install it with `pip install opensoundscape[grad-cam]` or `pip install grad-cam`."
+        ) from exc
+
+    return pytorch_grad_cam
 
 
 class ChannelDimCheckError(Exception):
@@ -2338,6 +2348,9 @@ class SpectrogramClassifier(SpectrogramModule):
         See pytorch_grad_cam documentation for references to the source of each method.
         """
 
+        pytorch_grad_cam = _require_grad_cam()
+        from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+
         if classes is not None:  # check that classes are in model.classes
             assert np.all(
                 [c in self.classes for c in classes]
@@ -2385,7 +2398,9 @@ class SpectrogramClassifier(SpectrogramModule):
             cam.device = self.device
         elif method is None:
             cam = None
-        elif issubclass(method, pytorch_grad_cam.base_cam.BaseCAM):
+        elif isinstance(method, type) and issubclass(
+            method, pytorch_grad_cam.base_cam.BaseCAM
+        ):
             # generate instance of cam from class
             cam = method(model=self.network, target_layers=target_layers)
             cam.device = self.device

@@ -1,4 +1,6 @@
 import importlib.util
+import builtins
+import sys
 import pandas as pd
 from pathlib import Path
 import types
@@ -279,6 +281,11 @@ onnx_deps = pytest.mark.skipif(
         for pkg in ("onnx", "onnxruntime", "onnxscript")
     ),
     reason="onnx, onnxruntime, or onnxscript not installed",
+)
+
+grad_cam_deps = pytest.mark.skipif(
+    importlib.util.find_spec("pytorch_grad_cam") is None,
+    reason="pytorch_grad_cam not installed",
 )
 
 
@@ -1215,6 +1222,7 @@ def test_predict_raise_errors(short_file_df, onemin_wav_df):
         model.predict(files_df, raise_errors=True)
 
 
+@grad_cam_deps
 def test_generate_cams(test_df):
     model = cnn.CNN(
         architecture="resnet18",
@@ -1251,6 +1259,7 @@ def test_generate_samples(test_df):
     assert type(samples[0].labels) == pd.Series
 
 
+@grad_cam_deps
 def test_generate_cams_batch_size(test_df):
     """smoke test for batch size > 1"""
     model = cnn.CNN(
@@ -1263,6 +1272,7 @@ def test_generate_cams_batch_size(test_df):
     _ = model.generate_cams(test_df, batch_size=2)
 
 
+@grad_cam_deps
 def test_generate_cams_num_workers(test_df):
     """smoke test for num workers > 1"""
     model = cnn.CNN(
@@ -1275,6 +1285,7 @@ def test_generate_cams_num_workers(test_df):
     _ = model.generate_cams(test_df, num_workers=2)
 
 
+@grad_cam_deps
 def test_generate_cams_scorecam_devices(test_df):
     """In pytorch_grad_cam <1.5.0 scorecam had device mismatch"""
 
@@ -1303,6 +1314,7 @@ def test_generate_cams_scorecam_devices(test_df):
     # )
 
 
+@grad_cam_deps
 def test_generate_cams_methods(test_df):
     """test each supported method both by passing class and string name"""
 
@@ -1337,6 +1349,7 @@ def test_generate_cams_methods(test_df):
         _ = model.generate_cams(test_df, method=method_str)
 
 
+@grad_cam_deps
 def test_generate_cam_all_architectures(test_df):
     for arch_name in cnn_architectures.ARCH_DICT.keys():
         try:
@@ -1361,6 +1374,7 @@ def test_generate_cam_all_architectures(test_df):
             raise Exception(f"{arch_name} failed") from e
 
 
+@grad_cam_deps
 def test_generate_cams_target_layers(test_df):
     """specify multiple target layers for cam"""
     model = cnn.CNN(
@@ -1373,6 +1387,32 @@ def test_generate_cams_target_layers(test_df):
     _ = model.generate_cams(
         test_df, target_layers=[model.network.layer3, model.network.layer4]
     )
+
+
+def test_generate_cams_missing_grad_cam_error(monkeypatch, test_df):
+    model = cnn.CNN(
+        architecture="resnet18",
+        classes=[0, 1],
+        sample_duration=5.0,
+        sample_rate=22050,
+        arch_weights=None,
+    )
+
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "pytorch_grad_cam" or name.startswith("pytorch_grad_cam."):
+            raise ModuleNotFoundError("No module named 'pytorch_grad_cam'")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.delitem(sys.modules, "pytorch_grad_cam", raising=False)
+    monkeypatch.delitem(
+        sys.modules, "pytorch_grad_cam.utils.model_targets", raising=False
+    )
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with pytest.raises(ImportError, match="opensoundscape\[grad-cam\]"):
+        model.generate_cams(test_df)
 
 
 def test_train_with_posixpath(train_df, temp_model_dir):
