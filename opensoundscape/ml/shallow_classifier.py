@@ -814,7 +814,7 @@ def fit_classifier_on_embeddings(
         )
         x_train, y_train = augmented_embed(
             embedding_model,
-            train_df[[]],
+            train_df,
             n_augmentation_variants=n_augmentation_variants,
             batch_size=embedding_batch_size,
             num_workers=embedding_num_workers,

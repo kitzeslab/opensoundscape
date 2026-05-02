@@ -156,9 +156,6 @@ class SpectrogramModule(BaseModule):
             sample_duration: duration of audio samples in seconds
             sample_rate: audio sample rate (if None, audio is not resampled during preprocessing)
             single_target: if True, predict only class with max score
-            channels: number of channels in input data
-            sample_height: height of input data
-            sample_width: width of input data
             preprocessor_dict: dictionary defining preprocessor and parameters,
                 can be generated with preprocessor.to_dict()
                 if not None, will override other preprocessor arguments
@@ -1203,7 +1200,7 @@ class SpectrogramClassifier(SpectrogramModule):
         num_workers=0,
         save_path=".",
         save_interval=-1,  # save weights every n steps
-        log_interval=10,  # print metrics every n batches
+        log_interval=50,  # print metrics every n steps
         validation_interval=100,  # compute validation metrics every n steps
         reset_optimizer=False,
         restart_scheduler=False,
@@ -1417,7 +1414,6 @@ class SpectrogramClassifier(SpectrogramModule):
             # validation generally occurs after validation_interval steps
 
             ### Training ###
-            self._log(f"\nTraining Epoch {self.current_step}")
             self.network.train()
 
             # get one batch of training data and run training step

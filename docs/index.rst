@@ -89,23 +89,29 @@ Suggested citation:
    installation/google_colab.md
    installation/contributors.md
 
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Basic Tutorials
+
+   tutorials/audio
+   tutorials/spectrogram
+   tutorials/predict_with_cnn
+   tutorials/songspace_agile_modeling
+   tutorials/acoustic_localization
 
 .. toctree::
    :maxdepth: 2
    :hidden:
-   :caption: Tutorials
+   :caption: Other Tutorials
 
-   tutorials/audio
-   tutorials/spectrogram
    tutorials/annotations
-   tutorials/predict_with_cnn
    tutorials/train_cnn
    tutorials/transfer_learning
    tutorials/training_birdnet_and_perch
    tutorials/training_with_lightning
    tutorials/customize_cnn_training
    tutorials/preprocess_audio_dataset
-   tutorials/acoustic_localization
    tutorials/RIBBIT_pulse_rate_demo
    tutorials/ruffed_grouse_detector
    tutorials/visualization
