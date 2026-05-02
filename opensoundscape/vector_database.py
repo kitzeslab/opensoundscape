@@ -672,17 +672,17 @@ def windows_to_dataframe(windows, extra_keys=None):
     if extra_keys is not None:
         cols.extend(extra_keys)
     records = [
-        (
-            [
-                w.filename,
-                w.offsets[0],
-                w.offsets[1],
-                w.datetime,
-                w.deployment,
-                w.project,
-                w.id,
-            ]
-            + [getattr(w, key, None) for key in extra_keys]
+        [
+            w.filename,
+            w.offsets[0],
+            w.offsets[1],
+            w.datetime,
+            w.deployment,
+            w.project,
+            w.id,
+        ]
+        + (
+            [getattr(w, key, None) for key in extra_keys]
             if extra_keys is not None
             else []
         )
