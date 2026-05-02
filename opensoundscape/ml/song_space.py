@@ -45,6 +45,15 @@ class SongSpace:
     - apply the final classifier to select clips for manual verification
     - end with manually verified detections for downstream analysis
     - potentially repeat with other species/classes
+
+    Args:
+        path (str): The path to the SongSpace directory
+        feature_extractor (str or model): The feature extractor to use for embedding audio clips.
+            Can be a string key for a model in the bioacoustics model zoo ("bs-convnext", "birdnet",
+            "perch", "perch2") or a custom model object with an embed() method and a classifier
+            attribute with an in_features property indicating the embedding dimension.
+        sample_duration (float): duration of audio clips to embed and classify, in seconds; if None,
+            uses the default sample duration of the feature extractor
     """
 
     @classmethod
