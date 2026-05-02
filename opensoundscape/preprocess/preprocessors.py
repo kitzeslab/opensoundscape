@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
+from opensoundscape import scipy_legacy_spectrogram
 from opensoundscape.audio import Audio
 from opensoundscape.preprocess import action_functions, actions, io, preprocessors
 from opensoundscape.preprocess.actions import (
@@ -346,6 +347,9 @@ class BasePreprocessor:
         for attr in dict["attributes"]:
             setattr(instance, attr, dict["attributes"][attr])
 
+        # if use legacy spectrogram, replace class 'opensoundscape.spectrogram.Spectrogram' with 'opensoundscape.scipy_legacy_spectrogram.Spectrogram'
+        _update_spectrogram_fn_with_legacy(dict)
+
         # re-create the pipeline using the actions' .from_dict methods
         instance.pipeline = pd.Series(
             {
@@ -503,12 +507,19 @@ class SpectrogramPreprocessor(BasePreprocessor):
         width=None,
         channels=1,
         bandpass_range=None,
+        use_legacy_spectrogram=False,
     ):
         super().__init__(sample_duration=sample_duration, sample_rate=sample_rate)
 
         self.height = height
         self.width = width
         self.channels = channels
+
+        # use legacy spectrogram implementation if requested
+        if use_legacy_spectrogram:
+            spec_from_audio = scipy_legacy_spectrogram.Spectrogram.from_audio
+        else:
+            spec_from_audio = Spectrogram.from_audio
 
         # define a default set of Actions
         # each Action's .__call__ method is called during preprocessing
@@ -560,7 +571,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
                     action_functions.audio_time_mask, is_augmentation=True
                 ),
                 # convert Audio object to Spectrogram
-                "to_spec": Action(Spectrogram.from_audio),
+                "to_spec": Action(spec_from_audio),
                 # convert Spectrogram to torch.Tensor and re-size to desired output shape
                 "to_tensor": SpectrogramToTensor(),  # uses sample's .height, .width, .channels
                 # add vertical (frequency) masking bars
@@ -1055,3 +1066,30 @@ def _action_html(title, action):
     
     """
     return html_code
+
+
+def _update_spectrogram_fn_with_legacy(dict):
+    """backwards-compatible Spectrogram preprocessing for opensoundscape<0.13.0
+
+    if use_legacy_spectrogram is True, replace class 'opensoundscape.spectrogram.Spectrogram' with
+    'opensoundscape.scipy_legacy_spectrogram.Spectrogram' in the pipeline dict and similarly for
+    MelSpectrogram
+    """
+    if dict["init_kwargs"].get("use_legacy_spectrogram", False):
+        # replace all intances of 'opensoundscape.spectrogram.Spectrogram' with 'opensoundscape.scipy_legacy_spectrogram.Spectrogram'
+        # in any action_fn or class in the pipeline dict
+        mapping = {
+            "opensoundscape.spectrogram.Spectrogram": "opensoundscape.scipy_legacy_spectrogram.Spectrogram",
+            "opensoundscape.spectrogram.MelSpectrogram": "opensoundscape.scipy_legacy_spectrogram.MelSpectrogram",
+        }
+        for key, action_dict in dict["pipeline"].items():
+            if action_dict.get("action_fn"):
+                for old, new in mapping.items():
+                    if action_dict["action_fn"].startswith(old):
+                        action_dict["action_fn"] = action_dict["action_fn"].replace(
+                            old, new
+                        )
+            if action_dict.get("class"):
+                for old, new in mapping.items():
+                    if action_dict["class"].startswith(old):
+                        action_dict["class"] = action_dict["class"].replace(old, new)

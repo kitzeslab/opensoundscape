@@ -9,6 +9,7 @@ import os
 import warnings
 from pathlib import Path
 from time import time
+from packaging import version
 
 import numpy as np
 import pandas as pd
@@ -1438,7 +1439,7 @@ class SpectrogramClassifier(SpectrogramModule):
 
                 # Log the Loss function
                 avg_loss = np.mean(self.loss_hist[-self.log_interval :])
-                self._log(f"\Running Average Loss: {avg_loss:.3f}")
+                self._log(f"\tRunning Average Loss: {avg_loss:.3f}")
                 self._log(f"\tMost Recent Step Loss: {loss.item():.3f}")
 
                 # compute and reset TorchMetrics for training set
@@ -1708,7 +1709,8 @@ class SpectrogramClassifier(SpectrogramModule):
         loaded_content = torch.load(path, weights_only=not unpickle)
 
         if isinstance(loaded_content, dict):
-            _version_mismatch_warn(loaded_content.pop("opensoundscape_version"))
+            model_opso_version = loaded_content.pop("opensoundscape_version")
+            _version_mismatch_warn(model_opso_version)
             # load up the weights and instantiate from dictionary keys
             # includes preprocessing parameters and settings
             state_dict = loaded_content.pop("weights")
@@ -1718,8 +1720,27 @@ class SpectrogramClassifier(SpectrogramModule):
                     f"Using .load method of {io.build_name(cls)} but the "
                     f"loaded model class is {class_name}."
                 )
-            model = cls(**loaded_content)
-            model.network.load_state_dict(state_dict)
+            if version.parse(model_opso_version) < version.parse("0.13.0"):
+                # use backwards-compatible loading
+                pre_dict = loaded_content["preprocessor_dict"]
+                pre_dict["init_kwargs"]["sample_rate"] = None
+                pre_dict["pipeline"]["overlay"]["params"]["break_on_key"] = "overlay"
+                pre_dict["pipeline"]["load_audio"]["params"].pop("sample_rate")
+                pre_dict["init_kwargs"]["use_legacy_spectrogram"] = True
+                model = CNN(**loaded_content, sample_rate=None)
+                # formerly included conv1.bias but torchvision models create conv1.bias=None, which we now retain
+                original_conv1_bias = state_dict.pop("conv1.bias", None)
+                model.network.load_state_dict(state_dict)
+                if original_conv1_bias is not None:
+                    model.network.conv1.bias = torch.nn.Parameter(original_conv1_bias)
+
+                # we inverted the default spectrogram values in 0.7.0
+                if version.parse(model_opso_version) < version.parse("0.7.0"):
+                    model.preprocessor.pipeline.to_tensor.set(invert=True)
+
+            else:
+                model = cls(**loaded_content)
+                model.network.load_state_dict(state_dict)
         else:  # entire pickled object, not dictionary
             _version_mismatch_warn(loaded_content.opensoundscape_version)
             model = loaded_content

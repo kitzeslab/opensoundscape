@@ -60,7 +60,9 @@ def generic_make_arch(
     freeze_feature_extractor=False,
     num_channels=3,
 ):
-    """works when first layer is conv2d and last layer is fully-connected Linear
+    """construct a CNN architecture, then adapt the input channels and output layer according to channels and num_classes arguments
+
+    works when first layer is conv2d and last layer is fully-connected Linear
 
     input_size = 224
 

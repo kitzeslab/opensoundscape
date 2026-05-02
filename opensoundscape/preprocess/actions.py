@@ -32,9 +32,9 @@ from opensoundscape.preprocess.action_functions import (
     register_action_fn,
 )
 from opensoundscape.preprocess import io
-from opensoundscape.spectrogram import Spectrogram
+from opensoundscape.spectrogram import Spectrogram, MelSpectrogram
 from opensoundscape.audio import Audio
-
+from opensoundscape import scipy_legacy_spectrogram
 
 ACTION_CLS_DICT = dict()
 
@@ -66,6 +66,9 @@ def register_all_methods(cls, public_only=True):
 
 register_all_methods(Audio)
 register_all_methods(Spectrogram)
+register_all_methods(MelSpectrogram)
+register_all_methods(scipy_legacy_spectrogram.Spectrogram)
+register_all_methods(scipy_legacy_spectrogram.MelSpectrogram)
 
 
 def action_from_dict(dict):
