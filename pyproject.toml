@@ -79,6 +79,7 @@ sentry-sdk = ">=2.8.0"
 nbconvert = ">=7.17.1"
 filelock = ">=3.20.3"
 fonttools = ">=4.61.0"
+lxml = ">=6.1.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -98,6 +99,9 @@ onnx = ">=1.19.1"
 onnxruntime = ">=1.23.2"
 onnxscript = ">=0.5.4"
 perch-hoplite = ">=1.0.1"
+grad-cam = ">=1.5.0"
+# security alert updates
+pygments = ">=2.20.0"
 
 [tool.poetry.extras]
 tensorflow = ["tensorflow", "tensorflow-hub", "keras"]
