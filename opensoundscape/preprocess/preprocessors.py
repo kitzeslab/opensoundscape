@@ -4,7 +4,6 @@ import copy
 import json
 import pathlib
 import time
-import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -23,7 +22,6 @@ from opensoundscape.preprocess.overlay import Overlay
 from opensoundscape.preprocess.utils import PreprocessingError, get_args
 from opensoundscape.sample import AudioSample
 from opensoundscape.spectrogram import Spectrogram
-from opensoundscape.utils import make_clip_df
 
 PREPROCESSOR_CLS_DICT = {}
 

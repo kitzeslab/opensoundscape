@@ -1,9 +1,7 @@
 """Class activation maps (CAM) for OpenSoundscape models"""
 
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
-import torch
 import os
 import warnings
 from matplotlib.patches import Patch

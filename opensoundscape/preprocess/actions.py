@@ -26,14 +26,12 @@ import torchvision
 import pandas as pd
 import copy
 
-from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
+from opensoundscape.preprocess.utils import get_args, get_reqd_args
 from opensoundscape.preprocess.action_functions import (
     ACTION_FN_DICT,
-    list_action_fns,
     register_action_fn,
 )
 from opensoundscape.preprocess import io
-from opensoundscape.sample import AudioSample
 from opensoundscape.spectrogram import Spectrogram
 from opensoundscape.audio import Audio
 

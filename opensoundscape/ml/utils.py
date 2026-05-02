@@ -1,12 +1,9 @@
 """Utilties for .ml"""
 
 import warnings
-import pandas as pd
-import numpy as np
+
 import torch
 import torch.nn.functional as F
-import pytorch_grad_cam
-import tqdm
 
 import opensoundscape
 from opensoundscape.ml.sampling import ClassAwareSampler

@@ -4,12 +4,12 @@
 (possibly other vector database libraries in the future)
 """
 
-from datetime import datetime
-import numpy as np
-from pathlib import Path
 import warnings
-import pandas as pd
 from collections import defaultdict
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 
 def load_or_create_hoplite_usearch_db(db, embedding_dim=None, cfg=None):
@@ -711,9 +711,7 @@ def similarity_search_hoplite_db(
             - "results": list of dictionaries with metadata for each retrieved sample
     """
     try:
-        from perch_hoplite.db import brutalism
-        from perch_hoplite.db import score_functions
-        from perch_hoplite.db import search_results
+        from perch_hoplite.db import brutalism, score_functions, search_results
     except ImportError as e:
         raise ImportError(
             "hoplite is not installed. Please install hoplite to use this feature."

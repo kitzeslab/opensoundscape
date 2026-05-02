@@ -24,7 +24,6 @@ from pathlib import Path
 import json
 import io
 import urllib
-import os
 
 import numpy as np
 import scipy

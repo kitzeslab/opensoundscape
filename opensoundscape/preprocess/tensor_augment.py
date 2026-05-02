@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Augmentations and transforms for torch.Tensors
 """

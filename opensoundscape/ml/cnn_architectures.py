@@ -27,8 +27,6 @@ or override an existing model's architecture:
 
 """
 
-import warnings
-
 import torch
 import torchvision
 

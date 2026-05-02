@@ -1,28 +1,22 @@
-from pathlib import Path
-import pandas as pd
+import json
 import warnings
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
 from aru_metadata_parser.parse import ARUFileTimestampParser
 from sklearn.metrics import average_precision_score, roc_auc_score
-import numpy as np
+
+from opensoundscape.ml.loss import BCELossWeakNegatives
 from opensoundscape.ml.shallow_classifier import (
-    predict_on_hoplite,
     MLPClassifier,
     fit_on_hoplite,
+    predict_on_hoplite,
 )
-from opensoundscape.ml.loss import BCELossWeakNegatives
+from opensoundscape.utils import parent_folder_name
 from opensoundscape.vector_database import (
     _find_matching_window_ids,
     load_or_create_hoplite_usearch_db,
-)
-import json
-
-# helper functions for common patterns of mapping audio files to deployments
-# for the file_to_deployment argument in ingest_audio
-from opensoundscape.utils import (
-    parent_folder_name,
-    two_parents_name,
-    second_parent_name,
-    filename_first_part,
 )
 
 default_datetime_parser = ARUFileTimestampParser()

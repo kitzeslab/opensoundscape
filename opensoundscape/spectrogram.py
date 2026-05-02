@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
 """spectrogram.py: Utilities for dealing with spectrograms"""
-import warnings
-import os
 
-import scipy
-import numpy as np
 import librosa.filters
-import skimage.transform
-from PIL import Image
-import torch
 import matplotlib
-from matplotlib import pyplot as plt
 import matplotlib.colors
+import numpy as np
+import torch
 import torch.nn.functional as F
 import torchaudio
+from matplotlib import pyplot as plt
+from PIL import Image
 
 from opensoundscape.audio import Audio
-from opensoundscape.utils import min_max_scale, linear_scale
+from opensoundscape.utils import linear_scale, min_max_scale
 
 
 class Spectrogram:

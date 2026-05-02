@@ -19,8 +19,6 @@ import os
 import copy
 
 import torch
-import torch.nn.functional as F
-import torch.nn.functional as F
 from tqdm.autonotebook import tqdm
 
 import opensoundscape
@@ -33,17 +31,14 @@ from opensoundscape.ml.utils import (
 )
 from opensoundscape.preprocess.preprocessors import (
     SpectrogramPreprocessor,
-    BasePreprocessor,
     preprocessor_from_dict,
 )
 from opensoundscape.preprocess import io
 from opensoundscape.ml.datasets import AudioFileDataset
-from opensoundscape.ml.dataloaders import SafeAudioDataloader, collate_audio_samples
-from opensoundscape.utils import identity
+from opensoundscape.ml.dataloaders import collate_audio_samples
 from opensoundscape.logging import wandb_table
 from opensoundscape.ml import shallow_classifier
 from opensoundscape.ml.cam import CAM
-from opensoundscape.ml.schedulers import CosineAnnealingWithWarmupScheduler
 import torch
 from torchmetrics.classification import (
     MulticlassAUROC,

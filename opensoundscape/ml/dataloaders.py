@@ -2,7 +2,6 @@ import torch
 import numpy as np
 import pandas as pd
 import warnings
-from pathlib import Path
 
 from opensoundscape.ml.safe_dataset import SafeDataset
 from opensoundscape.ml.datasets import AudioFileDataset, AudioFileDataset

@@ -15,7 +15,6 @@ from opensoundscape.ml.loss import BCELossWeakNegatives
 from opensoundscape.ml.utils import _version_mismatch_warn, _infinite_dataloader
 from opensoundscape.vector_database import _require_hoplite
 from opensoundscape.ml.loss import BCELossWeakNegatives
-import opensoundscape as opso
 from opensoundscape.ml.datasets import HopliteDataset
 from opensoundscape.vector_database import find_matching_windows, windows_to_dataframe
 
