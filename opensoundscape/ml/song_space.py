@@ -1,4 +1,5 @@
 import json
+from typing import Literal
 import warnings
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from opensoundscape.ml.shallow_classifier import (
     MLPClassifier,
     fit_on_hoplite,
     predict_on_hoplite,
+    select_from_hoplite,
 )
 from opensoundscape.utils import parent_folder_name
 from opensoundscape.vector_database import (
@@ -650,6 +652,229 @@ class SongSpace:
         # sample up to n_samples from the unlabeled dataframe
         unlabeled_df = unlabeled_df.sample(n=min(n_samples, len(unlabeled_df)))
         return unlabeled_df
+
+    def select(
+        self,
+        classifier,
+        classes,
+        k=5,
+        strategy: Literal["top_k", "random_k", "all"] = "top_k",
+        batch_size=1024,
+        date_range=None,
+        time_range=None,
+        min_score=None,
+        max_score=None,
+        deployments=None,
+        projects=None,
+        recordings=None,
+        deployments_filter=None,
+        recordings_filter=None,
+        windows_filter=None,
+        annotations_filter=None,
+        random_state=None,
+        return_windows=False,
+        progress_bar=False,
+        warn_no_matches=False,
+    ):
+        """Extract top-scoring or random clips from the database based on classifier predictions and filters
+
+        Args:
+            db: hoplite database containing embeddings
+            classifier: classifier to apply to embeddings in the database to generate clip ranking scores
+                MLPClassifier object or other classifier object to call on the torch.tensor embeddings,
+                or the name (str) in self.classifiers dictionary
+                must have a 'classes' attribute listing the class names, including the classes specified in the `classes` argument
+            classes: list of class names to select clips for; if None, selects clips for every class in classifier
+            k: number of clips to return per class; default 5 (ignored if strategy="all")
+            strategy: which clips to select:
+                "top_k" to return the top k clips for each class
+                "random_k" to return k random clips
+                "all" to return all clips (ignores `k`)
+                default "top_k"
+            batch_size: n samples simultaneously processed when applying classifier to embeddings; default 1024
+            date_range: tuple of (start_date, end_date) to filter clips by date;
+                Formats: datetime.datetime, datetime.date, or string in "YYYY-MM-DD" format; if None, does not filter by date
+                Can pass (date,None) or (None,date) to filter by only start or end date, respectively
+            time_range: tuple of (start_time, end_time) to filter clips by time of day; if None, does not filter by time of day
+                Formats: datetime.datetime, datetime.time or string in "HH:MM:SS" format
+                Note: filters by time of day of the _recording_ start time (rather than audio clip start time)
+                Assumes time zone match between time_range values and recording timestamps in the database
+            min_score: minimum score to filter clips by existing score in the database; if None, does not threshold by min score
+            max_score: maximum score to filter clips by existing score in the database; if None, does not restrict by max score
+            deployments: list of deployment names to filter by; if None, does not filter by deployment
+            projects: list of project names to filter by; if None, does not filter by project
+            recordings: list of recording names to filter by; if None, does not filter by recording
+            deployments_filter: custom filter dict for deployments; if provided, overrides deployments argument
+            recordings_filter: custom filter dict for recordings; if provided, overrides recordings argument
+            windows_filter: custom filter dict for windows; if provided, overrides date_range, time_range arguments
+            annotations_filter: custom filter dict for annotations in hoplite DB
+            warn_no_matches: if True, raises a warning if no clips are found for a class after applying filters and score thresholds; default False
+
+        Returns:
+            dict of {class_name: list of matching windows} if return_windows=True; otherwise a dataframe with columns for class, score, and window info
+        """
+        if isinstance(classifier, str):
+            if classifier not in self.classifiers:
+                raise ValueError(
+                    f"No classifier with name {classifier} found in SongSpace. Available classifiers: {list(self.classifiers.keys())}"
+                )
+            classifier = self.classifiers[classifier]
+        return select_from_hoplite(
+            db=self.database,
+            classifier=classifier,
+            classes=classes,
+            k=k,
+            strategy=strategy,
+            batch_size=batch_size,
+            date_range=date_range,
+            time_range=time_range,
+            min_score=min_score,
+            max_score=max_score,
+            deployments=deployments,
+            projects=projects,
+            recordings=recordings,
+            deployments_filter=deployments_filter,
+            recordings_filter=recordings_filter,
+            windows_filter=windows_filter,
+            annotations_filter=annotations_filter,
+            random_state=random_state,
+            return_windows=return_windows,
+            progress_bar=progress_bar,
+            warn_no_matches=warn_no_matches,
+        )
+
+    def stratified_selection(
+        self,
+        classifier,
+        classes,
+        stratify_deployments=True,
+        stratify_day=False,
+        date_ranges=None,
+        stratify_recordings=False,
+        stratify_datasets=False,
+        k=5,
+        strategy: Literal["top_k", "random_k", "all"] = "top_k",
+        batch_size=1024,
+        date_range=None,
+        time_range=None,
+        min_score=None,
+        max_score=None,
+        deployments=None,
+        projects=None,
+        recordings=None,
+        deployments_filter=None,
+        recordings_filter=None,
+        windows_filter=None,
+        annotations_filter=None,
+        random_state=None,
+        progress_bar=False,
+        warn_no_matches=False,
+    ):
+        """Perform stratified selection of clips based on classifier predictions and filters
+
+        Args:
+            classifier: classifier to apply to embeddings in the database to generate clip ranking scores; see select() for details
+            classes: list of class names to select clips for; if None, selects clips for every class in classifier
+            stratify_deployments: whether to stratify selection by deployment; default True
+            stratify_day: whether to stratify selection by day; default False
+            date_ranges: optional list of inclusive (start_date, end_date) 'YYYY-MM-DD' tuples for stratification
+                - if provided, stratify_day is ignored and stratification is based on these date ranges instead
+            stratify_recordings: whether to stratify selection by recording (audio file); default False
+            stratify_datasets: whether to stratify selection by dataset; default False
+            k: number of clips to return per class per stratum; default 5 (ignored if strategy="all")
+            strategy: which clips to select:
+                "top_k" to return the top k clips for each class in each stratum
+                "random_k" to return k random clips for each class in each stratum
+                "all" to return all clips (ignores `k`)
+                default "top_k"
+            batch_size, date_range, time_range, min_score, max_score, deployments, projects,
+                recordings, deployments_filter, recordings_filter, windows_filter, annotations_filter,
+                random_state, return_windows, progress_bar, warn_no_matches:
+                see select() for details on these arguments
+
+        Returns:
+            dict of {stratum_value: {class_name: list of matching windows}} if return_windows=True; otherwise a dataframe with columns for stratum_value, class, score, and window info
+        """
+
+        if stratify_deployments:
+            deployments = [d.name for d in self.database.get_all_deployments()]
+        else:
+            deployments = [None]  # single stratum with all deployments
+        if projects is None:  # select all datasets
+            included_datasets = list(self.datasets.keys())
+        else:  # user-specified subset
+            included_datasets = projects
+        if stratify_datasets:
+            dataset_strata = included_datasets
+        else:
+            # single stratum with all selected datasets
+            dataset_strata = [projects]
+        if stratify_recordings:
+            recordings_strata = [r.filename for r in self.database.get_all_recordings()]
+        else:
+            recordings_strata = [None]  # single stratum with all recordings
+        if date_ranges is not None:
+            date_ranges = [
+                (
+                    pd.to_datetime(start_date).date(),
+                    pd.to_datetime(end_date).date(),
+                )
+                for start_date, end_date in date_ranges
+            ]
+        elif stratify_day:
+            # get list of unique recording start dates in the database for stratification
+            all_recordings = self.database.get_all_recordings()
+            recording_start_dates = set()
+            for r in all_recordings:
+                if r.datetime is not None:
+                    recording_start_dates.add(r.datetime.date())
+            date_ranges = []
+            for d in sorted(recording_start_dates):
+                date_ranges.append((d, d))
+        else:
+            date_ranges = [None]  # single stratum with all dates
+
+        all_selected_clips = []
+        # iterate over combinations of stratification values and perform selection for each combination
+        # todo: add a method to tally 'effort' (# clips evaluated by the classifier) for each group
+        for deployment in deployments:
+            for dataset_subset in dataset_strata:
+                for recording in recordings_strata:
+                    for date_range in date_ranges:
+                        selected_clips = self.select(
+                            classifier=classifier,
+                            classes=classes,
+                            k=k,
+                            strategy=strategy,
+                            batch_size=batch_size,
+                            date_range=date_range,
+                            deployments=deployment,
+                            recordings=recording,
+                            projects=dataset_subset,
+                            progress_bar=progress_bar,
+                            warn_no_matches=warn_no_matches,
+                            time_range=time_range,
+                            min_score=min_score,
+                            max_score=max_score,
+                            deployments_filter=deployments_filter,
+                            recordings_filter=recordings_filter,
+                            windows_filter=windows_filter,
+                            annotations_filter=annotations_filter,
+                            random_state=random_state,
+                            return_windows=False,  # create dataframe
+                        )
+                        selected_clips["deployment"] = deployment
+                        selected_clips["dataset"] = dataset_subset
+                        selected_clips["recording"] = recording
+                        selected_clips["date_range"] = (
+                            f"{date_range[0]} to {date_range[1]}"
+                            if date_range is not None
+                            else None
+                        )
+                        all_selected_clips.append(selected_clips)
+        # concatenate results into a single dataframe
+        all_selected_clips_df = pd.concat(all_selected_clips, ignore_index=True)
+        return all_selected_clips_df
 
 
 def _require_bmz():

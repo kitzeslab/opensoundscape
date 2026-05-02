@@ -1004,6 +1004,9 @@ def select_from_hoplite(
         windows_filter: custom filter dict for windows; if provided, overrides date_range, time_range arguments
         annotations_filter: custom filter dict for annotations in hoplite DB
         warn_no_matches: if True, raises a warning if no clips are found for a class after applying filters and score thresholds; default False
+
+    Returns:
+        dict of {class_name: list of matching windows} if return_windows=True; otherwise a dataframe with columns for class, score, and window info
     """
     np.random.seed(random_state)
 
@@ -1023,6 +1026,25 @@ def select_from_hoplite(
         windows_filter=windows_filter,
         annotations_filter=annotations_filter,
     )
+    if len(matching_windows) == 0:
+        if warn_no_matches:
+            warnings.warn("No clips found matching the provided filters")
+        if return_windows:
+            return {}
+        else:
+            return pd.DataFrame(
+                columns=[
+                    "file",
+                    "start_time",
+                    "end_time",
+                    "datetime",
+                    "deployment",
+                    "project",
+                    "window_id",
+                    "score",
+                    "class",
+                ]
+            )
 
     # apply classifier in batches to matching windows
     all_scores = []
@@ -1039,6 +1061,7 @@ def select_from_hoplite(
         with torch.no_grad():
             batch_scores = classifier(batch_embs_tensor).cpu().numpy()
         all_scores.append(batch_scores)
+
     all_scores = np.concatenate(all_scores)  # shape (n_matching_windows, n_classes)
 
     if classes is None:
@@ -1068,7 +1091,7 @@ def select_from_hoplite(
         cls_scores = all_scores[:, clsidx]
         cls_windows = np.array(matching_windows)
 
-        # score thresholding by min and max score
+        # score filtering by min and max score
         mask = np.ones_like(cls_scores, dtype=bool)
         if min_score is not None:
             mask = mask & (cls_scores >= min_score)
@@ -1112,7 +1135,7 @@ def select_from_hoplite(
     # return dataframe:
     per_class_results = []
     for class_name, windows in results.items():
-        df = windows_to_dataframe(windows)
+        df = windows_to_dataframe(windows, extra_keys=["score"])
         df["class"] = class_name
         per_class_results.append(df)
     return pd.concat(per_class_results)
@@ -1154,23 +1177,26 @@ def count_dets_hoplite(
             - if None, reports all scores above min_score and below max_score in a single bin
             - if provided, min_score and max_score are ignored and bins are determined by score_bins
         batch_size: n samples simultaneously processed when applying classifier to embeddings;
-        default 1024 date_range: tuple of (start_date, end_date) to filter clips by date;
+            default 1024
+        date_range: tuple of (start_date, end_date) to filter clips by date;
             Formats: datetime.datetime, datetime.date, or string in "YYYY-MM-DD" format; if None,
             does not filter by date Can pass (date,None) or (None,date) to filter by only start or
             end date, respectively
         time_range: tuple of (start_time, end_time) to filter clips by time of day; if None, does
         not filter by time of day
             Formats: datetime.datetime, datetime.time or string in "HH:MM:SS" format Note: filters
-            by time of day of the _recording_ start time (rather than audio clip start time) Assumes
-            time zone match between time_range values and recording timestamps in the database
+            by time of day of the _recording_ start time (rather than audio clip start time)
+            Assumes time zone match between time_range values and recording timestamps in the database
         deployments: list of deployment names to filter by; if None, does not filter by deployment
         projects: list of project names to filter by; if None, does not filter by project
         recordings: list of recording names to filter by; if None, does not filter by recording
         deployments_filter: custom filter dict for deployments; if provided, overrides deployments
-        argument recordings_filter: custom filter dict for recordings; if provided, overrides
-        recordings argument windows_filter: custom filter dict for windows; if provided, overrides
-        date_range, time_range arguments annotations_filter: custom filter dict for annotations in
-        hoplite DB
+            argument
+        recordings_filter: custom filter dict for recordings; if provided, overrides
+            recordings argument
+        windows_filter: custom filter dict for windows; if provided, overrides date_range,
+        time_range arguments
+        annotations_filter: custom filter dict for annotations in hoplite DB
 
     Returns:
         counts: dict of dicts with counts[class][bin_range] = count of clips for class in score bin;

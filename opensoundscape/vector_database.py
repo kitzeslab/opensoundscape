@@ -598,10 +598,14 @@ def find_matching_windows(
                 end_date = pd.to_datetime(end_date).date()
             # create date_range filters
             # for time range, we will need to do post-filtering after retrieving the windows, since time of day is not a native filter in hoplite
+            # include entire date regardless of time of day
             if start_date is not None:
-                recordings_filter.update(gte=dict(datetime=start_date))
+                start_datetime = pd.to_datetime(start_date).floor("D")
+                recordings_filter.update(gte=dict(datetime=start_datetime))
             if end_date is not None:
-                recordings_filter.update(lte=dict(datetime=end_date))
+                # include any time of day on the end date using ceil to Day precision
+                end_datetime = pd.to_datetime(end_date).ceil("D")
+                recordings_filter.update(lte=dict(datetime=end_datetime))
             # print(recordings_filter)
     # now find all window ids that match the filters
     window_ids = db.match_window_ids(
@@ -647,7 +651,15 @@ def find_matching_windows(
     return windows
 
 
-def windows_to_dataframe(windows):
+def windows_to_dataframe(windows, extra_keys=None):
+    """convert list of hoplite windows to a pandas dataframe with relevant info for each window
+
+    Args:
+        windows: list of hoplite window objects, with attributes filename, offsets, datetime, deployment, project, id
+        extra_keys: optional list of additional attributes to include in the dataframe, if present in the window objects
+    Returns:
+        pandas dataframe with columns for file, start_time, end_time, datetime, deployment, project, window_id, and any extra_keys specified
+    """
     cols = [
         "file",
         "start_time",
@@ -657,16 +669,23 @@ def windows_to_dataframe(windows):
         "project",
         "window_id",
     ]
+    if extra_keys is not None:
+        cols.extend(extra_keys)
     records = [
-        [
-            w.filename,
-            w.offsets[0],
-            w.offsets[1],
-            w.datetime,
-            w.deployment,
-            w.project,
-            w.id,
-        ]
+        (
+            [
+                w.filename,
+                w.offsets[0],
+                w.offsets[1],
+                w.datetime,
+                w.deployment,
+                w.project,
+                w.id,
+            ]
+            + [getattr(w, key, None) for key in extra_keys]
+            if extra_keys is not None
+            else []
+        )
         for w in windows
     ]
     results_df = pd.DataFrame(records, columns=cols)
