@@ -1,13 +1,13 @@
 import warnings
 from pathlib import Path
 import warnings
-import numpy as np
 import pandas as pd
 
 import torch
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint
 
+from opensoundscape.ml.dataloaders import collate_audio_samples
 from opensoundscape.ml.utils import apply_activation_layer, check_labels
 from opensoundscape.ml.datasets import AudioFileDataset
 from opensoundscape.logging import wandb_table
@@ -19,6 +19,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.lightning_mode = True
+        self.compute_per_class_metrics = False
         self.save_hyperparameters()
 
     def train(self, *args, **kwargs):
@@ -37,7 +38,7 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
 
         typically returns logits (raw, untransformed model outputs)
         """
-        batch_tensors, _ = samples
+        batch_tensors, _ = collate_audio_samples(samples)
         batch_tensors = batch_tensors.to(self.device)
         return self.network(batch_tensors)
 
@@ -280,9 +281,8 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
             batch_size=batch_size,
             num_workers=num_workers,
             raise_errors=raise_errors,
-            split_files_into_clips=True,
             clip_overlap=0,
-            final_clip=None,
+            final_clip="extend",
             bypass_augmentations=True,
         )
 
@@ -327,12 +327,10 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         batch_size=1,
         num_workers=0,
         activation_layer=None,
-        split_files_into_clips=True,
         clip_overlap=None,
-        clip_overlap_fraction=None,
-        clip_step=None,
         overlap_fraction=None,
-        final_clip=None,
+        clip_step=None,
+        final_clip="extend",
         bypass_augmentations=True,
         invalid_samples_log=None,
         raise_errors=False,
@@ -368,12 +366,8 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
                 - 'sigmoid': all scores in [0,1] but don't sum to 1
                 - 'softmax_and_logit': applies softmax first then logit
                 [default: None]
-            split_files_into_clips:
-                If True, internally splits and predicts on clips from longer audio files
-                Otherwise, assumes each row of `samples` corresponds to one complete sample
-            clip_overlap_fraction, clip_overlap, clip_step, final_clip:
+            overlap_fraction, clip_overlap, clip_step, final_clip:
                 see `opensoundscape.utils.generate_clip_times_df`
-            overlap_fraction: deprecated alias for clip_overlap_fraction
             bypass_augmentations: If False, Actions with
                 is_augmentation==True are performed. Default True.
             invalid_samples_log: if not None, samples that failed to preprocess
@@ -426,10 +420,8 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         # create dataloader to generate batches of AudioSamples
         dataloader = self.predict_dataloader(
             samples=samples,
-            split_files_into_clips=split_files_into_clips,
             overlap_fraction=overlap_fraction,
             clip_overlap=clip_overlap,
-            clip_overlap_fraction=clip_overlap_fraction,
             clip_step=clip_step,
             final_clip=final_clip,
             bypass_augmentations=bypass_augmentations,

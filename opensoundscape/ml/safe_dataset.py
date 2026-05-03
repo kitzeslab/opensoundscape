@@ -14,6 +14,7 @@ based on an implementation by @msamogh in nonechucks
 (github.com/msamogh/nonechucks/)
 """
 
+import copy
 import warnings
 
 
@@ -25,17 +26,16 @@ class SafeDataset:
     the current index (see __getitem__).
 
     Note that this class does not subclass DataSet. Instead, it contains a
-    `.dataset` attribute that is a DataSet (or AudioFileDataset / AudioSplittingDataset,
+    `.dataset` attribute that is a DataSet (or AudioFileDataset / AudioFileDataset,
     which subclass DataSet).
 
     Args:
-        dataset: a torch Dataset instance or child such as AudioFileDataset, AudioSplittingDataset
+        dataset: a torch Dataset instance or child such as AudioFileDataset, AudioFileDataset
         eager_eval: If True, checks if every file is able to be loaded during
             initialization (logs _valid_indices and _invalid_indices)
 
-    Attributes: _vlid_indices and _invalid_indices can be accessed later to check
-    which samples raised Exceptions. _invalid_samples is a set of all index values
-    for samples that raised Exceptions.
+    Attributes: _valid_indices and _invalid_indices can be accessed later to check
+    which samples raised Exceptions.
 
     Methods:
         __getitem__(index):
@@ -52,7 +52,11 @@ class SafeDataset:
         Args:
             dataset: a Pytorch DataSet object
             invalid_sample_behavior: what to do when loading a sample results in an error
-                - "substitute": pick another sample to load
+                - "substitute": pick another sample to load. Returned sample will have an attribute is_alternative = True
+                - "placeholder": return a placeholder value (zeros) for the sample of the shape of the first
+                    successfully loaded sample. Returned sample will have an attribute is_alternative = True
+                    Note that if the first sample fails to load, an error will be raised since we don't have a placeholder
+                    (unless user sets self.placeholder before accessing the first sample)
                 - "raise": raise the error
                 - "none": return None
 
@@ -62,12 +66,13 @@ class SafeDataset:
 
         self.dataset = dataset
         self.invalid_sample_behavior = invalid_sample_behavior
-        # These will contain indices over the original dataset. The indices of
+        self.placeholder = None  # set to the first successfully loaded sample
+
+        # These lists will contain indices over the original dataset. The indices of
         # the safe samples will go into _valid_indices and similarly for invalid
-        # samples in _invalid_indices. _invalid_samples holds the actual names
+        # samples in _invalid_indices.
         self._valid_indices = []
         self._invalid_indices = []
-        self._invalid_samples = set()
 
     def _safe_get_item(self, idx):
         """attempts to load sample at idx, returns the exception if it fails
@@ -96,19 +101,12 @@ class SafeDataset:
                 self._valid_indices.append(idx)
             return sample
         except Exception as exc:
-            # the index was out of bounds, so we actually want to raise this
-            # IndexError
             if isinstance(exc, IndexError) and invalid_idx:
+                # the index was out of bounds, so we actually want to raise this
+                # IndexError instead of returning it
                 raise
             if idx not in self._invalid_indices:
                 self._invalid_indices.append(idx)
-            # store the actual sample names also?
-            sample = self.dataset.label_df.index[idx]
-            if isinstance(sample, tuple):
-                # just get file path, discard start/end time #TODO revisit choice
-                sample = sample[0]
-            if sample not in self._invalid_samples:
-                self._invalid_samples.add(sample)
 
             # _return_ the exception (don't raise it)
             return exc
@@ -117,22 +115,21 @@ class SafeDataset:
         """Resets the valid and invalid samples indices, & invalid sample list."""
         self._valid_indices = []
         self._invalid_indices = []
-        self._invalid_samples = set()
 
     def report(self, log=None):
-        """write _invalid_samples to log file, give warning, & return _invalid_samples"""
-        if len(self._invalid_samples) > 0:
+        """write invalid samples to log file, give warning, & return invalid samples"""
+        invalid_samples = self.dataset.label_df.iloc[self._invalid_indices][[]]
+        if len(invalid_samples) > 0:
             msg = (
-                f"There were {len(self._invalid_samples)} "
-                "sample(s) that raised errors and were skipped."
+                f"There were {len(invalid_samples)} "
+                "sample(s) that raised errors and were skipped or replaced."
             )
+
             if log is not None:
-                with open(log, "w") as f:
-                    for p in self._invalid_samples:
-                        f.write(f"{p} \n")
+                invalid_samples.to_csv(log)
                 msg += f"The invalid file paths are logged in {log}"
             warnings.warn(msg)
-        return self._invalid_samples
+        return invalid_samples
 
     def __len__(self):
         """Returns the length of the original dataset.
@@ -152,7 +149,8 @@ class SafeDataset:
         """If loading an index fails, behavior depends on self.invalid_sample_behavior
 
         self.invalid_sample_behavior:
-            "substitute": pick another sample,
+            "substitute": pick another sample
+            "placeholder": return a placeholder value (zeros) for the sample
             "raise": raise the error
             "none": return None
         """
@@ -164,6 +162,13 @@ class SafeDataset:
             while attempts < len(self.dataset):
                 sample_or_exc = self._safe_get_item(idx)
                 if not isinstance(sample_or_exc, Exception):
+                    # we successfully loaded a sample
+                    if attempts > 0:
+                        # mark the sample as a replacement
+                        sample_or_exc.is_alternative = True
+                    else:
+                        # mark the sample as the original
+                        sample_or_exc.is_alternative = False
                     return sample_or_exc
                 idx += 1
                 attempts += 1
@@ -175,6 +180,40 @@ class SafeDataset:
                 "All samples caused exceptions during preprocessing. The most"
                 "recent exception is in the error trace. "
             ) from sample_or_exc
+        elif self.invalid_sample_behavior == "placeholder":
+            # try to load the sample at idx, if it fails, return a placeholder sample
+            # raises an error if the first sample fails to load and no placeholder is set
+            sample_or_exc = self._safe_get_item(idx)
+            if isinstance(sample_or_exc, Exception):
+                # sample failed to load.
+                # if we have a placeholder, return it
+                # otherwise we failed to load the first sample, so raise the error
+
+                if self.placeholder is None:
+                    raise ValueError(
+                        "The first sample requested from the dataset failed to load"
+                    ) from sample_or_exc
+                if idx not in self._invalid_indices:
+                    self._invalid_indices.append(idx)
+                return self.placeholder
+            else:  # successfully loaded sample
+                sample_or_exc.is_alternative = False
+                if idx not in self._valid_indices:
+                    self._valid_indices.append(idx)
+                if self.placeholder is None:
+                    # store this sample as the placeholder for future use
+                    placeholder = copy.deepcopy(sample_or_exc)
+                    # mark as not original sample (will fail if cannot set attributes on sample)
+                    placeholder.is_alternative = True
+                    try:  # try setting the values to zero, but allow failure
+                        # in case the sample doesn't have .data or .labels attributes
+                        placeholder.data = 0 * placeholder.data
+                        placeholder.labels = 0 * placeholder.labels
+                    except:
+                        pass
+                    self.placeholder = placeholder
+
+                return sample_or_exc
         elif (
             self.invalid_sample_behavior == "raise"
             or self.invalid_sample_behavior == "none"
@@ -193,6 +232,6 @@ class SafeDataset:
                     raise
         else:
             raise ValueError(
-                f"invalid_sample_behavior must be 'substitute','raise', or 'none'. "
+                f"invalid_sample_behavior must be 'substitute','placeholder', 'raise', or 'none'. "
                 f"Got {self.invalid_sample_behavior}"
             )

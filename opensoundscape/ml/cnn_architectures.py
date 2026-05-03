@@ -3,7 +3,7 @@
 This module allows the use of several built-in CNN architectures from PyTorch.
 The architecture refers to the specific layers and layer input/output shapes
 (including convolution sizes and strides, etc) - such as the ResNet18 or
-Inception V3 architecture.
+EfficientNet B0 architecture.
 
 We provide wrappers which modify the output layer to the desired shape
 (to match the number of classes). The way to change the output layer
@@ -19,18 +19,13 @@ model has 10 output classes, write
 Then you can initialize a model object from
 `opensoundscape.ml.cnn` with your architecture:
 
-`model=CNN(my_arch,classes,sample_duration)`
+`model=CNN(my_arch,classes,sample_duration, sample_rate)`
 
 or override an existing model's architecture:
 
 `model.network = my_arch`
 
-Note: the InceptionV3 architecture must be used differently than other
-architectures - the easiest way is to simply use the InceptionV3 class in
-opensoundscape.ml.cnn.
 """
-
-import warnings
 
 import torch
 import torchvision
@@ -65,7 +60,9 @@ def generic_make_arch(
     freeze_feature_extractor=False,
     num_channels=3,
 ):
-    """works when first layer is conv2d and last layer is fully-connected Linear
+    """construct a CNN architecture, then adapt the input channels and output layer according to channels and num_classes arguments
+
+    works when first layer is conv2d and last layer is fully-connected Linear
 
     input_size = 224
 
@@ -458,59 +455,6 @@ def densenet121(
 
 
 @register_arch
-def inception_v3(
-    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
-):
-    """Wrapper for Inception v3 architecture
-
-    Input: 229x229
-
-    WARNING: expects (299,299) sized images and has auxiliary output. See
-    InceptionV3 class in `opensoundscape.ml.cnn` for use.
-
-    Args:
-        num_classes:
-            number of output nodes for the final layer
-        freeze_feature_extractor:
-            if False (default), entire network will have gradients and can train
-            if True, feature block is frozen and only final layer is trained
-        weights:
-            string containing version name of the pre-trained classification weights to use for this architecture.
-            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
-            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
-        num_channels:
-            specify channels in input sample, eg [channels h,w] sample shape
-    """
-    architecture_ft = torchvision.models.inception_v3(weights=weights)
-    if freeze_feature_extractor:
-        freeze_params(architecture_ft)
-    # Handle the auxilary net
-    num_ftrs = architecture_ft.AuxLogits.fc.in_features
-    architecture_ft.AuxLogits.fc = torch.nn.Linear(num_ftrs, num_classes)
-    # Handle the primary net
-    num_ftrs = architecture_ft.fc.in_features
-    architecture_ft.fc = torch.nn.Linear(num_ftrs, num_classes)
-    if num_channels != 3:
-        warnings.warn(
-            "Retaining weights while reshaping Inception "
-            "number of input channels is not implemented. First conv2d will "
-            "have random weights."
-        )
-
-        architecture_ft.Conv2d_1a_3x3 = torchvision.models.inception.BasicConv2d(
-            num_channels, 32, kernel_size=3, stride=2
-        )
-
-    architecture_ft.embedding_layer = "Mixed_7c"
-    architecture_ft.cam_layer = "Mixed_7c"
-    architecture_ft.classifier_layer = "fc"
-
-    architecture_ft.constructor_name = "inception_v3"
-
-    return architecture_ft
-
-
-@register_arch
 def efficientnet_b0(
     num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
 ):
@@ -540,6 +484,39 @@ def efficientnet_b0(
         embed_layer="avgpool",
         cam_layer="features.8",
         name="efficientnet_b0",
+        input_conv2d_layer="features.0.0",
+        linear_clf_layer="classifier.1",
+        freeze_feature_extractor=freeze_feature_extractor,
+        num_channels=num_channels,
+    )
+
+
+@register_arch
+def efficientnet_b1(
+    num_classes, freeze_feature_extractor=False, weights="DEFAULT", num_channels=3
+):
+    """Wrapper for efficientnet_b1 architecture
+
+    Args:
+        num_classes:
+            number of output nodes for the final layer
+        freeze_feature_extractor:
+            if False (default), entire network will have gradients and can train
+            if True, feature block is frozen and only final layer is trained
+        weights:
+            string containing version name of the pre-trained classification weights to use for this architecture.
+            if 'DEFAULT', model is loaded with best available weights (note that these may change across versions).
+            Pre-trained weights available for each architecture are listed at https://pytorch.org/vision/stable/models.html
+        num_channels:
+            specify channels in input sample, eg [channels h,w] sample shape
+    """
+    return generic_make_arch(
+        constructor=torchvision.models.efficientnet_b1,
+        weights=weights,
+        num_classes=num_classes,
+        embed_layer="avgpool",
+        cam_layer="features.8",
+        name="efficientnet_b1",
         input_conv2d_layer="features.0.0",
         linear_clf_layer="classifier.1",
         freeze_feature_extractor=freeze_feature_extractor,
@@ -647,6 +624,7 @@ def change_conv2d_channels(
             weights = torch.stack(new_channels, dim=1)  # stack on channel dim, dim 1
         # reapply the average weights of the original architecture's conv1
         new_conv2d.weight = torch.nn.Parameter(weights)
+        new_conv2d.bias = conv2d.bias  # copy bias from original conv2d
 
     return new_conv2d
 

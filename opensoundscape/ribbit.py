@@ -1,4 +1,4 @@
-""" Detect periodic vocalizations with RIBBIT
+"""Detect periodic vocalizations with RIBBIT
 
 This module provides functionality to search audio for periodically fluctuating vocalizations.
 """
@@ -18,6 +18,10 @@ def calculate_pulse_score(
     """Search for amplitude pulsing in an audio signal in a range of pulse repetition rates (PRR)
 
     scores an audio amplitude signal by highest value of power spectral density in the PRR range
+
+    Note: the implementation of Spectrogram.net_amplitude() changed in opensoundscape v0.13.0,
+    which results in vastly different absolute values of the RIBBiT function. However, relative
+    scores between audio files are typically similar.
 
     Args:
         amplitude: a time series of the audio signal's amplitude (for instance a smoothed raw
@@ -78,9 +82,9 @@ def ribbit(
     pulse_rate_range,
     clip_duration,
     clip_overlap=None,
-    clip_overlap_fraction=None,
+    overlap_fraction=None,
     clip_step=None,
-    final_clip=None,
+    final_clip="remainder",
     noise_bands=None,
     spec_clip_range=(-100, -20),
     plot=False,
@@ -97,10 +101,10 @@ def ribbit(
         clip_duration: the length of audio (in seconds) to analyze at one time
             - each clip is analyzed independently and recieves a ribbit score
         clip_overlap (float): overlap between consecutive clips (sec)
-        clip_overlap_fraction (float): overlap between consecutive clips as a fraction of
+        overlap_fraction (float): overlap between consecutive clips as a fraction of
             clip_duration
         clip_step (float): step size between consecutive clips (sec)
-            - only one of clip_overlap, clip_overlap_fraction, or clip_step should be provided
+            - only one of clip_overlap, overlap_fraction, or clip_step should be provided
             - if all are None, defaults to clip_overlap=0
         final_clip (str): behavior if final clip is less than clip_duration
             seconds long. By default, discards remaining audio if less than
@@ -111,7 +115,8 @@ def ribbit(
                 clip_duration)
             - "full": Increase overlap with previous clip to yield a clip with
                 clip_duration length
-            Note that the "extend" option is not supported for RIBBIT.
+            - "extend": Extend the final clip with zeros (silence) to yield a clip with
+                clip_duration length
 
         noise_bands: list of frequency ranges to subtract from the signal_band
             For instance: [ [min1,max1] , [min2,max2] ]
@@ -174,12 +179,6 @@ def ribbit(
         - calculate power spectral density of the amplitude time series
         - score the file based on the max value of power spectral density in the pulse rate range
     """
-    if final_clip == "extend":
-        raise ValueError(
-            "final_clip='extend' is not supported for RIBBIT. "
-            "consider using 'remainder'."
-        )
-
     # clip extreme values in the spectrogram to lie within spec_clip_range
     min_val, max_val = spec_clip_range
     spectrogram = spectrogram.limit_range(min_val, max_val)
@@ -190,14 +189,14 @@ def ribbit(
     time = spectrogram.times
     # we calculate the sample rate of the amplitude signal using the difference
     # in time between columns of the Spectrogram
-    sample_rate = 1 / spectrogram.window_step
+    sample_rate = 1 / spectrogram.window_hop_seconds
 
     # determine the start and end times of each clip to analyze
     clip_df = generate_clip_times_df(
         full_duration=spectrogram.duration,
         clip_duration=clip_duration,
         clip_overlap=clip_overlap,
-        clip_overlap_fraction=clip_overlap_fraction,
+        overlap_fraction=overlap_fraction,
         clip_step=clip_step,
         final_clip=final_clip,
     )
@@ -207,6 +206,11 @@ def ribbit(
     for i, row in clip_df.iterrows():
         # extract the amplitude signal for this clip
         window = amplitude[(time >= row["start_time"]) & (time < row["end_time"])]
+
+        # extend with silence if less than expected duration
+        expected_length = int(clip_duration * sample_rate)
+        if len(window) < expected_length:
+            window = np.pad(window, (0, expected_length - len(window)), mode="constant")
 
         if plot:
             print(f"window: {row['start_time']} to {row['end_time']} sec")

@@ -1,4 +1,4 @@
-__version__ = "0.12.1"
+__version__ = "0.13.0"
 
 from . import annotations
 from . import audio
@@ -14,19 +14,23 @@ from . import preprocess
 from . import logging
 from . import localization
 from . import sample_data
+from . import vector_database
+from . import visualization
 
 # expose some modules at the top level
-from .ml import cnn, cnn_architectures
+from .ml import cnn, cnn_architectures, shallow_classifier
+from .ml import song_space
 from .preprocess import preprocessors, actions
 
 # expose some classes at the top level
 from .audio import Audio
 from .sample_data import birds, birds_path
 from .spectrogram import Spectrogram, MelSpectrogram
-
-from .ml.cnn import SpectrogramClassifier, CNN
+from .ml.song_space import SongSpace
+from .ml.cnn import SpectrogramClassifier, CNN, load_model
+from .ml.onnx_model import ONNXModel
 from .ml.lightning import LightningSpectrogramModule
-from .ml.datasets import AudioFileDataset, AudioSplittingDataset
+from .ml.datasets import AudioFileDataset, AudioFileDataset
 from .preprocess.actions import Action
 from .preprocess.preprocessors import SpectrogramPreprocessor, AudioPreprocessor
 from .sample import AudioSample
@@ -34,3 +38,4 @@ from .annotations import BoxedAnnotations
 from .preprocess.utils import show_tensor, show_tensor_grid
 from .localization import SpatialEvent, SynchronizedRecorderArray
 from .utils import set_seed
+from .ml.shallow_classifier import MLPClassifier

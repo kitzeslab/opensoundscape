@@ -1,14 +1,26 @@
 """Utilties for .ml"""
 
 import warnings
-import pandas as pd
-import numpy as np
+
 import torch
 import torch.nn.functional as F
-import pytorch_grad_cam
-import tqdm
 
+import opensoundscape
 from opensoundscape.ml.sampling import ClassAwareSampler
+
+
+def _infinite_dataloader(dataloader):
+    """Create an infinite iterator over a DataLoader
+
+    Args:
+        dataloader: a PyTorch DataLoader object
+
+    Returns:
+        an infinite iterator over the DataLoader
+    """
+    while True:
+        for batch in dataloader:
+            yield batch
 
 
 def cas_dataloader(dataset, batch_size, num_workers):
@@ -106,8 +118,7 @@ def apply_activation_layer(x, activation_layer=None):
     """
     if x is None:
         return None
-    if not isinstance(x, torch.Tensor):
-        x = torch.tensor(x)
+    x = torch.as_tensor(x)
 
     if activation_layer is None:  # scores [-inf,inf]
         pass
@@ -137,7 +148,7 @@ def collate_audio_samples_to_tensors(batch):
     """
     takes a list of AudioSample objects, returns batched tensors
 
-    use this collate function with DataLoader if you want to use AudioFileDataset (or AudioSplittingDataset)
+    use this collate function with DataLoader if you want to use AudioFileDataset (or AudioFileDataset)
     but want the traditional output of PyTorch Dataloaders (returns two tensors:
         the first is a tensor of the data with dim 0 as batch dimension,
         the second is a tensor of the labels with dim 0 as batch dimension)
@@ -181,3 +192,22 @@ def check_labels(label_df, classes):
     assert (
         label_df.values.max(axis=None) <= 1 and label_df.values.min(axis=None) >= 0
     ), "Labels must in range [0,1], but found values outside range"
+
+
+def _version_mismatch_warn(opensoundscape_version):
+    if opensoundscape_version != opensoundscape.__version__:
+        warnings.warn(
+            f"Model was saved with OpenSoundscape version {opensoundscape_version}, "
+            f"but you are currently using version {opensoundscape.__version__}. "
+            "This might not be an issue but you should confirm that the model behaves as expected."
+        )
+
+
+def _warn_output_size(dataloader, size, output_size_warning):
+    if output_size_warning and len(dataloader.dataset) * size > output_size_warning:
+        warnings.warn(
+            f"Generating ~{len(dataloader.dataset)*size:,} output values "
+            f"({len(dataloader.dataset):,} samples x ~{size:,} per sample). "
+            f"This may use a lot of memory (~1Gb per 3e8 outputs). To disable this warning, set "
+            f"`output_size_warning` to None or 0."
+        )

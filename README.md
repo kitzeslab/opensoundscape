@@ -50,7 +50,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 
 #### How do I install OpenSoundscape?
 
-* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.12.1`. 
+* Most users should install OpenSoundscape via pip, preferably within a virtual environment: `pip install opensoundscape==0.13.0`. 
 * To use OpenSoundscape in Jupyter Notebooks (e.g. for tutorials), follow the installation instructions for your operating system, then follow the "Jupyter" instructions.
 * Contributors and advanced users can also use Poetry to install OpenSoundscape using the "Contributor" instructions
 
@@ -66,7 +66,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 conda create -n NAME python=3.11
 conda activate NAME
 conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 -c conda-forge
-pip install opensoundscape==0.12.1
+pip install opensoundscape==0.13.0
 ```
 
 ### Use Audio and Spectrogram classes to inspect audio data
@@ -95,7 +95,11 @@ Audio.from_file(path, start_timestamp=start_time,duration=audio_length)
 
 ### Load and use a model from the Bioacoustics Model Zoo
 The [Bioacoustics Model Zoo](https://github.com/kitzeslab/bioacoustics-model-zoo) hosts models in a repository that can be installed as a package and are compatible with OpenSoundscape. To install, use
-`pip install bioacoustics-model-zoo==0.12.0`
+`pip install --upgrade bioacoustics-model-zoo`
+
+To install additional dependencies for specific models, use patterns like 
+
+`pip install --upgrade bioacoustics-model-zoo[hawkears]`
 
 Load up a model and apply it to your own audio right away:
 
@@ -105,15 +109,24 @@ import bioacoustics_model_zoo as bmz
 #list available models
 print(bmz.utils.list_models())
 
-#generate class predictions and embedding vectors with Perch
-perch = bmz.Perch()
-scores = perch.predict(files)
-embeddings = perch.generate_embeddings(files)
+#generate class predictions and embedding vectors with HawkEars...
+hawkears = bmz.HawkEars()
+scores = hawkears.predict(files)
+embeddings = hawkears.embed(files)
 
-#...or BirdNET
+#...or BirdNET...
+# (you'll need ai-edge-litert in your environment, run `pip install bioacoustics-model-zoo[birdnet]`)
 birdnet = bmz.BirdNET()
 scores = birdnet.predict(files)
-embeddings = birdnet.generate_embeddings(files)
+embeddings = birdnet.embed(files)
+
+# or Perch2
+# `pip install bioacoustics-model-zoo[perch]` will install tensorflow and tensorflow-hub
+#...or BirdNET...
+# (you'll need ai-edge-litert in your environment, run `pip install bioacoustics-model-zoo[birdnet]`)
+perch2 = bmz.Perch2()
+scores = perch2.predict(files)
+embeddings = perch2.embed(files)
 ```
 
 See the tutorial notebooks for examples of training and fine-tuning models from the model zoo with your own annotations. 
@@ -157,10 +170,10 @@ labels = all_annotations.clip_labels(
 train_df, validation_df = train_test_split(labels, test_size=0.3)
 
 # create a CNN and train on the labeled data
-model = CNN(architecture='resnet18', sample_duration=2, classes=class_list)
+model = CNN(architecture='resnet18', sample_duration=2, classes=class_list, sample_rate=32000)
 
 # train the model to recognize the classes of interest in audio data
-model.train(train_df, validation_df, epochs=20, num_workers=8, batch_size=256)
+model.train(train_df, validation_df, steps=500, num_workers=8, batch_size=256)
 ```
 
 ### Train a custom classifier on BirdNET or Perch embeddings

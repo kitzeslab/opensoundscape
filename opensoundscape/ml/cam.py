@@ -1,9 +1,7 @@
-""" Class activation maps (CAM) for OpenSoundscape models"""
+"""Class activation maps (CAM) for OpenSoundscape models"""
 
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
-import torch
 import os
 import warnings
 from matplotlib.patches import Patch
@@ -185,17 +183,37 @@ class CAM:
         plt_show=True,
         save_path=None,
         gbp_normalization_q=99,
+        flipud=False,
     ):
         """Plot per-class activation maps, guided back propogations, or their products
 
         Do not pass both mode=None and show_base=False.
 
         Args:
-            class_subset, mode, show_base, alpha, color_cycle, gbp_normalization_q: see create_rgb_heatmaps
+            class_subset: iterable of classes to visualize with activation maps
+                - default `None` plots all classes
+                - each item must be in the index of self.gbp_map / self.activation_maps
+                - note that a class `None` is created by cnn.generate_cams() when classes are not
+                specified during CNN.generate_cams()
+            mode: str selecting which maps to visualize, one of:
+                'activation' [default]: overlay activation map
+                'backprop': overlay guided back propogation result
+                'backprop_and_activation': overlay product of both maps
+                None: do not overlay anything on the original sample
+            show_base: if False, does not plot the image of the original sample
+                [default: True]
+            alpha: opacity of the activation map overlap [default: 0.5]
+            color_cycle: iterable of colors activation maps
+                - cycles through the list using one color per class
+            gbp_normalization_q: guided backprop is normalized such that the q'th
+                percentile of the map is 1. [default: 99]. This helps avoid gbp
+                maps that are too dark to see. Lower values make brighter and noiser
+                maps, higher values make darker and smoother maps.
             figsize: the figure size for the plot [default: None]
             plt_show: if True, runs plt.show() [default: True]
                 - ignored if return_numpy=True
             save_path: path to save image to [default: None does not save file]
+            flipud: if True, flips the image vertically before plotting [default: False]
         Returns:
             (fig, ax) of matplotlib figure, or np.array if return_numpy=True
 
@@ -222,6 +240,10 @@ class CAM:
             color_cycle=color_cycle,
             gbp_normalization_q=gbp_normalization_q,
         )
+
+        # flip image vertically if desired
+        if flipud:
+            overlayed_image = np.flipud(overlayed_image)
 
         # create and plot a figure
         fig, ax = plt.subplots(figsize=figsize)

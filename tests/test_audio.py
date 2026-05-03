@@ -7,6 +7,7 @@ import math
 import numpy.testing as npt
 import pytz
 import datetime
+import pandas as pd
 
 from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
 from opensoundscape import audio
@@ -66,8 +67,17 @@ def not_a_file_str():
 
 
 @pytest.fixture()
-def out_path():
-    return "tests/audio/audio_out"
+def out_path(request):
+    path = Path("tests/audio/audio_out")
+    if not path.exists():
+        path.mkdir()
+
+    def fin():
+        if path.exists():
+            path.rmdir()
+
+    request.addfinalizer(fin)
+    return path
 
 
 @pytest.fixture()
@@ -559,6 +569,135 @@ def test_trim_past_end_of_clip(silence_10s_mp3_str):
         a.trim(9, 11, out_of_bounds_mode="raise")
 
 
+def test_trim_end_time_none_returns_to_end():
+    a = Audio(samples=np.arange(10, dtype=np.float32), sample_rate=2)
+    trimmed = a.trim(2, None)
+
+    npt.assert_array_equal(trimmed.samples, np.arange(4, 10, dtype=np.float32))
+    assert math.isclose(trimmed.duration, 3.0, abs_tol=1e-9)
+
+
+def test_trim_end_time_none_multichannel_uses_time_axis(multichannel_audio):
+    trimmed = multichannel_audio.trim(0.2, None)
+
+    assert trimmed.samples.shape == (2, 8)
+    assert math.isclose(trimmed.duration, 0.8, abs_tol=1e-9)
+
+
+def test_trim_negative_end_time():
+    a = Audio(samples=np.arange(10, dtype=np.float32), sample_rate=2)
+    trimmed = a.trim(1, -1)
+
+    npt.assert_array_equal(trimmed.samples, np.arange(2, 8, dtype=np.float32))
+    assert math.isclose(trimmed.duration, 3.0, abs_tol=1e-9)
+
+
+def test_trim_negative_end_time_beyond_duration():
+    a = Audio(samples=np.arange(10, dtype=np.float32), sample_rate=2)
+
+    with pytest.warns(UserWarning):
+        trimmed_warn = a.trim(0, -100, out_of_bounds_mode="warn")
+    assert trimmed_warn.samples.shape == (0,)
+
+    with pytest.raises(AudioOutOfBoundsError):
+        a.trim(0, -100, out_of_bounds_mode="raise")
+
+
+def test_audio_getitem_slice_equivalent_to_trim():
+    a = Audio(samples=np.arange(20, dtype=np.float32), sample_rate=10)
+
+    sliced = a[0.5:1.2]
+    trimmed = a.trim(0.5, 1.2)
+
+    npt.assert_array_equal(sliced.samples, trimmed.samples)
+    assert sliced.sample_rate == trimmed.sample_rate
+
+
+def test_audio_getitem_slice_with_step_returns_segments():
+    a = Audio(samples=np.arange(20, dtype=np.float32), sample_rate=20)
+
+    segments = a[0:1:0.25]
+
+    assert len(segments) == 4
+    for segment in segments:
+        assert isinstance(segment, Audio)
+        # segment length is quantized to integer samples
+        assert segment.samples.shape == (5,)
+        assert math.isclose(segment.duration, 0.25, abs_tol=1e-6)
+
+
+def test_audio_getitem_slice_invalid_steps_raise():
+    a = Audio(samples=np.arange(20, dtype=np.float32), sample_rate=10)
+
+    with pytest.raises(ValueError):
+        _ = a[0:1:0]
+
+    with pytest.raises(ValueError):
+        _ = a[0:1:-0.25]
+
+
+def test_audio_operator_overloads_semantics():
+    a = Audio(samples=np.array([0.0, 0.5, -0.5], dtype=np.float32), sample_rate=10)
+    b = Audio(samples=np.array([0.25, -0.25], dtype=np.float32), sample_rate=10)
+
+    # + with Audio performs a concatenation
+    concatenated = a + b
+    npt.assert_allclose(concatenated.samples, audio.concat([a, b]).samples)
+
+    # + / - with numeric maps to gain adjustments
+    npt.assert_allclose((a + 3).samples, a.apply_gain(3).samples)
+    npt.assert_allclose((a - 3).samples, a.apply_gain(-3).samples)
+
+    # * with numeric scales samples; * with Audio delegates to mix
+    npt.assert_allclose((a * 2).samples, (a.samples * 2))
+    npt.assert_allclose((a * b).samples, audio.mix([a, b]).samples)
+
+    # ** loops the signal
+    looped = b**3
+    npt.assert_array_equal(
+        looped.samples,
+        np.array([0.25, -0.25, 0.25, -0.25, 0.25, -0.25], dtype=np.float32),
+    )
+
+
+def test_change_speed_positive_factor_no_resample():
+    a = Audio(samples=np.array([0.0, 0.5, 1.0], dtype=np.float32), sample_rate=10)
+
+    faster = a.change_speed(2.0)
+
+    npt.assert_array_equal(faster.samples, a.samples)
+    assert faster.sample_rate == 20
+
+
+def test_change_speed_negative_factor_reverses_audio():
+    a = Audio(samples=np.array([0.0, 0.5, 1.0], dtype=np.float32), sample_rate=10)
+
+    reversed_audio = a.change_speed(-1.0)
+
+    npt.assert_array_equal(reversed_audio.samples, np.array([1.0, 0.5, 0.0]))
+    assert reversed_audio.sample_rate == 10
+
+
+def test_change_speed_resample_to_original_sample_rate():
+    a = Audio(samples=np.linspace(0, 1, 40, dtype=np.float32), sample_rate=20)
+
+    faster = a.change_speed(2.0, resample=True)
+
+    assert faster.sample_rate == a.sample_rate
+    assert faster.duration < a.duration
+
+
+def test_change_speed_edge_cases():
+    a = Audio(samples=np.linspace(0, 1, 20, dtype=np.float32), sample_rate=10)
+
+    # very small and zero factors currently truncate sample rate to 0
+    zero_speed = a.change_speed(0)
+    tiny_speed = a.change_speed(0.01)
+
+    assert zero_speed.sample_rate == 0
+    assert tiny_speed.sample_rate == 0
+
+
 def test_trim_with_datetime(silence_10s_mp3_str):
     a = Audio.from_file(silence_10s_mp3_str, sample_rate=10000)
     a.metadata["recording_start_time"] = datetime.datetime(
@@ -778,9 +917,9 @@ def test_audio_constructor_should_fail_on_non_integer_sample_rate():
         Audio(np.zeros(10), "fail...")
 
 
-def test_split_and_save_default(silence_10s_mp3_pathlib):
+def test_split_and_save_default(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
-    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5.0, dry_run=True)
+    clip_df = audio.split_and_save(out_path, "unnecessary", 5.0, dry_run=True)
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
@@ -788,20 +927,20 @@ def test_split_and_save_default(silence_10s_mp3_pathlib):
     assert clip_df.iloc[1]["end_time"] == 10.0
 
 
-def test_split_and_save_default_overlay(silence_10s_mp3_pathlib):
+def test_split_and_save_default_overlay(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
-    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5.0, 1.0, dry_run=True)
-    assert clip_df.shape[0] == 2
+    clip_df = audio.split_and_save(out_path, "unnecessary", 5.0, 1.0, dry_run=True)
+    assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert clip_df.iloc[1]["start_time"] == 4.0
     assert clip_df.iloc[1]["end_time"] == 9.0
 
 
-def test_split_and_save_default_full(silence_10s_mp3_pathlib):
+def test_split_and_save_default_full(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
     clip_df = audio.split_and_save(
-        "unnecessary", "unnecessary", 5.0, 1.0, final_clip="full", dry_run=True
+        out_path, "unnecessary", 5.0, 1.0, final_clip="full", dry_run=True
     )
     assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -812,10 +951,10 @@ def test_split_and_save_default_full(silence_10s_mp3_pathlib):
     assert clip_df.iloc[2]["end_time"] == 10.0
 
 
-def test_split_and_save_default_extend(silence_10s_mp3_pathlib):
+def test_split_and_save_default_extend(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
     clip_df = audio.split_and_save(
-        "unnecessary", "unnecessary", 5.0, 1.0, final_clip="extend", dry_run=True
+        out_path, "unnecessary", 5.0, 1.0, final_clip="extend", dry_run=True
     )
     assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -826,18 +965,20 @@ def test_split_and_save_default_extend(silence_10s_mp3_pathlib):
     assert clip_df.iloc[2]["end_time"] == 13.0
 
 
-def test_non_integer_source_split_and_save_default(silence_10s_mp3_pathlib):
+def test_non_integer_source_split_and_save_default(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
-    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5, dry_run=True)
+    clip_df = audio.split_and_save(
+        out_path, "unnecessary", 5, dry_run=True, final_clip=None
+    )
     assert clip_df.shape[0] == 1
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
 
 
-def test_non_integer_source_split_and_save_remainder(silence_10s_mp3_pathlib):
+def test_non_integer_source_split_and_save_remainder(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
     clip_df = audio.split_and_save(
-        "unnecessary", "unnecessary", 5, dry_run=True, final_clip="remainder"
+        out_path, "unnecessary", 5, dry_run=True, final_clip="remainder"
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -846,10 +987,10 @@ def test_non_integer_source_split_and_save_remainder(silence_10s_mp3_pathlib):
     assert abs(clip_df.iloc[1]["end_time"] - 8.2) < 0.1
 
 
-def test_non_integer_source_split_and_save_full(silence_10s_mp3_pathlib):
+def test_non_integer_source_split_and_save_full(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
     clip_df = audio.split_and_save(
-        "unnecessary", "unnecessary", 5, dry_run=True, final_clip="full"
+        out_path, "unnecessary", 5, dry_run=True, final_clip="full"
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -858,10 +999,10 @@ def test_non_integer_source_split_and_save_full(silence_10s_mp3_pathlib):
     assert abs(clip_df.iloc[1]["end_time"] - 8.2) < 0.1
 
 
-def test_non_integer_source_split_and_save_extend(silence_10s_mp3_pathlib):
+def test_non_integer_source_split_and_save_extend(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib).trim(0, 8.2)
     clip_df = audio.split_and_save(
-        "unnecessary", "unnecessary", 5, dry_run=True, final_clip="extend"
+        out_path, "unnecessary", 5, dry_run=True, final_clip="extend"
     )
     assert clip_df.shape[0] == 2
     assert clip_df.iloc[0]["start_time"] == 0.0
@@ -870,20 +1011,22 @@ def test_non_integer_source_split_and_save_extend(silence_10s_mp3_pathlib):
     assert (clip_df.iloc[1]["end_time"] - 10.0) < 0.1
 
 
-def test_non_integer_cliplen_split_and_save(silence_10s_mp3_pathlib):
+def test_non_integer_cliplen_split_and_save(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
-    clip_df = audio.split_and_save("unnecessary", "unnecessary", 4.5, dry_run=True)
-    assert clip_df.shape[0] == 2
+    clip_df = audio.split_and_save(
+        out_path, "unnecessary", 4.5, dry_run=True, final_clip="extend"
+    )
+    assert clip_df.shape[0] == 3
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 4.5
     assert clip_df.iloc[1]["start_time"] == 4.5
     assert clip_df.iloc[1]["end_time"] == 9.0
 
 
-def test_non_integer_overlaplen_split_and_save(silence_10s_mp3_pathlib):
+def test_non_integer_overlaplen_split_and_save(silence_10s_mp3_pathlib, out_path):
     audio = Audio.from_file(silence_10s_mp3_pathlib)
-    clip_df = audio.split_and_save("unnecessary", "unnecessary", 5.0, 0.5, dry_run=True)
-    assert clip_df.shape[0] == 2
+    clip_df = audio.split_and_save(out_path, "unnecessary", 5.0, 0.5, dry_run=True)
+    assert clip_df.shape[0] == 3  # default is 'extend' for final clip
     assert clip_df.iloc[0]["start_time"] == 0.0
     assert clip_df.iloc[0]["end_time"] == 5.0
     assert clip_df.iloc[1]["start_time"] == 4.5
@@ -905,6 +1048,11 @@ def test_noise_classmethod():
     for c in ["white", "blue", "violet", "brown", "pink"]:
         a = Audio.noise(1, 200, color=c)
         assert len(a.samples) == 200
+
+
+def test_noise_short_duration():
+    a = Audio.noise(0.01, 44100, color="white")
+    assert len(a.samples) == 441
 
 
 def test_concat(veryshort_wav_audio):
@@ -1035,8 +1183,7 @@ def test_estimate_delay_with_bandpass(veryshort_audio):
         signal,
         ref_sig,
         max_delay=max_delay,
-        bandpass_range=[100, 10000],
-        bandpass_order=5,
+        frequency_range=[100, 10000],
     )
     assert math.isclose(dly, delay, abs_tol=1e-4)
 
@@ -1168,3 +1315,62 @@ def test_multichannelaudio_concat(multichannel_audio):
 def test_multichannel_from_audio_list(veryshort_audio):
     a = audio.MultiChannelAudio.from_audio_list([veryshort_audio, veryshort_audio])
     assert a.n_channels == 2
+
+
+def test_audio_apply():
+    audio = Audio.silence(duration=5, sample_rate=10)
+    ts, windowed_rms = audio.apply(
+        function=lambda x: x.rms,
+        clip_duration=1,
+        clip_step=1,
+    )
+    assert len(ts) == 5
+    assert len(windowed_rms) == 5
+    assert math.isclose(windowed_rms[0], 0.0, abs_tol=1e-6)
+
+
+def test_pad(veryshort_wav_audio):
+    a = veryshort_wav_audio.pad(0.03, 0.05)
+    assert len(a.samples) == len(veryshort_wav_audio.samples) + int(
+        np.round((0.03 + 0.05) * veryshort_wav_audio.sample_rate)
+    )
+    # check that padding is silent
+    assert math.isclose(0.0, np.max(a.samples[:10]), abs_tol=1e-7)
+    assert math.isclose(0.0, np.max(a.samples[-10:]), abs_tol=1e-7)
+    # check that original audio is in the right place
+    offset_samples = int(np.round(0.03 * veryshort_wav_audio.sample_rate))
+    assert np.allclose(
+        a.samples[offset_samples : offset_samples + len(veryshort_wav_audio.samples)],
+        veryshort_wav_audio.samples,
+        atol=1e-7,
+    )
+    # try with noise padding
+    a2 = veryshort_wav_audio.pad(0.03, 0.05, fill="white")
+    assert not math.isclose(0.0, np.max(a2.samples[:20]), abs_tol=1e-7)
+    assert not math.isclose(0.0, np.max(a2.samples[-20:]), abs_tol=1e-7)
+    assert len(a2.samples) == len(veryshort_wav_audio.samples) + int(
+        np.round((0.03 + 0.05) * veryshort_wav_audio.sample_rate)
+    )
+
+
+def test_pad_both_sides(veryshort_wav_audio):
+    a = veryshort_wav_audio.pad(0.05)
+    assert len(a.samples) == len(veryshort_wav_audio.samples) + int(
+        2 * int(0.05 * veryshort_wav_audio.sample_rate)
+    )
+
+
+def test_pad_to(veryshort_wav_audio):
+    a = veryshort_wav_audio.pad_to(0.2)
+    assert math.isclose(a.duration, 0.2, abs_tol=1e-5)
+    # check that padding is silent
+    assert math.isclose(0.0, np.max(a.samples[-10:]), abs_tol=1e-7)
+    # check that original audio is in the right place (centered)
+    offset_samples = int(
+        (0.2 - veryshort_wav_audio.duration) / 2 * veryshort_wav_audio.sample_rate
+    )
+    assert np.allclose(
+        a.samples[offset_samples : offset_samples + len(veryshort_wav_audio.samples)],
+        veryshort_wav_audio.samples,
+        atol=1e-7,
+    )

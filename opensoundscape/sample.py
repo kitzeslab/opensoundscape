@@ -2,7 +2,7 @@
 
 import copy
 from pathlib import Path
-import torch
+
 import numpy as np
 
 
@@ -34,6 +34,7 @@ class AudioSample(Sample):
         duration=None,
         labels=None,
         trace=None,
+        sample_rate=None,
     ):
         """initialize AudioSample
         Args:
@@ -50,6 +51,7 @@ class AudioSample(Sample):
         self.duration = duration
         self.labels = labels
         self.trace = trace
+        self.sample_rate = sample_rate
         self.preprocessing_exception = None
 
         # to begin with, set the data to source
@@ -100,10 +102,8 @@ class AudioSample(Sample):
             file path
                 - if None (default), value of `file` must be full path
         """
-        # cast (potentially sparse input) to dense boolean #TODO: should it be int or long, or float?
-        # note that this implementation doesn't allow soft labels
         # make a copy to avoid modifying original
-        labels_series = labels_series.copy().astype(bool)
+        labels_series = labels_series.copy().astype(np.float16)
 
         if type(labels_series.name) == tuple:
             # if the dataframe has a multi-index, it should be (file,start_time,end_time)
@@ -155,49 +155,3 @@ class AudioSample(Sample):
                 return self.duration
             else:
                 return self.start_time + self.duration
-
-
-# TODO: move this to dataloaders.py? or preprocessing.utils?
-def collate_audio_samples_to_dict(samples):
-    """
-    generate batched tensors of data and labels (in a dictionary).
-    returns collated samples: a dictionary with keys "samples" and "labels"
-
-    assumes that s.data is a Tensor and s.labels is a list/array
-    for each sample S, and that every sample has labels for the same classes.
-
-    Args:
-
-        samples: iterable of AudioSample objects (or other objects
-        with attributes .data as Tensor and .labels as list/array)
-
-    Returns:
-        dictionary of {
-            "samples":batched tensor of samples,
-            "labels": batched tensor of labels,
-        }
-    """
-    return {
-        "samples": torch.stack([s.data for s in samples]),
-        "labels": torch.Tensor(np.vstack([s.labels.values for s in samples])),
-    }
-
-
-def collate_audio_samples(samples):
-    """
-    generate batched tensors of data and labels from list of AudioSample
-
-    assumes that s.data is a Tensor and s.labels is a list/array
-    for each item in samples, and that every sample has labels for the same classes.
-
-    Args:
-        samples: iterable of AudioSample objects (or other objects
-            with attributes .data as Tensor and .labels as list/array)
-
-    Returns:
-        (samples, labels) tensors of shape (batch_size, *) & (batch_size, n_classes)
-    """
-    return (
-        torch.stack([s.data for s in samples]),
-        torch.Tensor(np.vstack([s.labels.values for s in samples])),
-    )

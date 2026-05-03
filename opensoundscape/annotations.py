@@ -23,7 +23,7 @@ import scipy.sparse
 
 try:
     import crowsetta
-except ImportError:
+except:
     crowsetta = None
 
 
@@ -1092,9 +1092,13 @@ class BoxedAnnotations:
                 annotations result in at least one clip being labeled 1
                 (if there are no gaps between clips).
             full_duration: The amount of time (seconds) to split into clips for each file
-                float or `None`; if `None`, attempts to get each file's duration
+                any of float, list, or `None`
+                - if `None`, attempts to get each file's duration
                 using `librosa.get_duration(path=file)` where file is the value
                 of `audio` for each row of self.df
+                - if float: uses this fixed duration for all files
+                - if list: should be same length as `audio_files`, giving duration
+                for each file
             class_subset: list of classes for one-hot labels. If None, classes will
                 be all unique values of self.df['annotation']
             audio_files: list of audio file paths (as str or pathlib.Path)
@@ -1159,17 +1163,47 @@ class BoxedAnnotations:
                     argument to `clip_labels()` will avoid the attempt to get 
                     audio file durations from file paths."""
                 ) from exc
-        else:  # use fixed full_duration for all files
-            # make a clip df, will be re-used for each file
-            clip_df_template = generate_clip_times_df(
-                full_duration=full_duration, clip_duration=clip_duration, **kwargs
-            )
-            # make a clip df for all files
-            clip_df = pd.concat([clip_df_template] * len(audio_files))
-            # add file column, repeating value of file across each clip
-            clip_df["file"] = np.repeat(audio_files, len(clip_df_template))
-            clip_df = clip_df.set_index(["file", "start_time", "end_time"])
+        else:
+            # clip_duration is fixed for all files, or is a list of durations for each file
+            if isinstance(full_duration, (list, np.ndarray)):
+                # per-file durations: generate clip times separately for each file
+                assert len(full_duration) == len(audio_files), (
+                    "`full_duration` should be a float or a list/array "
+                    "with same length as `audio_files`, or None. Length did not match audio_files."
+                )
 
+                dfs = []
+                for i, file in enumerate(audio_files):
+                    df = generate_clip_times_df(
+                        full_duration=full_duration[i],
+                        clip_duration=clip_duration,
+                        **kwargs,
+                    )
+                    df["file"] = file
+                    dfs.append(df)
+                clip_df = pd.concat(dfs).reset_index(drop=True)
+                clip_df = clip_df.set_index(["file", "start_time", "end_time"])
+            else:
+                # same duration for all files: use a single template and repeat it for each file
+
+                # generate clip times once for the shared duration
+                template_df = generate_clip_times_df(
+                    full_duration=full_duration,
+                    clip_duration=clip_duration,
+                    **kwargs,
+                )
+
+                # repeat the template for each file and assign file labels in a vectorized way
+                clip_df = pd.concat(
+                    [template_df] * len(audio_files),
+                    ignore_index=True,
+                )
+                if len(template_df) > 0:
+                    clip_df["file"] = np.repeat(audio_files, len(template_df))
+                else:
+                    # no clips for the given duration/clip_duration; still add the column
+                    clip_df["file"] = pd.Series(dtype=object)
+                clip_df = clip_df.set_index(["file", "start_time", "end_time"])
         # call labels_on_index with clip_df
         return self.labels_on_index(
             clip_df=clip_df,
@@ -1281,8 +1315,12 @@ class BoxedAnnotations:
         train_idx, test_idx = train_test_split(range(len(self.audio_files)), **kwargs)
         train_files = np.array(self.audio_files)[train_idx]
         test_files = np.array(self.audio_files)[test_idx]
-        train_ann_files = np.array(self.annotation_files)[train_idx]
-        test_ann_files = np.array(self.annotation_files)[test_idx]
+        if self.annotation_files is None:
+            train_ann_files = None
+            test_ann_files = None
+        else:
+            train_ann_files = np.array(self.annotation_files)[train_idx]
+            test_ann_files = np.array(self.annotation_files)[test_idx]
 
         # find class dynamically so that this method works if BoxedAnnotations is subclassed
         cls = type(self)
@@ -1592,6 +1630,10 @@ class CategoricalLabels:
             multihot_df_sparse: sparse dataframe of multi-hot labels
             multihot_df_dense: dense dataframe of multi-hot labels
         """
+        # for convenience, if labels is a list of single items, convert to list of lists
+        if len(labels) > 0 and all(not isinstance(l, list) for l in labels):
+            labels = [[l] for l in labels]
+
         # labels can be list of lists of class names or list of lists of integer class indices
         # if classes are not provided, infer them from unique set of labels
         if classes is None:

@@ -21,6 +21,39 @@ class BCEWithLogitsLoss_hot(nn.BCEWithLogitsLoss):
         return super().forward(x, target)
 
 
+class BCELossWeakNegatives(nn.BCEWithLogitsLoss):
+    """BCEWithLogitsLoss that applies a weak negative weight to nan labels in the target.
+
+    This is different from soft labeling: we treat nan labels as negatives, then apply
+    element-wise weighting to reduce their contribution to the loss.
+
+    Args:
+        weak_negative_weight: weight to apply to nan labels in target
+        **kwargs: passed to nn.BCEWithLogitsLoss
+    """
+
+    def __init__(self, weak_negative_weight=0.01, **kwargs):
+        super().__init__(**kwargs, reduction="none")
+        self.weak_negative_weight = weak_negative_weight
+
+    def forward(self, x, target):
+        target = target.float()  # avoid complaints about long dtype
+        x = x.float()  # avoid complaints about long dtype
+
+        # Create a weight tensor based on the target
+        mask = torch.isnan(target)
+        # Replace NaNs in target with zeros for loss computation
+        target_clean = torch.where(mask, 0.0, target)
+        weight = torch.where(mask, self.weak_negative_weight, 1.0)
+
+        raw_bce_loss_per_item = super().forward(x, target_clean)
+        weighted_loss = (raw_bce_loss_per_item * weight).sum()
+        norm = weight.sum().clamp(min=1e-8)  # avoid division by zero
+
+        # normalize loss by the effective number of labels (sum of weights)
+        return weighted_loss / norm
+
+
 class CrossEntropyLoss_hot(nn.CrossEntropyLoss):
     """use pytorch's nn.CrossEntropyLoss for one-hot labels
     by converting labels from 1-hot to integer labels

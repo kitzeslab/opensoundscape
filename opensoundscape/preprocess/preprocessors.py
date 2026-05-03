@@ -1,30 +1,28 @@
 """Preprocessor classes: tools for preparing and augmenting audio samples"""
 
-from pathlib import Path
-import pandas as pd
 import copy
-import time
 import json
-import yaml
 import pathlib
-import warnings
+import time
+from pathlib import Path
 
-from opensoundscape.preprocess import actions, action_functions, io
+import pandas as pd
+import yaml
+
+from opensoundscape import scipy_legacy_spectrogram
+from opensoundscape.audio import Audio
+from opensoundscape.preprocess import action_functions, actions, io, preprocessors
 from opensoundscape.preprocess.actions import (
+    ACTION_CLS_DICT,
     Action,
     AudioClipLoader,
     AudioTrim,
     SpectrogramToTensor,
 )
 from opensoundscape.preprocess.overlay import Overlay
-from opensoundscape.preprocess.utils import PreprocessingError, get_args, get_reqd_args
-from opensoundscape.spectrogram import Spectrogram
-from opensoundscape.audio import Audio
+from opensoundscape.preprocess.utils import PreprocessingError, get_args
 from opensoundscape.sample import AudioSample
-from opensoundscape.preprocess.actions import ACTION_CLS_DICT
-from opensoundscape.preprocess import io
-from opensoundscape.preprocess import preprocessors, actions
-
+from opensoundscape.spectrogram import Spectrogram
 
 PREPROCESSOR_CLS_DICT = {}
 
@@ -79,9 +77,10 @@ class BasePreprocessor:
         sample_duration: length of audio samples to generate (seconds)
     """
 
-    def __init__(self, sample_duration=None):
+    def __init__(self, sample_duration=None, sample_rate=None):
         self.pipeline = pd.Series({}, dtype=object)
         self.sample_duration = sample_duration
+        self.sample_rate = sample_rate
 
     def __repr__(self):
         return f"Preprocessor with pipeline:\n{self.pipeline}"
@@ -284,6 +283,7 @@ class BasePreprocessor:
         # add attributes to the sample that might be needed by actions in the pipeline
         sample.preprocessor = self
         sample.target_duration = self.sample_duration
+        sample.sample_rate = self.sample_rate
 
         return sample
 
@@ -346,6 +346,9 @@ class BasePreprocessor:
         # set any stored attribute values
         for attr in dict["attributes"]:
             setattr(instance, attr, dict["attributes"][attr])
+
+        # if use legacy spectrogram, replace class 'opensoundscape.spectrogram.Spectrogram' with 'opensoundscape.scipy_legacy_spectrogram.Spectrogram'
+        _update_spectrogram_fn_with_legacy(dict)
 
         # re-create the pipeline using the actions' .from_dict methods
         instance.pipeline = pd.Series(
@@ -481,45 +484,42 @@ class SpectrogramPreprocessor(BasePreprocessor):
             If not None, longer clips are trimmed to this length. By default,
             shorter clips will be extended (modify random_trim_audio and
             trim_audio to change behavior).
-
-        overlay_df: if not None, will include an overlay action drawing
-            samples from this df
+        sample_rate: target sample rate. if None, does not resample
+        overlay_samples: if not None, will include an overlay (mixup) action
+            samples can be a dataframe of file/start/end times or a set of audio files
         height: height of output sample (frequency axis)
             - default None will use the original height of the spectrogram
         width: width of output sample (time axis)
             -  default None will use the original width of the spectrogram
         channels: number of channels in output sample (default 1)
-        sample_shape: tuple of (height, width, channels) for output sample
-            Deprecated in favor of using height, width, channels
-            - if not None, will override height, width, channels
-            [default: None] means use height, width, channels arguments
+        bandpass_range: tuple (min_f, max_f) in Hz for cropping spectrogram frequency axis
+            - default None retains full frequency range (0 - sample_rate/2 Hz)
+            - if sample_rate is None and input audio can be multiple sample rates,
+                bandpass_range should be used to ensure specs have a consistent frequency range
     """
 
     def __init__(
         self,
         sample_duration,
-        overlay_df=None,
-        height=224,
-        width=224,
+        sample_rate,
+        overlay_samples=None,
+        height=None,
+        width=None,
         channels=1,
-        sample_shape=None,
+        bandpass_range=None,
+        use_legacy_spectrogram=False,
     ):
-        super().__init__(sample_duration=sample_duration)
-
-        # allow sample_shape argument for backwards compatability
-        if sample_shape is not None:
-            height, width, channels = sample_shape
-            warnings.warn(
-                """sample_shape argument is deprecated. Please use height, width, channels arguments instead. 
-                The current behavior is to override height, width, channels with sample_shape 
-                when sample_shape is not None.
-                """,
-                DeprecationWarning,
-            )
+        super().__init__(sample_duration=sample_duration, sample_rate=sample_rate)
 
         self.height = height
         self.width = width
         self.channels = channels
+
+        # use legacy spectrogram implementation if requested
+        if use_legacy_spectrogram:
+            spec_from_audio = scipy_legacy_spectrogram.Spectrogram.from_audio
+        else:
+            spec_from_audio = Spectrogram.from_audio
 
         # define a default set of Actions
         # each Action's .__call__ method is called during preprocessing
@@ -529,7 +529,256 @@ class SpectrogramPreprocessor(BasePreprocessor):
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
-                "load_audio": AudioClipLoader(out_of_bounds_mode="ignore"),
+                "load_audio": AudioClipLoader(),
+                # if we are augmenting and get more audio than target duration, take a random trim from it
+                "random_trim_audio": AudioTrim(
+                    target_duration=sample_duration,
+                    is_augmentation=True,
+                    random_trim=True,
+                ),
+                # otherwise, we expect to get the correct duration. no random trim
+                # trim or extend (w/silence) clips to correct length
+                "trim_audio": AudioTrim(
+                    target_duration=sample_duration, random_trim=False
+                ),
+                # adaptive random gain: randomly scale audio amplitude, without going below minimum level
+                "adaptive_random_gain": actions.Action(
+                    action_functions.adaptive_random_gain, is_augmentation=True
+                ),
+                # Overlay is a version of "mixup" that draws samples from a user-specified dataframe
+                # and overlays them on the current sample
+                "overlay": (
+                    Overlay(
+                        break_on_key="overlay",
+                        is_augmentation=True,
+                        overlay_samples=overlay_samples,
+                        update_labels=True,
+                        sample_duration=sample_duration,
+                    )
+                ),
+                # adaptive random noise: add random noise with level based on original signal level
+                "adaptive_random_noise": actions.Action(
+                    action_functions.adaptive_random_noise,
+                    is_augmentation=True,
+                ),
+                # random time wrap: shift sample in time, moving end to beginning
+                "random_wrap": actions.Action(
+                    action_functions.random_wrap_audio,
+                    is_augmentation=True,
+                ),
+                # time mask: randomly mask short time segments with noise
+                "time_mask": actions.Action(
+                    action_functions.audio_time_mask, is_augmentation=True
+                ),
+                # convert Audio object to Spectrogram
+                "to_spec": Action(spec_from_audio),
+                # convert Spectrogram to torch.Tensor and re-size to desired output shape
+                "to_tensor": SpectrogramToTensor(),  # uses sample's .height, .width, .channels
+                # add vertical (frequency) masking bars
+                "frequency_mask": Action(
+                    action_functions.frequency_mask, is_augmentation=True
+                ),
+                # linearly scale the tensor values
+                "rescale": Action(action_functions.scale_tensor),
+            }
+        )
+        if bandpass_range is None and sample_rate is not None:
+            bandpass_range = (0, sample_rate / 2)
+        if bandpass_range is not None:
+            self.insert_action(
+                "bandpass",
+                Action(
+                    Spectrogram.bandpass,
+                    min_f=bandpass_range[0],
+                    max_f=bandpass_range[1],
+                    out_of_bounds_ok=False,
+                ),
+                after_key="to_spec",
+            )
+
+    def _generate_sample(self, sample):
+        """add attributes to the sample specifying desired shape of output sample"""
+        sample = super()._generate_sample(sample)
+
+        # add attributes specifying desired shape, tag onto sample object
+        # so that they can be accessed by actions in the pipeline (eg LoadAudio, SpectrogramToTensor)
+        sample.height = self.height
+        sample.width = self.width
+        sample.channels = self.channels
+
+        return sample
+
+
+@register_preprocessor_cls
+class TorchSpectrogramPreprocessor(BasePreprocessor):
+    """Spectrogram Preprocessor using torchvision.transforms for export to ONNX"""
+
+    def __init__(
+        self,
+        sample_duration,
+        sample_rate,
+        overlay_samples=None,
+        torch_transforms=None,
+        spec_nfft=512,
+        spec_window_length=None,
+        spec_hop_length=None,
+        lower_dB_range=-80,
+        bandpass_range=None,
+        rescale_mean_sd=None,
+        resize_ft=None,
+        n_mels=None,
+    ):
+        """Spectrogram Preprocessor using torchvision.transforms, allows export to ONNX
+
+        loads audio, creates torch spectrogram, performs augmentations
+
+        audio is resampled to self.sample_rate unless sample_rate is None
+
+        to update the list of torchaudio/torchvision transforms, use:
+        self.pipeline['transform'].transforms=[list of torchvision transforms]
+
+        Only the contents of the torchvision transforms will be exported to ONNX.
+        Any random augmentations on audio and spectrograms are not included in the
+        torchvision transforms and will not be exported to ONNX.
+
+        Args:
+            sample_duration:
+                length in seconds of audio samples generated
+                If not None, longer clips are trimmed to this length. By default,
+                shorter clips will be extended (modify random_trim_audio and
+                trim_audio to change behavior).
+            sample_rate:
+                sample rate to which audio files are resampled when loaded
+            overlay_samples: if not None, will include an overlay (mixup) action
+                samples can be a dataframe of file/start/end times or a set of audio files
+            torch_transforms: optionally pass custom list of torchvision transforms
+                to use instead of default set
+            spec_nfft: number of FFT components for spectrogram
+                ignored if torch_transforms is provided
+            spec_window_length: window length for spectrogram
+                [default: None, uses spec_nfft]
+                ignored if torch_transforms is provided
+            spec_hop_length: hop length for spectrogram
+                [default: None, uses spec_window_length // 2]
+                ignored if torch_transforms is provided
+            lower_dB_range: dynamic range for spectrogram in decibels
+                -1*lower_dB_range is passed to AmplitudeToDB transform
+                ignored if torch_transforms is provided
+            bandpass_range: tuple (min_f, max_f) frequency range to crop spectrogram
+                [default: None, no bandpass]
+                ignored if torch_transforms is provided
+            rescale_mean_sd: tuple (mean, std) for rescaling values as (x - mean) / std
+            rescale_mean_sd: tuple (mean, std) for rescaling values as (x - mean) / std
+                ignored if torch_transforms is provided
+            resize_ft: tuple (frequency dim, time dim) to resize spectrogram [default: None]
+                Note: including this transform will make the preprocessor non-serializable
+                i.e. cannot be saved to JSON/YAML. We recommend using default "None"
+                for no resizing.
+                ignored if torch_transforms is provided
+            n_mels: if not None, use MelScale transform to convert to mel spectrogram
+                with n_mels frequency bins
+                [default: None produces linear-frequency spectrogram]
+                ignored if torch_transforms is provided
+
+        Returns:
+            initialized TorchSpectrogramPreprocessor object
+
+        Example:
+        Initialize with a custom list of transforms:
+        ```python
+        import torchaudio
+        from opensoundscape import preprocessors
+        my_transforms = [
+            torchaudio.transforms.Spectrogram(
+                n_fft=512,
+                win_length=512,
+                hop_length=128,
+                center=False, #highly recommended because default=True will zero-pad, creating extra columns
+            ),
+            torchaudio.transforms.AmplitudeToDB(top_db=80),
+        ]
+        preprocessor = preprocessors.TorchSpectrogramPreprocessor(
+            sample_rate=32000,
+            sample_duration=5,
+            torch_transforms=my_transforms,
+        )
+        ```
+
+        """
+        super().__init__(sample_duration=sample_duration, sample_rate=sample_rate)
+        self.channels = 1
+
+        try:
+            import torchaudio
+            import torchvision
+        except ImportError:
+            raise ImportError(
+                "TorchSpectrogramPreprocessor requires torchaudio and torchvision packages. Please install them to use this preprocessor."
+            )
+
+        # define an Action that runs a set of torchvision/torchaudio transforms
+        if torch_transforms is None:
+            # define default set of torchvision transforms
+
+            # spectrogram transform:
+            torch_transforms = [
+                torchaudio.transforms.Spectrogram(
+                    n_fft=spec_nfft,
+                    win_length=spec_window_length,
+                    hop_length=spec_hop_length,
+                    center=False,  # stick with opso convention here because default=True will zero-pad, creating extra columns
+                )
+            ]
+            if n_mels is not None:
+                if bandpass_range is not None:
+                    f_min, f_max = bandpass_range
+                else:
+                    f_min, f_max = 0, None
+
+                torch_transforms.append(
+                    actions.MelScale(
+                        n_mels=n_mels,
+                        sample_rate=sample_rate,
+                        n_stft=spec_nfft // 2 + 1,
+                        f_max=f_max,
+                        f_min=f_min,
+                    )
+                )
+                # add an attribute .n_stft so that it can re-load properly
+
+            torch_transforms.append(
+                torchaudio.transforms.AmplitudeToDB(top_db=-1 * lower_dB_range),
+            )
+            if bandpass_range is not None and n_mels is None:
+                f_min, f_max = bandpass_range
+                torch_transforms.append(
+                    actions.TorchCropFreq(
+                        f_min=f_min,
+                        f_max=f_max,
+                        sample_rate=sample_rate,
+                        n_fft=spec_nfft,
+                    )
+                )
+            if rescale_mean_sd is not None:
+                mean, std = rescale_mean_sd
+                # note that the confusingly-named Normalize transform performs
+                # (x - mean) / std, not per-sample normalization
+                torch_transforms.append(
+                    torchvision.transforms.Normalize(mean=mean, std=std)
+                )
+            if resize_ft is not None:
+                torch_transforms.append(torchvision.transforms.Resize(resize_ft))
+        transform_action = actions.TorchTransforms(transforms=torch_transforms)
+
+        # the pipeline first loads audio clips and trims them to the correct length
+        # then applies the torchvision transforms to create spectrogram tensors
+        # random augmentations on audio and spectrograms are not included in the
+        # torchvision transforms and will not be exported to ONNX
+        self.pipeline = pd.Series(
+            {
+                # load a segment of an audio file into an Audio object
+                # references AudioSample attributes: start_time, duration, sample_rate
+                "load_audio": AudioClipLoader(),
                 # if we are augmenting and get a long file, take a random trim from it
                 "random_trim_audio": AudioTrim(
                     target_duration=sample_duration,
@@ -541,23 +790,19 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 "trim_audio": AudioTrim(
                     target_duration=sample_duration, random_trim=False
                 ),
-                # convert Audio object to Spectrogram
-                "to_spec": Action(Spectrogram.from_audio),
-                # bandpass to 0-11.025 kHz (to ensure all outputs have same scale in y-axis)
-                "bandpass": Action(
-                    Spectrogram.bandpass, min_f=0, max_f=11025, out_of_bounds_ok=False
-                ),
-                # convert Spectrogram to torch.Tensor and re-size to desired output shape
-                # references AudioSample attributes: target_height, target_width, target_channels
-                "to_tensor": SpectrogramToTensor(),  # uses sample.target_shape
-                ##  augmentations ##
-                # Overlay is a version of "mixup" that draws samples from a user-specified dataframe
-                # and overlays them on the current sample
+                # extract samples from Audio object
+                "to_tensor": actions.AudioToSamplesTensor(),
+                # convert Audio object to PyTorch tensor spectrogram
+                "transform": transform_action,
                 "overlay": (
                     Overlay(
+                        break_on_key="overlay",
                         is_augmentation=True,
-                        overlay_df=pd.DataFrame() if overlay_df is None else overlay_df,
+                        # if None/empty overlay_samples, action will be set to .bypass=True
+                        # and skipped during preprocessing (can be used as a placeholder for later setting of overlay_samples)
+                        overlay_samples=overlay_samples,
                         update_labels=True,
+                        sample_duration=sample_duration,
                     )
                 ),
                 # add vertical (time) and horizontal (frequency) masking bars
@@ -570,7 +815,7 @@ class SpectrogramPreprocessor(BasePreprocessor):
                     action_functions.tensor_add_noise, is_augmentation=True, std=0.005
                 ),
                 # linearly scale the _values_ of the sample
-                "rescale": Action(action_functions.scale_tensor),
+                # "rescale": Action(action_functions.scale_tensor),
                 # apply random affine (rotation, translation, scaling, shearing) augmentation
                 # default values are reasonable for spectrograms: no shearing or rotation
                 "random_affine": Action(
@@ -578,22 +823,6 @@ class SpectrogramPreprocessor(BasePreprocessor):
                 ),
             }
         )
-
-        # bypass overlay if overlay_df was not provided (None)
-        # keep the action in the pipeline for ease of enabling it later
-        if overlay_df is None or len(overlay_df) < 1:
-            self.pipeline["overlay"].bypass = True
-
-    def _generate_sample(self, sample):
-        """add attributes to the sample specifying desired shape of output sample"""
-        sample = super()._generate_sample(sample)
-
-        # add attributes specifying desired shape of output sample
-        sample.height = self.height
-        sample.width = self.width
-        sample.channels = self.channels
-
-        return sample
 
 
 class PCENPreprocessor(preprocessors.SpectrogramPreprocessor):
@@ -614,19 +843,16 @@ class PCENPreprocessor(preprocessors.SpectrogramPreprocessor):
         """
         super().__init__(*args, **kwargs)
 
-        # need to pass linear-value spectrogram to pcen
-        self.pipeline["to_spec"].set(dB_scale=False)
-
         # use Librosa implementation of PCEN (could use a pytorch implementation in the future, and make it trainable)
         pcen_action = actions.Action(fn=action_functions.pcen, is_augmentation=False)
         self.insert_action(action_index="pcen", action=pcen_action, after_key="to_spec")
 
         # normalize PCEN output to [0,1]
         def normalize_to_01(s):
-            new_s = (s.spectrogram - s.spectrogram.min()) / (
-                s.spectrogram.max() - s.spectrogram.min()
+            new_s = (s.power_spectrogram - s.power_spectrogram.min()) / (
+                s.power_spectrogram.max() - s.power_spectrogram.min()
             )
-            return s._spawn(spectrogram=new_s)
+            return s._spawn(power_spectrogram=new_s)
 
         self.insert_action(
             action_index="normalize",
@@ -634,7 +860,9 @@ class PCENPreprocessor(preprocessors.SpectrogramPreprocessor):
             after_key="pcen",
         )
 
-        self.pipeline.to_tensor.set(range=[0, 1])
+        # when extracting tensor from Spectrogram, use the .power_spectrogram attribute
+        # (linear values normalized to 0-1) rather than .spectrogram (dB values)
+        self.pipeline.to_tensor.set(range=[0, 1], dB=False)
 
 
 @register_preprocessor_cls
@@ -650,12 +878,12 @@ class AudioPreprocessor(BasePreprocessor):
     """
 
     def __init__(self, sample_duration, sample_rate, extend_short_clips=True):
-        super().__init__(sample_duration=sample_duration)
+        super().__init__(sample_duration=sample_duration, sample_rate=sample_rate)
         self.pipeline = pd.Series(
             {
                 # load a segment of an audio file into an Audio object
                 # references AudioSample attributes: start_time and duration
-                "load_audio": AudioClipLoader(sample_rate=sample_rate),
+                "load_audio": AudioClipLoader(),
                 # trim samples to correct length
                 # if extend_short_clips=True, extend short clips with silence
                 "trim_audio": AudioTrim(
@@ -672,28 +900,25 @@ class AudioAugmentationPreprocessor(AudioPreprocessor):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # random gain
-        # when training data is much louder than application, e.g. xeno-canto focal recordings,
-        # large gain reduction such as dB_range=(-40, -10) may be useful
-        random_gain_action = actions.Action(
-            action_functions.audio_random_gain, is_augmentation=True, dB_range=(-5, 0)
+        # adaptive random gain: randomly scale audio amplitude, without going below minimum level
+        self.insert_action(
+            "adaptive_random_gain",
+            actions.Action(action_functions.adaptive_random_gain, is_augmentation=True),
         )
-        random_gain_action.bypass = True
-        self.insert_action("random_gain", random_gain_action)
 
-        # add noise
-        add_noise_action = actions.Action(
-            action_functions.audio_add_noise,
-            is_augmentation=True,
-            noise_dB=(-80, -40),
+        # adaptive random noise: add random noise with level based on original signal level
+        self.insert_action(
+            "adaptive_random_noise",
+            actions.Action(
+                action_functions.adaptive_random_noise,
+                is_augmentation=True,
+            ),
         )
-        self.insert_action("add_noise", add_noise_action)
 
         # random time wrap: shift sample in time, moving end to beginning
         random_wrap_action = actions.Action(
             action_functions.random_wrap_audio,
             is_augmentation=True,
-            probability=0.75,
         )
         self.insert_action("random_wrap", random_wrap_action)
 
@@ -748,7 +973,8 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
     def __init__(
         self,
         sample_duration,
-        overlay_df=None,
+        sample_rate,
+        overlay_samples=None,
         height=None,
         width=None,
         channels=1,
@@ -764,8 +990,9 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
 
         Args:
             sample_duration: length in seconds of audio samples generated
-            overlay_df: if not None, will include an overlay action drawing
-                samples from this df
+            sample_rate: target audio sample rate. if None, does not resample
+            overlay_samples: if not None, will include an overlay (mixup) action
+                samples can be a dataframe of file/start/end times or a set of audio files
             height: height of output sample (frequency axis)
                 - default None will use the original height of the spectrogram
             width: width of output sample (time axis)
@@ -777,7 +1004,8 @@ class NoiseReduceSpectrogramPreprocessor(SpectrogramPreprocessor):
         noisereduce_kwargs = noisereduce_kwargs or {}
         super().__init__(
             sample_duration=sample_duration,
-            overlay_df=overlay_df,
+            sample_rate=sample_rate,
+            overlay_samples=overlay_samples,
             height=height,
             width=width,
             channels=channels,
@@ -800,9 +1028,6 @@ def replace_nones(value):
         return "None"
     else:
         return str(value)
-
-
-from IPython.display import display, HTML
 
 
 def _action_html(title, action):
@@ -841,3 +1066,30 @@ def _action_html(title, action):
     
     """
     return html_code
+
+
+def _update_spectrogram_fn_with_legacy(dict):
+    """backwards-compatible Spectrogram preprocessing for opensoundscape<0.13.0
+
+    if use_legacy_spectrogram is True, replace class 'opensoundscape.spectrogram.Spectrogram' with
+    'opensoundscape.scipy_legacy_spectrogram.Spectrogram' in the pipeline dict and similarly for
+    MelSpectrogram
+    """
+    if dict["init_kwargs"].get("use_legacy_spectrogram", False):
+        # replace all intances of 'opensoundscape.spectrogram.Spectrogram' with 'opensoundscape.scipy_legacy_spectrogram.Spectrogram'
+        # in any action_fn or class in the pipeline dict
+        mapping = {
+            "opensoundscape.spectrogram.Spectrogram": "opensoundscape.scipy_legacy_spectrogram.Spectrogram",
+            "opensoundscape.spectrogram.MelSpectrogram": "opensoundscape.scipy_legacy_spectrogram.MelSpectrogram",
+        }
+        for key, action_dict in dict["pipeline"].items():
+            if action_dict.get("action_fn"):
+                for old, new in mapping.items():
+                    if action_dict["action_fn"].startswith(old):
+                        action_dict["action_fn"] = action_dict["action_fn"].replace(
+                            old, new
+                        )
+            if action_dict.get("class"):
+                for old, new in mapping.items():
+                    if action_dict["class"].startswith(old):
+                        action_dict["class"] = action_dict["class"].replace(old, new)

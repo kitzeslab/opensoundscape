@@ -224,10 +224,9 @@ def test_gcc():
     # Note: sometimes failed to find correct tdoa when impulse was 3 so upped to 20
     a[start:end] = 20  # impulse
     a += np.random.rand(1000)  # add noise
+    # signal b is identical to a, but delayed by `delay` samples
     b = np.zeros(1000)
-    b[start - delay : end - delay] = (
-        3  # signal b is identical to a, but delayed by delay samples
-    )
+    b[start - delay : end - delay] = 3
     b += np.random.rand(1000)  # add noise
 
     for cc_filter in ["cc", "phat", "roth", "scot", "ht"]:
@@ -239,6 +238,12 @@ def test_gcc():
         assert (
             lags[np.argmax(gccs)] == delay
         ), f"filter {filter} did not find correct delay"
+
+        # repeat with frequency range argument
+        gccs = sp.gcc(
+            a, b, cc_filter=cc_filter, frequency_range=(100, 3000), sample_rate=5000
+        )
+        assert lags[np.argmax(gccs)] == delay
 
 
 def test_all_tdoa_filter_types_find_correct_delay_no_noise():

@@ -24,7 +24,6 @@ from pathlib import Path
 import json
 import io
 import urllib
-import os
 
 import numpy as np
 import scipy
@@ -161,21 +160,21 @@ class Audio:
         Note: Clips samples to [-1,1] which can result in dBFS different from that
         requested, especially when dBFS is near zero
         """
-        # look-up dictionary for relationship of power spectral density with frequency
-        psd_functions = dict(
-            white=lambda f: 1,
-            blue=lambda f: np.sqrt(f),
-            violet=lambda f: f,
-            brownian=lambda f: 1 / np.where(f == 0, float("inf"), f),
-            brown=lambda f: 1 / np.where(f == 0, float("inf"), f),
-            pink=lambda f: 1 / np.where(f == 0, float("inf"), np.sqrt(f)),
-        )
         n_samples = int(duration * sample_rate)
-        assert color in psd_functions, f"Invalid color {color}"
-        psd = psd_functions[color]
+        if n_samples < 1:
+            # return empty Audio object
+            return cls(np.array([]), sample_rate)
+        elif n_samples == 1:
+            # single sample, return constant value at desired dBFS, random sign
+            sample_value = (10 ** (dBFS / 20)) / np.sqrt(2) * np.sign(np.random.randn())
+            return cls(np.array([sample_value]), sample_rate)
 
-        white = np.fft.rfft(np.random.randn(n_samples))
-        target_psd = psd(np.fft.rfftfreq(n_samples))
+        assert color in _noise_psd_functions, f"Invalid color {color}"
+
+        # get target power spectral density for desired color
+        psd = _noise_psd_functions[color]
+        freqs = np.fft.rfftfreq(n_samples, d=1 / sample_rate)
+        target_psd = psd(freqs)
         # Normalize S for rms of desired dBFS
         target_psd = (
             target_psd
@@ -184,9 +183,12 @@ class Audio:
             / np.sqrt(2)
         )
 
+        # generate white noise in frequency domain then shape it with target psd
+        white = np.fft.rfft(np.random.randn(n_samples))
         shaped = white * target_psd
 
-        samples = np.fft.irfft(shaped)
+        # convert back to time domain
+        samples = np.fft.irfft(shaped, n=n_samples)
 
         return cls(np.clip(samples, -1, 1), sample_rate)
 
@@ -362,10 +364,17 @@ class Audio:
         It uses the IPython.display.Audio class to create an interactive Audio widget.
 
         """
+        if len(self.samples) == 0:
+            return "[Audio object with 0 samples]"
         return self._to_ipdisplay_audio()._repr_html_()
 
     def show_widget(self, normalize=False, autoplay=False):
         """create and display IPython.display.Audio widget; see that class for docs"""
+        if len(self.samples) == 0:
+            print("<Audio object with 0 samples>")
+            return
+        if max(abs(self.samples)) > 1:
+            normalize = True  # avoid error in display with out-of-bounds samples
         IPython.display.display(
             self._to_ipdisplay_audio(normalize=normalize, autoplay=autoplay)
         )
@@ -410,6 +419,8 @@ class Audio:
         Args:
             start_time: time in seconds for start of extracted clip
             end_time: time in seconds for end of extracted clip
+                - if negative, counts from end of audio
+                - if None, extracts to end of audio
             out_of_bounds_mode: behavior if requested time period is not fully contained
                 within the audio file. Options:
                 - 'ignore': return any available audio with no warning/error [default]
@@ -424,7 +435,22 @@ class Audio:
         and trim_with_timestamps() to trim using localized datetime.datetime objects
         """
         start_sample = self._get_sample_index(start_time)
-        end_sample = self._get_sample_index(end_time)
+        if end_time is None:
+            end_sample = self.samples.shape[-1]
+        elif end_time < 0:
+            end_sample = self.samples.shape[-1] + self._get_sample_index(end_time)
+            if end_sample < 0:
+                msg = (
+                    f"Requested end_time {end_time} is before the start of the "
+                    "audio; treating as out-of-bounds."
+                )
+                if out_of_bounds_mode == "raise":
+                    raise AudioOutOfBoundsError(msg)
+                elif out_of_bounds_mode == "warn":
+                    warnings.warn(msg)
+                end_sample = 0
+        else:
+            end_sample = self._get_sample_index(end_time)
         return self.trim_samples(
             start_sample, end_sample, out_of_bounds_mode=out_of_bounds_mode
         )
@@ -651,6 +677,115 @@ class Audio:
         """
         assert duration >= 0, f"`duration` to extend by must be >=0, got {duration}"
         return self.extend_to(self.duration + duration)
+
+    def pad(self, pre_duration, post_duration=None, fill=None):
+        """Pad audio file to desired duration by adding silence or Noise to the beginning and end
+
+        If `post_duration` is None, it is set equal to `pre_duration`.
+
+        Otherwise, silence/noise is added to the beginning and end of the Audio object to achieve the desired
+        `duration`. If an odd number of samples is needed, the extra sample is added to the end.
+
+        Args:
+            pre_duration: the duration in seconds to pad at the beginning of the audio object
+            post_duration: the duration in seconds to pad at the end of the audio object
+                - if None, set equal to pre_duration [default: None]
+            fill: noise color to use for padding. If None, uses silence.
+                Options are the same as Audio.noise():
+                - 'white': uniform psd (equal energy per linear frequency band)
+                - 'pink': psd = 1/sqrt(f) (equal energy per octave)
+                - 'brownian': psd = 1/f (aka brown noise)
+                - 'brown': synonym for brownian
+                - 'violet': psd = f
+                - 'blue': psd = sqrt(f)
+                [default: None]
+        Returns:
+            a new Audio object of the desired duration
+        """
+        assert (
+            pre_duration >= 0
+        ), f"`pre_duration` to pad by must be >=0, got {pre_duration}"
+        if post_duration is None:
+            post_duration = pre_duration
+        else:
+            assert (
+                post_duration >= 0
+            ), f"`post_duration` to pad by must be >=0, got {post_duration}"
+        n_pre_samples = round(pre_duration * self.sample_rate)
+        n_post_samples = round(post_duration * self.sample_rate)
+
+        if fill is None:
+            pre_samples = np.zeros(n_pre_samples)
+            post_samples = np.zeros(n_post_samples)
+        else:
+            pre_audio = Audio.noise(
+                duration=pre_duration, sample_rate=self.sample_rate, color=fill
+            )
+            post_audio = Audio.noise(
+                duration=post_duration, sample_rate=self.sample_rate, color=fill
+            )
+            pre_samples = pre_audio.samples
+            post_samples = post_audio.samples
+
+        new_samples = np.concatenate([pre_samples, self.samples, post_samples])
+
+        # update metadata to reflect new duration
+        if self.metadata is None:
+            metadata = None
+        else:
+            metadata = self.metadata.copy()
+            if "recording_start_time" in metadata:
+                # timedelta doesn't like np types, fix issue #928
+                seconds = pre_duration
+                seconds = cast_np_to_native(seconds)
+                metadata["recording_start_time"] -= datetime.timedelta(seconds=seconds)
+
+            if "duration" in metadata:
+                metadata["duration"] = len(new_samples) / self.sample_rate
+
+        return self._spawn(
+            samples=new_samples,
+            metadata=metadata,
+        )
+
+    def pad_to(self, duration, fill=None):
+        """Pad audio file to desired duration by adding silence or Noise to the beginning and end
+
+        If `duration` is less than or equal to the Audio's self.duration, the Audio remains unchanged.
+
+        Otherwise, silence/noise is added to the beginning and end of the Audio object to achieve the desired
+        `duration`. If an odd number of samples is needed, the extra sample is added to the end.
+
+        Args:
+            duration: the minimum final duration in seconds of the audio object
+            fill: noise color to use for padding. If None, uses silence.
+                Options are the same as Audio.noise():
+                - 'white': uniform psd (equal energy per linear frequency band)
+                - 'pink': psd = 1/sqrt(f) (equal energy per octave)
+                - 'brownian': psd = 1/f (aka brown noise)
+                - 'brown': synonym for brownian
+                - 'violet': psd = f
+                - 'blue': psd = sqrt(f)
+                [default: None]
+        Returns:
+            a new Audio object of the desired duration
+        """
+        assert duration >= 0, f"`duration` to pad to must be >=0, got {duration}"
+
+        if duration <= self.duration:
+            return self
+
+        # be explicit about sample counts with padding to avoid sample-level rounding issues
+        total_n_samples = round(duration * self.sample_rate)
+        n_samples_to_add = total_n_samples - len(self.samples)
+        pre_n_samples = n_samples_to_add // 2
+        post_n_samples = n_samples_to_add - pre_n_samples
+        pre_duration = pre_n_samples / self.sample_rate
+        post_duration = post_n_samples / self.sample_rate
+
+        return self.pad(
+            pre_duration=pre_duration, post_duration=post_duration, fill=fill
+        )
 
     def bandpass(self, low_f, high_f, order):
         """Bandpass audio signal with a butterworth filter
@@ -912,7 +1047,7 @@ class Audio:
 
         Args:
             clip_duration (float):  The duration in seconds of the clips
-            **kwargs (such as clip_overlap_fraction, final_clip) are passed to
+            **kwargs (such as overlap_fraction, final_clip) are passed to
                 opensoundscape.utils.generate_clip_times_df()
                 - extends last Audio object if user passes final_clip == "extend"
         Returns:
@@ -949,13 +1084,64 @@ class Audio:
 
         return clips, clip_df
 
+    def apply(
+        self,
+        function,
+        clip_duration,
+        clip_overlap=None,
+        overlap_fraction=None,
+        clip_step=None,
+        final_clip="extend",
+        rounding_precision=10,
+        **kwargs,
+    ):
+        """Apply a function to windowed signal, return (times,values)
+
+        Args:
+            function: a function that takes an Audio object as its first argument
+                and returns a value (e.g. scalar, array, etc.)
+            clip_duration: duration (seconds) of each window
+            clip_overlap: overlap (seconds) of each window [default: None]
+            overlap_fraction: fraction of overlap (0 to 1) of each window
+                [default: None]
+            clip_step: step size (seconds) between windows [default: None]
+            final_clip: behavior if final_clip is less than clip_duration seconds long.
+                [default: "extend"]
+                Possible options (any other input will ignore the final clip entirely),
+                    - "remainder": Include the remainder of the Audio (clip will not have
+                      clip_duration length)
+                    - "full": Increase the overlap to yield a clip with clip_duration length
+                    - "extend": Similar to remainder but extend (repeat) the clip to reach
+                      clip_duration length
+                    - None: Discard the remainder
+            rounding_precision: number of decimal places to round clip start and end times
+                - helps avoid floating point issues when generating clip times
+            return_df: if True, returns dataframe with the computed value as 'value' column in a
+                dataframe with clip start_time and end_time columns
+            **kwargs: additional keyword arguments to pass to the function
+        Returns:
+            (window start times, values)
+        """
+        clip_times_df = generate_clip_times_df(
+            full_duration=self.duration,
+            clip_duration=clip_duration,
+            clip_overlap=clip_overlap,
+            overlap_fraction=overlap_fraction,
+            clip_step=clip_step,
+            final_clip=final_clip,
+            rounding_precision=rounding_precision,
+        )
+
+        results = [function(self.trim(s, e), **kwargs) for s, e in clip_times_df.values]
+        return clip_times_df["start_time"].values.tolist(), results
+
     def split_and_save(
         self,
         destination,
         prefix,
         clip_duration,
         clip_overlap=0,
-        final_clip=None,
+        final_clip="extend",
         dry_run=False,
     ):
         """Split audio into clips and save them to a folder
@@ -1028,6 +1214,113 @@ class Audio:
         """calculate the root-mean-square dB value relative to a full-scale sine wave"""
         return 20 * np.log10(self.rms * np.sqrt(2))
 
+    def __add__(self, other):
+        """Adding Audio objects = concatenation; adding int/float = gain adjustment
+
+        Args:
+            other: another Audio object or a numeric value
+        """
+        if not isinstance(other, (Audio, int, float)):
+            raise ValueError(
+                "Can only add Audio objects (concatenation) or add gain (int/float)"
+            )
+        if isinstance(other, Audio):
+            return concat([self, other])
+
+        if not isinstance(other, (int, float)):
+            raise TypeError(
+                "Can only add gain (int/float) or concatenate audio objects"
+            )
+        else:
+            return self.apply_gain(other)
+
+    def __sub__(self, other):
+        """Subtracting Audio objects = gain reduction by `other` dB
+
+        Args:
+            other: numeric value (dB)
+        """
+        if not isinstance(other, (int, float)):
+            raise TypeError("Can only subtract gain (int/float)")
+        return self.apply_gain(-other)
+
+    def __mul__(self, other):
+        """Multiplying Audio object by a numeric value = gain adjustment; Multiply 2 audio signals = mixdown
+
+        Args:
+            other: numeric value (linear scale)
+        """
+        if isinstance(other, (int, float)):
+            return self._spawn(samples=self.samples * other)
+        elif isinstance(other, Audio):
+            return mix([self, other])
+        else:
+            raise ValueError(
+                "Can only multiply Audio by another Audio object (mixdown) "
+                "or by a numeric value (gain adjustment)"
+            )
+
+    def __pow__(self, n, modulus=None):
+        """The ** operator loops an Audio object `N` times"""
+        return self.loop(n=n)
+
+    def change_speed(
+        self, speed_factor, resample=False, resample_type=DEFAULT_RESAMPLE_TYPE
+    ):
+        """Change the speed (and pitch) of the audio by a given factor
+
+        Audio is reversed if speed_factor is negative
+
+        Args:
+            speed_factor: factor by which to change speed
+                - e.g. 2.0 = twice as fast, 0.5 = half as fast
+            resample: if True, resample the audio back to the original sample rate
+                - if False, the sample rate is adjusted to reflect the speed change
+                [default: False]
+            resample_type: type of resampling to use if resample=True
+                - see Audio.resample() for options
+        Returns:
+            Audio object with changed speed
+        """
+        sample_rate_with_current_samples = int(self.sample_rate * abs(speed_factor))
+        new_audio = self._spawn(
+            samples=self.samples if speed_factor > 0 else self.samples[::-1],
+            sample_rate=sample_rate_with_current_samples,
+        )
+        if resample:
+            new_audio = new_audio.resample(
+                sample_rate=self.sample_rate, resample_type=resample_type
+            )
+        return new_audio
+
+    def __getitem__(self, key):
+        """Enables slicing Audio objects, treating slice as time in seconds"""
+        if isinstance(key, slice):
+            # handle negatives and Nones for start time and stop time
+            start_time = 0 if key.start is None else key.start
+            if start_time < 0:
+                start_time = self.duration + key.start
+            stop_time = key.stop
+            if stop_time is not None and stop_time < 0:
+                stop_time = self.duration + key.stop
+            # trim to bounds
+            trimmed = self.trim(start_time, stop_time)
+
+            if key.step is None:  # return trimmed clip
+                return trimmed
+            else:
+                # validate step before using it as segment length
+                if key.step == 0:
+                    raise ValueError("Audio slicing step cannot be zero")
+                if key.step < 0:
+                    raise ValueError("Audio slicing step cannot be negative")
+
+                # return Audio segments of length step from start to stop
+                # discard dataframe of clip times
+                return trimmed.split(key.step)[0]
+        else:
+            raise TypeError("Audio object can only be indexed with slice")
+
 
 def load_channels_as_audio(
     path,
@@ -1061,22 +1354,22 @@ def load_channels_as_audio(
         metadata_dict = None
 
     ## Load samples ##
-    warnings.filterwarnings("ignore")
-    samples, sr = librosa.load(
-        path,
-        sr=sample_rate,
-        res_type=resample_type,
-        mono=False,
-        offset=offset,
-        duration=duration,
-        dtype=None,
-    )
-    # temporary workaround for soundfile issue #349
-    # which causes empty sample array if loading float32 from mp3:
-    # pass dtype=None, then change it afterwards
-    samples = samples.astype(dtype)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        samples, sr = librosa.load(
+            path,
+            sr=sample_rate,
+            res_type=resample_type,
+            mono=False,
+            offset=offset,
+            duration=duration,
+            dtype=None,
+        )
+        # temporary workaround for soundfile issue #349
+        # which causes empty sample array if loading float32 from mp3:
+        # pass dtype=None, then change it afterwards
+        samples = samples.astype(dtype)
 
-    warnings.resetwarnings()
     if len(np.shape(samples)) == 1:
         samples = [samples]
 
@@ -1281,11 +1574,9 @@ def estimate_delay(
     primary_audio,
     reference_audio,
     max_delay,
-    bandpass_range=None,
-    bandpass_order=9,
+    frequency_range=None,
     cc_filter="phat",
     return_cc_max=False,
-    skip_ref_bandpass=False,
 ):
     """
     Use generalized cross correlation to estimate time delay between 2 audio objects containing the same signal. The audio objects must be time-synchronized.
@@ -1299,15 +1590,16 @@ def estimate_delay(
         reference_audio: audio object containing the reference signal.
         max_delay: maximum time delay to consider, in seconds. Must be less than the duration of the primary audio.
             (see `opensoundscape.signal_processing.tdoa`)
-        bandpass_range: if None, no bandpass filter is performed
-            otherwise [low_f,high_f]
-        bandpass_order: order of Butterworth bandpass filter
+        frequency_range: tuple of (low_f, high_f) frequencies in Hz to use in the generalized cross correlation.
+            If None, all frequencies are kept.
+            First or second value can be None if no lower or upper limit is desired
+            Note: retaining high frequencies near the Nyquist frequency sometimes results
+                in spurious cross correlation values at 0 or at the beginning/end of the signal
+                when using 'phat' and 'scot' methods.
         cc_filter: generalized cross correlation type, see
             opensoundscape.signal_processing.gcc() [default: 'phat']
         return_cc_max: if True, returns cross correlation max value as second argument
             (see `opensoundscape.signal_processing.tdoa`)
-        skip_ref_bandpass: [default: False] if True, skip the bandpass operation for the
-            reference_audio object, only apply it to `audio`
     Returns:
         estimated time delay (seconds) from reference_audio to audio
 
@@ -1321,13 +1613,6 @@ def estimate_delay(
     if reference_audio.sample_rate != sr:
         reference_audio = reference_audio.resample(sr)
 
-    # apply audio-domain butterworth bandpass filter if desired
-    if bandpass_range is not None:
-        l, h = bandpass_range  # extract low and high frequencies
-        primary_audio = primary_audio.bandpass(l, h, bandpass_order)
-        if not skip_ref_bandpass:
-            reference_audio = reference_audio.bandpass(l, h, bandpass_order)
-
     # estimate time delay from reference_audio to audio using generalized cross correlation
     return tdoa(
         primary_audio.samples,
@@ -1336,6 +1621,7 @@ def estimate_delay(
         cc_filter=cc_filter,
         sample_rate=sr,
         return_max=return_cc_max,
+        frequency_range=frequency_range,
     )
 
 
@@ -1720,21 +2006,22 @@ def _audio_from_file_handler(
         offset = 0
 
     ## Load samples ##
-    warnings.filterwarnings("ignore")
-    samples, sr = librosa.load(
-        path,
-        sr=sample_rate,
-        res_type=resample_type,
-        mono=to_mono,
-        offset=offset,
-        duration=duration,
-        dtype=None,
-    )
-    # temporary workaround for soundfile issue #349
-    # which causes empty sample array if loading float32 from mp3:
-    # pass dtype=None, then change it afterwards
-    samples = samples.astype(dtype)
-    warnings.resetwarnings()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        samples, sr = librosa.load(
+            path,
+            sr=sample_rate,
+            res_type=resample_type,
+            mono=to_mono,
+            offset=offset,
+            duration=duration,
+            dtype=None,
+        )
+        # temporary workaround for soundfile issue #349
+        # which causes empty sample array if loading float32 from mp3:
+        # pass dtype=None, then change it afterwards
+        samples = samples.astype(dtype)
 
     # out of bounds warning/exception user if no samples or too short
     if len(samples) == 0:
@@ -1848,7 +2135,7 @@ class MultiChannelAudio(Audio):
         offset=None,
         duration=None,
         start_timestamp=None,
-        out_of_bounds_mode="warn",
+        out_of_bounds_mode="ignore",
     ):
         """Load audio from files
 
@@ -2022,7 +2309,7 @@ class MultiChannelAudio(Audio):
         prefix,
         clip_duration,
         clip_overlap=0,
-        final_clip=None,
+        final_clip="extend",
         dry_run=False,
     ):
         """Split audio into clips and save them to a folder
@@ -2091,3 +2378,14 @@ class MultiChannelAudio(Audio):
         if clip_range is not None:
             new_samples = np.clip(new_samples, clip_range[0], clip_range[1])
         return self._spawn(samples=new_samples)
+
+
+_noise_psd_functions = dict(
+    white=lambda f: 1,
+    blue=lambda f: np.sqrt(f),
+    violet=lambda f: f,
+    brownian=lambda f: 1 / np.where(f == 0, float("inf"), f),
+    brown=lambda f: 1 / np.where(f == 0, float("inf"), f),
+    pink=lambda f: 1 / np.where(f == 0, float("inf"), np.sqrt(f)),
+)
+"""look-up dictionary for relationship of power spectral density with frequency"""

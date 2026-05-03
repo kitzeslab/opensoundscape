@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 from opensoundscape.preprocess.preprocessors import SpectrogramPreprocessor
-from opensoundscape.ml.datasets import AudioFileDataset, AudioSplittingDataset
+from opensoundscape.ml.datasets import AudioFileDataset
 
 from opensoundscape.logging import wandb_table
 
@@ -15,7 +15,7 @@ def dataset_df():
 
 @pytest.fixture()
 def pre():
-    return SpectrogramPreprocessor(sample_duration=2.0)
+    return SpectrogramPreprocessor(sample_duration=2.0, sample_rate=22050)
 
 
 def test_wandb_table_files(dataset_df, pre):
@@ -26,11 +26,11 @@ def test_wandb_table_files(dataset_df, pre):
 
 def test_wandb_table_clips(dataset_df, pre):
     """smoke test: does it make a wandb table?"""
-    dataset = AudioSplittingDataset(dataset_df, pre)
+    dataset = AudioFileDataset(dataset_df, pre)
     wandb_table(dataset, n=2, raise_exceptions=True)
 
 
 def test_wandb_table_no_labels(dataset_df, pre):
     """smoke test: does it make a wandb table?"""
-    dataset = AudioSplittingDataset(dataset_df, pre)
+    dataset = AudioFileDataset(dataset_df, pre)
     wandb_table(dataset, n=2, raise_exceptions=True, drop_labels=False)

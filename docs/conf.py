@@ -24,7 +24,7 @@ copyright = "2024 Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilna
 author = "Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilnani, Alexandra Syunkova, Leonardo Viotti, Santiago Ruiz Guzman, Justin Kitzes"
 
 # The full version, including alpha/beta/rc tags
-release = "0.12.1"
+release = "0.13.0"
 
 
 # -- General configuration ---------------------------------------------------
@@ -94,6 +94,7 @@ autodoc_mock_imports = [
     "librosa",
     "ray",
     "torch",
+    "torchaudio",
     "sklearn",
     "numpy",
     "schema",
@@ -117,6 +118,9 @@ autodoc_mock_imports = [
     "torchmetrics",
     "lightning",
     "cv2",
+    "tensorflow",
+    "ipywidgets",
+    "plotly",
 ]
 
 master_doc = "index"

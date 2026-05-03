@@ -1,5 +1,7 @@
 """helpers for integrating with WandB and exporting content"""
 
+import warnings
+
 import wandb
 import pandas as pd
 from opensoundscape.audio import Audio
@@ -26,6 +28,7 @@ def wandb_table(
         random_state: default None; if integer provided, used for reproducible random sample
         drop_labels: if True, does not include 'label' column in Table
         gradcam_model: if not None, will generate GradCAMs for each sample using gradcam_model.get_cams()
+            - requires optional dependency `pip install grad-cam`
 
     Returns: a W&B Table of preprocessed samples with labels and playable audio
 
@@ -39,10 +42,14 @@ def wandb_table(
         dataset = dataset.sample(n=n, random_state=random_state)
 
     # set up columns for WandB display table
-    table_columns = ["audio", "tensor", "labels", "path"]
-    if dataset.has_clips:  # keep track of clip start/ends
-        table_columns += ["clip start time"]
-        table_columns += ["clip duration"]
+    table_columns = [
+        "audio",
+        "tensor",
+        "labels",
+        "path",
+        "clip start time",
+        "clip duration",
+    ]
     for c in classes_to_extract:
         table_columns.append(c)
 
@@ -69,9 +76,9 @@ def wandb_table(
                 image,  # spectrogram image
                 sample.categorical_labels,
                 str(sample.source),
+                sample.start_time,
+                sample.duration,
             ]
-            if dataset.has_clips:
-                row_info += [sample.start_time, sample.duration]
             for c in classes_to_extract:
                 row_info += [sample.labels[c]]
 
@@ -84,14 +91,26 @@ def wandb_table(
 
     # add GradCAMs to table
     if gradcam_model is not None:
-        for c in classes_to_extract:
-            samples = dataset.label_df
-            samples = gradcam_model.generate_cams(samples, classes=[c])
-            cam_images = []
-            for s in samples:
-                array = s.cam.create_rgb_heatmaps(class_subset=[c])
-                cam_images.append(wandb.Image(array))
-            sample_table[f"{c} GradCAM"] = cam_images
+        try:
+            import pytorch_grad_cam
+
+            grad_cam_available = True
+        except ImportError as exc:
+            # cannot generate CAMs without grad-cam dependency, but this is an optional feature so just warn and skip
+            warnings.warn(
+                "Generating GradCAMs for the wandb table requires the optional 'grad-cam' dependency. "
+                "Install it with `pip install opensoundscape[grad-cam]` or `pip install grad-cam` to enable this feature."
+            )
+            grad_cam_available = False
+        if grad_cam_available:
+            for c in classes_to_extract:
+                samples = dataset.label_df
+                samples = gradcam_model.generate_cams(samples, classes=[c])
+                cam_images = []
+                for s in samples:
+                    array = s.cam.create_rgb_heatmaps(class_subset=[c])
+                    cam_images.append(wandb.Image(array))
+                sample_table[f"{c} GradCAM"] = cam_images
 
     if drop_labels:
         sample_table = sample_table.drop(columns=["labels"])
