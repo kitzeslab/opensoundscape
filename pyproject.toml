@@ -83,7 +83,7 @@ lxml = ">=6.1.0"
 
 
 [tool.poetry.group.dev.dependencies]
-black = "~24.3"
+black = ">=24.3,<26.4"
 pre-commit = ">=1.18"
 sphinx = ">=7.2.6"
 pytest = ">=9.0.3"
