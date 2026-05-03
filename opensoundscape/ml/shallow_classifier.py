@@ -696,10 +696,6 @@ def fit(
     return best_model_val_metrics
 
 
-# copy fit docstring to MLPClassifier.fit
-MLPClassifier.fit.__doc__ = fit.__doc__
-
-
 def augmented_embed(
     embedding_model,
     sample_df,

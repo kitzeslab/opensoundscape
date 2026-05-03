@@ -3,7 +3,6 @@ import types
 import importlib.util
 
 import numpy as np
-import onnxruntime
 import pytest
 import torch
 

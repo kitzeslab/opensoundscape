@@ -709,20 +709,12 @@ def similarity_search_hoplite_db(
         db: a Hoplite database containing embeddings from the same model
         num_results: The number of results to return for each query
         exact_search: default False for usearch (faster), if True uses brute force search
-        search_subset_size: Number of embeddings to compare with. If None, all embeddings
-            are used. For floats between 0 and 1, sample a proportion of the database.
-            For ints, sample the specified number of embeddings.
-            if None [default], searches all embeddings
+        search_subset_size: Number of embeddings to compare with. If None, all embeddings are used.
             Note: only implemented for exact_search=True
-        target_score: if specified, searches for similarity scores close to target_score
-            default [None] searches for most similar embeddings
-        audio_root: root directory for relative paths to query audio files
-        search_kwargs: dict of additional keyword arguments passed to db.ui.search() or
-            brutalism.threaded_brute_search() if exact_search=True
+        target_score: if specified, searches for similarity scores close to target_score; default None searches for most similar embeddings
+        search_kwargs: dict of additional keyword arguments passed to db.ui.search() or brutalism.threaded_brute_search(); typical keys differ between exact_search modes
             exact_search=False: radius, threads, exact, log, progress
             exact_search=True: batch_size, max_workers, rng_seed
-        **embedding_kwargs: additional keyword arguments passed to self.embed(), such as
-            batch_size and num_workers
     Returns:
         A list of dictionaries with the search results, one item per query sample:
         Each item is a dictionary with the following keys:
