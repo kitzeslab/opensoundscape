@@ -1,6 +1,8 @@
+import json
+
 import numpy as np
-import onnxruntime
 import torch
+
 from opensoundscape.ml.cnn import SpectrogramClassifier
 from opensoundscape.preprocess.preprocessors import AudioPreprocessor
 
@@ -77,8 +79,6 @@ class ONNXModel(SpectrogramClassifier):
                 missing_fields.append("sample_duration")
         if classes is None:
             try:
-                import json
-
                 classes = json.loads(meta["classes"])
             except Exception:
                 missing_fields.append("classes")
@@ -205,7 +205,11 @@ class ONNXModel(SpectrogramClassifier):
             model: A SpectrogramClassifier object to convert to ONNXModel.
             execution_providers: Tuple of ONNX Runtime execution providers to use for the resulting ONNXModel.
                  EG: "CPUExecutionProvider", "CUDAExecutionProvider", "CoreMLExecutionProvider"
-            **save_onnx_kwargs: Additional kwargs to pass to model.save_onnx() method
+            **save_onnx_kwargs: Additional kwargs to pass to model.save_onnx() method:
+                activation_layer: Any | None = None,
+                include_preprocessor_output: bool = True,
+                include_embedding_output: bool = True,
+                include_classifier_output: bool = True,
 
         Returns:
             An ONNXModel initialized with the exported ONNX model.
@@ -223,11 +227,18 @@ class ONNXModel(SpectrogramClassifier):
         onnx_model = ONNXModel.from_spectrogram_classifier(model)
         onnx_model.predict(audio_file_list)
         """
-        torch_onnx_program = model.save_onnx(path=None)  # , **save_onnx_kwargs)
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            raise ImportError(
+                "onnxruntime is required to use ONNXModel. Please install with `pip install onnxruntime` "
+                "or `pip install opensoundscape[onnx]`."
+            )
+        torch_onnx_program = model.save_onnx(path=None, **save_onnx_kwargs)
         torch_onnx_program.optimize()
 
         model_bytes = torch_onnx_program.model_proto.SerializeToString()
-        ort_session = onnxruntime.InferenceSession(model_bytes)
+        ort_session = ort.InferenceSession(model_bytes, providers=execution_providers)
         return cls(
             ort_session,
             sample_rate=model.preprocessor.sample_rate,
@@ -235,4 +246,5 @@ class ONNXModel(SpectrogramClassifier):
             classes=model.classes,
             class_outputs_key="classifier",
             embedding_outputs_key="embedding",
+            execution_providers=execution_providers,
         )
