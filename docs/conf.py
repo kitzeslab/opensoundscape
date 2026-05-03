@@ -121,6 +121,10 @@ autodoc_mock_imports = [
     "tensorflow",
     "ipywidgets",
     "plotly",
+    "onnnx",
+    "onnxruntime",
+    "onnxscript",
+    "perch-hoplite",
 ]
 
 master_doc = "index"

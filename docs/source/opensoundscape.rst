@@ -106,6 +106,13 @@ opensoundscape.visualization module
    :undoc-members:
    :show-inheritance:
 
+opensoundscape.vector_database module
+-------------------------------------
+.. automodule:: opensoundscape.vector_database
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 

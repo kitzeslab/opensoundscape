@@ -30,12 +30,13 @@ from .ml.song_space import SongSpace
 from .ml.cnn import SpectrogramClassifier, CNN, load_model
 from .ml.onnx_model import ONNXModel
 from .ml.lightning import LightningSpectrogramModule
-from .ml.datasets import AudioFileDataset, AudioFileDataset
+from .ml.datasets import AudioFileDataset
 from .preprocess.actions import Action
 from .preprocess.preprocessors import SpectrogramPreprocessor, AudioPreprocessor
 from .sample import AudioSample
-from .annotations import BoxedAnnotations
+from .annotations import BoxedAnnotations, CategoricalLabels
 from .preprocess.utils import show_tensor, show_tensor_grid
 from .localization import SpatialEvent, SynchronizedRecorderArray
 from .utils import set_seed
 from .ml.shallow_classifier import MLPClassifier
+from .visualization import annotate, inspect, explore_features, explore_histogram
