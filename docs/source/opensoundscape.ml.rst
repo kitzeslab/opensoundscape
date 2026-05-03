@@ -100,6 +100,14 @@ opensoundscape.ml.export module
    :undoc-members:
    :show-inheritance:
 
+opensoundscape.ml.song_space module
+-----------------------------------
+
+.. automodule:: opensoundscape.ml.song_space
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 
