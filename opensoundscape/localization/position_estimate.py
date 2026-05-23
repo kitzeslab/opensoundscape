@@ -12,14 +12,18 @@ class PositionEstimate:
     - duration: duration of the event in seconds
 
 
-    Also contains information about the receivers used for localization, and intermediate outputs
-    of the localization algorithm:
+    Also contains information about the receivers used for localization, intermediate outputs
+    of the localization algorithm, and optional MSRP outputs:
     - receiver_files: list of file paths to audio files used for localization
     - receiver_start_time_offsets: list of floats, time from start of audio to start of event
         for each receiver
     - receiver_locations: list of receiver locations
     - tdoas: list of time differences of arrival computed with cross correlation
     - cc_maxs: list of cross correlation maxima
+    - power_map: optional pd.Series of SRP values indexed by search-grid coordinates
+        (added when localization is performed with M-SRP and keep_maps=True)
+    - search_map: optional SearchMap object used to compute the SRP (added when
+        keep_maps=True)
 
     Args:
         location estimate: 2 or 3 element array of floats, estimated location of the sound source
@@ -126,6 +130,118 @@ class PositionEstimate:
             )
 
         return all_audio
+
+    def plot_msrp(self, n_col=4, max_plots=8):
+
+        assert hasattr(
+            self, "search_map"
+        ), "must use keep_power_map=True in SpatialEvent.localize_msrp() to retain search_map and power_map for plotting"
+
+        from matplotlib import pyplot as plt
+
+        search_map = self.search_map
+        dims = search_map.search_points.shape[1]
+        if dims == 2:
+            fig, ax = plt.subplots(1, 1)
+
+            x = search_map.search_points.values[:, 0]
+            y = search_map.search_points.values[:, 1]
+            power = self.power_map.values
+            rec = self.receiver_locations
+
+            sc = ax.scatter(x, y, c=power)
+            ax.scatter(
+                rec[:, 0],
+                rec[:, 1],
+                c="Grey",
+                label="Receivers",
+                marker=".",
+                s=100,
+            )
+
+            ax.scatter(
+                self.location_estimate[0],
+                self.location_estimate[1],
+                c="Red",
+                label="Estimated Source",
+                marker="x",
+                s=200,
+            )
+            fig.colorbar(sc, ax=ax, label="Power")
+            ax.set_title("M-SRP-PHAT Power Map")
+        else:
+
+            heights = np.unique(search_map.search_points.values[:, 2])
+            heights = select_evenly_spaced_values(heights, max_plots)
+            n_plots = len(heights)
+
+            # look at one specific height
+            fig, axs = plt.subplots((n_plots // n_col) + 1, n_col)
+            axs = axs.flatten()
+
+            for i, height in enumerate(heights):
+                ax = axs[i]
+                grid_at_height_mask = search_map.search_points.values[:, 2] == height
+                # select x and y values from search_mask.grid using mask
+                x = search_map.search_points.values[grid_at_height_mask, 0]
+                y = search_map.search_points.values[grid_at_height_mask, 1]
+                power = self.power_map[grid_at_height_mask].values
+                rec = self.receiver_locations
+
+                ax.scatter(x, y, c=power)
+                ax.scatter(
+                    rec[:, 0],
+                    rec[:, 1],
+                    c="Grey",
+                    label="Receivers",
+                    marker=".",
+                    s=100,
+                )
+
+                ax.scatter(
+                    self.location_estimate[0],
+                    self.location_estimate[1],
+                    c="Red",
+                    label="Estimated Source",
+                    marker="x",
+                    s=200,
+                )
+                ax.set_title(f"height: {height}")
+
+            # remove unused axes
+            if n_plots < len(axs):
+                for ax in axs[n_plots:]:
+                    ax.remove()
+
+        axs[0].legend()
+        return fig, axs
+
+
+def select_evenly_spaced_values(arr, N):
+    """
+    Selects N evenly spaced values from a NumPy array.
+
+    Args:
+        arr (np.ndarray): The input NumPy array.
+        N (int): The number of evenly spaced values to select.
+
+    Returns:
+        np.ndarray: A new array containing the N evenly spaced values.
+    """
+    if N <= 0:
+        return np.array([])
+    if N == 1:
+        return np.array([arr[0]])
+
+    if len(arr) < N:
+        return arr
+
+    # Generate N evenly spaced indices from 0 to len(arr) - 1
+    indices = np.linspace(0, len(arr) - 1, N, dtype=int)
+
+    # Select the values from the original array using these indices
+    selected_values = arr[indices]
+    return selected_values
 
 
 def positions_to_df(list_of_events):

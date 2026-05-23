@@ -24,6 +24,7 @@ class SpatialEvent:
         receiver_files,
         receiver_locations,
         max_delay,
+        receivers=None,
         min_n_receivers=3,
         receiver_start_time_offsets=None,
         start_timestamp=None,
@@ -41,6 +42,7 @@ class SpatialEvent:
             receiver_files: list of audio files, one for each receiver
             receiver_locations: list of [x,y] or [x,y,z] positions of each receiver in meters
             max_delay: maximum time delay (in seconds) to consider for time-delay-of-arrival estimate. Cannot be longer than 1/2 the duration.
+            receivers: list of receiver IDs corresponding to each receiver file and location
             receiver_start_time_offsets: list of start_time of detection (seconds) for each receiver relative to start of audio file
                 - if all audio files started at the same real-world time, this value will be the same for all recievers
                 - for example, 5.0 means the detection window starts 5 seconds after the beginning of the Audio file
@@ -103,6 +105,7 @@ class SpatialEvent:
         self.speed_of_sound = speed_of_sound
 
         # static attributes
+        self.receivers = receivers
         self.receiver_files = np.array(receiver_files)
         self.receiver_locations = np.array(receiver_locations)
         self.start_timestamp = start_timestamp
@@ -154,6 +157,7 @@ class SpatialEvent:
             - if localization is not successful, .location_estimate attribute of returned object is
               None
         """
+
         # If no values are already stored, perform generalized cross correlation to estimate time delays
         # or if user wants to re-estimate the time delays, perform generalized cross correlation to estimate time delays
         if self.tdoas is None or self.cc_maxs is None or use_stored_tdoas is False:
@@ -416,6 +420,92 @@ class SpatialEvent:
                 d[key] = str(d[key])
         return d
 
+    def localize_msrp(self, search_map, keep_power_map=False, **kwargs):
+        """Perform M-SRP-PHAT localization on a SpatialEvent.
+
+        This method extracts aligned audio segments from the event's receiver files,
+        constructs the `signals` dict (receiver_id -> numpy array), and calls
+        `opensoundscape.localization.msrp.localize()` with the provided
+        `search_map` and keyword arguments.
+
+        Keyword arguments passed through (**kwargs) are forwarded to
+        `msrp.localize()` and may include: freq_low, freq_high, cc_filter,
+        aggregation_fn, convex_hull_margin, detrend, and others supported by
+        `msrp.localize()`.
+
+        Args:
+            search_map (SearchMap): grid with precomputed time-delay intervals.
+                Create with `opensoundscape.localization.SearchMap`.
+            keep_power_map (bool): if True, attach 'power_map' and 'search_map' to
+                the returned PositionEstimate (via keep_maps in msrp.localize()).
+                Useful for plotting or analysis beyond just the maximum power location.
+                Default: False.
+
+        Returns:
+            PositionEstimate: populated with location_estimate and, if requested,
+            power_map and search_map attributes.
+        """
+        from opensoundscape.localization import msrp
+
+        # Load audio signals
+        signals = []
+        sample_rate = search_map.sample_rate
+
+        # load audio signals from each receiver
+        # todo extend extracted clip by max_delay on either side? see spatial_event._estimate_delays
+
+        for i, file in enumerate(self.receiver_files):
+            try:
+                audio = Audio.from_file(
+                    file,
+                    sample_rate=sample_rate,
+                    offset=self.receiver_start_time_offsets[i],
+                    duration=self.duration,
+                )
+                signals.append(audio.samples)
+            except Exception as e:
+                print(f"Could not load {file}: {e}")
+                continue
+
+        # combine into np.array with consistent signal length
+        min_len = np.min([len(s) for s in signals])
+        signals = np.array([s[:min_len] for s in signals])
+        signals = {rec: s for rec, s in zip(self.receivers, signals)}
+
+        if self.bandpass_range is None:
+            low_f, high_f = None, None
+        else:
+            low_f, high_f = self.bandpass_range
+
+        # run msrp localization
+        result = msrp.localize(
+            signals=signals,
+            search_map=search_map,
+            freq_low=low_f,
+            freq_high=high_f,
+            keep_maps=keep_power_map,
+            cc_filter=self.cc_filter,
+            **kwargs,
+        )
+        estimate = PositionEstimate(
+            location_estimate=result["location"],
+            class_name=self.class_name,
+            receiver_files=self.receiver_files,
+            receiver_locations=self.receiver_locations,
+            start_timestamp=self.start_timestamp,
+            receiver_start_time_offsets=self.receiver_start_time_offsets,
+            duration=self.duration,
+        )
+        estimate.max_power = result["max_power"]
+
+        if keep_power_map:
+            # include the complete set of steered response power and associated positions
+            # in the returned PositionEstimate
+            estimate.power_map = result["power_map"]
+            estimate.search_map = result["search_map"]
+
+        return estimate
+
 
 def events_to_df(list_of_events):
     """convert a list of SpatialEvent objects to pd DataFrame
@@ -503,7 +593,9 @@ def calculate_tdoa_residuals(
     return time_residuals * speed_of_sound
 
 
-def localize_events_parallel(events, num_workers, localization_algorithm):
+def localize_events_parallel(
+    events, num_workers, localization_algorithm, search_map=None, **kwargs
+):
 
     # perform gcc to estimate relative time of arrival at each receiver
     # estimate locations of sound event using time delays and receiver locations
@@ -512,7 +604,16 @@ def localize_events_parallel(events, num_workers, localization_algorithm):
 
     # parallelize the localization of each event across cpus
     # return list of PositionEstimate objects
-    return Parallel(n_jobs=num_workers)(
-        delayed(e.estimate_location)(localization_algorithm=localization_algorithm)
-        for e in events
-    )
+    if localization_algorithm == "msrp":
+        if search_map is None:
+            raise ValueError("search_map must be provided for msrp localization")
+        return Parallel(n_jobs=num_workers)(
+            delayed(e.localize_msrp)(search_map=search_map, **kwargs) for e in events
+        )
+    else:
+        return Parallel(n_jobs=num_workers)(
+            delayed(e.estimate_location)(
+                localization_algorithm=localization_algorithm, **kwargs
+            )
+            for e in events
+        )
