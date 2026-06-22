@@ -137,8 +137,8 @@ class SongSpace:
     def __init__(self, path, feature_extractor="perch2", sample_duration=None):
         self.path = path
 
-        # create directory for this SongSpace, which will hold the database and metadata
-        Path(path).mkdir(parents=True, exist_ok=True)
+        # create directory for this SongSpace if it doesn't exist yet
+        Path(self.path).mkdir(parents=True, exist_ok=True)
 
         if isinstance(feature_extractor, str):
             _require_bmz()

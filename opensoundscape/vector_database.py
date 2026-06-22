@@ -49,21 +49,26 @@ def load_or_create_hoplite_usearch_db(db, embedding_dim=None, cfg=None):
 
     if isinstance(db, (str, Path)):
         db_path = Path(db)
-        if db_path.exists():
-            print(f"Connecting to existing db at {db_path}")
-            db = SQLiteUSearchDB.create(db_path)
-            n_recordings = len(db.get_all_recordings())
-            print(
-                f"Connected database has {db.count_embeddings():,} embeddings from {n_recordings} file{'' if n_recordings == 1 else 's'}."
-            )
-        else:
-            assert (
-                embedding_dim is not None
-            ), "embedding_dim must be provided when creating a new hoplite database"
-            print(f"Creating new db at {db_path}")
-            if cfg is None:
-                cfg = get_default_usearch_config(embedding_dim)
-            db = SQLiteUSearchDB.create(db_path, cfg)
+
+        if db_path.exists() and (db_path / "usearch.index").exists():
+
+            try:
+                db = SQLiteUSearchDB.create(db_path)
+                n_recordings = len(db.get_all_recordings())
+                print(
+                    f"Connected to existing database with {db.count_embeddings():,} embeddings from {n_recordings} file{'' if n_recordings == 1 else 's'}."
+                )
+                return db
+            except Exception:
+                pass  # doesn't seem to be an existing db, try to create a new one
+        # create new database at this path
+        assert (
+            embedding_dim is not None
+        ), "embedding_dim must be provided when creating a new hoplite database"
+        print(f"Creating new db at {db_path}")
+        if cfg is None:
+            cfg = get_default_usearch_config(embedding_dim)
+        db = SQLiteUSearchDB.create(db_path, cfg)
     else:
         assert isinstance(
             db, perch_hoplite.db.interface.HopliteDBInterface
