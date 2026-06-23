@@ -3,6 +3,11 @@ import json
 import numpy as np
 import torch
 
+try:
+    import onnxruntime
+except ImportError:
+    onnxruntime = None
+
 from opensoundscape.ml.cnn import SpectrogramClassifier
 from opensoundscape.preprocess.preprocessors import AudioPreprocessor
 
