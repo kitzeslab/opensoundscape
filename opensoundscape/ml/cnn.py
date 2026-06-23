@@ -903,6 +903,7 @@ class SpectrogramClassifier(SpectrogramModule):
             dataloader=dataloader,
             wandb_session=wandb_session,
             progress_bar=progress_bar,
+            targets=(self.class_outputs_key,),
         )[self.class_outputs_key]
 
         ### Apply activation layer ###
@@ -1643,8 +1644,7 @@ class SpectrogramClassifier(SpectrogramModule):
                 or self.network.constructor_name
                 not in cnn_architectures.ARCH_DICT.keys()
             ):
-                warnings.warn(
-                    """
+                warnings.warn("""
                     This architecture is not listed in opensoundscape.ml.cnn_architectures.ARCH_DICT.
                     It will not be available for loading after saving the model with .save() (unless using pickle=True). 
                     To make it re-loadable, define a function that generates the architecture from arguments: (n_classes, n_channels) 
@@ -1654,8 +1654,7 @@ class SpectrogramClassifier(SpectrogramModule):
                     to avoid this warning and ensure it is reloaded correctly by opensoundscape.ml.load_model().
 
                     See opensoundscape.ml.cnn_architectures module for examples of constructor functions
-                    """
-                )
+                    """)
 
             # save dictionary of separate components
             # better for cross-version compatability
@@ -3026,8 +3025,7 @@ def load_model(path, device=None, unpickle=True):
         return model
 
     except ModuleNotFoundError as e:
-        raise ModuleNotFoundError(
-            """
+        raise ModuleNotFoundError("""
             This model file could not be loaded in this version of
             OpenSoundscape. You may need to load the model with the version
             of OpenSoundscape that created it and torch.save() the
@@ -3036,8 +3034,7 @@ def load_model(path, device=None, unpickle=True):
             this class). If you do this, make sure to
             re-create any specific preprocessing steps that were used in the
             original model. See the `Predict with pre-trained CNN` tutorial for details.
-            """
-        ) from e
+            """) from e
 
 
 def _gpu_if_available():
