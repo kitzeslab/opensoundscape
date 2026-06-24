@@ -34,6 +34,8 @@ def make_songspace(tmp_path, monkeypatch, embed_dim=4):
     fe = SimpleNamespace()
     fe.classifier = SimpleNamespace(in_features=embed_dim)
     fe.sample_duration = 1.0
+    fe.embedding_size = embed_dim
+
     # provide a minimal similarity_search_hoplite_db to allow delegation tests
     fe.similarity_search_hoplite_db = lambda *args, **kwargs: "SIMILAR"
 
