@@ -156,10 +156,12 @@ class SongSpace:
                 feature_extractor = bmz.Perch()
             elif feature_extractor == "perch2":
                 feature_extractor = bmz.Perch2()
+            elif feature_extractor == "perch2_onnx":
+                feature_extractor = bmz.Perch2ONNX(headless=True)
             else:
                 raise ValueError(
                     f"Unsupported feature extractor: {feature_extractor}. Supported options are "
-                    "'bs-convnext','birdnet', 'perch', and 'perch2' (or pass your own model)."
+                    "'bs-convnext', 'birdnet', 'perch', 'perch2', and 'perch2_onnx' (or pass your own model object)."
                 )
 
         else:
@@ -172,11 +174,11 @@ class SongSpace:
 
         database = load_or_create_hoplite_usearch_db(
             path,
-            embedding_dim=feature_extractor.classifier.in_features,
+            embedding_dim=feature_extractor.embedding_size,
         )
-        if database.get_embedding_dim() != feature_extractor.classifier.in_features:
+        if database.get_embedding_dim() != feature_extractor.embedding_size:
             raise ValueError(
-                f"Database embedding dimension {database.get_embedding_dim()} does not match feature extractor output dimension {feature_extractor.classifier.in_features}"
+                f"Database embedding dimension {database.get_embedding_dim()} does not match feature extractor output dimension (.embedding_size: {feature_extractor.embedding_size})"
             )
         self.feature_extractor = feature_extractor
         self._database = database
