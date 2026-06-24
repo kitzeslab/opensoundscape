@@ -3,6 +3,7 @@ import pandas as pd
 from pathlib import Path
 import shutil
 
+import opensoundscape
 from opensoundscape.ml import lightning
 from opensoundscape.utils import make_clip_df
 
@@ -68,6 +69,22 @@ def test_lightning_spectrogram_module_save_load(model, model_save_dir):
         p, weights_only=False
     )
     assert m2.preprocessor.sample_duration == 5
+
+
+def test_lighting_spectrogram_module_from_cnn():
+    cnn = opensoundscape.ml.cnn.SpectrogramClassifier(
+        architecture="resnet18",
+        classes=["class0"],
+        sample_duration=1.0,
+        sample_rate=22050,
+    )
+    model = lightning.LightningSpectrogramModule.from_model(cnn)
+    assert model.preprocessor.sample_duration == 1.0
+    assert model.preprocessor.to_dict() == cnn.preprocessor.to_dict()
+    assert model.classes == cnn.classes
+    # compare state dict
+    for k, v in model.network.state_dict().items():
+        assert (v == cnn.network.state_dict()[k]).all()
 
 
 def test_lightning_spectrogram_module_train(model, train_df_clips, model_save_dir):
