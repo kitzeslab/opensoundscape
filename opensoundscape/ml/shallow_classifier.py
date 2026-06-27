@@ -506,7 +506,8 @@ def fit(
         early if validation loss doesn't improve for this many steps (not validation evaluations)
         [Default: None, which means no early stopping]
     """
-    # if no optimizer or criterion provided, use default AdamW and BCEWithLogitsLoss
+    # if no optimizer or criterion provided, use default AdamW and BCELossWeakNegatives
+    # which uses NaN labels as negatives with a default weight of 0.01 relative to strong labels
     if optimizer is None:
         optimizer = torch.optim.AdamW(model.parameters())
     if criterion is None:
