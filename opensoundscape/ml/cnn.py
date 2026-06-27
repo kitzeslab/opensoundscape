@@ -1648,7 +1648,8 @@ class SpectrogramClassifier(SpectrogramModule):
                 or self.network.constructor_name
                 not in cnn_architectures.ARCH_DICT.keys()
             ):
-                warnings.warn("""
+                warnings.warn(
+                    """
                     This architecture is not listed in opensoundscape.ml.cnn_architectures.ARCH_DICT.
                     It will not be available for loading after saving the model with .save() (unless using pickle=True). 
                     To make it re-loadable, define a function that generates the architecture from arguments: (n_classes, n_channels) 
@@ -1658,7 +1659,8 @@ class SpectrogramClassifier(SpectrogramModule):
                     to avoid this warning and ensure it is reloaded correctly by opensoundscape.CNN.load().
 
                     See opensoundscape.ml.cnn_architectures module for examples of constructor functions
-                    """)
+                    """
+                )
 
             # save dictionary of separate components
             # better for cross-version compatability
