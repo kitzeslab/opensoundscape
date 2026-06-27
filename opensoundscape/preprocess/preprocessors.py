@@ -895,11 +895,39 @@ class AudioPreprocessor(BasePreprocessor):
 
 @register_preprocessor_cls
 class AudioAugmentationPreprocessor(AudioPreprocessor):
-    """AudioPreprocessor that applies augmentations to audio samples during training"""
+    """AudioPreprocessor that applies augmentations to audio samples during training
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    Args:
+        overlay_samples: if not None, will include an overlay (mixup) action drawing
+            samples from a user-specified dataframe or list of audio files to blend
+            with the current sample. If None, the overlay action is skipped.
+        **kwargs: sample_duration, sample_rate, extend_short_clips are passed to AudioPreprocessor
+    """
 
+    def __init__(
+        self,
+        sample_duration,
+        sample_rate,
+        extend_short_clips=True,
+        overlay_samples=None,
+    ):
+        super().__init__(
+            sample_duration=sample_duration,
+            sample_rate=sample_rate,
+            extend_short_clips=extend_short_clips,
+        )
+
+        # overlay: mixup samples from a user-specified dataframe onto the current sample
+        self.insert_action(
+            "overlay",
+            Overlay(
+                break_on_key="overlay",
+                is_augmentation=True,
+                overlay_samples=overlay_samples,
+                update_labels=True,
+                sample_duration=self.sample_duration,
+            ),
+        )
         # adaptive random gain: randomly scale audio amplitude, without going below minimum level
         self.insert_action(
             "adaptive_random_gain",
