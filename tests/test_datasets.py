@@ -190,8 +190,8 @@ def test_overlay_no_valid_samples(labeled_file_df, overlay_df_all_positive):
     )
     dataset = AudioFileDataset(labeled_file_df, pre)
     dataset.preprocessor.pipeline.overlay.set(overlay_class="different")
-    with pytest.raises(PreprocessingError):
-        sample1 = dataset[0]  # no samples with "different" labels
+    # changed behavior from raising error to returning the original sample if no valid overlay samples are found
+    sample1 = dataset[0]
 
 
 def test_overlay_specific_class(labeled_file_df, overlay_pre):
