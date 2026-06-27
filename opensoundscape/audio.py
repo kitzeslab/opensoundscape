@@ -346,6 +346,22 @@ class Audio:
 
         return cls(samples, sample_rate, resample_type=resample_type)
 
+    @classmethod
+    def from_xc(cls, xc_recording, sample_rate=None, resample_type="kaiser_fast"):
+        """Download xeno-canto recording and create Audio object
+
+        Args:
+            xc_recording: xeno-canto recording ID, e.g. 380406
+            sample_rate: The final sampling rate of Audio object [default: None]
+                - if None, retains original sample rate
+            resample_type: The librosa method to do resampling [default: "kaiser_fast"]
+
+        Returns:
+            Audio object
+        """
+        url = f"https://xeno-canto.org/{xc_recording}/download"
+        return cls.from_url(url, sample_rate=sample_rate, resample_type=resample_type)
+
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
 
