@@ -18,6 +18,7 @@ audio_object = audio_object.resample(22050)
 ```
 
 """
+
 import warnings
 import datetime
 from pathlib import Path
@@ -1899,7 +1900,7 @@ def _audio_from_file_handler(
     offset=None,
     duration=None,
     start_timestamp=None,
-    out_of_bounds_mode="warn",
+    out_of_bounds_mode="ignore",
 ):
     """Load audio from files
 
@@ -1950,9 +1951,10 @@ def _audio_from_file_handler(
             timestamp = local_timezone.localize(local_timestamp)
             ```
         out_of_bounds_mode:
-            - 'warn': generate a warning [default]
+            - 'ignore': return any available audio with no warning/error [default]
+            - 'warn': generate a warning
             - 'raise': raise an AudioOutOfBoundsError
-            - 'ignore': return any available audio with no warning/error
+
 
     Returns:
         Audio object with attributes: samples, sample_rate, resample_type,
