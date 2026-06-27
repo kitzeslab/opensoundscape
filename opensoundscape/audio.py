@@ -18,6 +18,7 @@ audio_object = audio_object.resample(22050)
 ```
 
 """
+
 import warnings
 import datetime
 from pathlib import Path
@@ -344,6 +345,22 @@ class Audio:
             sample_rate = original_sample_rate
 
         return cls(samples, sample_rate, resample_type=resample_type)
+
+    @classmethod
+    def from_xc(cls, xc_recording, sample_rate=None, resample_type="kaiser_fast"):
+        """Download xeno-canto recording and create Audio object
+
+        Args:
+            xc_recording: xeno-canto recording ID, e.g. 380406
+            sample_rate: The final sampling rate of Audio object [default: None]
+                - if None, retains original sample rate
+            resample_type: The librosa method to do resampling [default: "kaiser_fast"]
+
+        Returns:
+            Audio object
+        """
+        url = f"https://xeno-canto.org/{xc_recording}/download"
+        return cls.from_url(url, sample_rate=sample_rate, resample_type=resample_type)
 
     def __repr__(self):
         return f"<Audio(samples={self.samples.shape}, sample_rate={self.sample_rate})>"
@@ -787,7 +804,7 @@ class Audio:
             pre_duration=pre_duration, post_duration=post_duration, fill=fill
         )
 
-    def bandpass(self, low_f, high_f, order):
+    def bandpass(self, low_f, high_f, order=5):
         """Bandpass audio signal with a butterworth filter
 
         Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
@@ -810,7 +827,7 @@ class Audio:
         )
         return self._spawn(samples=filtered_samples)
 
-    def lowpass(self, cutoff_f, order):
+    def lowpass(self, cutoff_f, order=5):
         """Low-pass audio signal with a butterworth filter
 
         Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
@@ -834,7 +851,7 @@ class Audio:
 
         return self._spawn(samples=filtered_samples)
 
-    def highpass(self, cutoff_f, order):
+    def highpass(self, cutoff_f, order=5):
         """High-pass audio signal with a butterworth filter
 
         Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
@@ -1899,7 +1916,7 @@ def _audio_from_file_handler(
     offset=None,
     duration=None,
     start_timestamp=None,
-    out_of_bounds_mode="warn",
+    out_of_bounds_mode="ignore",
 ):
     """Load audio from files
 
@@ -1950,9 +1967,10 @@ def _audio_from_file_handler(
             timestamp = local_timezone.localize(local_timestamp)
             ```
         out_of_bounds_mode:
-            - 'warn': generate a warning [default]
+            - 'ignore': return any available audio with no warning/error [default]
+            - 'warn': generate a warning
             - 'raise': raise an AudioOutOfBoundsError
-            - 'ignore': return any available audio with no warning/error
+
 
     Returns:
         Audio object with attributes: samples, sample_rate, resample_type,

@@ -1000,6 +1000,9 @@ def test_save_and_load_model(model_save_path):
     m = cnn.load_model(model_save_path)
     assert m.classes == classes
     assert type(m) == cnn.CNN
+    m == cnn.CNN.load(model_save_path)
+    assert m.classes == classes
+    assert type(m) == cnn.CNN
 
 
 def test_save_and_load_model_custom_arch(model_save_path):

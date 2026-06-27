@@ -22,6 +22,22 @@ class LightningSpectrogramModule(SpectrogramModule, L.LightningModule):
         self.compute_per_class_metrics = False
         self.save_hyperparameters()
 
+    @classmethod
+    def from_model(cls, model: SpectrogramModule):
+        """create a LightningSpectrogramModule from a SpectrogramModule (e.g., CNN object)
+
+        Args:
+            model: a SpectrogramModule object
+        """
+        lightning_model = cls(
+            architecture=model.network,
+            classes=model.classes,
+            sample_duration=model.sample_duration,
+            sample_rate=model.sample_rate,
+        )
+        lightning_model.preprocessor = model.preprocessor
+        return lightning_model
+
     def train(self, *args, **kwargs):
         """inherit train() method from LightningModule rather than SpectrogramModule
 

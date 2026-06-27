@@ -282,9 +282,7 @@ def overlay(
                     good_choice = sum(label_intersection) == 0
 
                 if not good_choice:  # tried max_attempts samples, none worked
-                    raise ValueError(
-                        f"No samples found with non-overlapping labels after {max_attempts} random draws"
-                    )
+                    return sample  # no overlay, just return the original sample
 
                 overlay_path = overlay_df.index[candidate_idx]
 

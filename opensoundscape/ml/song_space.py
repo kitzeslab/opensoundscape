@@ -137,8 +137,8 @@ class SongSpace:
     def __init__(self, path, feature_extractor="perch2", sample_duration=None):
         self.path = path
 
-        # create directory for this SongSpace, which will hold the database and metadata
-        Path(path).mkdir(parents=True, exist_ok=True)
+        # create directory for this SongSpace if it doesn't exist yet
+        Path(self.path).mkdir(parents=True, exist_ok=True)
 
         if isinstance(feature_extractor, str):
             _require_bmz()
@@ -156,10 +156,12 @@ class SongSpace:
                 feature_extractor = bmz.Perch()
             elif feature_extractor == "perch2":
                 feature_extractor = bmz.Perch2()
+            elif feature_extractor == "perch2_onnx":
+                feature_extractor = bmz.Perch2ONNX(headless=True)
             else:
                 raise ValueError(
                     f"Unsupported feature extractor: {feature_extractor}. Supported options are "
-                    "'bs-convnext','birdnet', 'perch', and 'perch2' (or pass your own model)."
+                    "'bs-convnext', 'birdnet', 'perch', 'perch2', and 'perch2_onnx' (or pass your own model object)."
                 )
 
         else:
@@ -172,11 +174,11 @@ class SongSpace:
 
         database = load_or_create_hoplite_usearch_db(
             path,
-            embedding_dim=feature_extractor.classifier.in_features,
+            embedding_dim=feature_extractor.embedding_size,
         )
-        if database.get_embedding_dim() != feature_extractor.classifier.in_features:
+        if database.get_embedding_dim() != feature_extractor.embedding_size:
             raise ValueError(
-                f"Database embedding dimension {database.get_embedding_dim()} does not match feature extractor output dimension {feature_extractor.classifier.in_features}"
+                f"Database embedding dimension {database.get_embedding_dim()} does not match feature extractor output dimension (.embedding_size: {feature_extractor.embedding_size})"
             )
         self.feature_extractor = feature_extractor
         self._database = database
@@ -442,30 +444,18 @@ class SongSpace:
         Args:
             classes: list of class names to train the classifier for; if None, trains for every class in the dataset(s)
             train_datasets: list of dataset names to use for training; must have been added with ingest_audio()
-            validation_dataset: dataset name to use for validation
-                if None, skips validation
+            validation_dataset: dataset name to use for validation; if None, skips validation
             weak_negatives_proportion: ratio of weak negatives to positives to add to the training data
                 selects random unlabeled samples from the database and treats as no-species samples, but with
-                a small weight in the loss function
-                default 2 means adding 2 weak negatives for every labeled sample; if 0, does not add any weak negatives
-                ignored if criterion is passed
-            embedding_batch_size: batch size for embedding; default 1
-            embedding_num_workers: number of workers for embedding; default 0
-            batch_size, steps, optimizer, criterion, device: model fitting parameters, see fit()
-            early_stopping_patience: if provided, training will stop early if validation loss doesn't improve
-                for this many steps (not validation evaluations)
-                [Default: None, which means no early stopping]
-            logging_interval: how often to print training progress; progress is logged every logging_interval steps
-                when validation is performed
-            validation_interval: how often to validate the model during training; if validation_dataset_name is provided,
-                validation is performed every validation_interval steps
-            audio_root: if provided, used as prefix for audio files in train_df and validation_df;
-                if None, assumes train_df and validation_df already have absolute audio paths
-            classifier_hidden_layers: tuple of hidden layer sizes for the MLPClassifier;
-                default is () for no hidden layers (i.e. linear probe / logistic regression)
-            weak_negatives_weight: weight for the weak negative samples in the loss function
-                default 0.01; ignored if criterion is passed
-        Returns: new classifier
+                a small weight in the loss function. Default 2 means adding 2 weak negatives for every labeled sample; if 0, does not add any weak negatives.
+            batch_size, steps, optimizer, criterion, device: model fitting parameters passed to the underlying training routine
+            early_stopping_patience: if provided, training will stop early if validation loss doesn't improve for this many steps
+            logging_interval: how often to print training progress; used by the underlying trainer
+            validation_interval: how often (in steps) to validate the model during training
+            classifier_hidden_layers: tuple of hidden layer sizes for the MLPClassifier; default () for no hidden layers
+            weak_negatives_weight: weight for the weak negative samples in the loss function; default 0.01
+        Returns:
+            new classifier (MLPClassifier)
         """
         # prepare training data by concatenating the label_dfs for the specified datasets
         train_dfs = []
@@ -688,11 +678,9 @@ class SongSpace:
         """Extract top-scoring or random clips from the database based on classifier predictions and filters
 
         Args:
-            db: hoplite database containing embeddings
             classifier: classifier to apply to embeddings in the database to generate clip ranking scores
                 MLPClassifier object or other classifier object to call on the torch.tensor embeddings,
-                or the name (str) in self.classifiers dictionary
-                must have a 'classes' attribute listing the class names, including the classes specified in the `classes` argument
+                or the name (str) in self.classifiers dictionary. Must have a 'classes' attribute listing the class names.
             classes: list of class names to select clips for; if None, selects clips for every class in classifier
             k: number of clips to return per class; default 5 (ignored if strategy="all")
             strategy: which clips to select:

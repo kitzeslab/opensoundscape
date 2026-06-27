@@ -11,6 +11,7 @@ from opensoundscape.preprocess import preprocessors, actions, action_functions
 from opensoundscape.preprocess.preprocessors import (
     SpectrogramPreprocessor,
     AudioPreprocessor,
+    AudioAugmentationPreprocessor,
 )
 from opensoundscape.preprocess.utils import PreprocessingError
 import warnings
@@ -86,6 +87,15 @@ def train_df_clips(train_df):
 @pytest.fixture()
 def preprocessor_with_overlay(train_df_clips):
     return SpectrogramPreprocessor(
+        sample_duration=2.0,
+        sample_rate=22050,
+        overlay_samples=train_df_clips,
+    )
+
+
+@pytest.fixture()
+def audio_preprocessor_with_overlay(train_df_clips):
+    return AudioAugmentationPreprocessor(
         sample_duration=2.0,
         sample_rate=22050,
         overlay_samples=train_df_clips,
@@ -232,6 +242,17 @@ def test_audiopreprocessor_extend(audiopreprocessor, short_sample):
     audiopreprocessor.pipeline.trim_audio.set(extend=False)
     with pytest.raises(PreprocessingError):
         s = audiopreprocessor.forward(short_sample).data
+
+
+def test_audiopreprocessor_overlay(audio_preprocessor_with_overlay, sample):
+    """audio-space overlay augmentation"""
+    s = audio_preprocessor_with_overlay.forward(sample).data
+    s2 = audio_preprocessor_with_overlay.forward(sample, bypass_augmentations=True).data
+    assert type(s) == Audio
+    assert math.isclose(s.duration, 2.0, abs_tol=1e-9)
+    assert s.sample_rate == 22050
+    # should be different
+    assert not np.array_equal(s.samples, s2.samples)
 
 
 def test_noisereduceaudiopreprocessor(sample):

@@ -42,6 +42,7 @@ jobs:
                 --to notebook \
                 --execute \
                 --ExecutePreprocessor.timeout=1800 \
+                --ExecutePreprocessor.kernel_name=python3 \
                 --output /tmp/$(basename "$notebook") \
                 "$notebook"; then
               passed+=("$notebook")

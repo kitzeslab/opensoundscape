@@ -49,21 +49,26 @@ def load_or_create_hoplite_usearch_db(db, embedding_dim=None, cfg=None):
 
     if isinstance(db, (str, Path)):
         db_path = Path(db)
-        if db_path.exists():
-            print(f"Connecting to existing db at {db_path}")
-            db = SQLiteUSearchDB.create(db_path)
-            n_recordings = len(db.get_all_recordings())
-            print(
-                f"Connected database has {db.count_embeddings():,} embeddings from {n_recordings} file{'' if n_recordings == 1 else 's'}."
-            )
-        else:
-            assert (
-                embedding_dim is not None
-            ), "embedding_dim must be provided when creating a new hoplite database"
-            print(f"Creating new db at {db_path}")
-            if cfg is None:
-                cfg = get_default_usearch_config(embedding_dim)
-            db = SQLiteUSearchDB.create(db_path, cfg)
+
+        if db_path.exists() and (db_path / "usearch.index").exists():
+
+            try:
+                db = SQLiteUSearchDB.create(db_path)
+                n_recordings = len(db.get_all_recordings())
+                print(
+                    f"Connected to existing database with {db.count_embeddings():,} embeddings from {n_recordings} file{'' if n_recordings == 1 else 's'}."
+                )
+                return db
+            except Exception:
+                pass  # doesn't seem to be an existing db, try to create a new one
+        # create new database at this path
+        assert (
+            embedding_dim is not None
+        ), "embedding_dim must be provided when creating a new hoplite database"
+        print(f"Creating new db at {db_path}")
+        if cfg is None:
+            cfg = get_default_usearch_config(embedding_dim)
+        db = SQLiteUSearchDB.create(db_path, cfg)
     else:
         assert isinstance(
             db, perch_hoplite.db.interface.HopliteDBInterface
@@ -709,20 +714,12 @@ def similarity_search_hoplite_db(
         db: a Hoplite database containing embeddings from the same model
         num_results: The number of results to return for each query
         exact_search: default False for usearch (faster), if True uses brute force search
-        search_subset_size: Number of embeddings to compare with. If None, all embeddings
-            are used. For floats between 0 and 1, sample a proportion of the database.
-            For ints, sample the specified number of embeddings.
-            if None [default], searches all embeddings
+        search_subset_size: Number of embeddings to compare with. If None, all embeddings are used.
             Note: only implemented for exact_search=True
-        target_score: if specified, searches for similarity scores close to target_score
-            default [None] searches for most similar embeddings
-        audio_root: root directory for relative paths to query audio files
-        search_kwargs: dict of additional keyword arguments passed to db.ui.search() or
-            brutalism.threaded_brute_search() if exact_search=True
+        target_score: if specified, searches for similarity scores close to target_score; default None searches for most similar embeddings
+        search_kwargs: dict of additional keyword arguments passed to db.ui.search() or brutalism.threaded_brute_search(); typical keys differ between exact_search modes
             exact_search=False: radius, threads, exact, log, progress
             exact_search=True: batch_size, max_workers, rng_seed
-        **embedding_kwargs: additional keyword arguments passed to self.embed(), such as
-            batch_size and num_workers
     Returns:
         A list of dictionaries with the search results, one item per query sample:
         Each item is a dictionary with the following keys:

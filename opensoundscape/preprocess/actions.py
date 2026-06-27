@@ -20,6 +20,8 @@ See the preprocessor module and Preprocessing tutorial
 for details on how to use and create your own actions.
 """
 
+import warnings
+
 import numpy as np
 import torch
 import torchvision
@@ -306,8 +308,8 @@ class AudioClipLoader(Action):
         )
         # warn user that "offset", "duration", "sample_rate" parameters will be ignored since they are provided by sample attributes
         if any(k in kwargs for k in ["offset", "duration", "sample_rate"]):
-            print(
-                """Warning: 'offset', 'duration', and 'sample_rate' parameters will be ignored since
+            warnings.warn(
+                """'offset', 'duration', and 'sample_rate' parameters will be ignored since
                 they are provided by sample.start_time, sample.duration, and sample.sample_rate
                 attributes, respectively, during sample preprocessing."""
             )

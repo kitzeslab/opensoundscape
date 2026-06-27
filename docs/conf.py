@@ -16,7 +16,6 @@ sys.path.insert(0, os.path.abspath("../"))
 # local import for linking to GitHub source code
 from docs.sphinx_linkcode import make_linkcode_resolve
 
-
 # -- Project information -----------------------------------------------------
 
 project = "opensoundscape"
@@ -24,7 +23,7 @@ copyright = "2024 Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilna
 author = "Sam Lapp, Tessa Rhinehart, Louis Freeland-Haynes, Jatin Khilnani, Alexandra Syunkova, Leonardo Viotti, Santiago Ruiz Guzman, Justin Kitzes"
 
 # The full version, including alpha/beta/rc tags
-release = "0.13.0"
+release = "0.13.1"
 
 
 # -- General configuration ---------------------------------------------------
@@ -89,7 +88,6 @@ style_nav_header_background = "#2980B9"
 # Mock libraries we don't want to install on RTD
 autodoc_mock_imports = [
     "opensoundscape.sample_data",  # weird opso module that sets class to itself - skip in automodule
-    "docopt",
     "pandas",
     "librosa",
     "ray",
