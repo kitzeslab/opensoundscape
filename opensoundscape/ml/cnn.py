@@ -1581,8 +1581,12 @@ class SpectrogramClassifier(SpectrogramModule):
     def save(self, path, save_hooks=False, pickle=False, error="raise"):
         """save model with weights using torch.save()
 
-        load from saved file with cnn.load_model(path)
+        load from saved file with CNN.load(path) or load_model(path)
 
+        Note that pickled objects may not load properly across different versions of OpenSoundscape.
+        However, the dictionary format does not retain the full training state for resuming model
+        training. Therefore, we advise saving with pickle=True for resuming training and with
+        pickle=False when and saving models for future use.
 
         Args:
             path: file path for saved model object
@@ -1644,19 +1648,17 @@ class SpectrogramClassifier(SpectrogramModule):
                 or self.network.constructor_name
                 not in cnn_architectures.ARCH_DICT.keys()
             ):
-                warnings.warn(
-                    """
+                warnings.warn("""
                     This architecture is not listed in opensoundscape.ml.cnn_architectures.ARCH_DICT.
                     It will not be available for loading after saving the model with .save() (unless using pickle=True). 
                     To make it re-loadable, define a function that generates the architecture from arguments: (n_classes, n_channels) 
                     then use opensoundscape.ml.cnn_architectures.register_architecture() to register the generating function.
 
                     The function can also set the returned object's .constructor_name to the registered string key in ARCH_DICT
-                    to avoid this warning and ensure it is reloaded correctly by opensoundscape.ml.load_model().
+                    to avoid this warning and ensure it is reloaded correctly by opensoundscape.CNN.load().
 
                     See opensoundscape.ml.cnn_architectures module for examples of constructor functions
-                    """
-                )
+                    """)
 
             # save dictionary of separate components
             # better for cross-version compatability
@@ -1685,11 +1687,13 @@ class SpectrogramClassifier(SpectrogramModule):
             )
 
     @classmethod
-    def load(cls, path, unpickle=True):
+    def load(cls, path, device=None, unpickle=True):
         """load a model saved using CNN.save()
 
         Args:
             path: path to file saved using CNN.save()
+            device: device to load the model onto
+                can be a torch.device or string (e.g. "cpu", "cuda:0", "mps")
             unpickle: if True, passes `weights_only=False` to
                 torch.load(). This is necessary if the model was saved with
                 pickle=True, which saves the entire model object. If
@@ -1700,48 +1704,10 @@ class SpectrogramClassifier(SpectrogramModule):
         Returns:
             new CNN instance
 
-        Note: Note that if you used pickle=True when saving, the model object might not load properly
+        Note: if you used pickle=True when saving, the model object might not load properly
         across different versions of OpenSoundscape.
         """
-        loaded_content = torch.load(path, weights_only=not unpickle)
-
-        if isinstance(loaded_content, dict):
-            model_opso_version = loaded_content.pop("opensoundscape_version")
-            _version_mismatch_warn(model_opso_version)
-            # load up the weights and instantiate from dictionary keys
-            # includes preprocessing parameters and settings
-            state_dict = loaded_content.pop("weights")
-            class_name = loaded_content.pop("class")
-            if not class_name == io.build_name(cls):
-                warnings.warn(
-                    f"Using .load method of {io.build_name(cls)} but the "
-                    f"loaded model class is {class_name}."
-                )
-            if version.parse(model_opso_version) < version.parse("0.13.0"):
-                # use backwards-compatible loading
-                pre_dict = loaded_content["preprocessor_dict"]
-                pre_dict["init_kwargs"]["sample_rate"] = None
-                pre_dict["pipeline"]["overlay"]["params"]["break_on_key"] = "overlay"
-                pre_dict["pipeline"]["load_audio"]["params"].pop("sample_rate")
-                pre_dict["init_kwargs"]["use_legacy_spectrogram"] = True
-                model = CNN(**loaded_content, sample_rate=None)
-                # formerly included conv1.bias but torchvision models create conv1.bias=None, which we now retain
-                original_conv1_bias = state_dict.pop("conv1.bias", None)
-                model.network.load_state_dict(state_dict)
-                if original_conv1_bias is not None:
-                    model.network.conv1.bias = torch.nn.Parameter(original_conv1_bias)
-
-                # we inverted the default spectrogram values in 0.7.0
-                if version.parse(model_opso_version) < version.parse("0.7.0"):
-                    model.preprocessor.pipeline.to_tensor.set(invert=True)
-
-            else:
-                model = cls(**loaded_content)
-                model.network.load_state_dict(state_dict)
-        else:  # entire pickled object, not dictionary
-            _version_mismatch_warn(loaded_content.opensoundscape_version)
-            model = loaded_content
-        return model
+        return load_model(path, device=device, unpickle=unpickle)
 
     def save_weights(self, path):
         """save just the weights of the network
@@ -1759,13 +1725,17 @@ class SpectrogramClassifier(SpectrogramModule):
         """load network weights state dict from a file
 
         For instance, load weights saved with .save_weights()
-        in-place operation
+        in-place operation (modifies self.network)
+        loads weights onto the same device as self.network (self.device)
 
         Args:
             path: file path with saved weights
             strict: (bool) see torch.load()
         """
-        self.network.load_state_dict(torch.load(path), strict=strict)
+        self.network.to(self.device)
+        self.network.load_state_dict(
+            torch.load(path, map_location=self.device), strict=strict
+        )
 
     def __call__(
         self,
@@ -2940,8 +2910,11 @@ class SpectrogramClassifier(SpectrogramModule):
 
 
 # alias for convenience
-CNN = SpectrogramClassifier
-register_model_cls(CNN)
+@register_model_cls
+class CNN(SpectrogramClassifier):
+    pass
+
+
 CNN.__doc__ = SpectrogramClassifier.__doc__
 CNN.__init__.__doc__ = SpectrogramClassifier.__init__.__doc__
 
@@ -2975,18 +2948,20 @@ def use_resample_loss(model, train_df):
 
 
 def load_model(path, device=None, unpickle=True):
-    """load a saved model object
+    """load a saved model object from a file
 
-    This function handles models saved either as pickled objects or as a dictionary
-    including weights, preprocessing parameters, architecture name, etc.
+    This function handles models saved with model.save() either as pickled objects (pickle=True)
+    or as a dictionary (pickle=False) including weights, preprocessing parameters, architecture name, etc.
 
     Note that pickled objects may not load properly across different versions of
-    OpenSoundscape, while the dictionary format does not retain the full training state
-    for resuming model training.
+    OpenSoundscape. However, the dictionary format does not retain the full training state
+    for resuming model training. Therefore, we advise saving with pickle=True for resuming training
+    and with pickle=False when and saving models for future use.
 
     Args:
         path: file path of saved model
-        device: which device to load into, eg 'cuda:1'
+        device: which device to load into,
+            can be string (eg 'cuda:0', 'mps', 'cpu', 'cuda:1', 'cuda') or torch.device object.
             [default: None] will choose first gpu if available, otherwise cpu
         unpickle: if True, passes `weights_only=False` to torch.load(). This is necessary if the
         model was saved with`pickle=True`, which saves the entire model object.
@@ -2995,50 +2970,74 @@ def load_model(path, device=None, unpickle=True):
     Returns:
         a model object with loaded weights
     """
-    try:
-        # load the entire pickled model object from a file and
-        # move the model to the desired torch "device" (eg cpu or cuda for gpu)
-        # by default, will choose cuda:0 if cuda is available,
-        # otherwise mps (Apple Silicon) if available, otherwise cpu
-        if device is None:
-            device = _gpu_if_available()
-        loaded_content = torch.load(
-            path,
-            # loading directly to other devices can cause issues if there are any tensors that should stay on cpu
-            map_location="cpu",
-            weights_only=not unpickle,
-        )
+    # auto-select gpu when available, if device is not specified
+    if device is None:
+        device = _gpu_if_available()
 
-        if isinstance(loaded_content, dict):
-            # warn the user if loaded model's opso version doesn't match the current one
-            _version_mismatch_warn(loaded_content.pop("opensoundscape_version"))
+    # loading directly to other devices can cause issues if there are any tensors that should stay on cpu
+    # therefore we first load the saved content to cpu, then move the model to the desired device at the end
+    loaded_content = torch.load(
+        path,
+        map_location="cpu",
+        weights_only=not unpickle,
+    )
+
+    # the loaded content can either be an entire pickled model object or a dictionary specifying how to construct the model
+    if isinstance(loaded_content, dict):
+        # user saved with pickle=False. Reconstruct from dictionary
+        # warn the user if loaded model's opso version doesn't match the current one
+        if "opensoundscape_version" in loaded_content:
+            model_opso_version = loaded_content.pop("opensoundscape_version")
+        else:
+            # unknown version
+            raise ValueError(
+                """The model did not contain sufficient information to load. 
+                It was likely saved by an early version of OpenSoundscape that is no longer
+                supported. Consider extracting the weights dictionary with torch.load(path) and
+                manually creating a model with the same architecture and preprocessing
+                parameters."""
+            )
+        _version_mismatch_warn(model_opso_version)
+
+        # find the model class by name
+        if "class" in loaded_content:
             model_cls = MODEL_CLS_DICT[loaded_content.pop("class")]
+        else:
+            warnings.warn("Class not specified, assuming CNN")
+            model_cls = CNN
+        state_dict = loaded_content.pop("weights")
+
+        # initialize the model class from the dictionary keys and load the weights
+        if version.parse(model_opso_version) < version.parse("0.13.0"):
+            # use backwards-compatible loading
+            pre_dict = loaded_content["preprocessor_dict"]
+            pre_dict["init_kwargs"]["sample_rate"] = None
+            pre_dict["pipeline"]["overlay"]["params"]["break_on_key"] = "overlay"
+            pre_dict["pipeline"]["load_audio"]["params"].pop("sample_rate")
+            pre_dict["init_kwargs"]["use_legacy_spectrogram"] = True
+            model = model_cls(**loaded_content, sample_rate=None)
+            # formerly included conv1.bias but torchvision models create conv1.bias=None, which we now retain
+            original_conv1_bias = state_dict.pop("conv1.bias", None)
+            model.network.load_state_dict(state_dict)
+            if original_conv1_bias is not None:
+                model.network.conv1.bias = torch.nn.Parameter(original_conv1_bias)
+
+            # we inverted the default spectrogram values in 0.7.0
+            if version.parse(model_opso_version) < version.parse("0.7.0"):
+                model.preprocessor.pipeline.to_tensor.set(invert=True)
+
+        else:
             model = model_cls(**loaded_content)
-            model.network.load_state_dict(loaded_content["weights"])
-        else:  # entire pickled object was loaded
-            _version_mismatch_warn(loaded_content.opensoundscape_version)
-            model = loaded_content
+            model.network.load_state_dict(state_dict)
 
-        # now we can set the selected device
-        model.device = device
-        model.network.to(device)
+    else:  # entire pickled object was saved and loaded
+        _version_mismatch_warn(loaded_content.opensoundscape_version)
+        model = loaded_content
 
-        model.device = device
-        return model
+    # now we can move the network to the user-specified device
+    model.network.to(device)
 
-    except ModuleNotFoundError as e:
-        raise ModuleNotFoundError(
-            """
-            This model file could not be loaded in this version of
-            OpenSoundscape. You may need to load the model with the version
-            of OpenSoundscape that created it and torch.save() the
-            model.network.state_dict(), then load the weights with model.load_weights
-            in the current OpenSoundscape version (where model is a new instance of 
-            this class). If you do this, make sure to
-            re-create any specific preprocessing steps that were used in the
-            original model. See the `Predict with pre-trained CNN` tutorial for details.
-            """
-        ) from e
+    return model
 
 
 def _gpu_if_available():
