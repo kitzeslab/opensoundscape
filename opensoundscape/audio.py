@@ -804,7 +804,7 @@ class Audio:
             pre_duration=pre_duration, post_duration=post_duration, fill=fill
         )
 
-    def bandpass(self, low_f, high_f, order):
+    def bandpass(self, low_f, high_f, order=5):
         """Bandpass audio signal with a butterworth filter
 
         Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
@@ -827,7 +827,7 @@ class Audio:
         )
         return self._spawn(samples=filtered_samples)
 
-    def lowpass(self, cutoff_f, order):
+    def lowpass(self, cutoff_f, order=5):
         """Low-pass audio signal with a butterworth filter
 
         Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
@@ -851,7 +851,7 @@ class Audio:
 
         return self._spawn(samples=filtered_samples)
 
-    def highpass(self, cutoff_f, order):
+    def highpass(self, cutoff_f, order=5):
         """High-pass audio signal with a butterworth filter
 
         Uses a phase-preserving algorithm (scipy.signal's butter and solfiltfilt)
