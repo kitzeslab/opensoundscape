@@ -9243,4 +9243,4 @@ viz = ["ipywidgets", "plotly"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10, !=3.11.0, <3.14"
-content-hash = "131784617e2a4bd6bd47d4a62f79e3576b8d8e6c4c4ff1ea4bdbfac2cb2780f9"
+content-hash = "8d81b0ef72f52cd610951131210ba3e5206fc8cb70c190a1e8cc002b3b7b4f73"
