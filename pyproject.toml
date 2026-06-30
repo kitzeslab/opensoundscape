@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "opensoundscape"
-version = "0.13.1"
+version = "0.13.2"
 description = "Open source, scalable acoustic data analysis for ecology and conservation"
 authors = [
   "Sam Lapp <sammlapp@gmail.com>",
@@ -42,6 +42,8 @@ noisereduce=">=3.0.2"
 lightning=">=2.2.5"
 scipy=">=1.15"
 llvmlite=">=0.44.0"
+ipython = ">=7.34.0"
+
 
 # optional dependencies (install with `pip install opensoundscape[viz]` etc.)
 ipywidgets = {version = ">=8.1.8", optional = true}
@@ -58,7 +60,6 @@ grad-cam = {version = ">=1.5.0", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = ">=5.2.0"
-ipython = ">=7.34.0"
 jupyterlab = ">=4.5.9"
 black = "~24.3"
 pre-commit = ">=1.18"
