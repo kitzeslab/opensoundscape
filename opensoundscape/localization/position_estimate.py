@@ -20,10 +20,16 @@ class PositionEstimate:
     - receiver_locations: list of receiver locations
     - tdoas: list of time differences of arrival computed with cross correlation
     - cc_maxs: list of cross correlation maxima
+    - crs: coordinate reference system of location_estimate and receiver_locations
+        (e.g. an EPSG code); enables conversion of location_estimate to
+        longitude/latitude via the .location_estimate_lonlat property
 
     Args:
         location estimate: 2 or 3 element array of floats, estimated location of the sound source
         see SpatialEvent() for other args
+        crs: coordinate reference system of the coordinates, e.g. an int EPSG code or
+            "EPSG:32617". Optional; if provided, location_estimate can be converted to
+            longitude/latitude via the .location_estimate_lonlat property [default: None]
     """
 
     def __init__(
@@ -38,6 +44,7 @@ class PositionEstimate:
         receiver_start_time_offsets=None,
         duration=None,
         distance_residuals=None,
+        crs=None,
     ):
         self.location_estimate = location_estimate
         self.class_name = class_name
@@ -49,9 +56,38 @@ class PositionEstimate:
         self.receiver_start_time_offsets = receiver_start_time_offsets
         self.duration = duration
         self.distance_residuals = distance_residuals
+        self.crs = crs
 
     def __repr__(self):
         return f"PositionEstimate({self.location_estimate})"
+
+    @property
+    def location_estimate_lonlat(self):
+        """Estimated source location as (longitude, latitude) in WGS84 degrees.
+
+        Converts the first two dimensions of location_estimate (x, y in meters) from
+        self.crs to longitude/latitude. Requires self.crs to be set (e.g. by creating
+        the array with SynchronizedRecorderArray.from_lonlat or passing crs=... to
+        SynchronizedRecorderArray) and the optional dependency `pyproj`.
+
+        Returns:
+            np.array([longitude, latitude]) in decimal degrees, or None if
+            location_estimate is None
+        """
+        if self.location_estimate is None:
+            return None
+        if self.crs is None:
+            raise ValueError(
+                "crs is not set on this PositionEstimate, so location_estimate cannot "
+                "be converted to longitude/latitude. Set .crs to the coordinate "
+                "reference system of the receiver locations (e.g. an EPSG code)."
+            )
+        from opensoundscape.localization.coordinates import xy_to_lonlat
+
+        longitude, latitude = xy_to_lonlat(
+            self.location_estimate[0], self.location_estimate[1], self.crs
+        )
+        return np.array([float(longitude), float(latitude)])
 
     @property
     def residual_rms(self):

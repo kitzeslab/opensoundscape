@@ -70,6 +70,7 @@ class SynchronizedRecorderArray:
         self,
         file_coords,
         speed_of_sound=SPEED_OF_SOUND,
+        crs=None,
     ):
         """
         Args:
@@ -82,9 +83,72 @@ class SynchronizedRecorderArray:
                 row in `file_coords` specifiying the location of the reciever that recorded the file.
             speed_of_sound : float, optional. Speed of sound in meters per second.
                 Default: opensoundscape.localization.localization_algorithms.SPEED_OF_SOUND
+            crs : optional coordinate reference system of the coordinates in file_coords,
+                e.g. an int EPSG code or "EPSG:32617". This is metadata only: it does not
+                change the localization math (which still uses the meter coordinates in
+                file_coords), but it is attached to each returned PositionEstimate so that
+                estimated locations can be converted back to longitude/latitude via
+                PositionEstimate.location_estimate_lonlat. To create an array directly from
+                longitude/latitude coordinates, use SynchronizedRecorderArray.from_lonlat.
+                [default: None]
         """
         self.file_coords = file_coords
         self.speed_of_sound = speed_of_sound
+        self.crs = crs
+
+    @classmethod
+    def from_lonlat(
+        cls,
+        file_coords,
+        speed_of_sound=SPEED_OF_SOUND,
+        crs=None,
+        longitude_column="longitude",
+        latitude_column="latitude",
+        elevation_column="elevation",
+    ):
+        """Create a SynchronizedRecorderArray from longitude/latitude receiver coordinates.
+
+        Field recorders typically log their positions as geographic coordinates
+        (longitude/latitude, WGS84), but the localization algorithms require Cartesian
+        coordinates in meters. This constructor projects the geographic coordinates to a
+        metric CRS (a UTM zone by default) and records the CRS so that estimated source
+        locations can be converted back to longitude/latitude.
+
+        Requires the optional dependency `pyproj` (`pip install opensoundscape[localization]`).
+
+        Args:
+            file_coords : pandas.DataFrame indexed by audio file path, with columns for
+                longitude and latitude (and optionally elevation) of each receiver.
+                Column names are configurable with the arguments below.
+            speed_of_sound : float, optional. Speed of sound in meters per second.
+                Default: opensoundscape.localization.localization_algorithms.SPEED_OF_SOUND
+            crs : target metric CRS for the projected coordinates (anything accepted by
+                pyproj, e.g. an int EPSG code or "EPSG:32617"). If None (default), an
+                appropriate WGS84 / UTM zone is chosen automatically from the mean of the
+                input coordinates.
+            longitude_column : name of the longitude column [default: "longitude"]
+            latitude_column : name of the latitude column [default: "latitude"]
+            elevation_column : name of an optional elevation/height column in meters,
+                carried through unchanged as the z coordinate if present
+                [default: "elevation"]
+
+        Returns:
+            SynchronizedRecorderArray with file_coords projected to meters and crs set
+        """
+        from opensoundscape.localization.coordinates import project_file_coords
+
+        projected, crs_used = project_file_coords(
+            file_coords,
+            crs=crs,
+            longitude_column=longitude_column,
+            latitude_column=latitude_column,
+            elevation_column=elevation_column,
+        )
+        return cls(
+            file_coords=projected,
+            speed_of_sound=speed_of_sound,
+            crs=crs_used,
+        )
 
     def localize_detections(
         self,
@@ -265,6 +329,11 @@ class SynchronizedRecorderArray:
             num_workers=num_workers,
             localization_algorithm=localization_algorithm,
         )
+
+        # attach the array's coordinate reference system to each estimate so that
+        # estimated locations can be converted back to longitude/latitude
+        for position in position_estimates:
+            position.crs = self.crs
 
         # separate positions into localized and unlocalized:
 
