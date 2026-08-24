@@ -1,6 +1,11 @@
 OpenSoundscape
 ==============
 
+.. image:: _static/opso_logo_2026.svg
+   :alt: OpenSoundscape logo
+   :width: 200px
+   :align: center
+
 .. image:: https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white
    :target: https://github.com/kitzeslab/opensoundscape
 

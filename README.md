@@ -1,4 +1,6 @@
-# OpenSoundscape
+
+
+# <img src="docs/_static/logo_short.svg" alt="logo" height="40"/> OpenSoundscape
 
 [![CI](https://github.com/kitzeslab/opensoundscape/actions/workflows/poetry.yml/badge.svg?branch=master)](https://github.com/kitzeslab/opensoundscape/actions/workflows/poetry.yml)
 [![Documentation Status](https://readthedocs.org/projects/opensoundscape/badge/?version=latest)](http://opensoundscape.org/en/latest/?badge=latest)

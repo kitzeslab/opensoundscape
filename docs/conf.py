@@ -83,6 +83,9 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 html_css_files = ["css/greentheme.css"]
 
+# Logo shown above the sidebar navigation on every page
+# html_logo = "_static/logo_short.svg"
+
 style_nav_header_background = "#2980B9"
 
 # Mock libraries we don't want to install on RTD
