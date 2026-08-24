@@ -1906,6 +1906,96 @@ def clipping_detector(samples, threshold=0.6):
     return len(list(filter(lambda x: x > threshold, samples)))
 
 
+def load_padded_audio_window(path, offset, duration, min_real_duration=0, **kwargs):
+    """Load a time window, padding with silence if it extends past the file.
+
+    Used by localization to extract `duration` seconds starting at `offset`,
+    even when that window begins before the start of the file or ends after
+    the file. Missing samples are replaced with zeros on the side that is
+    out of bounds.
+
+    Returns None if the file has no overlapping samples, or if the overlapping
+    real audio is shorter than `min_real_duration`. Completely missing audio is
+    not padded into a silent clip.
+
+    Args:
+        path: audio file path
+        offset: start of the requested window in seconds, relative to file start.
+            May be negative (requesting audio before the file begins).
+        duration: length of the requested window in seconds
+        min_real_duration: if the overlapping real audio is shorter than this
+            (seconds), return None instead of a padded clip. Default 0 returns
+            None only when there is no overlap.
+        **kwargs: passed to Audio.from_file (e.g. sample_rate). `offset`,
+            `duration`, and `out_of_bounds_mode` are set by this function.
+
+    Returns:
+        Audio of length `duration`, or None if the window should be discarded
+    """
+    if duration is None or duration <= 0:
+        raise ValueError(f"`duration` must be > 0, got {duration}")
+
+    offset = float(offset)
+    duration = float(duration)
+    pre_pad = max(0.0, -offset)
+    load_offset = max(0.0, offset)
+    load_duration = duration - pre_pad
+
+    if load_duration <= 0:
+        return None
+
+    try:
+        file_duration = soundfile.info(str(path)).duration
+    except Exception:
+        file_duration = None
+
+    # seeking past EOF raises in librosa/soundfile; treat as no overlap.
+    # do not clamp duration: from_file(out_of_bounds_mode="ignore") already
+    # returns the available samples when the window extends past EOF.
+    if file_duration is not None and load_offset >= file_duration:
+        return None
+
+    audio = Audio.from_file(
+        path,
+        offset=load_offset,
+        duration=load_duration,
+        out_of_bounds_mode="ignore",
+        **kwargs,
+    )
+    n_real = len(audio.samples)
+    if n_real == 0:
+        return None
+
+    sample_rate = audio.sample_rate
+    if n_real / sample_rate < min_real_duration - 1e-3:
+        return None
+
+    target_n = int(round(duration * sample_rate))
+    n_pre = int(round(pre_pad * sample_rate))
+    max_content = max(target_n - n_pre, 0)
+    if n_real > max_content:
+        audio = audio.trim_samples(0, max_content)
+        n_real = len(audio.samples)
+
+    n_post = max(target_n - n_pre - n_real, 0)
+    if n_pre > 0 or n_post > 0:
+        audio = audio.pad(
+            pre_duration=n_pre / sample_rate,
+            post_duration=n_post / sample_rate,
+        )
+
+    samples = audio.samples
+    if len(samples) < target_n:
+        samples = np.pad(samples, (0, target_n - len(samples)))
+    elif len(samples) > target_n:
+        samples = samples[:target_n]
+
+    metadata = None if audio.metadata is None else audio.metadata.copy()
+    if metadata is not None:
+        metadata["duration"] = target_n / sample_rate
+    return audio._spawn(samples=samples, metadata=metadata)
+
+
 def _audio_from_file_handler(
     cls,
     path,

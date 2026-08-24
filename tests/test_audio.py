@@ -9,7 +9,12 @@ import pytz
 import datetime
 import pandas as pd
 
-from opensoundscape.audio import Audio, AudioOutOfBoundsError, load_channels_as_audio
+from opensoundscape.audio import (
+    Audio,
+    AudioOutOfBoundsError,
+    load_channels_as_audio,
+    load_padded_audio_window,
+)
 from opensoundscape import audio
 import opensoundscape
 
@@ -1374,3 +1379,51 @@ def test_pad_to(veryshort_wav_audio):
         veryshort_wav_audio.samples,
         atol=1e-7,
     )
+
+
+def test_load_padded_audio_window_before_start():
+    path = "tests/audio/LOCA_2021_09_24_652_3.wav"  # 1.0s file
+    pre_pad = 0.1
+    duration = 0.5
+    audio = load_padded_audio_window(path, offset=-pre_pad, duration=duration)
+    assert audio is not None
+    assert math.isclose(audio.duration, duration, abs_tol=1e-4)
+    n_pre = int(round(pre_pad * audio.sample_rate))
+    assert math.isclose(0.0, np.max(np.abs(audio.samples[:n_pre])), abs_tol=1e-7)
+    original = Audio.from_file(path, offset=0, duration=duration - pre_pad)
+    assert np.allclose(
+        audio.samples[n_pre : n_pre + len(original.samples)], original.samples
+    )
+
+
+def test_load_padded_audio_window_after_end():
+    path = "tests/audio/LOCA_2021_09_24_652_3.wav"  # 1.0s file
+    offset = 0.8
+    duration = 0.5  # extends 0.3s past EOF
+    audio = load_padded_audio_window(path, offset=offset, duration=duration)
+    assert audio is not None
+    assert math.isclose(audio.duration, duration, abs_tol=1e-4)
+    original = Audio.from_file(
+        path, offset=offset, duration=duration, out_of_bounds_mode="ignore"
+    )
+    n_real = len(original.samples)
+    assert np.allclose(audio.samples[:n_real], original.samples)
+    assert math.isclose(0.0, np.max(np.abs(audio.samples[n_real:])), abs_tol=1e-7)
+
+
+def test_load_padded_audio_window_no_overlap_returns_none():
+    path = "tests/audio/LOCA_2021_09_24_652_3.wav"  # 1.0s file
+    assert load_padded_audio_window(path, offset=1.5, duration=0.5) is None
+
+
+def test_load_padded_audio_window_min_real_duration():
+    path = "tests/audio/veryshort.wav"  # ~0.14s
+    # window overlaps the file but real audio is shorter than the detection
+    audio = load_padded_audio_window(
+        path, offset=-0.04, duration=0.38, min_real_duration=0.3
+    )
+    assert audio is None
+    # without the minimum, the overlapping audio is padded and returned
+    padded = load_padded_audio_window(path, offset=-0.04, duration=0.38)
+    assert padded is not None
+    assert math.isclose(padded.duration, 0.38, abs_tol=1e-4)

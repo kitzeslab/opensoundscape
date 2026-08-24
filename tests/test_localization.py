@@ -285,15 +285,14 @@ def test_localization_pipeline(file_coords_csv, predictions):
         assert math.isclose(position.location_estimate[1], true_y, abs_tol=2)
 
     # test load_audio_segments, loading with 1s before and after the event start/end
-
-    with pytest.warns(UserWarning):  # warning for extending beyond edges of audio
-        audio_list = position_estimates[0].load_aligned_audio_segments(
-            start_offset=1, end_offset=1
-        )
+    # clips that extend past the file are padded with silence
+    audio_list = position_estimates[0].load_aligned_audio_segments(
+        start_offset=1, end_offset=1
+    )
     assert len(audio_list) == 5
-    # event is 1s long, so we should have 3s total (slightly less for others
-    # due to tdoa offsets and extending beyond file edges)
-    assert np.isclose(audio_list[0].duration, 3, atol=1e-5)
+    # event is 1s long, so we should have 3s total on every receiver
+    for a in audio_list:
+        assert np.isclose(a.duration, 3, atol=1e-5)
 
 
 def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detections):
@@ -403,6 +402,58 @@ def test_SpatialEvent_estimate_delays(LOCA_2021_aru_coords):
     assert all(
         success.values()
     ), f"Incorrect result for cc_filters: {[k for k,v in success.items() if not v]}"
+
+
+def _loca_receiver_subset(LOCA_2021_aru_coords):
+    files = [
+        f
+        for f in LOCA_2021_aru_coords.index
+        if "LOCA_2021_09_24_652_" in f and "late" not in f
+    ]
+    return files, LOCA_2021_aru_coords.loc[files]
+
+
+def test_estimate_delays_at_file_start(LOCA_2021_aru_coords):
+    """Detections at t=0 should be padded and still produce TDOAs (issue #1278)"""
+    files, coords = _loca_receiver_subset(LOCA_2021_aru_coords)
+    event = localization.SpatialEvent(
+        receiver_files=files,
+        receiver_locations=coords.values,
+        max_delay=0.04,
+        receiver_start_time_offsets=[0.0] * len(files),
+        duration=0.3,
+        class_name="zeep",
+        bandpass_range=(7000, 10000),
+        cc_filter="phat",
+    )
+    tdoas, cc_maxs = event._estimate_delays()
+    assert tdoas is not None
+    assert cc_maxs is not None
+    assert len(tdoas) == len(files)
+    assert tdoas[0] == 0
+
+
+def test_estimate_delays_at_file_end(LOCA_2021_aru_coords):
+    """Detections at the end of 1s files should be padded and still produce TDOAs (issue #1278)"""
+    files, coords = _loca_receiver_subset(LOCA_2021_aru_coords)
+    duration = 0.3
+    # LOCA files are 1.0s; start at 0.7 so the detection ends at EOF and the
+    # max_delay buffer extends past the file
+    event = localization.SpatialEvent(
+        receiver_files=files,
+        receiver_locations=coords.values,
+        max_delay=0.04,
+        receiver_start_time_offsets=[0.7] * len(files),
+        duration=duration,
+        class_name="zeep",
+        bandpass_range=(7000, 10000),
+        cc_filter="phat",
+    )
+    tdoas, cc_maxs = event._estimate_delays()
+    assert tdoas is not None
+    assert cc_maxs is not None
+    assert len(tdoas) == len(files)
+    assert tdoas[0] == 0
 
 
 def test_spatial_event_receiver_removal_and_cc_threshold(LOCA_2021_aru_coords):

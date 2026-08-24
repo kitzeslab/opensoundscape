@@ -3,7 +3,7 @@ import numpy as np
 import datetime
 import pandas as pd
 
-from opensoundscape.audio import Audio
+from opensoundscape.audio import load_padded_audio_window
 from opensoundscape import audio
 from opensoundscape.utils import cast_np_to_native
 from opensoundscape.localization.localization_algorithms import SPEED_OF_SOUND
@@ -223,6 +223,11 @@ class SpatialEvent:
             value corresponds to the cross correlation of one file relative
             to the first file (self.receiver_files[0])
 
+            If a requested window extends before the start or after the end of a
+            file, the missing samples are padded with silence so TDOA can still
+            run. Receivers whose files do not contain the detection itself are
+            discarded.
+
         Effects:
             sets self.tdoas and self.cc_maxs with the same values as those returned
         """
@@ -236,18 +241,17 @@ class SpatialEvent:
             # sets the .receiver_start_time_offsets using start_timestamp and receiver start times
             self._calculate_receiver_start_time_offsets()
 
-        # load audio from desired time period
-        reference_audio = Audio.from_file(
+        # load audio from desired time period, padding with silence if the
+        # window extends before the start or after the end of the file
+        reference_audio = load_padded_audio_window(
             self.receiver_files[0],
             offset=self.receiver_start_time_offsets[0] - self.max_delay,
             duration=extracted_clip_duration,
+            min_real_duration=self.duration,
         )
 
-        # make sure the audio clip is of the desired length
-        # Note: this will give errors for clips starting at 0s since we can't get earlier audio;
-        # alternatively, we could pad the audio with zeros
-        if not np.isclose(reference_audio.duration, extracted_clip_duration, atol=1e-3):
-            # don't try to localize
+        # skip localization if the reference file does not contain the detection
+        if reference_audio is None:
             self.error_msg = "did not get audio clip of desired length"
             self.tdoas = None
             self.cc_maxs = None
@@ -259,7 +263,7 @@ class SpatialEvent:
         cc_maxs = []
 
         # catch the receivers that have an issue and should be discarded
-        # e.g. their file starts or end during the time-window, so estimate_delays is not possible
+        # e.g. the file does not contain the detection window
         bad_receivers_index = []
 
         for index, file in enumerate(self.receiver_files):
@@ -269,15 +273,19 @@ class SpatialEvent:
                 continue
 
             # use specified time offsets to extract the correct audio segment
-            audio2 = Audio.from_file(
+            audio2 = load_padded_audio_window(
                 file,
                 offset=self.receiver_start_time_offsets[index] - self.max_delay,
                 duration=extracted_clip_duration,
+                min_real_duration=self.duration,
             )
 
-            # catch edge cases where the audio lengths do not match.
-            # allow for 1 sample difference
-            if abs(len(audio2.samples) - len(reference_audio.samples)) > 1:
+            # discard receivers with no usable audio or a residual length mismatch
+            # (allow 1 sample difference for rounding)
+            if (
+                audio2 is None
+                or abs(len(audio2.samples) - len(reference_audio.samples)) > 1
+            ):
                 bad_receivers_index.append(index)
             else:
                 tdoa, cc_max = audio.estimate_delay(
@@ -298,7 +306,7 @@ class SpatialEvent:
         # i.e. those that had audio length mismatches
         if len(bad_receivers_index) > 0:
             print(
-                f"Warning: {len(bad_receivers_index)} receivers were discarded because their audio files were not the same length as the primary receiver."
+                f"Warning: {len(bad_receivers_index)} receivers were discarded because they did not contain the detection window."
             )
             # drop the bad receivers from the list of files and locations
             self.receiver_files = np.array(
