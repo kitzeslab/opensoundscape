@@ -111,19 +111,25 @@ class PositionEstimate:
         plt.pcolormesh(np.vstack([s.spectrogram for s in specs]),cmap='Greys')
         ```
         """
-        from opensoundscape.audio import Audio
+        from opensoundscape.audio import Audio, load_padded_audio_window
 
+        duration = self.duration + start_offset + end_offset
         all_audio = []
         for i, audio_path in enumerate(self.receiver_files):
             start = self.receiver_start_time_offsets[i] + self.tdoas[i] - start_offset
-            all_audio.append(
-                Audio.from_file(
-                    audio_path,
-                    offset=start,
-                    duration=self.duration + start_offset + end_offset,
-                    out_of_bounds_mode="warn",
-                )
+            clip = load_padded_audio_window(
+                audio_path,
+                offset=start,
+                duration=duration,
             )
+            if clip is None:
+                # no overlap with the file; return silence matching requested duration
+                probe = Audio.from_file(
+                    audio_path, duration=0.0001, out_of_bounds_mode="ignore"
+                )
+                sample_rate = probe.sample_rate if len(probe.samples) else 22050
+                clip = Audio.silence(duration=duration, sample_rate=sample_rate)
+            all_audio.append(clip)
 
         return all_audio
 
