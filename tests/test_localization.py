@@ -253,7 +253,9 @@ def test_least_squares_optimize():
 def test_asserts_localized_timestamps(file_coords_csv, predictions_no_timezone):
     file_coords = pd.read_csv(file_coords_csv, index_col=0)
 
-    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=file_coords
+    )
     with pytest.raises(ValueError):
         array.localize_detections(
             detections=predictions_no_timezone,
@@ -267,7 +269,9 @@ def test_asserts_localized_timestamps(file_coords_csv, predictions_no_timezone):
 def test_localization_pipeline(file_coords_csv, predictions):
     file_coords = pd.read_csv(file_coords_csv, index_col=0)
 
-    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=file_coords
+    )
     position_estimates, _ = array.localize_detections(
         detections=predictions,
         min_n_receivers=4,
@@ -298,7 +302,9 @@ def test_localization_pipeline(file_coords_csv, predictions):
 
 def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detections):
 
-    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=LOCA_2021_aru_coords
+    )
     localized_events = array.localize_detections(
         detections=LOCA_2021_detections,
         min_n_receivers=4,
@@ -319,7 +325,9 @@ def test_localization_pipeline_real_audio(LOCA_2021_aru_coords, LOCA_2021_detect
 
 def test_unlocalized_events(file_coords_csv, predictions):
     file_coords = pd.read_csv(file_coords_csv, index_col=0)
-    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=file_coords
+    )
     localized_events, unlocalized_events = array.localize_detections(
         detections=predictions,
         min_n_receivers=4,
@@ -338,7 +346,9 @@ def test_SynchronizedRecorderArray_SpatialEvents_not_generated(
     # Tests that the SynchronizedRecorderArray will not return any SpatialEvents if
     # min_n_receivers is set too high.
     file_coords = pd.read_csv(file_coords_csv, index_col=0)
-    array = localization.SynchronizedRecorderArray(file_coords=file_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=file_coords
+    )
     localized_events, unlocalized_events = array.localize_detections(
         detections=predictions,
         min_n_receivers=10,  # too high. No SpatialEvents will be outputted.
@@ -358,7 +368,9 @@ def test_localization_pipeline_real_audio_edge_case(
     # in the detections dataframe is actually too shorter
     # i.e. the file is shorter than the minimum length needed for cross correlation
 
-    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=LOCA_2021_aru_coords
+    )
     localized_events, _ = array.localize_detections(
         detections=LOCA_2021_detections,
         min_n_receivers=4,
@@ -502,7 +514,9 @@ def test_SpatialEvent_estimate_delays_auto_timestamps(LOCA_2021_aru_coords):
 
 
 def test_localization_pipeline_parallelized(LOCA_2021_aru_coords, LOCA_2021_detections):
-    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=LOCA_2021_aru_coords
+    )
     localized_events = array.localize_detections(
         detections=LOCA_2021_detections,
         min_n_receivers=4,
@@ -528,7 +542,9 @@ def test_localization_pipeline_parallelized(LOCA_2021_aru_coords, LOCA_2021_dete
 
 def test_localization_pipeline_cc_filters(LOCA_2021_aru_coords, LOCA_2021_detections):
     ## Test that the different filters work, and are returning DIFFERENT cc values
-    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=LOCA_2021_aru_coords
+    )
 
     cc_scores = {}
     for cc_filter in ["phat", "cc_norm", "roth"]:
@@ -557,7 +573,9 @@ def test_create_candidate_events_finds_timestamps(
 ):
     # when creating candidate events, start_timestamp is obtained from metadata if not included in detections df
     # will fail if recording_start_time not in metadata parsed from file
-    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=LOCA_2021_aru_coords
+    )
     candidate_events = array.create_candidate_events(
         detections=LOCA_2021_detections,
         min_n_receivers=4,
@@ -580,7 +598,9 @@ def test_create_candidate_events_provided_timestamps(
     # the LOCA_2021_detections_w_datetimes dataframe has a fourth multi-index level "start_timestamp"
     # which is used to set the start_timestamp of the candidate events, rather than trying to parse from the audio files
 
-    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=LOCA_2021_aru_coords
+    )
     candidate_events = array.create_candidate_events(
         detections=LOCA_2021_detections_w_datetimes,
         min_n_receivers=4,
@@ -612,7 +632,7 @@ def test_localize_from_files_with_different_start_times(
 ):
     # test that the localize_detections method can handle detections from different files with different start times
     # and that the start times are correctly used to set the start_timestamp of the candidate events
-    array = localization.SynchronizedRecorderArray(
+    array = localization.SynchronizedRecorderArray.from_file_coords(
         file_coords=LOCA_2021_aru_coords,
     )
     localized_events = array.localize_detections(
@@ -641,7 +661,9 @@ def test_localize_too_few_receivers(LOCA_2021_aru_coords, LOCA_2021_detections):
     events that originally had enough recorders, but after filtering by cc_threshold
     have too few recorders, should be returned as unlocalized events
     """
-    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=LOCA_2021_aru_coords
+    )
     localized_events, unlocalized_events = array.localize_detections(
         detections=LOCA_2021_detections,
         min_n_receivers=4,
@@ -659,7 +681,9 @@ def test_cc_threshold_mask_receivers(LOCA_2021_aru_coords, LOCA_2021_detections)
     """when some receivers are filtered out based on cc threshold,
     they should not be included in attributes like .receiver_start_time_offsets
     """
-    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=LOCA_2021_aru_coords
+    )
     localized_positions, unlocalized_events = array.localize_detections(
         detections=LOCA_2021_detections,
         min_n_receivers=4,
@@ -792,7 +816,9 @@ def test_position_estimate_to_from_dict():
 
 def test_df_to_positions(LOCA_2021_aru_coords, LOCA_2021_detections):
     # test that a dataframe of detections can be converted to a list of PositionEstimates
-    array = localization.SynchronizedRecorderArray(file_coords=LOCA_2021_aru_coords)
+    array = localization.SynchronizedRecorderArray.from_file_coords(
+        file_coords=LOCA_2021_aru_coords
+    )
     positions = array.localize_detections(
         detections=LOCA_2021_detections,
         localization_algorithm="gillette",
