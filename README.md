@@ -30,7 +30,7 @@ For full API documentation and tutorials on how to use OpenSoundscape to work wi
 
 ## Contact & Citation
 
-OpenSoundcape is developed and maintained by the [Kitzes Lab](http://www.kitzeslab.org/) at the University of Pittsburgh. It is currently in active development. If you find a bug, please [submit an issue](https://github.com/kitzeslab/opensoundscape/issues) on the GitHub repository. If you have another question about OpenSoundscape, please use the (OpenSoundscape Discussions board)[https://github.com/kitzeslab/opensoundscape/discussions] or email Sam Lapp (`sam.lapp at pitt.edu`)
+OpenSoundcape is developed and maintained by the [Kitzes Lab](http://www.kitzeslab.org/) at the University of Pittsburgh. It is currently in active development. If you find a bug, please [submit an issue](https://github.com/kitzeslab/opensoundscape/issues) on the GitHub repository. If you have another question about OpenSoundscape, please use the [OpenSoundscape Discussions board](https://github.com/kitzeslab/opensoundscape/discussions) or email Sam Lapp (`sam.lapp at pitt.edu`)
 
 
 Suggested citation:
@@ -62,7 +62,7 @@ Details about installation are available on the OpenSoundscape documentation at 
 * For Windows users, we strongly recommend using WSL2 which facilitates happy coding
 * We support Python 3.10, 3.11, 3.12, and 3.13 (but current github runners only test on Python 3.13)
 * Most computer cluster users should follow the Linux installation instructions
-* For older Macs (Intel chip), use this workaround since newer PyTorch versions are not found by pip (replace `NAME` with the desired name of your enviornment):
+* For older Macs (Intel chip), use this workaround since newer PyTorch versions are not found by pip (replace `NAME` with the desired name of your environment):
 
 ```
 conda create -n NAME python=3.11
@@ -124,8 +124,6 @@ embeddings = birdnet.embed(files)
 
 # or Perch2
 # `pip install bioacoustics-model-zoo[perch]` will install tensorflow and tensorflow-hub
-#...or BirdNET...
-# (you'll need ai-edge-litert in your environment, run `pip install bioacoustics-model-zoo[birdnet]`)
 perch2 = bmz.Perch2()
 scores = perch2.predict(files)
 embeddings = perch2.embed(files)
@@ -135,6 +133,7 @@ See the tutorial notebooks for examples of training and fine-tuning models from 
 
 ### Load a pre-trained CNN from a local file, and make predictions on long audio files
 ```python
+from glob import glob
 from opensoundscape import load_model
 
 #get list of audio files
@@ -155,7 +154,10 @@ from opensoundscape import BoxedAnnotations, CNN
 
 # assume we have a list of raven annotation files and corresponding audio files
 # load the annotations into OpenSoundscape
-all_annotations = BoxedAnnotations.from_raven_files(raven_file_paths,audio_file_paths)
+# (annotation_column tells OpenSoundscape which Raven column contains the labels)
+all_annotations = BoxedAnnotations.from_raven_files(
+  raven_files=raven_file_paths, audio_files=audio_file_paths, annotation_column="Species"
+)
 
 # pick classes to train the model on. These should occur in the annotated data
 class_list = ['IBWO','BLJA']
