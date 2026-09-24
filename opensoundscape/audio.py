@@ -220,11 +220,11 @@ class Audio:
         the desired clip is in the audio. For mp3 files, access time grows
         linearly with time since the beginning of the file.
 
-        This function relies on librosa.load(), which supports wav natively but
-        requires ffmpeg for mp3 support.
+        This function relies on librosa.load -> soundfile.read -> libsndfile,
+        which now supports all standard audio formats.
 
         Args:
-            path (str, Path): path to an audio file
+            path (str, pathlib.Path, etils.Path): path to an audio file
             sample_rate (int, None): resample audio with value and resample_type,
                 if None use source sample_rate (default: None)
             resample_type: method used to resample_type (default: "soxr_hq")
@@ -1936,7 +1936,7 @@ def _audio_from_file_handler(
     requires ffmpeg for mp3 support.
 
     Args:
-        path (str, Path): path to an audio file
+        path (str, pathlib.Path, etils.Path): path to an audio file
         sample_rate (int, None): resample audio with value and resample_type,
             if None use source sample_rate (default: None)
         resample_type: method used to resample_type (default: "soxr_hq")
@@ -1984,8 +1984,6 @@ def _audio_from_file_handler(
 
     assert out_of_bounds_mode in ["raise", "warn", "ignore"]
 
-    path = str(path)  # Pathlib path can have dependency issues - use string
-
     ## Load Metadata ##
     if load_metadata:
         metadata = parse_metadata(path)
@@ -2024,22 +2022,31 @@ def _audio_from_file_handler(
         offset = 0
 
     ## Load samples ##
+    # libsndfile/SoundFile doesn't support float16
+    # we can load as float32 then convert, accepting a brief memory spike
+    # see https://github.com/bastibe/python-soundfile/issues/496
+    # and https://github.com/librosa/librosa/pull/2105
+    if dtype in [np.float16, "float16"]:
+        load_dtype = "float32"
+    else:
+        load_dtype = dtype
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        samples, sr = librosa.load(
-            path,
-            sr=sample_rate,
-            res_type=resample_type,
-            mono=to_mono,
-            offset=offset,
-            duration=duration,
-            dtype=None,
-        )
-        # temporary workaround for soundfile issue #349
-        # which causes empty sample array if loading float32 from mp3:
-        # pass dtype=None, then change it afterwards
-        samples = samples.astype(dtype)
+        # by loading in file context, we can load etils.ePath, eg files from gs:// buckets
+        with path.open("rb") as openfile:
+            samples, sr = librosa.load(
+                openfile,
+                sr=sample_rate,
+                res_type=resample_type,
+                mono=to_mono,
+                offset=offset,
+                duration=duration,
+                dtype=load_dtype,
+            )
+
+    if dtype in [np.float16, "float16"]:
+        samples = samples.astype(np.float16)
 
     # out of bounds warning/exception user if no samples or too short
     if len(samples) == 0:
@@ -2173,7 +2180,7 @@ class MultiChannelAudio(Audio):
         requires ffmpeg for mp3 support.
 
         Args:
-            path (str, Path): path to an audio file
+            path (str, pathlib.Path, etils.Path): path to an audio file
             sample_rate (int, None): resample audio with value and resample_type,
                 if None use source sample_rate (default: None)
             resample_type: method used to resample_type (default: "soxr_hq")
