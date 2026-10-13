@@ -320,7 +320,7 @@ class SynchronizedRecorderArray:
         Takes the detections dictionary and groups detections that are within `max_receiver_dist` of each other.
 
         Args:
-            detections: a dictionary of detections, with multi-index (file,start_time,end_time,start_timestamp), and
+             (file,start_time,end_time,start_timestamp), and
                 one column per class with 0/1 values for non-detection/detection
                 where start_timestamp contains timzeone-aware datetime.datetime objects corresponding to start_time
                 - If `start_timestamp` index not present, attempts to automatically determine the
