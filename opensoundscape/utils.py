@@ -7,6 +7,10 @@ import librosa
 from matplotlib.colors import LinearSegmentedColormap
 import torch
 import random
+import datetime
+import pytz
+import opensoundscape
+from aru_metadata_parser.parse import parse_aru_file_start_time
 
 
 class GetDurationError(ValueError):
@@ -418,3 +422,215 @@ def second_parent_name(file_path):
 def filename_first_part(file_path):
     """Utility function to extract the part of the filename before the first underscore from a file path"""
     return Path(file_path).stem.split("_")[0]
+
+
+class GetRecordingStartTimeError(ValueError):
+    """Raised when a recording start time cannot be resolved in strict mode."""
+
+
+def _read_recording_start_time(file, parse_timestamp_from_filename):
+    """Read a datetime from metadata, optionally falling back to the filename."""
+    metadata = opensoundscape.audio.parse_metadata(file) or {}
+    recording_start_time = metadata.get("recording_start_time")
+    if isinstance(recording_start_time, datetime.datetime):
+        return recording_start_time
+    if parse_timestamp_from_filename:
+        return parse_aru_file_start_time(file)
+    raise ValueError("metadata does not contain a recording start timestamp")
+
+
+def _localize_recording_start_time(recording_start_time, file_timezone):
+    """Return an aware datetime, validating any supplied recorder timezone."""
+    if recording_start_time.utcoffset() is None:
+        if file_timezone is None:
+            raise ValueError("provide file_timezone for naive timestamps")
+        # Raise if daylight saving time makes the timestamp ambiguous or nonexistent
+        return file_timezone.localize(recording_start_time, is_dst=None)
+
+    if file_timezone is not None:
+        converted_start_time = recording_start_time.astimezone(file_timezone)
+        if converted_start_time.utcoffset() != recording_start_time.utcoffset():
+            raise ValueError("file_timezone conflicts with timestamp offset")
+    return recording_start_time
+
+
+def _select_recordings(
+    files,
+    predicate,
+    target_timezone,
+    parse_timestamp_from_filename,
+    file_timezone,
+    raise_exceptions,
+):
+    """Resolve timestamps, enact exception policy, and filter using predicate function.
+
+    Args:
+        files: Iterable of path-like objects; order and duplicates are preserved.
+        predicate: Function passed the datetime objects resolved from a file,
+        returns a boolean indicating if the file should be included in the filtered
+        results
+        target_timezone: pytz timezone name in which calendar dates are compared.
+        parse_timestamp_from_filename: Attempt aru-metadata-parser filename
+        parsing only if metadata lacks a usable timestamp.
+        file_timezone: pytz timezone name for naive timestamps. For aware timestamps,
+        its offset must agree with the encoded offset at that instant.
+        raise_exceptions: If False, skip files with timestamp errors. If True, raise
+        GetRecordingStartTimeError with the original cause. Includes missing
+        timestamps, DST failures, and timezone conflicts.
+
+    Returns:
+        List of original path objects whose datetimes match the predicate function.
+
+    Raises:
+        ValueError: Invalid bounds, timezone names, or flags.
+        GetRecordingStartTimeError: File timestamp failure when raise_exceptions=True.
+    """
+    target_timezone = pytz.timezone(target_timezone)
+    if file_timezone is not None:
+        file_timezone = pytz.timezone(file_timezone)
+
+    selected = []
+    for file in files:
+        try:
+            recording_start_time = _read_recording_start_time(
+                file,
+                parse_timestamp_from_filename=parse_timestamp_from_filename,
+            )
+            recording_start_time = _localize_recording_start_time(
+                recording_start_time,
+                file_timezone=file_timezone,
+            )
+            recording_start_time = recording_start_time.astimezone(target_timezone)
+        except Exception as exc:
+            if raise_exceptions:
+                raise GetRecordingStartTimeError(f"Exception on file {file}") from exc
+            continue
+        if predicate(recording_start_time):
+            selected.append(file)
+    return selected
+
+
+def select_files_in_date_range(
+    files,
+    first_date,
+    last_date,
+    target_timezone,
+    parse_timestamp_from_filename=False,
+    file_timezone=None,
+    raise_exceptions=False,
+):
+    """Selects recordings with start times within a date range, including start and end date
+
+    Args:
+        files: Iterable of path-like objects; order and duplicates are preserved.
+        first_date: Inclusive datetime.date bound (not datetime.datetime).
+        last_date: Inclusive datetime.date bound, at least first_date.
+        target_timezone: pytz timezone name in which calendar dates are compared.
+        parse_timestamp_from_filename: Attempt aru-metadata-parser filename parsing
+        only if metadata lacks a usable timestamp. Defaults to False.
+        file_timezone: pytz timezone name for naive timestamps. For aware timestamps,
+        its offset must agree with the encoded offset at that instant.
+        raise_exceptions: If False (default), skip files with timestamp errors. If
+        True, raise GetRecordingStartTimeError with the original cause. Includes
+        missing timestamps, DST failures, and timezone conflicts.
+
+    Returns:
+        List of original path objects whose recording starts match the range.
+
+    Raises:
+        ValueError: Invalid bounds, timezone names, or flags.
+        GetRecordingStartTimeError: File timestamp failure when raise_exceptions=True.
+
+    Examples:
+        >>> from datetime import date
+        >>> select_files_in_date_range([], date(2024, 1, 1), date(2024, 1, 2), 'UTC')
+        []
+
+    Notes:
+        Only recording starts are considered, not recording overlap or file
+        modification times. Metadata takes precedence over filenames. If timezone is
+        not found in metadata or filename, this will require file_timezone.
+        Ambiguous/nonexistent daylight saving times are unresolved (will raise an
+        exception or skip). Filename recognition, including fuzzy parsing, is best
+        effort.
+    """
+    if any(
+        not isinstance(d, datetime.date) or isinstance(d, datetime.datetime)
+        for d in (first_date, last_date)
+    ):
+        raise ValueError("bounds must be datetime.date objects, not datetimes")
+    if first_date > last_date:
+        raise ValueError("first_date must be <= last_date")
+
+    def predicate(dt):
+        return first_date <= dt.date() <= last_date
+
+    return _select_recordings(
+        files,
+        predicate,
+        target_timezone,
+        parse_timestamp_from_filename,
+        file_timezone,
+        raise_exceptions,
+    )
+
+
+def select_files_in_time_range(
+    files,
+    earliest_time,
+    latest_time,
+    target_timezone,
+    parse_timestamp_from_filename=False,
+    file_timezone=None,
+    raise_exceptions=False,
+):
+    """Select recordings by time of day they started, inclusive of end values
+
+    Args:
+        files: Iterable of path-like objects.
+        earliest_time: Timezone-free datetime.time lower boundary.
+        latest_time: Timezone-free datetime.time upper boundary. If earlier than earliest_time, the range wraps midnight. Equal bounds match exactly.
+        target_timezone: pytz timezone name for wall-clock comparisons.
+        parse_timestamp_from_filename: Enable best-effort filename fallback; metadata
+        is preferred. Defaults to False.
+        file_timezone: Timezone name for naive timestamps, or an offset consistency
+        check for aware timestamps; never overrides an encoded timezone.
+        raise_exceptions: If False (default), skip files with timestamp errors. If
+        True, raise GetRecordingStartTimeError with the original cause.
+        Includes missing timestamps, DST failures, and timezone conflicts.
+
+    Returns:
+        List of original paths preserving order and duplicates.
+
+    Raises:
+        ValueError: Invalid bounds, timezone names, or flags.
+        GetRecordingStartTimeError: File timestamp failure when raise_exceptions=True.
+
+    Notes:
+        Only recording starts are considered, not recording overlap or file
+        modification times. Metadata takes precedence over filenames. If timezone is
+        not found in metadata or filename, this will require file_timezone.
+        Ambiguous/nonexistent daylight saving times are unresolved (will raise an
+        exception or skip). Filename recognition, including fuzzy parsing, is best
+        effort.
+    """
+    if any(
+        not isinstance(t, datetime.time) or t.tzinfo is not None
+        for t in (earliest_time, latest_time)
+    ):
+        raise ValueError("bounds must be timezone-free datetime.time objects")
+
+    def predicate(dt):
+        t = dt.time()
+        if earliest_time <= latest_time:
+            return earliest_time <= t <= latest_time
+        return t >= earliest_time or t <= latest_time
+
+    return _select_recordings(
+        files,
+        predicate,
+        target_timezone,
+        parse_timestamp_from_filename,
+        file_timezone,
+        raise_exceptions,
+    )
