@@ -434,6 +434,7 @@ def _read_recording_start_time(file, parse_timestamp_from_filename):
     recording_start_time = metadata.get("recording_start_time")
     if isinstance(recording_start_time, datetime.datetime):
         return recording_start_time
+    # Note, this will always return a naive datetime as we don't use the filename_timezone argument
     if parse_timestamp_from_filename:
         return parse_aru_file_start_time(file)
     raise ValueError("metadata does not contain a recording start timestamp")
