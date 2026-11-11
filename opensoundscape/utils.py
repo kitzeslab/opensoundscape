@@ -444,9 +444,11 @@ def _localize_recording_start_time(recording_start_time, file_timezone):
     if recording_start_time.utcoffset() is None:
         if file_timezone is None:
             raise ValueError("provide file_timezone for naive timestamps")
-        # Raise if daylight saving time makes the timestamp ambiguous or nonexistent
+        # is_dst here will raise if daylight saving time makes the timestamp ambiguous or nonexistent
         return file_timezone.localize(recording_start_time, is_dst=None)
 
+    # Note we only ever reach this if recording_start_time is not naive (read from filename)
+    # Recording start time is localized, if we have a file timezone we can check their UTC offsets agree
     if file_timezone is not None:
         converted_start_time = recording_start_time.astimezone(file_timezone)
         if converted_start_time.utcoffset() != recording_start_time.utcoffset():
