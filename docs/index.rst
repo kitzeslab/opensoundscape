@@ -100,6 +100,7 @@ Suggested citation:
    :caption: Basic Tutorials
 
    tutorials/audio
+   tutorials/select_recordings
    tutorials/spectrogram
    tutorials/predict_with_cnn
    tutorials/songspace_agile_modeling
